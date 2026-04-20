@@ -12,16 +12,20 @@ class TickRecord:
     Attributes:
         tick_number: Nanoseconds since Unix epoch; the tick's time boundary.
         public_key: Ed25519 public key for this tick (32 bytes).
-        new_fortis: Signature of previous tick's public_key, signed by
-                    previous tick's private key (32 bytes).
-        old_fortis: Signature of this tick's public_key, signed by this
-                    tick's private key. ``None`` for the genesis record.
+        forward_fortis: Signature of mutual_acknowledgement by this tick's
+                        *previous* private key. ``None`` for the genesis record.
+        backward_fortis: Signature of mutual_acknowledgement by this tick's
+                         private key. Never ``None`` for non-genesis ticks.
     """
 
     tick_number: int
     public_key: bytes
-    new_fortis: bytes
-    old_fortis: bytes | None
+    forward_fortis: bytes | None
+    backward_fortis: bytes
+
+    def __post_init__(self) -> None:
+        if self.backward_fortis is None:
+            raise TypeError("backward_fortis must never be None for non-genesis ticks")
 
 
 @dataclass(frozen=True)

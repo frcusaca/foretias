@@ -8,8 +8,6 @@ functions behind a mutex.
 
 from __future__ import annotations
 
-import struct
-
 from .crypto import generate_keypair, sha256, sign, verify
 from .models import Fortis, TickRecord
 
@@ -20,7 +18,7 @@ def _concat(tbid: bytes, tick_number: int, content: bytes | str) -> bytes:
         content_bytes = content
     else:
         content_bytes = content.encode("utf-8")
-    return tbid + struct.pack(">Q", tick_number) + content_bytes
+    return tbid + tick_number.to_bytes(8, "big") + content_bytes
 
 
 class _timebeing:
@@ -39,12 +37,6 @@ class _timebeing:
         tbn: str = "",
     ) -> Fortis:
         """Stamp *content* with Ed25519 under the given tick key.
-
-        Process:
-            1. Hash the content: content_hash = SHA-256(content).
-            2. Concatenate the signature input: concat(tbid, tick_number, content).
-            3. Sign: signature = Ed25519_sign(signature_input, private_key).
-            4. Return a Fortis containing (tick_number, content_hash, signature, tbid, echo, tbn).
 
         Ed25519 has internal hashing, so the raw concatenation is signed
         directly — no pre-hash of the signature input.
@@ -70,13 +62,9 @@ class _timebeing:
     ) -> tuple[TickRecord, bytes]:
         """Advance from the current tick to a new tick.
 
-        Tick transition algorithm:
-            1. Generate keypair (new_sk, new_pk). tick_number = now (nanoseconds).
-            2. new_fortis = _stamp(content=new_pk, tbid=TBID, tick_number=new_tick, private_key=new_sk)
-            3. old_fortis = _stamp(content=new_pk, tbid=TBID, tick_number=new_tick, private_key=cur_sk)
-            4. Append new TickRecord.
-            5. Destroy cur_sk.
-            6. New keypair becomes active.
+        Self-attestation model with mutual attestation between consecutive
+        ticks. Neither signature requires the old private key for later
+        verification.
 
         Args:
             tbid: Time being identity.
@@ -87,35 +75,34 @@ class _timebeing:
             (new_tick_record, new_private_key).
         """
         new_tick_number = _now_ns()
-        new_sk, new_pk = generate_keypair()
+        new_secret_key, new_public_key = generate_keypair()
 
-        cur_pk = current_tick_record.public_key
-        cur_tick = current_tick_record.tick_number
+        current_public_key = current_tick_record.public_key
+        current_tick = current_tick_record.tick_number
 
-        # new_fortis: new key signs new public key (self-attestation)
-        new_fortis = _timebeing._stamp(
-            content=new_pk,
-            tbid=tbid,
-            tick_number=new_tick_number,
-            private_key=new_sk,
+        # Build mutual acknowledgement
+        mutual_acknowledgement = (
+            tbid
+            + current_tick.to_bytes(8, "big")
+            + current_public_key
+            + new_tick_number.to_bytes(8, "big")
+            + new_public_key
         )
 
-        # old_fortis: current key signs new public key (cross-attestation to next tick)
-        old_fortis = _timebeing._stamp(
-            content=new_pk,
-            tbid=tbid,
-            tick_number=new_tick_number,
-            private_key=current_private_key,
-        )
+        # forward_fortis: OLD signs mutual_acknowledgement with OLD private key
+        forward_fortis = sign(mutual_acknowledgement, current_private_key)
+
+        # backward_fortis: NEW signs mutual_acknowledgement with NEW private key
+        backward_fortis = sign(mutual_acknowledgement, new_secret_key)
 
         new_record = TickRecord(
             tick_number=new_tick_number,
-            public_key=new_pk,
-            new_fortis=new_fortis.signature,
-            old_fortis=old_fortis.signature,
+            public_key=new_public_key,
+            forward_fortis=forward_fortis,
+            backward_fortis=backward_fortis,
         )
 
-        return new_record, new_sk
+        return new_record, new_secret_key
 
     @staticmethod
     def _verify_pair(B: TickRecord, A: TickRecord, tbid: bytes) -> bool:
@@ -123,20 +110,35 @@ class _timebeing:
 
         B is the later tick, A is the earlier tick.
 
-        Checks both cross-stamp signatures:
-            1. A.new_fortis verifies against A.public_key.
-            2. B.old_fortis verifies against A.public_key (A's key attested to B).
+        During _tick(B), two signatures are created over the same
+        mutual_acknowledgement = concat(A.tick, A.pk, B.tick, B.pk):
+        - forward_fortis: signed by A.sk (current private key at tick time)
+        - backward_fortis: signed by B.sk (new private key)
+
+        Verification:
+        - B.forward_fortis: verify against A.pk. Catches tampering with B.
+        - B.backward_fortis: verify against B.pk. Cuts tampering with B.
         """
-        # A.new_fortis: A's private key signed the content for this tick
-        new_fortis_input = _concat(tbid, A.tick_number, A.public_key)
-        if not verify(new_fortis_input, A.new_fortis, A.public_key):
+        mutual_acknowledgement = (
+            tbid
+            + A.tick_number.to_bytes(8, "big")
+            + A.public_key
+            + B.tick_number.to_bytes(8, "big")
+            + B.public_key
+        )
+
+        # B.forward_fortis: signed by A.sk, verified against A.pk.
+        # Always present for non-genesis ticks.
+        if B.forward_fortis is None:
+            return False
+        if not verify(mutual_acknowledgement, B.forward_fortis, A.public_key):
             return False
 
-        # B.old_fortis: A's private key signed concat(tbid, B.tick_number, B.public_key)
-        if B.old_fortis is None:
+        # B.backward_fortis: signed by B.sk, verified against B.pk.
+        # Always present for non-genesis ticks.
+        if B.backward_fortis is None:
             return False
-        old_fortis_input = _concat(tbid, B.tick_number, B.public_key)
-        if not verify(old_fortis_input, B.old_fortis, A.public_key):
+        if not verify(mutual_acknowledgement, B.backward_fortis, B.public_key):
             return False
 
         return True

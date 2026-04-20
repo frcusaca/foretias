@@ -108,8 +108,8 @@ class Calendar:
                 {
                     "tick_number": t.tick_number,
                     "public_key": _bytes_to_hex(t.public_key),
-                    "new_fortis": _bytes_to_hex(t.new_fortis),
-                    "old_fortis": _bytes_to_hex(t.old_fortis) if t.old_fortis is not None else None,
+                    "forward_fortis": _bytes_to_hex(t.forward_fortis) if t.forward_fortis is not None else None,
+                    "backward_fortis": _bytes_to_hex(t.backward_fortis) if t.backward_fortis is not None else None,
                 }
                 for t in self._ticks
             ],
@@ -145,10 +145,10 @@ class Calendar:
             prev_tick_number = tick_number
 
             public_key = _hex_to_bytes(td["public_key"])
-            new_fortis = _hex_to_bytes(td["new_fortis"])
-            old_fortis = _hex_to_bytes(td["old_fortis"]) if td["old_fortis"] is not None else None
+            forward_fortis = _hex_to_bytes(td["forward_fortis"]) if td["forward_fortis"] is not None else None
+            backward_fortis = _hex_to_bytes(td["backward_fortis"]) if td["backward_fortis"] is not None else None
 
-            ticks.append(TickRecord(tick_number, public_key, new_fortis, old_fortis))
+            ticks.append(TickRecord(tick_number, public_key, forward_fortis, backward_fortis))
 
         cal = cls(tbid, tbn, serialized, chronon_seconds, ticks)
 
