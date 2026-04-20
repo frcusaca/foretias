@@ -12,6 +12,7 @@ import uuid
 from datetime import timedelta
 
 from ._timebeing import _timebeing
+from .crypto import sign
 from .calendar import Calendar
 from .config import Config
 from .crypto import generate_keypair
@@ -60,15 +61,23 @@ class TimebeingFamily:
         self._config = Config.resolve(persist_path=persist_path)
         self._lock = threading.Lock()
 
-        # Initialize calendar with genesis
+        # Initialize calendar with genesis.
+        # Genesis uses a self-transition: MA(genesis, genesis).
+        # Both fortis are computed; neither is None.
         sk, pk = generate_keypair()
-        genesis_fortis = _timebeing._stamp(
-            content=pk, tbid=self._tbid, tick_number=0,
-            private_key=sk,
+        genesis_ma = (
+            self._tbid
+            + b"\x00" * 8
+            + pk
+            + b"\x00" * 8
+            + pk
         )
+        genesis_forward = sign(genesis_ma, sk)
+        genesis_backward = sign(genesis_ma, sk)
         genesis = TickRecord(
             tick_number=0, public_key=pk,
-            new_fortis=genesis_fortis.signature, old_fortis=None,
+            forward_fortis=genesis_forward,
+            backward_fortis=genesis_backward,
         )
         self._calendar = Calendar(
             tbid=self._tbid, tbn=self._tbn,
@@ -177,14 +186,10 @@ class TimebeingFamily:
 
     def _advance_tick(self) -> None:
         """Internal tick advancement (must be called with lock held)."""
+        current = self._calendar.ticks[-1]
         new_record, new_sk = _timebeing._tick(
             tbid=self._tbid,
-            current_tick_record=TickRecord(
-                tick_number=self._calendar.latest() or 0,
-                public_key=self._current_pk,
-                new_fortis=b"",
-                old_fortis=None,
-            ),
+            current_tick_record=current,
             current_private_key=self._current_sk,
         )
         self._calendar.append(new_record)

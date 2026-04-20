@@ -25,6 +25,9 @@ dev = [
     "pytest>=8",
 ]
 
+[project.scripts]
+fortis = "fortias.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/frcusaca/fortias"
 Repository = "https://github.com/frcusaca/fortias"
