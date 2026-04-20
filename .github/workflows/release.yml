@@ -31,7 +31,7 @@ jobs:
         run: uv pip install -e .
 
       - name: Build package
-        run: hatch build
+        run: uvx hatch build
 
       - name: Check package
         run: |
