@@ -56,3 +56,4 @@ dmypy.json
 # Auto-generated version file (hatch-vcs)
 src/fortias/_version.py
 .venv
+.remember
