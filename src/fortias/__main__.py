@@ -1,4 +1,9 @@
-"""Allow running fortias as a module: python -m fortias.
+"""Allow running fortias as ``python -m fortias``."""
 
-#TBD: implement calls to extract and stamp.
-"""
+from __future__ import annotations
+
+import sys
+
+from .cli import main
+
+sys.exit(main())

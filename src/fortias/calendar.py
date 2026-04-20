@@ -1,170 +1,191 @@
-"""
-Fortias Protocol v0.0.1 — Verification calendar.
-
-The :class:`Calendar` is an in-memory, monotonically ordered store of
-``(TimestampV0, verifier_bytes)`` ticks.  Each tick publishes an Ed25519
-public key that is authoritative from ``calendar_timestamp`` onward (until
-the next tick supersedes it).
-
-Monotonic insertion policy
---------------------------
-:meth:`tick` enforces strictly increasing timestamps.  A timestamp equal to
-or earlier than the current head is rejected.  Because the list is always
-fully sorted in ascending order, lookups use binary search (O(log n)) with
-no extra bookkeeping.
-
-All data lives in process memory and is not persisted across restarts.
-
-Lookup / cutoff policy
-----------------------
-:meth:`get_tick` returns the *greatest* tick whose timestamp is **less than
-or equal to** the query timestamp (``≤``).  This is the "latest-key-at-time"
-policy.
-
-Example::
-
-    # Tick published at exactly 00:05:00
-    cal.tick(TS(2026, 1, 1, 0, 5, 0), new_key)
-
-    # A stamp issued at 00:05:30 — still within the 5-minute window
-    cal.get_tick(TS(2026, 1, 1, 0, 5, 30))
-    # → returns the 00:05:00 tick (key is valid)
-
-    # A stamp issued at 00:06:00 — clock has turned the next minute
-    cal.get_tick(TS(2026, 1, 1, 0, 6, 0))
-    # → returns the NEXT tick (00:06:00), not the 00:05:00 one.
-    #   The 00:05:00 key is no longer authoritative.
-
-This policy means that key rotations are always discoverable: a verifier
-asking "what key was valid at T?" gets the key that was active *at that
-exact moment*, and as soon as a new tick supersedes it, old stamps signed
-under the old key will correctly fail verification.
-"""
+"""Fortias v1 — Calendar: append-only log of tick records."""
 
 from __future__ import annotations
 
-import uuid
-from bisect import bisect_right
-from datetime import datetime, timezone
+import json
+import pathlib
 
-from .crypto import PROTOCOL_VERSION
-from .models import VerificationCalendar, VerificationCalendarResponse
-from .timestamp import TimestampFactoryV0, TimestampV0
+from ._timebeing import _timebeing
+from .models import TickRecord
+
+_HEX_ERROR = "hex-encoded fields must be valid hex strings"
+
+
+def _bytes_to_hex(value: bytes) -> str:
+    return value.hex()
+
+
+def _hex_to_bytes(value: str) -> bytes:
+    try:
+        return bytes.fromhex(value)
+    except ValueError:
+        raise ValueError(_HEX_ERROR) from None
 
 
 class Calendar:
-    """In-memory store of ``(TimestampV0, verifier)`` ticks in ascending order.
+    """Append-only log of a time being's tick chain.
 
-    Each entry pairs a :class:`~fortias.timestamp.TimestampV0` with the raw
-    32-byte Ed25519 public key that was authoritative from that moment.
-
-    The list is maintained in strictly ascending timestamp order by enforcing
-    monotonicity on :meth:`tick`.  This allows O(log n) binary search for
-    lookups.
+    Attributes:
+        tbid: The time being's identity.
+        tbn: The time being's human-readable name.
+        serialized: Whether the time being computes sparse ticks.
+        chronon_seconds: Fixed tick interval in seconds.
+        ticks: The list of :class:`TickRecord` entries.
     """
 
-    def __init__(self) -> None:
-        self._ticks: list[tuple[TimestampV0, bytes]] = []
+    def __init__(
+        self,
+        tbid: bytes,
+        tbn: str,
+        serialized: bool,
+        chronon_seconds: int,
+        ticks: list[TickRecord] | None = None,
+    ) -> None:
+        self.tbid = tbid
+        self.tbn = tbn
+        self.serialized = serialized
+        self.chronon_seconds = chronon_seconds
+        self._ticks: list[TickRecord] = list(ticks or [])
 
     # ------------------------------------------------------------------
-    # Tick interface
+    # Mutation
     # ------------------------------------------------------------------
 
-    def tick(self, timestamp: TimestampV0, verifier: bytes) -> None:
-        """Append ``(timestamp, verifier)`` iff *timestamp* is the new maximum.
-
-        Enforces monotonicity: the calendar is an ever-advancing sequence.
-        A timestamp equal to or earlier than the current head is rejected.
-
-        Because the list is always sorted in ascending order, the last
-        element is always the maximum timestamp.
-
-        Args:
-            timestamp: Must be strictly greater than every previously
-                       inserted timestamp.
-            verifier:  Raw 32-byte Ed25519 public key authoritative from
-                       *timestamp* onward.
+    def append(self, tick_record: TickRecord) -> None:
+        """Add a new tick record.
 
         Raises:
-            :class:`ValueError`: if *timestamp* is not strictly greater than
-                                 the current maximum.
+            ValueError: if *tick_record* is not strictly greater than
+                        the current head.
         """
-        if self._ticks and timestamp <= self._ticks[-1][0]:
+        if self._ticks and tick_record.tick_number <= self._ticks[-1].tick_number:
             raise ValueError(
-                f"tick() requires a strictly increasing timestamp.  "
-                f"Received {timestamp!r}, current maximum is {self._ticks[-1][0]!r}."
+                f"append() requires a strictly increasing tick_number. "
+                f"Received {tick_record.tick_number!r}, current maximum is {self._ticks[-1].tick_number!r}."
             )
-        self._ticks.append((timestamp, verifier))
-
-    def get_tick(
-        self, timestamp: TimestampV0
-    ) -> tuple[TimestampV0, bytes] | None:
-        """Return the greatest tick with ``tick_ts ≤ timestamp``, or ``None``.
-
-        O(log n) binary search on the sorted underlying list.
-
-        This implements the **latest-key-at-time** policy: given a query
-        timestamp, return the most recent tick whose timestamp is less than
-        or equal to the query.  This is the key that was authoritative at
-        the query moment.
-
-        Args:
-            timestamp: Query timestamp.
-
-        Returns:
-            The ``(tick_timestamp, verifier)`` pair for the greatest tick
-            whose timestamp is ``≤`` *timestamp*, or ``None`` if no such
-            tick exists.
-        """
-        if not self._ticks:
-            return None
-        idx = bisect_right(self._ticks, timestamp, key=lambda e: e[0])
-        if idx == 0:
-            return None
-        return self._ticks[idx - 1]
+        self._ticks.append(tick_record)
 
     # ------------------------------------------------------------------
-    # Verification calendar
+    # Lookup
     # ------------------------------------------------------------------
 
-    def retrieve_for_verification(
-        self,
-        query_timestamp: TimestampV0,
-        tbid: str,
-    ) -> VerificationCalendarResponse:
-        """Look up the verification calendar entry for *query_timestamp*.
+    def get(self, tick_number: int, count: int) -> list[TickRecord]:
+        """Return earliest *count* ticks at or after *tick_number*.
 
-        Finds the greatest tick at-or-before *query_timestamp* and packages
-        it into a :class:`~fortias.models.VerificationCalendarResponse`.
+        Uses binary search to find the first tick >= *tick_number*, then
+        returns up to *count* records from that point.
+        """
+        # Binary search for first tick >= tick_number
+        lo, hi = 0, len(self._ticks)
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if self._ticks[mid].tick_number < tick_number:
+                lo = mid + 1
+            else:
+                hi = mid
+        start = lo
+        end = min(start + count, len(self._ticks))
+        return list(self._ticks[start:end])
 
-        The TBID is provided by the caller (the TimeBeing service object)
-        so that each verification lookup has a unique correlation id.
+    def latest(self) -> int | None:
+        """Return the highest tick number, or None if empty."""
+        return self._ticks[-1].tick_number if self._ticks else None
 
-        Args:
-            query_timestamp: The timestamp to look up (typically a stamp's
-                             ``fortias_timestamp`` parsed into a
-                             :class:`~fortias.timestamp.TimestampV0`).
-            tbid:            UUID4 correlation id from the service layer.
+    # ------------------------------------------------------------------
+    # Persistence
+    # ------------------------------------------------------------------
+
+    def save(self, path: str | pathlib.Path) -> None:
+        """Save to JSON file. Hex-encodes all byte arrays."""
+        path = pathlib.Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        data = {
+            "tbid": _bytes_to_hex(self.tbid),
+            "tbn": self.tbn,
+            "serialized": self.serialized,
+            "chronon_seconds": self.chronon_seconds,
+            "ticks": [
+                {
+                    "tick_number": t.tick_number,
+                    "public_key": _bytes_to_hex(t.public_key),
+                    "new_fortis": _bytes_to_hex(t.new_fortis),
+                    "old_fortis": _bytes_to_hex(t.old_fortis) if t.old_fortis is not None else None,
+                }
+                for t in self._ticks
+            ],
+        }
+        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    @classmethod
+    def load(cls, path: str | pathlib.Path) -> Calendar:
+        """Load from JSON file. Validates ascending tick_numbers, hex parse, chain integrity.
+
+        Raises:
+            ValueError: if validation fails.
+        """
+        path = pathlib.Path(path)
+        data = json.loads(path.read_text(encoding="utf-8"))
+
+        # Parse top-level fields
+        tbid = _hex_to_bytes(data["tbid"])
+        tbn = data["tbn"]
+        serialized = data["serialized"]
+        chronon_seconds = data["chronon_seconds"]
+
+        # Parse tick records
+        ticks: list[TickRecord] = []
+        prev_tick_number = -1
+        for i, td in enumerate(data["ticks"]):
+            tick_number = td["tick_number"]
+            # Validate non-negative and strictly ascending
+            if not isinstance(tick_number, int) or tick_number < 0:
+                raise ValueError(f"tick[{i}].tick_number must be a non-negative integer")
+            if tick_number <= prev_tick_number:
+                raise ValueError(f"tick[{i}].tick_number must be strictly ascending")
+            prev_tick_number = tick_number
+
+            public_key = _hex_to_bytes(td["public_key"])
+            new_fortis = _hex_to_bytes(td["new_fortis"])
+            old_fortis = _hex_to_bytes(td["old_fortis"]) if td["old_fortis"] is not None else None
+
+            ticks.append(TickRecord(tick_number, public_key, new_fortis, old_fortis))
+
+        cal = cls(tbid, tbn, serialized, chronon_seconds, ticks)
+
+        # Chain integrity check
+        ok, failures = cal.integrity_check(return_failures=True)
+        if not ok:
+            raise ValueError(
+                f"Calendar chain integrity check failed at indexes: {failures}"
+            )
+
+        return cal
+
+    # ------------------------------------------------------------------
+    # Verification
+    # ------------------------------------------------------------------
+
+    def integrity_check(self, return_failures: bool = False) -> bool | tuple[bool, list[int] | None]:
+        """Check all consecutive pairs via _verify_pair.
 
         Returns:
-            A :class:`~fortias.models.VerificationCalendarResponse` whose
-            ``verification_calendar`` field carries the located
-            :class:`~fortias.models.VerificationCalendar`, or ``None`` if
-            no tick at-or-before *query_timestamp* exists.
+            bool if *return_failures* is False (default).
+            (bool, list[int]) if *return_failures* is True.
         """
-        hit = self.get_tick(query_timestamp)
-        vcal: VerificationCalendar | None = None
-        if hit is not None:
-            tick_ts, verifier = hit
-            vcal = VerificationCalendar(
-                calendar_timestamp=tick_ts,
-                verifier=verifier,
-            )
-        return VerificationCalendarResponse(
-            TBID=tbid,
-            fortias_version=PROTOCOL_VERSION,
-            fortias_timestamp=TimestampFactoryV0.from_datetime(
-                datetime.now(tz=timezone.utc)
-            ).to_iso_string(),
-            verification_calendar=vcal,
-        )
+        if len(self._ticks) < 2:
+            return (True, []) if return_failures else True
+
+        failures: list[int] = []
+        for i in range(len(self._ticks) - 1):
+            if not _timebeing._verify_pair(self._ticks[i + 1], self._ticks[i], self.tbid):
+                failures.append(i)
+
+        ok = len(failures) == 0
+        if return_failures:
+            return (ok, failures)
+        return ok
+
+    @property
+    def ticks(self) -> list[TickRecord]:
+        """Access the tick list (read-only)."""
+        return list(self._ticks)

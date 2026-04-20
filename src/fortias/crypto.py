@@ -1,19 +1,7 @@
-"""
-Fortias Protocol v0.0.1 — Cryptographic primitives.
+"""Fortias v1 — Cryptographic primitives.
 
-Signatures are Ed25519 over the raw payload bytes (no pre-hash inside the
-signature input).  Public keys stored in the verification
-:class:`~fortias.calendar.Calendar` are the 32-byte raw form returned by
-:meth:`cryptography.hazmat.primitives.asymmetric.ed25519.Ed25519PublicKey.public_bytes_raw`.
-
-The integrity hash kept in :class:`~fortias.models.StampResponse`
-(``stamp_request_hash``) is a separate SHA-256 digest of the payload — it lets
-a requester re-derive the same value client-side and compare, without pulling
-the whole payload through the signature check.
-
-TODO: Investigate the "no pre-hash inside the signature input" statement.
-Ed25519 internally hashes anyway, so this description may be inaccurate
-or misleading. Clarify what was actually meant.
+Ed25519 signatures over raw bytes (no pre-hash inside the signature input).
+SHA-256 for content hashing.
 """
 
 from __future__ import annotations
@@ -26,43 +14,40 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PublicKey,
 )
 
-from .exceptions import InvalidKeyError
 
-
-PROTOCOL_VERSION = "0.0.1"
-
-
-def hash_payload_for_version(payload: bytes, version: str) -> str:
-    """Hex-encoded payload digest selected by protocol version.
+def sha256(data: bytes | str) -> bytes:
+    """SHA-256 digest of *data*.
 
     Args:
-        payload: Raw bytes to digest.
-        version: Protocol version string.  Only ``"0.0.1"`` is supported and
-                 selects SHA-256.
+        data: Raw bytes or string to hash.
 
     Returns:
-        Hex-encoded digest string.
-
-    Raises:
-        :class:`ValueError`: if *version* is not a recognised protocol version.
+        32-byte digest.
     """
-    if version == PROTOCOL_VERSION:
-        return hashlib.sha256(payload).hexdigest()
-    raise ValueError(f"Unsupported protocol version: {version!r}")
+    if isinstance(data, str):
+        data = data.encode("utf-8")
+    return hashlib.sha256(data).digest()
+
+
+def sha256_hex(data: bytes | str) -> str:
+    """Hex-encoded SHA-256 digest of *data*."""
+    if isinstance(data, str):
+        data = data.encode("utf-8")
+    return hashlib.sha256(data).hexdigest()
 
 
 def generate_keypair() -> tuple[bytes, bytes]:
     """Generate a fresh Ed25519 keypair as 32-byte raw buffers.
 
     Returns:
-        ``(private_key_bytes, public_key_bytes)`` — each 32 bytes.
+        ``(private_key_bytes, public_key_bytes)`` -- each 32 bytes.
     """
     sk = Ed25519PrivateKey.generate()
     pk = sk.public_key()
     return sk.private_bytes_raw(), pk.public_bytes_raw()
 
 
-def sign(payload: bytes, secret_key: bytes) -> str:
+def sign(payload: bytes, secret_key: bytes) -> bytes:
     """Sign *payload* with an Ed25519 private key.
 
     Args:
@@ -70,35 +55,32 @@ def sign(payload: bytes, secret_key: bytes) -> str:
         secret_key: 32-byte Ed25519 private key in raw form.
 
     Returns:
-        Hex-encoded 64-byte signature.
+        64-byte Ed25519 signature.
 
     Raises:
-        :class:`~fortias.exceptions.InvalidKeyError`: if *secret_key* is not a
-            valid Ed25519 private key.
+        ValueError: if *secret_key* is not a valid Ed25519 private key.
     """
     try:
         sk = Ed25519PrivateKey.from_private_bytes(secret_key)
     except (ValueError, TypeError) as exc:
-        raise InvalidKeyError(f"Invalid Ed25519 private key: {exc}") from exc
-    return sk.sign(payload).hex()
+        raise ValueError(f"Invalid Ed25519 private key: {exc}") from exc
+    return sk.sign(payload)
 
 
-def verify_signature(payload: bytes, signature_hex: str, verifier: bytes) -> bool:
+def verify(payload: bytes, signature: bytes, public_key: bytes) -> bool:
     """Verify an Ed25519 signature over *payload*.
 
     Args:
-        payload:       Bytes that were signed.
-        signature_hex: Hex-encoded signature produced by :func:`sign`.
-        verifier:      32-byte Ed25519 public key in raw form.
+        payload:     Bytes that were signed.
+        signature:   64-byte Ed25519 signature.
+        public_key:  32-byte Ed25519 public key.
 
     Returns:
-        ``True`` if the signature is valid, ``False`` otherwise.  A malformed
-        key, malformed hex signature, or cryptographic mismatch all yield
-        ``False`` rather than raising.
+        ``True`` if valid, ``False`` otherwise. Malformed input yields ``False``.
     """
     try:
-        pk = Ed25519PublicKey.from_public_bytes(verifier)
-        pk.verify(bytes.fromhex(signature_hex), payload)
+        pk = Ed25519PublicKey.from_public_bytes(public_key)
+        pk.verify(signature, payload)
     except (InvalidSignature, ValueError, TypeError):
         return False
     return True
