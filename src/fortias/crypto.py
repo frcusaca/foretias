@@ -10,6 +10,10 @@ The integrity hash kept in :class:`~fortias.models.StampResponse`
 (``stamp_request_hash``) is a separate SHA-256 digest of the payload — it lets
 a requester re-derive the same value client-side and compare, without pulling
 the whole payload through the signature check.
+
+TODO: Investigate the "no pre-hash inside the signature input" statement.
+Ed25519 internally hashes anyway, so this description may be inaccurate
+or misleading. Clarify what was actually meant.
 """
 
 from __future__ import annotations

@@ -35,6 +35,9 @@ _UNIX_EPOCH    = datetime(1970, 1, 1, tzinfo=timezone.utc)
 _SPECIFICATION = "Fortias Timestamp V0: nanosecond-precision ISO 8601, AD 0-9999"
 
 # Matches: 2026-04-19T14:30:00[.123456789][Z|+00:00]
+# TODO: Validate date components (month 1-12, day 1-31, etc.) in the regex.
+# Currently accepts invalid dates like month 13 or day 32 since it only
+# checks digit counts, not actual validity.
 _ISO_RE = re.compile(
     r"^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})"
     r"(?:\.(\d{1,9}))?"

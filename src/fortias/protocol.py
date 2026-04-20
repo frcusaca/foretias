@@ -58,7 +58,15 @@ def _require_key(secret_key: bytes) -> None:
 
 
 def _utc_now_iso() -> str:
-    return datetime.now(tz=timezone.utc).isoformat(timespec="microseconds")
+    """Return current UTC time as a nanosecond-precision ISO 8601 string.
+
+    Uses :class:`~fortias.timestamp.TimestampV0` to ensure the output
+    format matches the nanosecond-precision uint64 representation used
+    throughout the protocol.
+    """
+    return TimestampFactoryV0.from_datetime(
+        datetime.now(tz=timezone.utc)
+    ).to_iso_string()
 
 
 def _make_tbid() -> str:
@@ -66,7 +74,13 @@ def _make_tbid() -> str:
 
 
 def _require_matching_hash(payload: bytes, claimed_hash: str) -> str:
-    """Raise if ``SHA-256(payload) != claimed_hash``; otherwise return the hash."""
+    """Raise if ``SHA-256(payload) != claimed_hash``; otherwise return the hash.
+
+    TODO: Consider whether this should hash the payload (SHA-256) and
+    compare with the hash that came in with it, rather than relying on
+    the client-supplied hash. This would provide an additional layer of
+    integrity checking.
+    """
     actual = hash_payload_for_version(payload, PROTOCOL_VERSION)
     if actual != claimed_hash:
         raise PayloadHashMismatchError(
@@ -88,7 +102,11 @@ class Fortias:
     """
 
     def __init__(self, secret_key: bytes, calendar: Calendar) -> None:
-        _require_key(secret_key)
+        try:
+            _require_key(secret_key)
+        except InvalidKeyError as exc:
+            print(f"Error: {exc}")
+            raise
         self._secret_key = bytes(secret_key)
         self._calendar = calendar
 
@@ -208,7 +226,7 @@ class Fortias:
         ))
 
         # --- 3. calendar lookup ---------------------------------------------
-        vcal_response = self._calendar.retrieve_for_verification(query_ts)
+        vcal_response = self._calendar.retrieve_for_verification(query_ts, tbid=_make_tbid())
         vcal = vcal_response.verification_calendar
         calendar_ok = vcal is not None
         results.append(VerifyResult(

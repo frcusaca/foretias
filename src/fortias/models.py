@@ -6,11 +6,17 @@ to share across the protocol boundary.
 
 Surface
 -------
+The protocol exposes two logical operations (to be served by an HTTP
+server or other transport layer):
+
 /stamp
     :class:`StampRequest`   → :class:`StampResponse`
 
 /verify
     :class:`VerifyRequest`  → :class:`VerifyResponse`   (with :class:`VerifyResult` per check)
+
+These are represented as in-process method calls on
+:class:`~fortias.protocol.Fortias` today.
 
 Verification calendar (internal, consumed by :class:`~fortias.protocol.Fortias`)
     :class:`VerificationCalendar`
@@ -155,7 +161,13 @@ class VerifyResponse:
     stamp_request_hash: str
     valid: bool
     results: tuple[VerifyResult, ...]
+    # TODO: Investigate whether an empty results list returning valid=True
+    # (vacuous truth via all([])) is the right default. Consider whether
+    # the protocol should require at least one check to be configured.
+
     echo: Any | None = None
+    # TODO: When building the HTTP server, add kw_only=True here to match
+    # the other dataclasses in this file.
     status: str = "normal"
 
     @classmethod

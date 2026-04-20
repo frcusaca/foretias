@@ -80,17 +80,17 @@ class TestRetrieveForVerification:
         verifier = b"pubkey" + b"\x00" * 26
         cal.tick(_ts(2025), verifier)
 
-        resp = cal.retrieve_for_verification(_ts(2026))
+        resp = cal.retrieve_for_verification(_ts(2026), tbid="test-tbid")
         assert resp.verification_calendar is not None
         assert resp.verification_calendar.calendar_timestamp == _ts(2025)
         assert resp.verification_calendar.verifier == verifier
         assert resp.fortias_version == "0.0.1"
-        assert resp.TBID  # non-empty
+        assert resp.TBID == "test-tbid"
 
     def test_returns_none_verification_calendar_when_empty(self):
         cal = Calendar()
-        resp = cal.retrieve_for_verification(_ts(2026))
+        resp = cal.retrieve_for_verification(_ts(2026), tbid="test-tbid")
         assert resp.verification_calendar is None
         # Envelope fields still populated.
-        assert resp.TBID
+        assert resp.TBID == "test-tbid"
         assert resp.fortias_timestamp

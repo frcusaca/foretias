@@ -4,3 +4,7 @@ try:
     from ._version import __version__
 except ImportError:
     __version__ = "0.0.0+unknown"
+
+from .protocol import Fortias
+
+__all__ = ["Fortias", "__version__"]
