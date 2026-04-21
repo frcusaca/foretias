@@ -12,13 +12,33 @@ from .crypto import generate_keypair, sha256, sign, verify
 from .models import Fortis, TickRecord
 
 
+def _uint64_be(value: int) -> bytes:
+    """Encode an integer as 8-byte big-endian."""
+    return value.to_bytes(8, "big")
+
+
+def _genesis_ma(tbid: bytes, pk: bytes) -> bytes:
+    """Build the mutual acknowledgement for a genesis tick.
+
+    Format: tbid + 0 (tick) + 0 (no prev pk) + now (ns) + pk.
+    """
+    import time
+    return (
+        tbid
+        + b"\x00" * 8
+        + b"\x00" * 32
+        + _uint64_be(int(time.time() * 1_000_000_000))
+        + pk
+    )
+
+
 def _concat(tbid: bytes, tick_number: int, content: bytes | str) -> bytes:
     """Concatenate tbid, tick_number as uint64 BE, and content for signature input."""
     if isinstance(content, bytes):
         content_bytes = content
     else:
         content_bytes = content.encode("utf-8")
-    return tbid + tick_number.to_bytes(8, "big") + content_bytes
+    return tbid + _uint64_be(tick_number) + content_bytes
 
 
 class _timebeing:
@@ -83,9 +103,9 @@ class _timebeing:
         # Build mutual acknowledgement
         mutual_acknowledgement = (
             tbid
-            + current_tick.to_bytes(8, "big")
+            + _uint64_be(current_tick)
             + current_public_key
-            + new_tick_number.to_bytes(8, "big")
+            + _uint64_be(new_tick_number)
             + new_public_key
         )
 
@@ -121,9 +141,9 @@ class _timebeing:
         """
         mutual_acknowledgement = (
             tbid
-            + A.tick_number.to_bytes(8, "big")
+            + _uint64_be(A.tick_number)
             + A.public_key
-            + B.tick_number.to_bytes(8, "big")
+            + _uint64_be(B.tick_number)
             + B.public_key
         )
 

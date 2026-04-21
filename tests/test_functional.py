@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from fortias._timebeing import _timebeing
+from fortias._timebeing import _genesis_ma, _timebeing, _uint64_be
 from fortias.crypto import generate_keypair, sign
 from fortias.models import Fortis, TickRecord
 
@@ -13,13 +13,7 @@ def _make_genesis():
     """Create a genesis tick record with self-transition MA."""
     tbid = b"test-tbid-123456789012345678901234"  # 32 bytes
     sk, pk = generate_keypair()
-    genesis_ma = (
-        tbid
-        + b"\x00" * 8
-        + pk
-        + b"\x00" * 8
-        + pk
-    )
+    genesis_ma = _genesis_ma(tbid, pk)
     genesis_forward = sign(genesis_ma, sk)
     genesis_backward = sign(genesis_ma, sk)
     genesis = TickRecord(
@@ -160,9 +154,9 @@ def _mutual_ack(A, B, tbid=b"test-tbid-123456789012345678901234"):
     """Build mutual_acknowledgement for two tick records."""
     return (
         tbid
-        + A.tick_number.to_bytes(8, "big")
+        + _uint64_be(A.tick_number)
         + A.public_key
-        + B.tick_number.to_bytes(8, "big")
+        + _uint64_be(B.tick_number)
         + B.public_key
     )
 

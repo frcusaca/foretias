@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import tempfile
 
+from fortias._timebeing import _genesis_ma, _timebeing
+
 from fortias._timebeing import _timebeing
 from fortias.calendar import Calendar
 from fortias.cli import _load_fortis, fortias_verify, main
@@ -19,13 +21,7 @@ def _make_test_files(tbid, content):
         content=content, tbid=tbid, tick_number=0,
         private_key=sk,
     )
-    genesis_ma = (
-        tbid
-        + b"\x00" * 8
-        + pk
-        + b"\x00" * 8
-        + pk
-    )
+    genesis_ma = _genesis_ma(tbid, pk)
     forward = sign(genesis_ma, sk)
     backward = sign(genesis_ma, sk)
     cal = Calendar(tbid, "Time Being test", True, 60, ticks=[])

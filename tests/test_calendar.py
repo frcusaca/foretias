@@ -7,7 +7,7 @@ import tempfile
 
 import pytest
 
-from fortias._timebeing import _timebeing
+from fortias._timebeing import _genesis_ma, _timebeing
 from fortias.calendar import Calendar
 from fortias.crypto import generate_keypair, sign
 from fortias.models import TickRecord
@@ -15,13 +15,7 @@ from fortias.models import TickRecord
 
 def _make_valid_genesis(tbid, pk, sk):
     """Create a genesis TickRecord with self-transition MA."""
-    genesis_ma = (
-        tbid
-        + b"\x00" * 8
-        + pk
-        + b"\x00" * 8
-        + pk
-    )
+    genesis_ma = _genesis_ma(tbid, pk)
     forward = sign(genesis_ma, sk)
     backward = sign(genesis_ma, sk)
     return TickRecord(tick_number=0, public_key=pk, forward_fortis=forward, backward_fortis=backward)

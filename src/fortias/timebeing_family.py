@@ -11,7 +11,7 @@ import threading
 import uuid
 from datetime import timedelta
 
-from ._timebeing import _timebeing
+from ._timebeing import _timebeing, _genesis_ma
 from .crypto import sign
 from .calendar import Calendar
 from .config import Config
@@ -65,13 +65,7 @@ class TimebeingFamily:
         # Genesis uses a self-transition: MA(genesis, genesis).
         # Both fortis are computed; neither is None.
         sk, pk = generate_keypair()
-        genesis_ma = (
-            self._tbid
-            + b"\x00" * 8
-            + pk
-            + b"\x00" * 8
-            + pk
-        )
+        genesis_ma = _genesis_ma(self._tbid, pk)
         genesis_forward = sign(genesis_ma, sk)
         genesis_backward = sign(genesis_ma, sk)
         genesis = TickRecord(
