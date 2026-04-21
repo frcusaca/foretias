@@ -154,7 +154,7 @@ A **calendar** is the append-only log of a time being's tick chain. It stores ev
   - Full chain integrity check via `integrity_check()`.
 - Calendar is persisted to: `{persist_path}/{tbid}/calendar.json`.
 
-### 2.4 Stamper
+### 2.4 Stamper (Latin *Chronos authenticus* )
 
 A **stamper** is the time being in the act of signing content. The stamper is not a separate entity — it is the signing role that a time being assumes.
 
