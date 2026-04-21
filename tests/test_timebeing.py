@@ -73,10 +73,7 @@ class TestDormantTimebeing:
             tbf2 = TimebeingFamily.load(persist_path=tmpdir)
             assert tbf2.active is False
 
-            with tbf2._lock:
-                # The load doesn't hold the lock, but stamp() acquires it.
-                # We test by calling stamp directly.
-                pass
+            # stamp() acquires _rlock internally, no need to hold it here
             try:
                 tbf2.stamp(b"hello")
             except RuntimeError as e:
@@ -90,15 +87,40 @@ class TestSerializedMode:
         tbf.stamp(b"msg1")
         # serialized=True: stamp should advance tick
         assert tbf.current_tick() >= tick0
+        # Exactly two ticks: genesis + 1
+        assert len(tbf.calendar.ticks) == 2
 
-    def test_multiple_stamps_advance_ticks(self):
+    def test_rapid_stamps_same_chronon(self):
+        """Rapid stamps in the same chronon window don't each trigger a tick."""
         tbf = TimebeingFamily(serialized=True)
-        tick0 = tbf.current_tick()
+        f1 = tbf.stamp(b"msg1")
+        assert tbf.verify(b"msg1", f1) is True
+        tick1 = tbf.current_tick()
+        f2 = tbf.stamp(b"msg2")
+        tick2 = tbf.current_tick()
+        f3 = tbf.stamp(b"msg3")
+        tick3 = tbf.current_tick()
+        # First stamp ticks (genesis → tick 1), subsequent stamps stay
+        # within the same chronon window.
+        assert tick1 > 0
+        assert tick2 == tick1
+        assert tick3 == tick1
+        # But they all produce valid Fortises at the same tick.
+        assert tbf.verify(b"msg2", f2) is True
+        assert tbf.verify(b"msg3", f3) is True
+
+    def test_stamps_across_chronon_boundary_advance(self):
+        """Stamps after a scheduled tick fires each advance the tick."""
+        tbf = TimebeingFamily(serialized=True, chronon_ns=1_000_000_000.0)
         tbf.stamp(b"msg1")
         tick1 = tbf.current_tick()
+        time.sleep(1.5)  # wait for daemon to fire scheduled tick
         tbf.stamp(b"msg2")
         tick2 = tbf.current_tick()
-        assert tick2 > tick1 >= tick0
+        assert tick2 > tick1
+        tbf.stamp(b"msg3")  # already scheduled tick, stays at tick2
+        tick3 = tbf.current_tick()
+        assert tick3 == tick2
 
 
 class TestGet:
@@ -126,11 +148,20 @@ class TestGet:
 
 class TestNonSerializedMode:
     def test_stamp_does_not_trigger_tick(self):
-        """Non-serialized: stamp should NOT advance tick."""
+        """Non-serialized: stamp does NOT advance tick. Daemon does."""
         tbf = TimebeingFamily(serialized=False, chronon_ns=3_600_000_000_000.0)
         tick_before = tbf.current_tick()
         tbf.stamp(b"msg")
         assert tbf.current_tick() == tick_before
+
+    def test_rapid_stamps_same_chronon(self):
+        """Rapid stamps within the same chronon window don't each tick."""
+        tbf = TimebeingFamily(serialized=False, chronon_ns=60_000_000_000_000.0)
+        tbf.stamp(b"msg1")
+        tick1 = tbf.current_tick()
+        tbf.stamp(b"msg2")
+        tick2 = tbf.current_tick()
+        assert tick2 == tick1
 
     def test_verify_fortis_stamped_at_current_tick(self):
         """Verify a fortis created at the current tick."""
@@ -175,10 +206,12 @@ class TestShutdown:
         tbf.shutdown()
         assert not tbf._daemon.is_alive()
 
-    def test_shutdown_serialized_is_noop(self):
-        tbf = TimebeingFamily(serialized=True)
-        assert tbf._daemon is None
-        tbf.shutdown()  # Should not raise
+    def test_shutdown_stops_serialized_daemon(self):
+        tbf = TimebeingFamily(serialized=True, chronon_ns=1_000_000_000.0)
+        assert tbf._daemon is not None
+        tbf.stamp(b"msg")  # schedules a tick
+        tbf.shutdown()
+        assert not tbf._daemon.is_alive()
 
     def test_shutdown_dormant_is_noop(self):
         with tempfile.TemporaryDirectory() as tmpdir:
