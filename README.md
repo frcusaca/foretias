@@ -14,10 +14,9 @@ pip install fortias
 
 ```python
 from fortias import TimebeingFamily
-from datetime import timedelta
 
 # Create a time being with 1-minute ticks
-tbf = TimebeingFamily(name="alpha", chronon=timedelta(minutes=1))
+tbf = TimebeingFamily(name="alpha", chronon_ns=60_000_000_000.0)
 
 # Stamp your first message
 fortis = tbf.stamp("hello world")
@@ -45,9 +44,8 @@ Add `--chain` to run a full chain integrity check on the calendar.
 
 ```python
 from fortias import TimebeingFamily, Fortis, TickRecord, Config
-from datetime import timedelta
 
-tbf = TimebeingFamily(name="alpha", chronon=timedelta(minutes=1))
+tbf = TimebeingFamily(name="alpha", chronon_ns=60_000_000_000.0)
 ```
 
 | Method | Returns | Description |

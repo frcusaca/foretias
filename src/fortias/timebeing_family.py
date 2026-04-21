@@ -9,7 +9,6 @@ from __future__ import annotations
 import pathlib
 import threading
 import uuid
-from datetime import timedelta
 
 from ._timebeing import _timebeing, _genesis_ma
 from .crypto import sign
@@ -29,7 +28,11 @@ class TimebeingFamily:
 
     Args:
         name: TBN prefix — final name becomes ``"Time Being {tbid.hex()}"``.
-        chronon: Fixed tick interval. Only used for non-serialized daemon thread.
+        chronon_ns: Fixed tick interval in nanoseconds. Only used for
+                    non-serialized daemon thread.  Nanoseconds are a
+                    practical convenience for v1 (fits in a float with
+                    sub-nanosecond jitter); not a fundamental limit of
+                    the protocol.
         tbid: Internal identity (UUID v4). Auto-generated if None.
         serialized: If True, tick advances only on stamp. If False,
                     a background daemon thread ticks every *chronon*.
@@ -40,21 +43,19 @@ class TimebeingFamily:
         tbid: The time being's opaque internal identity.
         tbn: Human-readable external name.
         serialized: Whether the time being computes sparse ticks.
-        chronon_seconds: Tick interval in seconds.
+        chronon_ns: Tick interval in nanoseconds.
         active: True if this instance holds the current private key.
     """
 
     def __init__(
         self,
         name: str = "timebeing",
-        chronon: timedelta | None = None,
+        chronon_ns: float = 60_000_000_000.0,
         tbid: bytes | None = None,
         serialized: bool = False,
         persist_path: str | None = None,
     ) -> None:
-        self.chronon_seconds = int(
-            (chronon or timedelta(minutes=1)).total_seconds()
-        )
+        self.chronon_ns = chronon_ns
         self.serialized = serialized
         self._tbid = tbid or uuid.uuid4().bytes
         self._tbn = f"Time Being {self._tbid.hex()}"
@@ -75,7 +76,7 @@ class TimebeingFamily:
         )
         self._calendar = Calendar(
             tbid=self._tbid, tbn=self._tbn,
-            serialized=serialized, chronon_seconds=self.chronon_seconds,
+            serialized=serialized, chronon_ns=self.chronon_ns,
             ticks=[genesis],
         )
         self._current_sk = sk
@@ -83,9 +84,12 @@ class TimebeingFamily:
         self._active = True
 
         # Start daemon thread for non-serialized mode
+        self._shutdown_event: threading.Event = threading.Event()
         if not serialized:
             self._daemon = threading.Thread(target=self._daemon_loop, daemon=True)
             self._daemon.start()
+        else:
+            self._daemon = None
 
     # ---------------------------------------------------------------
     # Properties
@@ -209,6 +213,21 @@ class TimebeingFamily:
         path = f"{self._config.persist_path}/{self._tbid.hex()}/calendar.json"
         self._calendar.save(path)
 
+    def shutdown(self) -> None:
+        """Signal the background daemon thread to stop, persist the calendar,
+        and wait for it.
+
+        Safe to call on serialized timebeings (no-op).
+        """
+        if self._daemon is None:
+            return
+        try:
+            self._persist()
+        except Exception:
+            pass  # Non-fatal; we still shut down
+        self._shutdown_event.set()
+        self._daemon.join()
+
     @classmethod
     def load(cls, persist_path: str | None = None) -> TimebeingFamily:
         """Load a time being from its calendar file on disk.
@@ -242,7 +261,7 @@ class TimebeingFamily:
         instance._tbid = tbid
         instance._tbn = tbn
         instance.serialized = calendar.serialized
-        instance.chronon_seconds = calendar.chronon_seconds
+        instance.chronon_ns = calendar.chronon_ns
         instance._config = config
         instance._lock = threading.Lock()
         instance._calendar = calendar
@@ -250,6 +269,7 @@ class TimebeingFamily:
         instance._current_pk = None
         instance._active = False
         instance._daemon = None
+        instance._shutdown_event = threading.Event()
         return instance
 
     # ---------------------------------------------------------------
@@ -257,14 +277,19 @@ class TimebeingFamily:
     # ---------------------------------------------------------------
 
     def _daemon_loop(self) -> None:
-        """Background loop: tick every chronon seconds."""
-        import time
-        while True:
-            time.sleep(self.chronon_seconds)
+        """Background loop: tick every chronon nanoseconds.
+
+        Note: *chronon_ns* is stored as nanoseconds for convenience but
+        the Event.wait API expects seconds, so we convert here.
+        """
+        wait_s = self.chronon_ns / 1_000_000_000
+        while not self._shutdown_event.is_set():
+            self._shutdown_event.wait(wait_s)
+            if self._shutdown_event.is_set():
+                break
             try:
                 self.tick()
             except RuntimeError:
-                # Dormant — stop daemon
                 break
             except Exception:
                 pass  # Log in production

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import tempfile
 import time
-from datetime import timedelta
 
 from fortias import TimebeingFamily, Fortis
 from fortias.crypto import generate_keypair
@@ -128,14 +127,14 @@ class TestGet:
 class TestNonSerializedMode:
     def test_stamp_does_not_trigger_tick(self):
         """Non-serialized: stamp should NOT advance tick."""
-        tbf = TimebeingFamily(serialized=False, chronon=timedelta(hours=1))
+        tbf = TimebeingFamily(serialized=False, chronon_ns=3_600_000_000_000.0)
         tick_before = tbf.current_tick()
         tbf.stamp(b"msg")
         assert tbf.current_tick() == tick_before
 
     def test_verify_fortis_stamped_at_current_tick(self):
         """Verify a fortis created at the current tick."""
-        tbf = TimebeingFamily(serialized=False, chronon=timedelta(hours=1))
+        tbf = TimebeingFamily(serialized=False, chronon_ns=3_600_000_000_000.0)
         fortis = tbf.stamp(b"hello")
         assert tbf.verify(b"hello", fortis) is True
 
@@ -167,3 +166,41 @@ class TestMutex:
         # All stamps should be verified
         for r in results:
             assert tbf.verify(b"concurrent message", r) is True
+
+
+class TestShutdown:
+    def test_shutdown_active_thread(self):
+        tbf = TimebeingFamily(serialized=False, chronon_ns=1_000_000_000.0)
+        assert tbf._daemon is not None
+        tbf.shutdown()
+        assert not tbf._daemon.is_alive()
+
+    def test_shutdown_serialized_is_noop(self):
+        tbf = TimebeingFamily(serialized=True)
+        assert tbf._daemon is None
+        tbf.shutdown()  # Should not raise
+
+    def test_shutdown_dormant_is_noop(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tbf = TimebeingFamily(serialized=True, persist_path=tmpdir)
+            tbf.stamp(b"hello")
+            tbf.save()
+            tbf2 = TimebeingFamily.load(persist_path=tmpdir)
+            assert tbf2._daemon is None
+            tbf2.shutdown()  # Should not raise
+
+    def test_shutdown_twice_is_safe(self):
+        tbf = TimebeingFamily(serialized=False, chronon_ns=1_000_000_000.0)
+        tbf.shutdown()
+        tbf.shutdown()  # Should not raise
+
+    def test_shutdown_saves_calendar(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tbf = TimebeingFamily(serialized=False, chronon_ns=1_000_000_000.0, persist_path=tmpdir)
+            tbf.stamp(b"hello")
+            tbf.tick()
+            tbf.shutdown()
+            # Calendar file should exist and be loadable
+            import pathlib
+            cal_path = f"{tmpdir}/{tbf.tbid.hex()}/calendar.json"
+            assert pathlib.Path(cal_path).exists()

@@ -37,7 +37,7 @@ A **time being** is a computational entity devoted to maintaining temporal integ
 - **Genetic features** (set at creation, never change):
   - `tbid` (bytes): opaque internal identity — UUID v4, unique per time being.
   - `tbn` (str): human-readable external name, formatted as `"Time Being {tbid.hex()}"`.
-  - `chronon` (timedelta): fixed tick interval (e.g., 1 minute).
+  - `chronon_ns` (float): fixed tick interval in nanoseconds.
   - `serialized` (bool): whether the time being computes sparse ticks or only when it stamps.
 - **Epigenetic information** (changes over time, mutex-protected):
   - `tick` (uint64): current tick counter, counting nanoseconds since Unix epoch.
@@ -49,7 +49,7 @@ A **time being** is a computational entity devoted to maintaining temporal integ
 
 1. **Created** with `tbid`, `tbn`, `chronon`, and `serialized`. Generates its first keypair for tick 0. The calendar is initialized with one record: `tick_number` = 0, `public_key` = the new public key, `forward_fortis` and `backward_fortis` are computed from a self-transition mutual acknowledgement (MA(genesis, genesis)).
 2. **Advances ticks**:
-   - If `serialized = False`: a background daemon thread calls `tick()` every `chronon` seconds. `stamp()` simply signs under the current tick.
+   - If `serialized = False`: a background daemon thread calls `tick()` every `chronon_ns` nanoseconds. `stamp()` simply signs under the current tick.
    - If `serialized = True`: no background thread. `tick()` advances only when `stamp()` is called, and only one caller is permitted at a time (mutex-protected).
 3. **Stamps content** under the current tick's private key.
 4. **Dies** when its Python process ends. The calendar is persisted to disk for future resurrection. The private key is never persisted — a resurrected time being can only verify, never stamp.
@@ -70,7 +70,7 @@ A **time being** is a computational entity devoted to maintaining temporal integ
 
 A **tick** is a discrete duration of time in the Fortias protocol. Each tick has its own Ed25519 keypair. Ticks form a numbered chain: tick 0, tick 1, tick 2, ...
 
-Ticks are numbered from genesis; each `tick_number` represents nanoseconds past the Unix epoch. The `chronon` is adhered to for non-serialized time beings at best effort — system load and clock synchronization may cause slight drift.
+Ticks are numbered from genesis; each `tick_number` represents nanoseconds past the Unix epoch. The `chronon_ns` is adhered to for non-serialized time beings at best effort — system load and clock synchronization may cause slight drift.  Nanoseconds are a practical convenience for v1 (fits in a float with sub-nanosecond jitter); not a fundamental limit of the protocol.
 
 **The tick: Fortias Method of Self-Attestation:**
 
@@ -125,7 +125,7 @@ A **calendar** is the append-only log of a time being's tick chain. It stores ev
   "tbid": "hex-encoded UUID",
   "tbn": "Time Being abc123...",
   "serialized": false,
-  "chronon_seconds": 60,
+  "chronon_ns": 60_000_000_000.0,
   "ticks": [
     {
       "tick_number": 0,
@@ -289,7 +289,7 @@ from fortias import TimebeingFamily, Fortis, Config
 from datetime import timedelta
 
 # Create a time being
-tbf = TimebeingFamily(name="alpha", chronon=timedelta(minutes=1))
+tbf = TimebeingFamily(name="alpha", chronon_ns=60_000_000_000.0)
 
 # Stamp content
 fortis = tbf.stamp("my message")
@@ -334,7 +334,7 @@ The `TimebeingFamily` is the main public class. It encapsulates the time being's
 ```python
 TimebeingFamily(
     name: str = "timebeing",         # TBN prefix — final name becomes "Time Being {tbid.hex()}"
-    chronon: timedelta = timedelta(minutes=1),
+    chronon_ns: float = 60_000_000_000.0,
     tbid: bytes | None = None,       # Auto-generated UUID v4 if None
     serialized: bool = False,        # Tick only advances on stamp
     persist_path: str | None = None, # Path resolved via Config
@@ -356,7 +356,7 @@ TimebeingFamily(
 **Threading:**
 
 - A `threading.Lock` protects all state mutations.
-- Non-serialized timebeings spawn a `threading.Thread` daemon in `__init__` that runs `tick()` every `chronon` seconds.
+- Non-serialized timebeings spawn a `threading.Thread` daemon in `__init__` that runs `tick()` every `chronon_ns` nanoseconds.
 - The daemon thread acquires the lock, calls `_tick()`, mutates state, persists.
 
 **Functional separation:**
@@ -369,7 +369,7 @@ All cryptographic logic is in pure functions (no side effects) inside `timebeing
 class Calendar:
     ticks: list[TickRecord]
 
-    def __init__(self, tbid, tbn, serialized, chronon_seconds, ticks=None):
+    def __init__(self, tbid, tbn, serialized, chronon_ns, ticks=None):
         ...
 
     def append(self, tick_record: TickRecord) -> None:
@@ -474,7 +474,7 @@ from fortias import TimebeingFamily
 from datetime import timedelta
 
 # Create a time being with 1-minute ticks
-tbf = TimebeingFamily(name="alpha", chronon=timedelta(minutes=1))
+tbf = TimebeingFamily(name="alpha", chronon_ns=60_000_000_000.0)
 
 # Stamp your first message
 fortis = tbf.stamp("hello world")

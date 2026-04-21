@@ -29,7 +29,7 @@ class Calendar:
         tbid: The time being's identity.
         tbn: The time being's human-readable name.
         serialized: Whether the time being computes sparse ticks.
-        chronon_seconds: Fixed tick interval in seconds.
+        chronon_ns: Fixed tick interval in nanoseconds.
         ticks: The list of :class:`TickRecord` entries.
     """
 
@@ -38,13 +38,13 @@ class Calendar:
         tbid: bytes,
         tbn: str,
         serialized: bool,
-        chronon_seconds: int,
+        chronon_ns: float,
         ticks: list[TickRecord] | None = None,
     ) -> None:
         self.tbid = tbid
         self.tbn = tbn
         self.serialized = serialized
-        self.chronon_seconds = chronon_seconds
+        self.chronon_ns = chronon_ns
         self._ticks: list[TickRecord] = list(ticks or [])
 
     # ------------------------------------------------------------------
@@ -103,7 +103,7 @@ class Calendar:
             "tbid": _bytes_to_hex(self.tbid),
             "tbn": self.tbn,
             "serialized": self.serialized,
-            "chronon_seconds": self.chronon_seconds,
+            "chronon_ns": self.chronon_ns,
             "ticks": [
                 {
                     "tick_number": t.tick_number,
@@ -130,7 +130,7 @@ class Calendar:
         tbid = _hex_to_bytes(data["tbid"])
         tbn = data["tbn"]
         serialized = data["serialized"]
-        chronon_seconds = data["chronon_seconds"]
+        chronon_ns = data["chronon_ns"]
 
         # Parse tick records
         ticks: list[TickRecord] = []
@@ -150,7 +150,7 @@ class Calendar:
 
             ticks.append(TickRecord(tick_number, public_key, forward_fortis, backward_fortis))
 
-        cal = cls(tbid, tbn, serialized, chronon_seconds, ticks)
+        cal = cls(tbid, tbn, serialized, chronon_ns, ticks)
 
         # Chain integrity check
         ok, failures = cal.integrity_check(return_failures=True)
