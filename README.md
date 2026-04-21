@@ -13,10 +13,10 @@ pip install fortias
 ## Quick Start
 
 ```python
-from fortias import TimebeingFamily
+from fortias import TimeFamily
 
 # Create a time being with 1-minute ticks
-tbf = TimebeingFamily(name="alpha", chronon_ns=60_000_000_000.0)
+tbf = TimeFamily(name="alpha", chronon_ns=60_000_000_000.0)
 
 # Stamp your first message
 fortis = tbf.stamp("hello world")
@@ -40,10 +40,12 @@ Add `--chain` to run a full chain integrity check on the calendar.
 
 ## API Reference
 
-### Core class: `TimebeingFamily`
+### Core class: `TimeFamily`
+
+`TimeFamily` (*Chrona nuntia*, the messenger) orchestrates between `Chronomatter` (*Chronos authenticus*, the Time Authority) and `Calendar` (*Chrona grapha*, passive storage).
 
 ```python
-from fortias import TimebeingFamily, Fortis, TickRecord, Config
+from fortias import TimeFamily, Chronomatter, Fortis, TickRecord, Config
 
 tbf = TimebeingFamily(name="alpha", chronon_ns=60_000_000_000.0)
 ```
@@ -55,7 +57,7 @@ tbf = TimebeingFamily(name="alpha", chronon_ns=60_000_000_000.0)
 | `current_tick()` | `int` | Current tick number |
 | `tick()` | `None` | Advance to the next tick |
 | `save()` | `None` | Persist calendar to disk |
-| `load(persist_path)` | `TimebeingFamily` | Load a dormant (verify-only) instance |
+| `load(persist_path)` | `TimeFamily` | Load a dormant (verify-only) instance |
 
 ### Data models
 
@@ -64,8 +66,8 @@ tbf = TimebeingFamily(name="alpha", chronon_ns=60_000_000_000.0)
 class TickRecord:
     tick_number: int     # Nanoseconds since Unix epoch
     public_key: bytes    # Ed25519 public key
-    new_fortis: bytes    # New key signs new public key
-    old_fortis: bytes | None  # Old key signs new public key
+    forward_fortis: bytes   # MA(prev) signed by prev_sk
+    backward_fortis: bytes  # MA(self) signed by self_sk
 
 @dataclass(frozen=True)
 class Fortis:

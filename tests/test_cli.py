@@ -6,8 +6,6 @@ import json
 import tempfile
 
 from fortias._timebeing import _genesis_ma, _timebeing
-
-from fortias._timebeing import _timebeing
 from fortias.calendar import Calendar
 from fortias.cli import _load_fortis, fortias_verify, main
 from fortias.crypto import generate_keypair, sign
@@ -24,7 +22,7 @@ def _make_test_files(tbid, content):
     genesis_ma = _genesis_ma(tbid, pk)
     forward = sign(genesis_ma, sk)
     backward = sign(genesis_ma, sk)
-    cal = Calendar(tbid, "Time Being test", True, 60, ticks=[])
+    cal = Calendar(tbid, "Time Being test", ticks=[])
     cal.append(TickRecord(0, pk, forward, backward))
 
     with tempfile.TemporaryDirectory() as tmpdir:

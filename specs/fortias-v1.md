@@ -26,17 +26,19 @@ Fortias v1 is a **Python library** that provides the core time being: a self-sov
 
 ---
 
-## 2. Creature Definitions
+## 2. Time Being (Latin: *Chronos fidelis*)
 
-### 2.1 Time Being (Latin: *Chronos fidelis*)
+### 2.1 Time Family (Latin: *Chronos adunatrix*)
+
+A **time family** is the conceptual entity that manages temporal integrity. In the v1 implementation, this role is split across three collaborating classes: `Stamp`, `Calendar`, and `TimeFamily`. See Section 2.7 for the architecture.
 
 A **time being** is a computational entity devoted to maintaining temporal integrity. It has a persistent identity, an internal clock, and a way of proving Fortises that it issued for a piece of data was signed at the time of the fortis.
 
 **Attributes:**
 
 - **Genetic features** (set at creation, never change):
-  - `tbid` (bytes): opaque internal identity — UUID v4, unique per time being.
-  - `tbn` (str): human-readable external name, formatted as `"Time Being {tbid.hex()}"`.
+  - `tbid` (bytes): opaque internal identity — UUID v4, unique per TimeBeing.
+  - `tbn` (str): human-readable external name, formatted as `"Time Family {tbid.hex()}"`.
   - `chronon_ns` (float): fixed tick interval in nanoseconds.
   - `serialized` (bool): whether the time being computes sparse ticks or only when it stamps.
 - **Epigenetic information** (changes over time, mutex-protected):
@@ -107,7 +109,7 @@ class TickRecord:
     backward_fortis: bytes       # MA(self) signed by self_sk. Never None.
 ```
 
-### 2.3 Calendar (Latin: *Chrona grapha*)
+### 2.3 Calendar (Latin: *Chronos graphus*)
 
 A **calendar** is the append-only log of a time being's tick chain. It stores every tick's public key and transition proof in sequential order.
 
@@ -123,15 +125,14 @@ A **calendar** is the append-only log of a time being's tick chain. It stores ev
 ```json
 {
   "tbid": "hex-encoded UUID",
-  "tbn": "Time Being abc123...",
-  "serialized": false,
-  "chronon_ns": 60_000_000_000.0,
+  "tbn": "Time  being abc123...",
+  "stamp_tbid": "hex-encoded UUID",
   "ticks": [
     {
       "tick_number": 0,
       "public_key": "hex-encoded Ed25519 public key",
       "forward_fortis": "hex-encoded signature",
-      "backward_fortis": null
+      "backward_fortis": "hex-encoded signature"
     },
     {
       "tick_number": 1697000000000000000,
@@ -154,9 +155,11 @@ A **calendar** is the append-only log of a time being's tick chain. It stores ev
   - Full chain integrity check via `integrity_check()`.
 - Calendar is persisted to: `{persist_path}/{tbid}/calendar.json`.
 
-### 2.4 Stamper (Latin *Chronos authenticus* )
+### 2.4 Chronomatter (Latin: *Chronos authenticus*)
 
-A **stamper** is the time being in the act of signing content. The stamper is not a separate entity — it is the signing role that a time being assumes.
+A **Chronomatter** (*Chronos authenticus*, the Time Authority) is the active entity that manages ticking an internal clock, and stamping requests. It so by managing Ed25519 key lifecycle, performs stamping and ticking, and publishes ticks to all attached Calendars. It is a standalone class, separate from Calendar storage.
+
+The Chronomatter creates its own genesis tick record for internal tracking, then publishes an *adapted genesis* per Calendar: Calendar.tbid + Chronomatter's current public key + self-signatures. Note the word can be pronounced /kruh-noh-MAY-ter/.
 
 **Input:**
 
@@ -204,9 +207,23 @@ class Fortis:
 
 A Fortis is self-contained. To verify it, a verifier needs the Fortis plus access to the time being's calendar (to look up the public key for the claimed tick).
 
-### 2.6 Inquirer
+### 2.6 Time Family (Latin: *Chronos adunatrix*)
 
-An **inquirer** is an entity that verifies existing Fortis artifacts. The inquirer does not produce stamps — it validates them. In v1, the same time being instance can act as both stamper and inquirer.
+The **Time Family** (*Chronos adunatrix*, the messenger) is the orchestrator that coordinates between `Stamp` (the Time Authority) and `Calendar` (passive tick storage). It provides the user-facing API, delegating to the Stamp for stamping/ticking and to the Calendar for storage.
+
+**Architecture: three collaborating entities**
+
+| Entity | Latin Name | Responsibility |
+|--------|-----------|----------------|
+| **Chronomatter** | *Chronos authenticus* | Key lifecycle, stamping, ticking, thread management |
+| **Calendar** | *Chronos graphus* | Passive tick storage, persistence, integrity checks |
+| **Time Family** | *Chronos adunatrix* | Orchestrator, settings, coordinates Stamp + Calendar(s) |
+
+**Data flows:**
+- `stamp(content)` → Stamp signs, returns Fortis (NOT stored in Calendar)
+- `tick()` → Stamp advances, publishes TickRecord to all attached Calendars
+- `verify(content, fortis, calendar)` → Stamp uses Calendar's ticks for key lookup
+- Calendar creates its own genesis via Stamp's adapted genesis (Calendar.tbid + Stamp's key)
 
 **Verification process:**
 
@@ -214,8 +231,10 @@ An **inquirer** is an entity that verifies existing Fortis artifacts. The inquir
 2. Look up the public key for `tick_number` in the calendar using `calendar.get(tick_number, 1)`.
 3. Verify `SHA-256(content) == content_hash`.
 4. Verify the Ed25519 signature against the public key.
-5. If a `next_tick_number` is provided, find the exact record matching next_tick_number from calendar and perform `_verify_pair` on the calendar entries for tick_number and next_tick_number
+5. If a `next_tick_number` is provided, find the exact record matching next_tick_number from calendar and perform `_verify_pair` on the calendar entries for tick_number and next_tick_number.
 6. Return results.
+
+In v1, the same TimeFamily instance can act as both chronomatter and inquirer.
 
 **Return type:**
 
@@ -273,9 +292,11 @@ The calendar loader runs full chain verification on load. The CLI `fortis verify
 
 ```
 fortias/
-  __init__.py        # Package init, exports TimebeingFamily, Fortis, Config
-  timebeing.py       # TimebeingFamily outer class + _tick(), _stamp(), _verify()
-  calendar.py        # Calendar class: load, save, lookup, chain verify
+  __init__.py        # Package init, exports TimeFamily, Chronomatter, Fortis, Config
+  chronomatter.py    # Chronomatter class (Chronos authenticus): key lifecycle, stamping, ticking
+  calendar.py        # Calendar class (Chronos grapha): load, save, lookup, chain verify
+  timefamily.py      # TimeFamily class (Chronos adunatrix): orchestrator
+  _time.py           # Pure functional: _tick(), _stamp(), _verify(), _genesis_ma()
   crypto.py          # Ed25519 primitives + SHA-256
   models.py          # TickRecord, Fortis dataclasses
   config.py          # Config dataclass for persistence path resolution
@@ -285,11 +306,10 @@ fortias/
 ### 4.2 Public API
 
 ```python
-from fortias import TimebeingFamily, Fortis, Config
-from datetime import timedelta
+from fortias import TimeFamily, Chronomatter, Fortis, Config
 
 # Create a time being
-tbf = TimebeingFamily(name="alpha", chronon_ns=60_000_000_000.0)
+tbf = TimeFamily(name="alpha", chronon_ns=60_000_000_000.0)
 
 # Stamp content
 fortis = tbf.stamp("my message")
@@ -302,7 +322,7 @@ valid, window_closed = tbf.verify("my message", fortis, next_tick_number=1)
 # valid=True, window_closed=True (tick 0's key is destroyed)
 
 # Load from disk (dormant mode — verify only)
-tbf2 = TimebeingFamily.load(persist_path="/path/to/fortias/")
+tbf2 = TimeFamily.load(persist_path="/path/to/fortias/")
 valid = tbf2.verify("my message", fortis)  # True, but cannot stamp
 ```
 
@@ -325,14 +345,14 @@ class Config:
         ...
 ```
 
-### 4.4 TimebeingFamily
+### 4.4 TimeFamily
 
-The `TimebeingFamily` is the main public class. It encapsulates the time being's identity, calendar, threading, and persistence.
+The `TimeFamily` is the main public class. It encapsulates the time being's identity, calendar, threading, and persistence.
 
 **Constructor:**
 
 ```python
-TimebeingFamily(
+TimeFamily(
     name: str = "timebeing",         # TBN prefix — final name becomes "Time Being {tbid.hex()}"
     chronon_ns: float = 60_000_000_000.0,
     tbid: bytes | None = None,       # Auto-generated UUID v4 if None
@@ -340,6 +360,10 @@ TimebeingFamily(
     persist_path: str | None = None, # Path resolved via Config
 )
 ```
+
+**Internal architecture:**
+
+`TimeFamily` creates a `Chronomatter` and a `Calendar`, attaches the Calendar to the Chronomatter, and delegates all operations. Users interact only with `TimeFamily`.
 
 **Methods:**
 
@@ -351,7 +375,7 @@ TimebeingFamily(
 | `tick` | `() -> None` | None | Advance the calendar to next tick. For non-serialized: background thread calls this. |
 | `get` | `(tick_number: int, count: int) -> list[TickRecord]` | list[TickRecord] | Return earliest `count` ticks at or after `tick_number`. |
 | `save` | `() -> None` | None | Persist calendar to disk. |
-| `load` | `(persist_path=None) -> TimebeingFamily` | TimebeingFamily | Class method. Load calendar from disk. Returns a dormant time being (no private key). |
+| `load` | `(persist_path=None) -> TimeFamily` | TimeFamily | Class method. Load calendar from disk. Returns a dormant time being (no private key). |
 
 **Threading:**
 
@@ -361,15 +385,55 @@ TimebeingFamily(
 
 **Functional separation:**
 
-All cryptographic logic is in pure functions (no side effects) inside `timebeing.py`. The TimebeingFamily manages mutation/disk/entropy and other runtime concerns.
+All cryptographic logic is in pure functions (no side effects) inside `timebeing.py`. The TimeFamily manages mutation/disk/entropy and other runtime concerns.
 
-### 4.5 Calendar Class
+### 4.5 Chronomatter Class
+
+The `Chronomatter` (*Chronos authenticus*) is the active entity managing key lifecycle, stamping, ticking, and thread coordination. It is in-memory only — never persisted to disk.
+
+**Constructor:**
+
+```python
+Chronomatter(
+    name: str = "timebeing",
+    chronon_ns: float = 60_000_000_000.0,
+    tbid: bytes | None = None,
+    serialized: bool = False,
+    persist_path: str | None = None,
+)
+```
+
+**Methods:**
+
+| Method | Signature | Returns | Description |
+|--------|-----------|---------|-------------|
+| `stamp` | `(content: str \| bytes) -> Fortis` | Fortis | Sign content under current tick key. Returns Fortis to caller (not stored). |
+| `verify` | `(content, fortis, calendar) -> bool` | bool | Verify signature and content hash using calendar for key lookup. |
+| `tick` | `() -> None` | None | Advance to next tick, publish to all attached Calendars. |
+| `get` | `(tick_number: int, count: int) -> list[TickRecord]` | list[TickRecord] | Return ticks by Chronomatter's internal counter. |
+| `attach_calendar` | `(calendar: Calendar) -> None` | None | Attach a Calendar, publish adapted genesis. |
+| `save` | `() -> None` | None | No-op. Only the Calendar is persisted to disk. |
+| `shutdown` | `() -> None` | None | Stop daemon thread, wait. |
+
+**Properties:**
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `tbid` | `bytes` | Internal identity (UUID v4 bytes). |
+| `tbn` | `str` | Human-readable name. |
+| `serialized` | `bool` | Whether tick advances only on stamp. |
+| `chronon_ns` | `float` | Tick interval in nanoseconds. |
+| `active` | `bool` | True if holding current private key. |
+| `current_tick` | `int` | Chronomatter's internal sequential counter. |
+
+### 4.6 Calendar Class
 
 ```python
 class Calendar:
     ticks: list[TickRecord]
 
-    def __init__(self, tbid, tbn, serialized, chronon_ns, ticks=None):
+    def __init__(self, tbid, tbn, ticks=None, stamp_tbid=None):
+        """Create calendar. stamp_tbid defaults to tbid; set when Stamp attaches for integrity checks."""
         ...
 
     def append(self, tick_record: TickRecord) -> None:
@@ -377,6 +441,10 @@ class Calendar:
 
     def get(self, tick_number: int, count: int) -> list[TickRecord]:
         """Return earliest `count` ticks at or after `tick_number`."""
+        ...
+
+    def latest(self) -> int | None:
+        """Return the highest tick number, or None if empty."""
         ...
 
     def load(path: str) -> Calendar:
@@ -470,11 +538,10 @@ pip install fortias
 ## 8. Quick Start
 
 ```python
-from fortias import TimebeingFamily
-from datetime import timedelta
+from fortias import TimeFamily
 
 # Create a time being with 1-minute ticks
-tbf = TimebeingFamily(name="alpha", chronon_ns=60_000_000_000.0)
+tbf = TimeFamily(name="alpha", chronon_ns=60_000_000_000.0)
 
 # Stamp your first message
 fortis = tbf.stamp("hello world")
@@ -493,7 +560,7 @@ print(is_valid, window_closed)  # True, True
 ## 9. The Minimal Correct Pattern
 
 ```python
-tbf = TimebeingFamily()
+tbf = TimeFamily()
 fortis = tbf.stamp("my message")
 assert tbf.verify("my message", fortis)  # True
 ```

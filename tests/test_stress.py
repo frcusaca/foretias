@@ -1,16 +1,16 @@
-"""Stress tests for fortias.TimebeingFamily."""
+"""Stress tests for fortias.TimeFamily."""
 
 from __future__ import annotations
 
 import tempfile
 
-from fortias import TimebeingFamily
+from fortias import TimeFamily
 
 
 class TestStress:
     def test_many_ticks_and_stamps(self):
         """Generate 100+ ticks, stamp multiple messages, verify all."""
-        tbf = TimebeingFamily(serialized=True)
+        tbf = TimeFamily(serialized=True)
 
         stamps = []
         for i in range(100):
@@ -27,7 +27,7 @@ class TestStress:
 
     def test_tampered_content_fails(self):
         """Tampered messages should fail verification."""
-        tbf = TimebeingFamily(serialized=True)
+        tbf = TimeFamily(serialized=True)
         fortis = tbf.stamp(b"original")
 
         assert tbf.verify(b"original", fortis) is True
@@ -36,7 +36,7 @@ class TestStress:
     def test_save_load_reverify(self):
         """Save calendar, reload, re-verify all stamps."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            tbf = TimebeingFamily(serialized=True, persist_path=tmpdir)
+            tbf = TimeFamily(serialized=True, persist_path=tmpdir)
 
             stamps = []
             for i in range(50):
@@ -46,7 +46,7 @@ class TestStress:
             tbf.save()
 
             # Reload dormant
-            tbf2 = TimebeingFamily.load(persist_path=tmpdir)
+            tbf2 = TimeFamily.load(persist_path=tmpdir)
 
             # Verify all stamps through the dormant instance
             for content, fortis in stamps:

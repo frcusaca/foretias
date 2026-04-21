@@ -23,28 +23,26 @@ def _hex_to_bytes(value: str) -> bytes:
 
 
 class Calendar:
-    """Append-only log of a time being's tick chain.
+    """Chrona grapha — Append-only log of a time being's tick chain.
 
     Attributes:
         tbid: The time being's identity.
         tbn: The time being's human-readable name.
-        serialized: Whether the time being computes sparse ticks.
-        chronon_ns: Fixed tick interval in nanoseconds.
         ticks: The list of :class:`TickRecord` entries.
+        stamp_tbid: The identity of the Stamp that published these ticks
+                    (may differ from tbid for adapted genesis).
     """
 
     def __init__(
         self,
         tbid: bytes,
         tbn: str,
-        serialized: bool,
-        chronon_ns: float,
         ticks: list[TickRecord] | None = None,
+        stamp_tbid: bytes | None = None,
     ) -> None:
         self.tbid = tbid
         self.tbn = tbn
-        self.serialized = serialized
-        self.chronon_ns = chronon_ns
+        self._stamp_tbid = stamp_tbid or tbid
         self._ticks: list[TickRecord] = list(ticks or [])
 
     # ------------------------------------------------------------------
@@ -102,8 +100,7 @@ class Calendar:
         data = {
             "tbid": _bytes_to_hex(self.tbid),
             "tbn": self.tbn,
-            "serialized": self.serialized,
-            "chronon_ns": self.chronon_ns,
+            "stamp_tbid": _bytes_to_hex(self._stamp_tbid),
             "ticks": [
                 {
                     "tick_number": t.tick_number,
@@ -129,8 +126,7 @@ class Calendar:
         # Parse top-level fields
         tbid = _hex_to_bytes(data["tbid"])
         tbn = data["tbn"]
-        serialized = data["serialized"]
-        chronon_ns = data["chronon_ns"]
+        stamp_tbid = _hex_to_bytes(data.get("stamp_tbid", tbid.hex()))
 
         # Parse tick records
         ticks: list[TickRecord] = []
@@ -150,7 +146,7 @@ class Calendar:
 
             ticks.append(TickRecord(tick_number, public_key, forward_fortis, backward_fortis))
 
-        cal = cls(tbid, tbn, serialized, chronon_ns, ticks)
+        cal = cls(tbid, tbn, ticks, stamp_tbid)
 
         # Chain integrity check
         ok, failures = cal.integrity_check(return_failures=True)
@@ -177,7 +173,7 @@ class Calendar:
 
         failures: list[int] = []
         for i in range(len(self._ticks) - 1):
-            if not _timebeing._verify_pair(self._ticks[i + 1], self._ticks[i], self.tbid):
+            if not _timebeing._verify_pair(self._ticks[i + 1], self._ticks[i], self._stamp_tbid):
                 failures.append(i)
 
         ok = len(failures) == 0

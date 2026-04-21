@@ -1,8 +1,8 @@
-"""Fortias v1 — Pure functional time being operations.
+"""Fortias v1 - Pure functional time being operations.
 
 All methods are static, pure, and side-effect-free. They take state as
 arguments and return new state or booleans. The mutable
-:class:`~fortias.timebeing_family.TimebeingFamily` class calls these
+:class:`~fortias.time_family.TimeFamily` class calls these
 functions behind a mutex.
 """
 
@@ -59,7 +59,7 @@ class _timebeing:
         """Stamp *content* with Ed25519 under the given tick key.
 
         Ed25519 has internal hashing, so the raw concatenation is signed
-        directly — no pre-hash of the signature input.
+        directly - no pre-hash of the signature input.
         """
         content_bytes = content if isinstance(content, bytes) else content.encode("utf-8")
         content_hash = sha256(content_bytes)

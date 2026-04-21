@@ -9,6 +9,7 @@ except ImportError:
 
 from .config import Config
 from .models import Fortis, TickRecord
-from .timebeing_family import TimebeingFamily
+from .stamper import Chronomatter
+from .time_family import TimeFamily
 
-__all__ = ["TimebeingFamily", "Fortis", "TickRecord", "Config", "__version__"]
+__all__ = ["TimeFamily", "Chronomatter", "Fortis", "TickRecord", "Config", "__version__"]
