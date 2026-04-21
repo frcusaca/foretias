@@ -30,7 +30,7 @@ Fortias v1 is a **Python library** that provides the core time being: a self-sov
 
 ### 2.1 Time Family (Latin: *Chronos adunatrix*)
 
-A **time family** is the conceptual entity that manages temporal integrity. In the v1 implementation, this role is split across three collaborating classes: `Stamp`, `Calendar`, and `TimeFamily`. See Section 2.7 for the architecture.
+A **time family** is the conceptual entity that manages temporal integrity. In the v1 implementation, this role is split across three collaborating classes: `Chronomatter`, `Calendar`, and `TimeFamily`. See Section 2.7 for the architecture.
 
 A **time being** is a computational entity devoted to maintaining temporal integrity. It has a persistent identity, an internal clock, and a way of proving Fortises that it issued for a piece of data was signed at the time of the fortis.
 
@@ -209,7 +209,7 @@ A Fortis is self-contained. To verify it, a verifier needs the Fortis plus acces
 
 ### 2.6 Time Family (Latin: *Chronos adunatrix*)
 
-The **Time Family** (*Chronos adunatrix*, the messenger) is the orchestrator that coordinates between `Stamp` (the Time Authority) and `Calendar` (passive tick storage). It provides the user-facing API, delegating to the Stamp for stamping/ticking and to the Calendar for storage.
+The **Time Family** (*Chronos adunatrix*, the messenger) is the orchestrator that coordinates between `Chronomatter` (the Time Authority) and `Calendar` (passive tick storage). It provides the user-facing API, delegating to the Chronomatter for stamping/ticking and to the Calendar for storage.
 
 **Architecture: three collaborating entities**
 
@@ -217,13 +217,13 @@ The **Time Family** (*Chronos adunatrix*, the messenger) is the orchestrator tha
 |--------|-----------|----------------|
 | **Chronomatter** | *Chronos authenticus* | Key lifecycle, stamping, ticking, thread management |
 | **Calendar** | *Chronos graphus* | Passive tick storage, persistence, integrity checks |
-| **Time Family** | *Chronos adunatrix* | Orchestrator, settings, coordinates Stamp + Calendar(s) |
+| **Time Family** | *Chronos adunatrix* | Orchestrator, settings, coordinates Chronomatter + Calendar(s) |
 
 **Data flows:**
-- `stamp(content)` → Stamp signs, returns Fortis (NOT stored in Calendar)
-- `tick()` → Stamp advances, publishes TickRecord to all attached Calendars
-- `verify(content, fortis, calendar)` → Stamp uses Calendar's ticks for key lookup
-- Calendar creates its own genesis via Stamp's adapted genesis (Calendar.tbid + Stamp's key)
+- `stamp(content)` → Chronomatter signs, returns Fortis (NOT stored in Calendar)
+- `tick()` → Chronomatter advances, publishes TickRecord to all attached Calendars
+- `verify(content, fortis, calendar)` → Chronomatter uses Calendar's ticks for key lookup
+- Calendar creates its own genesis via Chronomatter's adapted genesis (Calendar.tbid + Chronomatter's key)
 
 **Verification process:**
 
@@ -263,7 +263,7 @@ def verify(content, fortis, next_tick_number: uint64 | None = None) -> bool | tu
 | Hashing | SHA-256 (FIPS 180-4) | Universally available, collision-resistant |
 | Digital Signatures | Ed25519 (RFC 8032) | Fast keygen, short keys, no parameter choices |
 
-### 3.2 Stamp Verification
+### 3.2 Chronomatter Verification
 
 To verify a Fortis:
 
@@ -433,7 +433,7 @@ class Calendar:
     ticks: list[TickRecord]
 
     def __init__(self, tbid, tbn, ticks=None, stamp_tbid=None):
-        """Create calendar. stamp_tbid defaults to tbid; set when Stamp attaches for integrity checks."""
+        """Create calendar. stamp_tbid defaults to tbid; set when Chronomatter attaches for integrity checks."""
         ...
 
     def append(self, tick_record: TickRecord) -> None:

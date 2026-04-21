@@ -47,7 +47,7 @@ Add `--chain` to run a full chain integrity check on the calendar.
 ```python
 from fortias import TimeFamily, Chronomatter, Fortis, TickRecord, Config
 
-tbf = TimebeingFamily(name="alpha", chronon_ns=60_000_000_000.0)
+tbf = TimeFamily(name="alpha", chronon_ns=60_000_000_000.0)
 ```
 
 | Method | Returns | Description |

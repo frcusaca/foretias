@@ -29,7 +29,7 @@ class Calendar:
         tbid: The time being's identity.
         tbn: The time being's human-readable name.
         ticks: The list of :class:`TickRecord` entries.
-        stamp_tbid: The identity of the Stamp that published these ticks
+        stamp_tbid: The identity of the Chronomatter that published these ticks
                     (may differ from tbid for adapted genesis).
     """
 

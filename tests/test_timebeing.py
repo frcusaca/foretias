@@ -143,7 +143,7 @@ class TestGet:
 
         records = tbf.get(tick0, 1)
         assert len(records) == 1
-        # The Stamp's counter is 1, so this returns tick 1 record
+        # The Chronomatter's counter is 1, so this returns tick 1 record
         # (not genesis which is at counter 0).
         assert records[0].public_key != tbf.calendar.ticks[0].public_key
 
