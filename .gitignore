@@ -57,3 +57,4 @@ dmypy.json
 src/fortias/_version.py
 .venv
 .remember
+uv.lock
