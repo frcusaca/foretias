@@ -1,6 +1,6 @@
 """Fortias v1 — TimeFamily (Chrona nuntia): the Orchestrator.
 
-Coordinates between :class:`~fortias.stamper.Chronomatter` (the Time Authority)
+Coordinates between :class:`~fortias.chronomatter.ChronomatterV1` (the Time Authority)
 and :class:`~fortias.calendar.Calendar` (passive tick storage), providing
 a user-facing API that delegates to the Chronomatter for stamping/ticking and
 to Calendar(s) for storage.
@@ -9,13 +9,29 @@ to Calendar(s) for storage.
 from __future__ import annotations
 
 import pathlib
-import threading
 import uuid
+import threading
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .calendar import Calendar
+    from .chronomatter import (
+        CalendarInterface,
+        ChronomatterInterface,
+        InquirerInterface,
+    )
 
 from .calendar import Calendar
+from .chronomatter import (
+    CalendarInterface,
+    ChronomatterInterface,
+    Inquirer,
+    InquirerInterface,
+    ChronomatterV1,
+    ChronomatterV1Serial,
+)
 from .config import Config
 from .models import Fortis, TickRecord
-from .stamper import Chronomatter
 
 
 class TimeFamily:
@@ -51,24 +67,62 @@ class TimeFamily:
     ) -> None:
         self._config = Config.resolve(persist_path=persist_path)
 
-        # Create Chronomatter (the time being authority)
-        self._stamp = Chronomatter(
-            name=name,
-            chronon_ns=chronon_ns,
-            tbid=tbid,
-            serialized=serialized,
-            persist_path=persist_path,
-        )
+        # Resolve tbid once, shared between Calendar and Chronomatter
+        resolved_tbid = tbid or uuid.uuid4().bytes
+        resolved_tbn = f"Time Being {resolved_tbid.hex()}"
 
-        # Create Calendar (uses Chronomatter's tbid) and attach to Chronomatter
-        self._calendar = Calendar(
-            tbid=self._stamp.tbid,
-            tbn=self._stamp.tbn,
-        )
+        # Create Calendar
+        self._calendar = Calendar(tbid=resolved_tbid, tbn=resolved_tbn)
+
+        # Create Chronomatter based on serialized flag
+        if serialized:
+            self._stamp = ChronomatterV1Serial(
+                name=name,
+                chronon_ns=chronon_ns,
+                tbid=resolved_tbid,
+                persist_path=persist_path,
+            )
+        else:
+            self._stamp = ChronomatterV1(
+                name=name,
+                chronon_ns=chronon_ns,
+                tbid=resolved_tbid,
+                persist_path=persist_path,
+            )
+
+        # Attach calendar to chronomatter
         self._stamp.attach_calendar(self._calendar)
+        self._calendar._stamp_tbid = self._stamp.tbid
+
+        # Create Inquirer
+        self._inquirer = Inquirer(calendars=[self._calendar])
+
+        # Set family references
+        self._calendar.family = self
+        self._stamp.family = self
+        self._inquirer.family = self
+
+        # Internal lock
+        self._rlock = threading.RLock()
 
     # ---------------------------------------------------------------
-    # Properties
+    # Interface accessors
+    # ---------------------------------------------------------------
+
+    def calendar(self) -> CalendarInterface:
+        """Return the Calendar interface."""
+        return self._calendar
+
+    def chronomatter(self) -> ChronomatterInterface:
+        """Return the Chronomatter interface."""
+        return self._stamp
+
+    def inquirer(self) -> InquirerInterface:
+        """Return the Inquirer interface."""
+        return self._inquirer
+
+    # ---------------------------------------------------------------
+    # Properties (backward compatibility)
     # ---------------------------------------------------------------
 
     @property
@@ -84,12 +138,8 @@ class TimeFamily:
         return self._stamp.active
 
     @property
-    def calendar(self) -> Calendar:
-        return self._calendar
-
-    @property
     def serialized(self) -> bool:
-        return self._stamp.serialized
+        return isinstance(self._stamp, ChronomatterV1Serial)
 
     @property
     def chronon_ns(self) -> float:
@@ -135,7 +185,7 @@ class TimeFamily:
             (sig_valid, window_closed) tuple otherwise.
         """
         with self._stamp._rlock:
-            result = self._stamp.verify(content, fortis, self._calendar)
+            result = self._inquirer.verify(content, fortis)
         if next_tick_number is None:
             return result
         # Window check
@@ -199,7 +249,8 @@ class TimeFamily:
                     f"{self._calendar.tbid.hex()}/calendar.json"
                 )
                 self._calendar.save(path)
-                self._stamp._next_tick_time_ns = None
+                if hasattr(self._stamp, "_next_tick_time_ns"):
+                    self._stamp._next_tick_time_ns = None
             except Exception:
                 pass  # Non-fatal; we still shut down
         self._stamp._shutdown_event.set()
@@ -238,11 +289,10 @@ class TimeFamily:
         tbid = calendar.tbid
         tbn = calendar.tbn
 
-        # Create dormant Chronomatter
-        stamp = Chronomatter.__new__(Chronomatter)
-        stamp._tbid = tbid
-        stamp._tbn = tbn
-        stamp._serialized = False
+        # Create dormant ChronomatterV1Serial (never stamps = no-op behavior)
+        stamp = ChronomatterV1Serial.__new__(ChronomatterV1Serial)
+        stamp.tbid = tbid
+        stamp.tbn = tbn
         stamp._chronon_ns = 60_000_000_000.0
         stamp._current_sk = None
         stamp._current_pk = None
@@ -257,6 +307,7 @@ class TimeFamily:
         stamp._ticks = []
         stamp._tick_pks = []
         stamp._tick_counter = 0
+        stamp._stamp_tbid = tbid
 
         # Extract public keys from calendar ticks for dormant verification
         for t in calendar.ticks:
@@ -270,8 +321,7 @@ class TimeFamily:
         instance._stamp = stamp
         instance._calendar = calendar
         instance._config = config
+        instance._inquirer = Inquirer(calendars=[calendar])
+        instance._rlock = threading.RLock()
 
         return instance
-
-    # For shutdown's lock usage
-    _rlock = threading.RLock()

@@ -7,6 +7,8 @@ import pathlib
 
 from ._timebeing import _timebeing
 from .models import TickRecord
+from .timebeing import Timebeing
+from typing import Any
 
 _HEX_ERROR = "hex-encoded fields must be valid hex strings"
 
@@ -22,7 +24,7 @@ def _hex_to_bytes(value: str) -> bytes:
         raise ValueError(_HEX_ERROR) from None
 
 
-class Calendar:
+class Calendar(Timebeing):
     """Chrona grapha — Append-only log of a time being's tick chain.
 
     Attributes:
@@ -40,8 +42,10 @@ class Calendar:
         ticks: list[TickRecord] | None = None,
         stamp_tbid: bytes | None = None,
     ) -> None:
+        # Initialize Timebeing attributes directly (skip super to allow explicit tbn)
         self.tbid = tbid
         self.tbn = tbn
+        self._family: Any = None
         self._stamp_tbid = stamp_tbid or tbid
         self._ticks: list[TickRecord] = list(ticks or [])
 

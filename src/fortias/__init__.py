@@ -9,7 +9,28 @@ except ImportError:
 
 from .config import Config
 from .models import Fortis, TickRecord
-from .stamper import Chronomatter
+from .timebeing import Timebeing
+from .chronomatter import (
+    CalendarInterface,
+    ChronomatterInterface,
+    InquirerInterface,
+    Inquirer,
+    ChronomatterV1,
+    ChronomatterV1Serial,
+)
 from .time_family import TimeFamily
 
-__all__ = ["TimeFamily", "Chronomatter", "Fortis", "TickRecord", "Config", "__version__"]
+__all__ = [
+    "TimeFamily",
+    "Timebeing",
+    "CalendarInterface",
+    "ChronomatterInterface",
+    "InquirerInterface",
+    "Inquirer",
+    "ChronomatterV1",
+    "ChronomatterV1Serial",
+    "Fortis",
+    "TickRecord",
+    "Config",
+    "__version__",
+]
