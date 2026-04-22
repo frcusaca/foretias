@@ -20,7 +20,6 @@ def _make_valid_genesis(tbid, pk, sk):
     backward = sign(genesis_ma, sk)
     return TickRecord(tick_number=0, public_key=pk, forward_fortis=forward, backward_fortis=backward)
 
-
 class TestAppend:
     def test_append_to_empty(self):
         cal = Calendar(b"tbid", "Time Being test")

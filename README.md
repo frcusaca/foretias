@@ -42,7 +42,7 @@ Add `--chain` to run a full chain integrity check on the calendar.
 
 ### Core class: `TimeFamily`
 
-`TimeFamily` (*Chrona nuntia*, the messenger) orchestrates between `Chronomatter` (*Chronos authenticus*, the Time Authority) and `Calendar` (*Chrona grapha*, passive storage).
+`TimeFamily` (*Chrona adunatrix*) orchestrates between `Chronomatter` (*Chronos authenticus*, the Time Authority) and `Calendar` (*Chrona grapha*, storage).
 
 ```python
 from fortias import TimeFamily, Chronomatter, Fortis, TickRecord, Config
