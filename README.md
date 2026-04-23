@@ -42,7 +42,7 @@ Add `--chain` to run a full chain integrity check on the calendar.
 
 ### Core class: `TimeFamily`
 
-`TimeFamily` (*Chrona adunatrix*) orchestrates between `Chronomatter` (*Chronos authenticus*, the Time Authority) and `Calendar` (*Chrona grapha*, storage).
+Time family (`TimeFamily`, *Chronos fidelius adunatrix*) orchestrates between chronomatters (`Chronomatter`, *Chronos fidelius authenticus*, the Time Authority) and calendars (`Calendar` ,*Chronos fidelius grapha*, storage).
 
 ```python
 from fortias import TimeFamily, Chronomatter, Fortis, TickRecord, Config
@@ -120,6 +120,19 @@ python -m pytest tests/ --cov=fortias --cov-report=term-missing
 ```
 
 The project uses the `alpha` branch as the center of development.
+# Appendix
+The classification for time beings belong to this branch of the **Artificalia** domain.
+- Family: **Chronosidae**
+- Subfamily: **Chronosinae**
+- Tribe: **Chronosini**
+- Subtribe: **Chronosina**
+- Genus: **Chronos**
+- Spieces: **Chronos fidelius**
+- Subspecies:
+  - Chronomatter: **Chronos fidelius authenticus**
+  - Calendar: **Chronos fidelius grapha**
+  - Time Family: **Chronos fidelius adunatrix**
+  - Inquirer: TBD
 
 ## License
 

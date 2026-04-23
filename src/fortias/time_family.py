@@ -30,7 +30,9 @@ from .chronomatter import (
     ChronomatterV1,
     ChronomatterV1Serial,
 )
+from ._timebeing import _genesis_ma
 from .config import Config
+from .crypto import sign
 from .models import Fortis, TickRecord
 
 
@@ -90,36 +92,50 @@ class TimeFamily:
                 persist_path=persist_path,
             )
 
-        # Attach calendar to chronomatter
-        self._stamp.attach_calendar(self._calendar)
-        self._calendar._stamp_tbid = self._stamp.tbid
+        self._inquirer = Inquirer()
 
-        # Create Inquirer
-        self._inquirer = Inquirer(calendars=[self._calendar])
-
-        # Set family references
         self._calendar.family = self
         self._stamp.family = self
         self._inquirer.family = self
+        self._calendar._stamp_tbid = self._stamp.tbid
+
+        if len(self._calendar.ticks) == 0:
+            genesis_ma = _genesis_ma(
+                self._calendar.tbid, self._stamp._current_pk
+            )
+            forward = sign(genesis_ma, self._stamp._current_sk)
+            backward = sign(genesis_ma, self._stamp._current_sk)
+            adapted = TickRecord(
+                tick_number=0,
+                public_key=self._stamp._current_pk,
+                forward_fortis=forward,
+                backward_fortis=backward,
+            )
+            self._calendar.append(adapted)
 
         # Internal lock
         self._rlock = threading.RLock()
 
     # ---------------------------------------------------------------
-    # Interface accessors
+    # Internal interface accessors (used by Timebeings)
     # ---------------------------------------------------------------
 
-    def calendar(self) -> CalendarInterface:
-        """Return the Calendar interface."""
+    def _get_calendar(self) -> CalendarInterface:
+        """Return the Calendar interface. Internal — used by Timebeings."""
         return self._calendar
 
-    def chronomatter(self) -> ChronomatterInterface:
-        """Return the Chronomatter interface."""
+    def _get_chronomatter(self) -> ChronomatterInterface:
+        """Return the Chronomatter interface. Internal — used by Timebeings."""
         return self._stamp
 
-    def inquirer(self) -> InquirerInterface:
-        """Return the Inquirer interface."""
+    def _get_inquirer(self) -> InquirerInterface:
+        """Return the Inquirer interface. Internal — used by Timebeings."""
         return self._inquirer
+
+    # Backward-compatible public aliases
+    calendar = _get_calendar
+    chronomatter = _get_chronomatter
+    inquirer = _get_inquirer
 
     # ---------------------------------------------------------------
     # Properties (backward compatibility)
@@ -298,7 +314,6 @@ class TimeFamily:
         stamp._current_pk = None
         stamp._active = False
         stamp._config = config
-        stamp._calendars = []
         stamp._rlock = threading.RLock()
         stamp._next_tick_time_ns = None
         stamp._last_tick_wall_ns = 0.0
@@ -321,7 +336,10 @@ class TimeFamily:
         instance._stamp = stamp
         instance._calendar = calendar
         instance._config = config
-        instance._inquirer = Inquirer(calendars=[calendar])
+        instance._inquirer = Inquirer()
         instance._rlock = threading.RLock()
+        stamp.family = instance
+        calendar.family = instance
+        instance._inquirer.family = instance
 
         return instance
