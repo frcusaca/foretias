@@ -9,3 +9,6 @@ pub mod core;
 pub mod crypto_server;
 pub mod fortias;
 pub mod server;
+
+#[cfg(feature = "python")]
+pub mod api;
