@@ -45,6 +45,14 @@ impl TimeFamilyServer {
         })
     }
 
+    pub fn get_tbid(&self) -> [u8; 16] {
+        self.tbid
+    }
+
+    pub fn get_tbn(&self) -> &str {
+        &self.tbn
+    }
+
     pub fn start(self: Arc<Self>) -> Result<tokio::task::JoinHandle<()>, NodeError> {
         let addr = self.listen_addr.clone();
 
