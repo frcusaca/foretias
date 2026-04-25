@@ -2,34 +2,48 @@
 
 use thiserror::Error;
 
+/// Top-level errors produced by the P2P node.
 #[derive(Debug, Error)]
 pub enum NodeError {
+    /// A cryptographic operation failed; wraps a [`CryptoError`].
     #[error("crypto operation failed: {0}")]
     Crypto(#[from] CryptoError),
+    /// A requested resource (tick, record, etc.) was not found.
     #[error("not found: {0}")]
     NotFound(&'static str),
+    /// Data did not match the expected format.
     #[error("bad format: {0}")]
     BadFormat(&'static str),
+    /// The requested feature is not yet implemented.
     #[error("not implemented: {0}")]
     NotImplemented(&'static str),
+    /// An I/O operation failed.
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
+    /// JSON serialization or deserialization failed.
     #[error("serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
+    /// An unexpected internal error with a descriptive message.
     #[error("internal error: {0}")]
     Internal(String),
 }
 
+/// Errors originating from the cryptographic backend.
 #[derive(Debug, Error)]
 pub enum CryptoError {
+    /// A signature verification failed.
     #[error("bad signature")]
     BadSignature,
+    /// The provided key is invalid or malformed.
     #[error("bad key")]
     BadKey,
+    /// Input data to a crypto operation was invalid.
     #[error("bad input: {0}")]
     BadInput(&'static str),
+    /// The requested crypto operation is not supported by this backend.
     #[error("operation not supported: {0}")]
     Unsupported(&'static str),
+    /// An internal error from the underlying crypto library, identified by error code.
     #[error("internal crypto error: code {0}")]
     Internal(i32),
 }

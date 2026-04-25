@@ -6,6 +6,7 @@ use crate::fortias::{Fortis, TickRecord};
 use super::jsonrpc::{self, JsonRpcResponse};
 use super::TimeFamilyServer;
 
+/// Handles a `stamp` JSON-RPC request: creates a Fortis attestation for the given content.
 pub fn handle_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
     let content_hex = match params.get("content").and_then(|v| v.as_str()) {
         Some(h) => h.to_string(),
@@ -81,6 +82,7 @@ fn do_stamp(server: &TimeFamilyServer, content: Vec<u8>) -> Result<Fortis, NodeE
     Ok(fortis)
 }
 
+/// Handles a `verify` JSON-RPC request: verifies a Fortis attestation against content and calendar.
 pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
     let content_hex = match params.get("content").and_then(|v| v.as_str()) {
         Some(h) => h.to_string(),
@@ -129,6 +131,7 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
     )
 }
 
+/// Handles a `get_calendar_slice` JSON-RPC request: returns tick records from a given starting tick.
 pub fn handle_get_calendar_slice(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
     let cal_tick_start = params.get("cal_tick_start")
         .and_then(|v| v.as_u64())

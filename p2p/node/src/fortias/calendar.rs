@@ -5,15 +5,21 @@ use crate::crypto_server::CryptoServer;
 use crate::error::NodeError;
 use serde::{Deserialize, Serialize};
 
+/// An append-only chronological record of TickRecords belonging to a TimeFamily.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Calendar {
+    /// TimeBeing identifier of this calendar's owner.
     pub tbid: [u8; 16],
+    /// TimeBeing name (human-readable identifier).
     pub tbn: String,
+    /// Stamp TimeBeing identifier used for attestation.
     pub stamp_tbid: [u8; 16],
+    /// Ordered list of tick records.
     pub ticks: Vec<TickRecord>,
 }
 
 impl Calendar {
+    /// Creates a new empty calendar with the given TimeBeing ID and name.
     pub fn new(tbid: [u8; 16], tbn: &str) -> Self {
         Self {
             tbid,
@@ -23,6 +29,7 @@ impl Calendar {
         }
     }
 
+    /// Appends a tick record; panics if the tick number is not strictly greater than the last.
     pub fn append(&mut self, record: TickRecord) {
         assert!(
             self.ticks.last().map(|r| record.tick_number > r.tick_number).unwrap_or(true),
@@ -31,7 +38,7 @@ impl Calendar {
         self.ticks.push(record);
     }
 
-    /// Check chain integrity: verify each consecutive pair.
+    /// Verifies chain integrity by checking that tick numbers are strictly ascending.
     pub fn integrity_check(&self, _server: &dyn CryptoServer) -> Result<bool, NodeError> {
         if self.ticks.len() < 2 {
             return Ok(true);
@@ -46,7 +53,7 @@ impl Calendar {
         Ok(true)
     }
 
-    /// Save calendar to JSON file.
+    /// Persists the calendar to a JSON file at the given path.
     pub fn save(&self, path: &str) -> Result<(), NodeError> {
         let data = serde_json::to_string_pretty(self)?;
         std::fs::create_dir_all(std::path::Path::new(path).parent().unwrap_or_else(|| std::path::Path::new(".")))?;
@@ -54,7 +61,7 @@ impl Calendar {
         Ok(())
     }
 
-    /// Load calendar from JSON file.
+    /// Loads a calendar from a JSON file at the given path.
     pub fn load(path: &str) -> Result<Self, NodeError> {
         let data = std::fs::read_to_string(path)?;
         let cal: Calendar = serde_json::from_str(&data)?;

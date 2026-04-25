@@ -22,16 +22,24 @@ fn derive_seal_key(priv_bytes: &[u8; 32]) -> [u8; 32] {
     key
 }
 
+/// Software-based crypto server backed by libsodium and ChaCha20-Poly1305.
 pub struct SoftwareCryptoServer {
+    /// The curve this server operates on.
     curve: FortiasCurve,
+    /// The public key generated at construction time.
     pub_key: PublicKeyBytes,
+    /// The private key, zeroized on drop.
     priv_key: Zeroizing<[u8; 32]>,
+    /// The peer ID derived from the public key.
     peer_id: FortiasPeerID,
+    /// Derived seal key for ChaCha20-Poly1305 encryption, zeroized on drop.
     seal_key: Zeroizing<[u8; 32]>,
+    /// In-memory store for FROST threshold signing shares.
     frost_shares: parking_lot::Mutex<HashMap<String, Zeroizing<Vec<u8>>>>,
 }
 
 impl SoftwareCryptoServer {
+    /// Generates a new keypair and initializes a software crypto server for the given curve.
     pub fn generate(curve: FortiasCurve) -> Result<Self, CryptoError> {
         match curve {
             FortiasCurve::Ed25519 => {

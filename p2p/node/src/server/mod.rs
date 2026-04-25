@@ -9,20 +9,31 @@ use crate::fortias::Calendar;
 
 use self::jsonrpc::{JsonRpcRequest, JsonRpcResponse};
 
+/// JSON-RPC 2.0 protocol types and error codes.
 pub mod jsonrpc;
+/// Request handlers for stamp, verify, and calendar queries.
 pub mod handlers;
 
+/// JSON-RPC 2.0 TCP server that handles stamp/verify/calendar requests for a TimeFamily.
 pub struct TimeFamilyServer {
+    /// TimeBeing identifier of this server's node.
     tbid: [u8; 16],
+    /// TimeBeing name (human-readable identifier).
     tbn: String,
+    /// The cryptographic backend used for signing and verification.
     server: Box<dyn CryptoServer>,
+    /// The append-only calendar of tick records.
     calendar: parking_lot::RwLock<Calendar>,
+    /// Monotonically increasing tick counter.
     current_tick: parking_lot::Mutex<u64>,
+    /// Chronon interval in nanoseconds, defining the tick period.
     chronon_ns: u64,
+    /// Network address this server listens on.
     listen_addr: String,
 }
 
 impl TimeFamilyServer {
+    /// Creates a new server with a fresh software crypto backend and empty calendar.
     pub fn new(listen_addr: &str, chronon_ns: u64) -> Result<Self, NodeError> {
         let crypto = crypto_server::new_software(
             crypto_server::FortiasCurve::Ed25519,
@@ -45,14 +56,17 @@ impl TimeFamilyServer {
         })
     }
 
+    /// Returns the TimeBeing identifier of this server.
     pub fn get_tbid(&self) -> [u8; 16] {
         self.tbid
     }
 
+    /// Returns the TimeBeing name of this server.
     pub fn get_tbn(&self) -> &str {
         &self.tbn
     }
 
+    /// Starts the TCP listener and spawns an async task to accept connections.
     pub fn start(self: Arc<Self>) -> Result<tokio::task::JoinHandle<()>, NodeError> {
         let addr = self.listen_addr.clone();
 

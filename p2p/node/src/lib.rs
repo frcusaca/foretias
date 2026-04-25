@@ -8,7 +8,9 @@ pub mod config;
 pub mod core;
 pub mod crypto_server;
 pub mod fortias;
+/// TimeFamilyServer — JSON-RPC 2.0 over TCP.
 pub mod server;
 
+/// PyO3 Python bindings (requires `python` feature).
 #[cfg(feature = "python")]
 pub mod api;

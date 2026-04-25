@@ -70,6 +70,83 @@ fn load_config() -> SettingsConfig {
     serde_json::from_str(&contents).unwrap_or_default()
 }
 
+/// Humanize a nanosecond duration into readable English.
+///
+/// Returns the most natural representation:
+/// - Exact single units: "1 minute", "365 days"
+/// - Mixed units: "1 hour, 23 minutes, and 45 seconds"
+/// - Non-round values fall back to comma-delimited nanoseconds: "123,456,789 ns"
+fn humanize_nanoseconds(ns: u64) -> String {
+    if ns == 0 {
+        return "0 ns".to_string();
+    }
+
+    let units = [
+        ("century", 3_155_760_000_000_000_000u64),
+        ("year", 31_557_600_000_000_000u64),
+        ("day", 86_400_000_000_000u64),
+        ("hour", 3_600_000_000_000u64),
+        ("minute", 60_000_000_000u64),
+        ("second", 1_000_000_000u64),
+        ("millisecond", 1_000_000u64),
+        ("microsecond", 1_000u64),
+        ("nanosecond", 1u64),
+    ];
+
+    for (name, value) in &units {
+        if ns % *value == 0 && ns >= *value {
+            let count = ns / value;
+            if count == 1 {
+                return format!("1 {name}");
+            }
+            return format!("{count} {name}s");
+        }
+    }
+
+    let mut parts: Vec<String> = Vec::new();
+    let mut remainder = ns;
+
+    for (name, value) in &units {
+        if remainder >= *value {
+            let count = remainder / value;
+            remainder %= value;
+            if count == 1 {
+                parts.push(name.to_string());
+            } else {
+                parts.push(format!("{count} {name}s"));
+            }
+        }
+        if remainder == 0 {
+            break;
+        }
+    }
+
+    match parts.len() {
+        0 => format_comma_delimited(ns, "ns"),
+        1 => parts.into_iter().next().unwrap(),
+        2 => format!("{} and {}", parts[0], parts[1]),
+        _ => {
+            let last = parts.pop().unwrap();
+            format!("{}, and {}", parts.join(", "), last)
+        }
+    }
+}
+
+/// Fallback: comma-delimited number for non-human-scale values.
+fn format_comma_delimited(n: u64, unit: &str) -> String {
+    let s = n.to_string();
+    let mut result = String::with_capacity(s.len() + s.len() / 3);
+    let chars: Vec<char> = s.chars().collect();
+    let len = chars.len();
+    for (i, &c) in chars.iter().enumerate() {
+        if i > 0 && (len - i) % 3 == 0 {
+            result.push(',');
+        }
+        result.push(c);
+    }
+    format!("{result} {unit}")
+}
+
 // ── Subcommands ─────────────────────────────────────────────────────────────
 
 async fn cmd_serve(addr: String, chronon_ns: u64) -> Result<(), Box<dyn std::error::Error>> {
@@ -94,7 +171,7 @@ async fn cmd_serve(addr: String, chronon_ns: u64) -> Result<(), Box<dyn std::err
     println!("  Listen : {}", addr);
     println!("  TBN    : {}", server.get_tbn());
     println!("  TBID   : {}", hex::encode(server.get_tbid()));
-    println!("  Chronon: {}ns", chronon_ns);
+    println!("  Chronon: {}", humanize_nanoseconds(chronon_ns));
 
     let handle = server.start()?;
 

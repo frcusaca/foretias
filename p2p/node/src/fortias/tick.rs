@@ -6,26 +6,41 @@ use crate::crypto_server::CryptoServer;
 use crate::core::bindings::{FortiasPubKey32, FortiasSig64};
 use crate::error::NodeError;
 
+/// A single entry in the Calendar, linking consecutive ticks via Fortis attestations.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TickRecord {
+    /// The monotonically increasing tick index.
     pub tick_number: u64,
+    /// The public key active at this tick.
     pub public_key: Vec<u8>,
+    /// Serialized Fortis attesting forward to the next tick.
     pub forward_fortis: Vec<u8>,
+    /// Serialized Fortis attesting backward to the previous tick.
     pub backward_fortis: Vec<u8>,
 }
 
+/// A cryptographically signed attestation of content at a specific tick.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Fortis {
+    /// The tick number at which this attestation was created.
     pub tick_number: u64,
+    /// SHA-256 hash of the attested content.
     pub content_hash: [u8; 32],
+    /// Ed25519 signature over the content and tick metadata.
     pub signature: Vec<u8>,
+    /// TimeBeing identifier of the signing node.
     pub tbid: [u8; 16],
+    /// Echo string identifying the tick (e.g. `"tick-42"`).
     pub echo: String,
+    /// TimeBeing name (human-readable identifier).
     pub tbn: String,
 }
 
+/// Trait for looking up TickRecords from a calendar or calendar-like store.
 pub trait CalendarLookup: Send + Sync {
+    /// Retrieves up to `count` tick records starting from `tick_number`.
     fn get(&self, tick_number: u64, count: usize) -> Result<Vec<TickRecord>, NodeError>;
+    /// Returns the tick number of the most recent record, if any.
     fn latest(&self) -> Option<u64>;
 }
 
