@@ -15,7 +15,7 @@ software-crypto = []
 
 [dependencies]
 tokio        = { version = "1", features = ["full"] }
-tokio-util   = "0.7"
+tokio-util   = { version = "0.7", features = ["codec"] }
 futures      = "0.3"
 
 ed25519-dalek = { version = "2", features = ["rand_core"] }

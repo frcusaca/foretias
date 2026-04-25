@@ -1,6 +1,9 @@
 //! Safe Rust wrappers over C11 FFI.
 
 pub mod bindings;
+pub mod identity;
+pub mod signing;
+pub mod hashing;
+pub mod rng;
 
-// Re-export from generated bindings
 pub use bindings::*;
