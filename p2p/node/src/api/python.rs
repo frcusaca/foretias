@@ -369,7 +369,7 @@ impl PyTimeFamily {
 
 /// Fortias P2P Python module.
 #[pymodule]
-fn _fortias_p2p(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn fortias_p2p(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyCryptoServer>()?;
     m.add_class::<PyFortis>()?;
     m.add_class::<PyTickRecord>()?;
