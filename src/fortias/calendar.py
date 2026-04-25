@@ -189,3 +189,11 @@ class Calendar(Timebeing):
     def ticks(self) -> list[TickRecord]:
         """Access the tick list (read-only)."""
         return list(self._ticks)
+
+    @property
+    def stamp_tbid(self) -> bytes:
+        return self._stamp_tbid
+
+    @stamp_tbid.setter
+    def stamp_tbid(self, value: bytes) -> None:
+        self._stamp_tbid = value

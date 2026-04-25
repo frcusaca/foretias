@@ -83,15 +83,15 @@ class TestTimeFamilyStress:
 class TestTimeFamilyShutdown:
     def test_shutdown_active_thread(self):
         tbf = TimeFamily(serialized=False, chronon_ns=1_000_000_000.0)
-        assert tbf._stamp._daemon is not None
+        assert tbf._chronomatter._daemon is not None
         tbf.shutdown()
-        assert not tbf._stamp._daemon.is_alive()
+        assert not tbf._chronomatter._daemon.is_alive()
 
     def test_shutdown_stops_serialized_daemon(self):
         tbf = TimeFamily(serialized=True, chronon_ns=1_000_000_000.0)
         tbf.stamp(b"msg")
         tbf.shutdown()
-        assert not tbf._stamp._daemon.is_alive()
+        assert not tbf._chronomatter._daemon.is_alive()
 
     def test_shutdown_dormant_is_noop(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -100,7 +100,7 @@ class TestTimeFamilyShutdown:
             tbf.save()
             tbf.shutdown()
             tbf2 = TimeFamily.load(persist_path=tmpdir)
-            assert tbf2._stamp._daemon is None
+            assert tbf2._chronomatter._daemon is None
             tbf2.shutdown()
 
     def test_shutdown_twice_is_safe(self):

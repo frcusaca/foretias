@@ -119,6 +119,25 @@ pip install pytest-cov
 python -m pytest tests/ --cov=fortias --cov-report=term-missing
 ```
 
+## Tests
+
+The test suite is organized into two tiers — **functional** (fast, deterministic) and **aggressive** (slow, destructive, edge-case coverage).
+
+| File | Layer | Coverage |
+|------|-------|----------|
+| `test_functional.py` | Core | Pure functions in `_timebeing` — stamp, tick, verify-pair, verify-chain, verify |
+| `test_calendar.py` | Component | Calendar append, get, latest, save/load, integrity-check |
+| `test_timebeing.py` | Component | Timebeing base class, Calendar MVP, ChronomatterV1/V1Serial, Inquirer |
+| `test_timebeing_aggressively.py` | Defensive | Calendar/Chronomatter/Inquirer edge cases: tampered loads, concurrent shutdown, chronon boundaries |
+| `test_timefamily.py` | Integration | TimeFamily orchestration: stamp, verify, tick, persistence, interface accessors |
+| `test_timefamily_aggressively.py` | Defensive | TimeFamily persistence roundtrips, stress (100+ ticks), shutdown safety, concurrent stamps |
+| `test_crypto.py` | Unit | SHA-256, keypair generation, sign/verify |
+| `test_models.py` | Unit | Frozen dataclass invariants — TickRecord, Fortis |
+| `test_config.py` | Unit | Config resolution (arg > env > default), frozen dataclass |
+| `test_cli.py` | Functional | CLI `fortis verify` — valid, tampered, no-command |
+
+The `_timebeing` module (prefixed with `_`) is the project's internal backbone. Its static methods are deliberately accessible to all other modules — this is an intentional exception to the single-underscore convention.
+
 The project uses the `alpha` branch as the center of development.
 # Appendix
 The classification for time beings belong to this branch of the **Artificalia** domain.

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import threading
 import uuid
+from contextlib import contextmanager
 from typing import Protocol
 
 from ._timebeing import _timebeing, _genesis_ma
@@ -20,9 +21,7 @@ from .timebeing import Timebeing
 
 
 def _monotonic_ns() -> float:
-    """Return the current value of the monotonic clock in nanoseconds."""
     import time
-
     return time.monotonic_ns()
 
 
@@ -69,6 +68,9 @@ class ChronomatterInterface(Protocol):
 
     @property
     def current_tick(self) -> int: ...
+
+    @property
+    def current_pk(self) -> bytes: ...
 
     def stamp(self, content: bytes | str) -> Fortis: ...
 
@@ -167,12 +169,10 @@ class Inquirer(Timebeing):
 
 
 def _uint64_be(value: int) -> bytes:
-    """Encode an integer as 8-byte big-endian."""
     return value.to_bytes(8, "big")
 
 
 def _concat(tbid: bytes, tick_number: int, content: bytes | str) -> bytes:
-    """Concatenate tbid, tick_number as uint64 BE, and content for signature input."""
     if isinstance(content, bytes):
         content_bytes = content
     else:
@@ -223,6 +223,8 @@ class ChronomatterV1(Calendar):
         self._daemon = threading.Thread(target=self._daemon_loop, daemon=True)
         self._daemon.start()
 
+    # -- Public properties --------------------------------------------------
+
     @property
     def active(self) -> bool:
         return self._active
@@ -238,6 +240,21 @@ class ChronomatterV1(Calendar):
     @property
     def current_pk(self) -> bytes:
         return self._current_pk
+
+    @property
+    def current_sk(self) -> bytes:
+        return self._current_sk
+
+    @property
+    def has_daemon(self) -> bool:
+        return self._daemon is not None
+
+    @contextmanager
+    def hold_read_lock(self):
+        with self._rlock:
+            yield
+
+    # -- Public operations --------------------------------------------------
 
     def stamp(self, content: bytes | str) -> Fortis:
         """Sign *content* under the current tick's private key."""
@@ -285,6 +302,18 @@ class ChronomatterV1(Calendar):
             end = min(start + count, len(self._ticks))
             return list(self._ticks[start:end])
 
+    def create_adapted_genesis(self, calendar: Calendar) -> TickRecord:
+        """Create a genesis TickRecord signed by this Chronomatter's current keys."""
+        genesis_ma = _genesis_ma(calendar.tbid, self._current_pk)
+        forward = sign(genesis_ma, self._current_sk)
+        backward = sign(genesis_ma, self._current_sk)
+        return TickRecord(
+            tick_number=0,
+            public_key=self._current_pk,
+            forward_fortis=forward,
+            backward_fortis=backward,
+        )
+
     def save(self) -> None:
         pass
 
@@ -292,6 +321,8 @@ class ChronomatterV1(Calendar):
         self._shutdown_event.set()
         if self._daemon is not None:
             self._daemon.join()
+
+    # -- Internal -----------------------------------------------------------
 
     def _advance_tick(self) -> None:
         current = self._ticks[-1]
@@ -373,6 +404,8 @@ class ChronomatterV1Serial(Calendar):
         self._daemon = threading.Thread(target=self._daemon_loop, daemon=True)
         self._daemon.start()
 
+    # -- Public properties --------------------------------------------------
+
     @property
     def active(self) -> bool:
         return self._active
@@ -388,6 +421,21 @@ class ChronomatterV1Serial(Calendar):
     @property
     def current_pk(self) -> bytes:
         return self._current_pk
+
+    @property
+    def current_sk(self) -> bytes:
+        return self._current_sk
+
+    @property
+    def has_daemon(self) -> bool:
+        return self._daemon is not None
+
+    @contextmanager
+    def hold_read_lock(self):
+        with self._rlock:
+            yield
+
+    # -- Public operations --------------------------------------------------
 
     def stamp(self, content: bytes | str) -> Fortis:
         """Sign *content* under the current tick's private key."""
@@ -436,6 +484,18 @@ class ChronomatterV1Serial(Calendar):
             end = min(start + count, len(self._ticks))
             return list(self._ticks[start:end])
 
+    def create_adapted_genesis(self, calendar: Calendar) -> TickRecord:
+        """Create a genesis TickRecord signed by this Chronomatter's current keys."""
+        genesis_ma = _genesis_ma(calendar.tbid, self._current_pk)
+        forward = sign(genesis_ma, self._current_sk)
+        backward = sign(genesis_ma, self._current_sk)
+        return TickRecord(
+            tick_number=0,
+            public_key=self._current_pk,
+            forward_fortis=forward,
+            backward_fortis=backward,
+        )
+
     def save(self) -> None:
         pass
 
@@ -444,6 +504,40 @@ class ChronomatterV1Serial(Calendar):
         self._shutdown_event.set()
         if self._daemon is not None:
             self._daemon.join()
+
+    # -- Factory for dormant loading ----------------------------------------
+
+    @classmethod
+    def from_calendar(cls, calendar: Calendar, config: Config) -> ChronomatterV1Serial:
+        """Create a dormant instance from a persisted Calendar."""
+        instance = cls.__new__(cls)
+        instance.tbid = calendar.tbid
+        instance.tbn = calendar.tbn
+        instance._family = None
+        instance._stamp_tbid = calendar.stamp_tbid
+        instance._ticks: list[TickRecord] = []
+        instance._current_sk: bytes | None = None
+        instance._current_pk: bytes | None = None
+        instance._active = False
+        instance._chronon_ns = 60_000_000_000.0
+        instance._config = config
+        instance._rlock = threading.RLock()
+        instance._next_tick_time_ns = None
+        instance._last_tick_wall_ns = 0.0
+        instance._shutdown_event = threading.Event()
+        instance._daemon = None
+        instance._tick_pks: list[bytes] = []
+        instance._tick_counter = 0
+
+        for t in calendar.ticks:
+            instance._tick_pks.append(t.public_key)
+        if calendar.ticks:
+            instance._ticks = [calendar.ticks[0]]
+            instance._current_pk = calendar.ticks[0].public_key
+
+        return instance
+
+    # -- Internal -----------------------------------------------------------
 
     def _advance_tick(self) -> None:
         current = self._ticks[-1]

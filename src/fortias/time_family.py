@@ -1,9 +1,8 @@
 """Fortias v1 — TimeFamily (Chrona nuntia): the Orchestrator.
 
-Coordinates between :class:`~fortias.chronomatter.ChronomatterV1` (the Time Authority)
-and :class:`~fortias.calendar.Calendar` (passive tick storage), providing
-a user-facing API that delegates to the Chronomatter for stamping/ticking and
-to Calendar(s) for storage.
+Coordinates between Chronomatter (the Time Authority) and Calendar (passive tick storage),
+providing a user-facing API that delegates to the Chronomatter for stamping/ticking and
+to Calendar for storage.
 """
 
 from __future__ import annotations
@@ -30,9 +29,7 @@ from .chronomatter import (
     ChronomatterV1,
     ChronomatterV1Serial,
 )
-from ._timebeing import _genesis_ma
 from .config import Config
-from .crypto import sign
 from .models import Fortis, TickRecord
 
 
@@ -42,21 +39,6 @@ class TimeFamily:
     Coordinates between Chronomatter (the time authority) and Calendar(s)
     (the tick storage).  Provides a user-facing API that delegates
     to the Chronomatter for stamping/ticking and to Calendar(s) for storage.
-
-    Args:
-        name: TBN prefix — final name becomes ``"Time Being {tbid.hex()}"``.
-        chronon_ns: Fixed tick interval in nanoseconds.
-        tbid: Internal identity (UUID v4 bytes). Auto-generated if None.
-        serialized: If True, tick advances only on stamp (throttled).
-        persist_path: Disk path for calendar storage. Resolved via :class:`Config`
-                      if None.
-
-    Attributes:
-        tbid: The time being's opaque internal identity.
-        tbn: Human-readable external name.
-        serialized: Whether the time being computes sparse ticks.
-        chronon_ns: Tick interval in nanoseconds.
-        active: True if this instance holds the current private key.
     """
 
     def __init__(
@@ -69,23 +51,20 @@ class TimeFamily:
     ) -> None:
         self._config = Config.resolve(persist_path=persist_path)
 
-        # Resolve tbid once, shared between Calendar and Chronomatter
         resolved_tbid = tbid or uuid.uuid4().bytes
         resolved_tbn = f"Time Being {resolved_tbid.hex()}"
 
-        # Create Calendar
         self._calendar = Calendar(tbid=resolved_tbid, tbn=resolved_tbn)
 
-        # Create Chronomatter based on serialized flag
         if serialized:
-            self._stamp = ChronomatterV1Serial(
+            self._chronomatter = ChronomatterV1Serial(
                 name=name,
                 chronon_ns=chronon_ns,
                 tbid=resolved_tbid,
                 persist_path=persist_path,
             )
         else:
-            self._stamp = ChronomatterV1(
+            self._chronomatter = ChronomatterV1(
                 name=name,
                 chronon_ns=chronon_ns,
                 tbid=resolved_tbid,
@@ -95,75 +74,54 @@ class TimeFamily:
         self._inquirer = Inquirer()
 
         self._calendar.family = self
-        self._stamp.family = self
+        self._chronomatter.family = self
         self._inquirer.family = self
-        self._calendar._stamp_tbid = self._stamp.tbid
+        self._calendar.stamp_tbid = self._chronomatter.tbid
 
         if len(self._calendar.ticks) == 0:
-            genesis_ma = _genesis_ma(
-                self._calendar.tbid, self._stamp._current_pk
-            )
-            forward = sign(genesis_ma, self._stamp._current_sk)
-            backward = sign(genesis_ma, self._stamp._current_sk)
-            adapted = TickRecord(
-                tick_number=0,
-                public_key=self._stamp._current_pk,
-                forward_fortis=forward,
-                backward_fortis=backward,
-            )
+            adapted = self._chronomatter.create_adapted_genesis(self._calendar)
             self._calendar.append(adapted)
 
-        # Internal lock
         self._rlock = threading.RLock()
 
-    # ---------------------------------------------------------------
-    # Internal interface accessors (used by Timebeings)
-    # ---------------------------------------------------------------
+    # -- Internal interface accessors --
 
     def _get_calendar(self) -> CalendarInterface:
-        """Return the Calendar interface. Internal — used by Timebeings."""
         return self._calendar
 
     def _get_chronomatter(self) -> ChronomatterInterface:
-        """Return the Chronomatter interface. Internal — used by Timebeings."""
-        return self._stamp
+        return self._chronomatter
 
     def _get_inquirer(self) -> InquirerInterface:
-        """Return the Inquirer interface. Internal — used by Timebeings."""
         return self._inquirer
 
-    # Backward-compatible public aliases
     calendar = _get_calendar
     chronomatter = _get_chronomatter
     inquirer = _get_inquirer
 
-    # ---------------------------------------------------------------
-    # Properties (backward compatibility)
-    # ---------------------------------------------------------------
+    # -- Properties --
 
     @property
     def tbid(self) -> bytes:
-        return self._stamp.tbid
+        return self._chronomatter.tbid
 
     @property
     def tbn(self) -> str:
-        return self._stamp.tbn
+        return self._chronomatter.tbn
 
     @property
     def active(self) -> bool:
-        return self._stamp.active
+        return self._chronomatter.active
 
     @property
     def serialized(self) -> bool:
-        return isinstance(self._stamp, ChronomatterV1Serial)
+        return isinstance(self._chronomatter, ChronomatterV1Serial)
 
     @property
     def chronon_ns(self) -> float:
-        return self._stamp.chronon_ns
+        return self._chronomatter.chronon_ns
 
-    # ---------------------------------------------------------------
-    # Core operations
-    # ---------------------------------------------------------------
+    # -- Core operations --
 
     def stamp(self, content: bytes | str) -> Fortis:
         """Sign *content* under the current tick's private key.
@@ -174,14 +132,8 @@ class TimeFamily:
         window stamp at the current tick.
 
         Raises RuntimeError if not active (dormant).
-
-        Args:
-            content: The data to timestamp.
-
-        Returns:
-            A :class:`Fortis` artifact.
         """
-        return self._stamp.stamp(content)
+        return self._chronomatter.stamp(content)
 
     def verify(
         self,
@@ -191,90 +143,91 @@ class TimeFamily:
     ) -> bool | tuple[bool, bool | None]:
         """Verify a Fortis against content and calendar.
 
-        Args:
-            content: The original content to verify.
-            fortis: The Fortis artifact to verify.
-            next_tick_number: If provided, also check window closed.
-
-        Returns:
-            bool if *next_tick_number* is None.
-            (sig_valid, window_closed) tuple otherwise.
+        Returns bool if *next_tick_number* is None.
+        Returns (sig_valid, window_closed) tuple otherwise.
         """
-        with self._stamp._rlock:
+        with self._chronomatter.hold_read_lock():
             result = self._inquirer.verify(content, fortis)
         if next_tick_number is None:
             return result
-        # Window check
         calendar_ticks = list(self._calendar.ticks)
         next_exists = any(t.tick_number == next_tick_number for t in calendar_ticks)
         return (result, next_exists)
 
     def current_tick(self) -> int:
         """Return the current tick number."""
-        with self._stamp._rlock:
-            return self._stamp.current_tick
+        with self._chronomatter.hold_read_lock():
+            return self._chronomatter.current_tick
 
     def tick(self) -> None:
         """Advance the calendar to the next tick.
 
-        Concurrent calls are handled gracefully.
-
         Raises RuntimeError if not active.
         """
-        if not self._stamp.active:
+        if not self._chronomatter.active:
             raise RuntimeError("Cannot tick: time being is dormant.")
         with self._rlock:
-            self._stamp.tick()
+            self._chronomatter.tick()
 
     def get(self, tick_number: int, count: int = 1) -> list[TickRecord]:
         """Return earliest *count* ticks at or after *tick_number*."""
-        with self._stamp._rlock:
-            return self._stamp.get(tick_number, count)
+        with self._chronomatter.hold_read_lock():
+            return self._chronomatter.get(tick_number, count)
 
-    # ---------------------------------------------------------------
-    # Persistence
-    # ---------------------------------------------------------------
+    # -- Persistence --
 
     def save(self) -> None:
         """Persist the Calendar to disk."""
         with self._rlock:
-            self._stamp.save()
+            self._chronomatter.save()
             path = (
                 f"{self._config.persist_path}/"
                 f"{self._calendar.tbid.hex()}/calendar.json"
             )
             self._calendar.save(path)
 
-    # ---------------------------------------------------------------
-    # Shutdown
-    # ---------------------------------------------------------------
+    # -- Shutdown --
 
     def shutdown(self) -> None:
         """Signal the background daemon thread to stop, persist the calendar,
         and wait for it.
 
-        Safe to call on serialized timebeings (no-op).
+        Safe to call when no daemon is running.
         """
-        if self._stamp._daemon is None:
+        if not self._chronomatter.has_daemon:
             return
         with self._rlock:
             try:
-                # Persist calendar before stopping daemon
                 path = (
                     f"{self._config.persist_path}/"
                     f"{self._calendar.tbid.hex()}/calendar.json"
                 )
                 self._calendar.save(path)
-                if hasattr(self._stamp, "_next_tick_time_ns"):
-                    self._stamp._next_tick_time_ns = None
             except Exception:
-                pass  # Non-fatal; we still shut down
-        self._stamp._shutdown_event.set()
-        self._stamp._daemon.join()
+                pass
+        self._chronomatter.shutdown()
 
-    # ---------------------------------------------------------------
-    # Dormant loading
-    # ---------------------------------------------------------------
+    # -- Dormant loading --
+
+    def _init_from_components(
+        self,
+        config: Config,
+        calendar: Calendar,
+        chronomatter: ChronomatterV1Serial,
+    ) -> None:
+        """Wire pre-constructed components into this instance.
+
+        Used by ``load()`` to assemble a dormant TimeFamily without
+        re-creating any of the child timebeings.
+        """
+        self._config = config
+        self._calendar = calendar
+        self._chronomatter = chronomatter
+        self._inquirer = Inquirer()
+        self._rlock = threading.RLock()
+        self._calendar.family = self
+        self._chronomatter.family = self
+        self._inquirer.family = self
 
     @classmethod
     def load(cls, persist_path: str | None = None) -> TimeFamily:
@@ -282,18 +235,10 @@ class TimeFamily:
 
         Returns a **dormant** time — it can verify but cannot stamp,
         because the private key was never persisted.
-
-        Args:
-            persist_path: Path to search for calendars. Resolved via :class:`Config`
-                          if None.
-
-        Returns:
-            A dormant :class:`TimeFamily`.
         """
         config = Config.resolve(persist_path=persist_path)
         calendar_dir = config.persist_path
 
-        # Find calendar files in the directory
         cal_path = None
         for f in pathlib.Path(calendar_dir).glob("*/calendar.json"):
             cal_path = f
@@ -302,44 +247,8 @@ class TimeFamily:
             raise FileNotFoundError(f"No calendar.json found under {calendar_dir}")
 
         calendar = Calendar.load(cal_path)
-        tbid = calendar.tbid
-        tbn = calendar.tbn
+        chronomatter = ChronomatterV1Serial.from_calendar(calendar, config)
 
-        # Create dormant ChronomatterV1Serial (never stamps = no-op behavior)
-        stamp = ChronomatterV1Serial.__new__(ChronomatterV1Serial)
-        stamp.tbid = tbid
-        stamp.tbn = tbn
-        stamp._chronon_ns = 60_000_000_000.0
-        stamp._current_sk = None
-        stamp._current_pk = None
-        stamp._active = False
-        stamp._config = config
-        stamp._rlock = threading.RLock()
-        stamp._next_tick_time_ns = None
-        stamp._last_tick_wall_ns = 0.0
-        stamp._shutdown_event = threading.Event()
-        stamp._daemon = None
-        stamp._ticks = []
-        stamp._tick_pks = []
-        stamp._tick_counter = 0
-        stamp._stamp_tbid = tbid
-
-        # Extract public keys from calendar ticks for dormant verification
-        for t in calendar.ticks:
-            stamp._tick_pks.append(t.public_key)
-        if calendar.ticks:
-            stamp._ticks = [calendar.ticks[0]]
-            stamp._current_pk = calendar.ticks[0].public_key
-
-        # Create instance
         instance = cls.__new__(cls)
-        instance._stamp = stamp
-        instance._calendar = calendar
-        instance._config = config
-        instance._inquirer = Inquirer()
-        instance._rlock = threading.RLock()
-        stamp.family = instance
-        calendar.family = instance
-        instance._inquirer.family = instance
-
+        instance._init_from_components(config, calendar, chronomatter)
         return instance
