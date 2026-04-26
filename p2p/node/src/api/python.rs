@@ -6,7 +6,8 @@
 #![allow(missing_docs)]
 
 use pyo3::prelude::*;
-use serde::Serialize;
+use pyo3::types::PyType;
+use serde::{Serialize, Deserialize};
 
 use crate::crypto_server::{self, CryptoServer, FortiasCurve, PublicKeyBytes};
 use crate::fortias::{self, calendar::Calendar as CalendarInner, tick::TickRecord as TickRecordInner};
@@ -15,21 +16,21 @@ use crate::core::bindings::{FortiasPubKey32, FortiasSig64};
 
 /// Python-facing Fortis stamp.
 #[pyclass]
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct PyFortis {
-    #[pyo3(get)]
+    #[pyo3(get, set)]
     pub tick_number: u64,
-    #[pyo3(get)]
+    #[pyo3(get, set)]
     pub content_hash: Vec<u8>,
-    #[pyo3(get)]
+    #[pyo3(get, set)]
     pub signature: Vec<u8>,
-    #[pyo3(get)]
+    #[pyo3(get, set)]
     pub tbid: Vec<u8>,
-    #[pyo3(get)]
+    #[pyo3(get, set)]
     pub echo: String,
-    #[pyo3(get)]
+    #[pyo3(get, set)]
     pub tbn: String,
-    #[pyo3(get)]
+    #[pyo3(get, set)]
     pub time_being_reference_time: String,
 }
 
@@ -49,6 +50,27 @@ impl From<&FortisInner> for PyFortis {
 
 #[pymethods]
 impl PyFortis {
+    /// Create an empty PyFortis (for constructing from JSON in Python).
+    #[new]
+    fn new() -> Self {
+        Self {
+            tick_number: 0,
+            content_hash: Vec::new(),
+            signature: Vec::new(),
+            tbid: Vec::new(),
+            echo: String::new(),
+            tbn: String::new(),
+            time_being_reference_time: String::new(),
+        }
+    }
+
+    /// Construct a PyFortis from a JSON string.
+    #[classmethod]
+    fn from_json(_cls: &Bound<'_, PyType>, json_str: &str) -> PyResult<Self> {
+        serde_json::from_str(json_str)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
+    }
+
     fn __repr__(&self) -> String {
         format!(
             "Fortis(tick={}, tbn={}, echo={})",
@@ -265,7 +287,8 @@ impl PyTimeFamily {
     }
 
     /// Stamp content, producing a Fortis and appending to calendar.
-    fn stamp(&self, content: &[u8]) -> PyResult<PyFortis> {
+    #[pyo3(signature = (content, echo = ""))]
+    fn stamp(&self, content: &[u8], echo: &str) -> PyResult<PyFortis> {
         let mut tick = self.current_tick.lock();
         *tick += 1;
         let tick_number = *tick;
@@ -275,7 +298,7 @@ impl PyTimeFamily {
             &self.tbid,
             tick_number,
             content,
-            "",
+            echo,
             &self.tbn,
         ).map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
 
