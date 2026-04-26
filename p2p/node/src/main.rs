@@ -30,11 +30,11 @@ enum Commands {
     },
     /// Stamp content via TimeFamilyServer
     Stamp {
-        /// Message to stamp (use -mf for file)
+        /// Message to stamp
         #[arg(short, long)]
         message: Option<String>,
         /// Read message from file
-        #[arg(short = 'f', long = "message-file")]
+        #[arg(short = 'M', long = "message-file")]
         message_file: Option<String>,
         /// Write stamp output to file (default: stdout)
         #[arg(short = 'o', long = "stamp-output")]
@@ -45,18 +45,18 @@ enum Commands {
     },
     /// Verify content against a Fortis
     Verify {
-        /// Message to verify (use -mf for file)
+        /// Message to verify
         #[arg(short, long)]
         message: Option<String>,
         /// Read message from file
-        #[arg(short = 'f', long = "message-file")]
+        #[arg(short = 'M', long = "message-file")]
         message_file: Option<String>,
-        /// Fortis JSON (use -si for file)
-        #[arg(short, long)]
-        fortis_json: Option<String>,
+        /// Fortis JSON inline
+        #[arg(short = 'f', long)]
+        fortis: Option<String>,
         /// Read Fortis from file
-        #[arg(short = 'i', long = "stamp-input")]
-        stamp_input: Option<String>,
+        #[arg(short = 'F', long = "fortis-file")]
+        fortis_file: Option<String>,
         /// Write verify output to file (default: stdout)
         #[arg(short = 'o', long = "verify-output")]
         verify_output: Option<String>,
@@ -176,12 +176,12 @@ fn read_message(msg: Option<String>, msg_file: Option<String>) -> Result<Vec<u8>
     }
 }
 
-fn read_fortis_json(fortis_json: Option<String>, stamp_input: Option<String>) -> Result<String, std::io::Error> {
-    match (fortis_json, stamp_input) {
+fn read_fortis(fortis: Option<String>, fortis_file: Option<String>) -> Result<String, std::io::Error> {
+    match (fortis, fortis_file) {
         (Some(j), None) => Ok(j),
         (None, Some(f)) => std::fs::read_to_string(&f),
-        (None, None) => Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Must provide --fortis-json or --stamp-input")),
-        (Some(_), Some(_)) => Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Cannot specify both --fortis-json and --stamp-input")),
+        (None, None) => Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Must provide --fortis or --fortis-file")),
+        (Some(_), Some(_)) => Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Cannot specify both --fortis and --fortis-file")),
     }
 }
 
@@ -260,14 +260,14 @@ async fn cmd_stamp(
 async fn cmd_verify(
     message: Option<String>,
     message_file: Option<String>,
-    fortis_json: Option<String>,
-    stamp_input: Option<String>,
+    fortis: Option<String>,
+    fortis_file: Option<String>,
     verify_output: Option<String>,
     server_addr: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let content = read_message(message, message_file)?;
     let content_hex = hex::encode(&content);
-    let fortis_str = read_fortis_json(fortis_json, stamp_input)?;
+    let fortis_str = read_fortis(fortis, fortis_file)?;
     let fortis_value: serde_json::Value = serde_json::from_str(&fortis_str)?;
 
     let result = json_rpc_call(
@@ -333,8 +333,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Stamp { message, message_file, stamp_output, server } => {
             cmd_stamp(message, message_file, stamp_output, server).await
         }
-        Commands::Verify { message, message_file, fortis_json, stamp_input, verify_output, server } => {
-            cmd_verify(message, message_file, fortis_json, stamp_input, verify_output, server).await
+        Commands::Verify { message, message_file, fortis, fortis_file, verify_output, server } => {
+            cmd_verify(message, message_file, fortis, fortis_file, verify_output, server).await
         }
     }
 }
