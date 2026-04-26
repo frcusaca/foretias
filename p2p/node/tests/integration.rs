@@ -86,6 +86,7 @@ fn test_stamp_and_verify_e2e() {
     // 3. Stamp "hello world"
     let stamp_result = Command::new(&bin)
         .arg("stamp")
+        .arg("--message")
         .arg("hello world")
         .arg("--server")
         .arg(&addr)
@@ -109,12 +110,15 @@ fn test_stamp_and_verify_e2e() {
     assert!(fortis.get("tbid").is_some(), "Fortis missing tbid");
     assert!(fortis.get("echo").is_some(), "Fortis missing echo");
     assert!(fortis.get("tbn").is_some(), "Fortis missing tbn");
+    assert!(fortis.get("time_being_reference_time").is_some(), "Fortis missing time_being_reference_time");
 
     // 4. Verify "hello world" with the Fortis
     let fortis_json = serde_json::to_string(&fortis).unwrap();
     let verify_result = Command::new(&bin)
         .arg("verify")
+        .arg("--message")
         .arg("hello world")
+        .arg("--fortis-json")
         .arg(&fortis_json)
         .arg("--server")
         .arg(&addr)
@@ -139,7 +143,9 @@ fn test_stamp_and_verify_e2e() {
     // 5. Verify wrong content fails
     let verify_wrong = Command::new(&bin)
         .arg("verify")
+        .arg("--message")
         .arg("wrong content")
+        .arg("--fortis-json")
         .arg(&fortis_json)
         .arg("--server")
         .arg(&addr)
@@ -158,6 +164,7 @@ fn test_stamp_and_verify_e2e() {
     // 6. Stamp a second time to test tick increment
     let stamp2_result = Command::new(&bin)
         .arg("stamp")
+        .arg("--message")
         .arg("second tick")
         .arg("--server")
         .arg(&addr)

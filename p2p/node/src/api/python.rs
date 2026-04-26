@@ -29,6 +29,8 @@ pub struct PyFortis {
     pub echo: String,
     #[pyo3(get)]
     pub tbn: String,
+    #[pyo3(get)]
+    pub time_being_reference_time: String,
 }
 
 impl From<&FortisInner> for PyFortis {
@@ -40,6 +42,7 @@ impl From<&FortisInner> for PyFortis {
             tbid: f.tbid.to_vec(),
             echo: f.echo.clone(),
             tbn: f.tbn.clone(),
+            time_being_reference_time: f.time_being_reference_time.clone(),
         }
     }
 }
@@ -233,15 +236,14 @@ pub struct PyTimeFamily {
     current_tick: parking_lot::Mutex<u64>,
     tbid: [u8; 16],
     tbn: String,
-    echo: String,
 }
 
 #[pymethods]
 impl PyTimeFamily {
     /// Create a new TimeFamily with a fresh identity.
     #[new]
-    #[pyo3(signature = (tbn = None, echo = None))]
-    fn new(tbn: Option<String>, echo: Option<String>) -> PyResult<Self> {
+    #[pyo3(signature = (tbn = None))]
+    fn new(tbn: Option<String>) -> PyResult<Self> {
         let server = crypto_server::new_software(FortiasCurve::Ed25519)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
 
@@ -250,7 +252,6 @@ impl PyTimeFamily {
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
 
         let tbn = tbn.unwrap_or_else(|| format!("tf-{}", hex::encode(&tbid[..8])));
-        let echo = echo.unwrap_or_else(|| hex::encode(server.peer_id().bytes));
 
         let calendar = CalendarInner::new(tbid, &tbn);
 
@@ -260,7 +261,6 @@ impl PyTimeFamily {
             current_tick: parking_lot::Mutex::new(0),
             tbid,
             tbn,
-            echo,
         })
     }
 
@@ -275,7 +275,7 @@ impl PyTimeFamily {
             &self.tbid,
             tick_number,
             content,
-            &self.echo,
+            "",
             &self.tbn,
         ).map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
 
@@ -307,6 +307,7 @@ impl PyTimeFamily {
             tbid,
             echo: fortis.echo.clone(),
             tbn: fortis.tbn.clone(),
+            time_being_reference_time: fortis.time_being_reference_time.clone(),
         };
 
         let cal = self.calendar.read();
@@ -328,11 +329,6 @@ impl PyTimeFamily {
     /// Return the tbn (time branch name).
     fn get_tbn(&self) -> PyResult<String> {
         Ok(self.tbn.clone())
-    }
-
-    /// Return the echo (node identity string).
-    fn get_echo(&self) -> PyResult<String> {
-        Ok(self.echo.clone())
     }
 
     /// Return the latest tick number, or None if no ticks yet.

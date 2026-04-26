@@ -73,7 +73,10 @@ class TestPyTimeFamily:
         assert len(fortis.signature) == 64
         assert len(fortis.tbid) == 16
         assert fortis.tbn == "test-node"
-        assert len(fortis.echo) > 0
+        assert isinstance(fortis.echo, str)
+        assert isinstance(fortis.time_being_reference_time, str)
+        assert fortis.time_being_reference_time.startswith("UE+")
+        assert fortis.time_being_reference_time.endswith("ns")
 
     def test_verify_correct(self):
         tf = PyTimeFamily(tbn="test-node")
@@ -134,6 +137,7 @@ class TestPyFortis:
         assert "tbid" in j
         assert "echo" in j
         assert "tbn" in j
+        assert "time_being_reference_time" in j
 
 
 class TestPyCalendar:

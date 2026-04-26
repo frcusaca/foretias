@@ -34,6 +34,8 @@ pub struct Fortis {
     pub echo: String,
     /// TimeBeing name (human-readable identifier).
     pub tbn: String,
+    /// Server wall-clock time at stamping, in `"UE+<nanoseconds>ns"` format.
+    pub time_being_reference_time: String,
 }
 
 /// Trait for looking up TickRecords from a calendar or calendar-like store.
@@ -61,6 +63,12 @@ pub fn stamp(
     let signature = server.sign(&sig_input)?;
     let content_hash = server.sha256(content)?;
 
+    let now_ns = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos() as u64;
+    let time_being_reference_time = format!("UE+{}ns", now_ns);
+
     Ok(Fortis {
         tick_number,
         content_hash: content_hash.bytes,
@@ -68,6 +76,7 @@ pub fn stamp(
         tbid: *tbid,
         echo: echo.to_string(),
         tbn: tbn.to_string(),
+        time_being_reference_time,
     })
 }
 

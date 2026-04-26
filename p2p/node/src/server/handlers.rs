@@ -26,7 +26,12 @@ pub fn handle_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse
         ),
     };
 
-    match do_stamp(server, content) {
+    let echo = params.get("echo")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    match do_stamp(server, content, echo) {
         Ok(fortis) => jsonrpc::JsonRpcResponse::success(
             params.get("id").cloned(),
             serde_json::to_value(&fortis).unwrap_or(Value::Null),
@@ -39,7 +44,7 @@ pub fn handle_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse
     }
 }
 
-fn do_stamp(server: &TimeFamilyServer, content: Vec<u8>) -> Result<Fortis, NodeError> {
+fn do_stamp(server: &TimeFamilyServer, content: Vec<u8>, echo: String) -> Result<Fortis, NodeError> {
     let tick = {
         let mut counter = server.current_tick.lock();
         *counter += 1;
@@ -48,7 +53,6 @@ fn do_stamp(server: &TimeFamilyServer, content: Vec<u8>) -> Result<Fortis, NodeE
 
     let tbid = server.tbid;
     let tbn = server.tbn.clone();
-    let echo = format!("tick-{}", tick);
 
     let fortis = crate::fortias::tick::stamp(
         server.server.as_ref(),

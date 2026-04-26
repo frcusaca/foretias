@@ -30,18 +30,36 @@ enum Commands {
     },
     /// Stamp content via TimeFamilyServer
     Stamp {
-        /// Content to stamp (raw string)
-        content: String,
+        /// Message to stamp (use -mf for file)
+        #[arg(short, long)]
+        message: Option<String>,
+        /// Read message from file
+        #[arg(short = 'f', long = "message-file")]
+        message_file: Option<String>,
+        /// Write stamp output to file (default: stdout)
+        #[arg(short = 'o', long = "stamp-output")]
+        stamp_output: Option<String>,
         /// Server address
         #[arg(short, long, default_value = "127.0.0.1:4001")]
         server: String,
     },
     /// Verify content against a Fortis
     Verify {
-        /// Content to verify (raw string)
-        content: String,
-        /// Fortis JSON (from stamp response)
-        fortis_json: String,
+        /// Message to verify (use -mf for file)
+        #[arg(short, long)]
+        message: Option<String>,
+        /// Read message from file
+        #[arg(short = 'f', long = "message-file")]
+        message_file: Option<String>,
+        /// Fortis JSON (use -si for file)
+        #[arg(short, long)]
+        fortis_json: Option<String>,
+        /// Read Fortis from file
+        #[arg(short = 'i', long = "stamp-input")]
+        stamp_input: Option<String>,
+        /// Write verify output to file (default: stdout)
+        #[arg(short = 'o', long = "verify-output")]
+        verify_output: Option<String>,
         /// Server address
         #[arg(short, long, default_value = "127.0.0.1:4001")]
         server: String,
@@ -147,6 +165,34 @@ fn format_comma_delimited(n: u64, unit: &str) -> String {
     format!("{result} {unit}")
 }
 
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+fn read_message(msg: Option<String>, msg_file: Option<String>) -> Result<Vec<u8>, std::io::Error> {
+    match (msg, msg_file) {
+        (Some(m), None) => Ok(m.into_bytes()),
+        (None, Some(f)) => std::fs::read(&f),
+        (None, None) => Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Must provide --message or --message-file")),
+        (Some(_), Some(_)) => Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Cannot specify both --message and --message-file")),
+    }
+}
+
+fn read_fortis_json(fortis_json: Option<String>, stamp_input: Option<String>) -> Result<String, std::io::Error> {
+    match (fortis_json, stamp_input) {
+        (Some(j), None) => Ok(j),
+        (None, Some(f)) => std::fs::read_to_string(&f),
+        (None, None) => Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Must provide --fortis-json or --stamp-input")),
+        (Some(_), Some(_)) => Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Cannot specify both --fortis-json and --stamp-input")),
+    }
+}
+
+fn client_echo() -> String {
+    let now_ns = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos() as u64;
+    format!("UE+{}ns", now_ns)
+}
+
 // ── Subcommands ─────────────────────────────────────────────────────────────
 
 async fn cmd_serve(addr: String, chronon_ns: u64) -> Result<(), Box<dyn std::error::Error>> {
@@ -186,26 +232,43 @@ async fn cmd_serve(addr: String, chronon_ns: u64) -> Result<(), Box<dyn std::err
     Ok(())
 }
 
-async fn cmd_stamp(content: String, server_addr: String) -> Result<(), Box<dyn std::error::Error>> {
-    let content_hex = hex::encode(content.as_bytes());
+async fn cmd_stamp(
+    message: Option<String>,
+    message_file: Option<String>,
+    stamp_output: Option<String>,
+    server_addr: String,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let content = read_message(message, message_file)?;
+    let content_hex = hex::encode(&content);
+    let echo = client_echo();
+
     let result = json_rpc_call(
         &server_addr,
         "stamp",
-        serde_json::json!({"content": content_hex}),
+        serde_json::json!({"content": content_hex, "echo": echo}),
     )
     .await?;
 
-    println!("{}", serde_json::to_string_pretty(&result)?);
+    let output = serde_json::to_string_pretty(&result)?;
+    match stamp_output {
+        Some(path) => std::fs::write(&path, &output).map_err(|e| format!("Failed to write {}: {}", path, e))?,
+        None => println!("{}", output),
+    }
     Ok(())
 }
 
 async fn cmd_verify(
-    content: String,
-    fortis_json: String,
+    message: Option<String>,
+    message_file: Option<String>,
+    fortis_json: Option<String>,
+    stamp_input: Option<String>,
+    verify_output: Option<String>,
     server_addr: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let content_hex = hex::encode(content.as_bytes());
-    let fortis_value: serde_json::Value = serde_json::from_str(&fortis_json)?;
+    let content = read_message(message, message_file)?;
+    let content_hex = hex::encode(&content);
+    let fortis_str = read_fortis_json(fortis_json, stamp_input)?;
+    let fortis_value: serde_json::Value = serde_json::from_str(&fortis_str)?;
 
     let result = json_rpc_call(
         &server_addr,
@@ -214,7 +277,11 @@ async fn cmd_verify(
     )
     .await?;
 
-    println!("{}", serde_json::to_string_pretty(&result)?);
+    let output = serde_json::to_string_pretty(&result)?;
+    match verify_output {
+        Some(path) => std::fs::write(&path, &output).map_err(|e| format!("Failed to write {}: {}", path, e))?,
+        None => println!("{}", output),
+    }
     Ok(())
 }
 
@@ -263,9 +330,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match cli.command {
         Commands::Serve { addr, chronon_ns } => cmd_serve(addr, chronon_ns).await,
-        Commands::Stamp { content, server } => cmd_stamp(content, server).await,
-        Commands::Verify { content, fortis_json, server } => {
-            cmd_verify(content, fortis_json, server).await
+        Commands::Stamp { message, message_file, stamp_output, server } => {
+            cmd_stamp(message, message_file, stamp_output, server).await
+        }
+        Commands::Verify { message, message_file, fortis_json, stamp_input, verify_output, server } => {
+            cmd_verify(message, message_file, fortis_json, stamp_input, verify_output, server).await
         }
     }
 }
