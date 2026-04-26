@@ -51,6 +51,17 @@ cc      = "1.0"
 bindgen = "0.70"
 
 [profile.release]
-opt-level = 2
+opt-level = 3
 lto       = true
 strip     = true
+
+[profile.dev]
+# Speed up by having more parallel units (default is 16)
+codegen-units = 256 
+# Disable debug symbols if you aren't using a visual debugger (LLDB/GDB)
+debug = 0 
+# No optimization
+opt-level = 0
+
+[profile.dev.package."*"]
+opt-level = 3
