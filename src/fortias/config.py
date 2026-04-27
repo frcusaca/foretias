@@ -1,6 +1,17 @@
-"""Fortias v1 — Configuration."""
+"""Fortias v1 — Configuration.
+
+.. deprecated:: Use ``fortias_p2p.PyTimeFamilyServer`` (Rust) instead.
+"""
 
 from __future__ import annotations
+
+import warnings
+
+warnings.warn(
+    "fortias.config is deprecated. Use fortias (Rust-backed) instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 import os
 from dataclasses import dataclass

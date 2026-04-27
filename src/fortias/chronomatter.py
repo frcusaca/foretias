@@ -3,9 +3,19 @@
 Manages Ed25519 key lifecycle, stamping, ticking, and publishes ticks
 to the family's Calendar.  Pure functional operations are delegated
 to :class:`~fortias._timebeing._timebeing`.
+
+.. deprecated:: Use ``fortias_p2p.PyTimeFamilyServer`` (Rust) instead.
 """
 
 from __future__ import annotations
+
+import warnings
+
+warnings.warn(
+    "fortias.chronomatter is deprecated. Use fortias (Rust-backed) instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 import threading
 import uuid

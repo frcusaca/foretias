@@ -5,13 +5,16 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 #![allow(missing_docs)]
 
+use std::path::PathBuf;
+use std::sync::Arc;
+
 use pyo3::prelude::*;
 use pyo3::types::PyType;
 use serde::{Serialize, Deserialize};
 
 use crate::crypto_server::{self, CryptoServer, FortiasCurve, PublicKeyBytes};
 use crate::fortias::{self, calendar::Calendar as CalendarInner, tick::TickRecord as TickRecordInner};
-use crate::fortias::tick::Fortis as FortisInner;
+use crate::fortias::tick::{Fortis as FortisInner, CalendarLookup};
 use crate::core::bindings::{FortiasPubKey32, FortiasSig64};
 
 /// Python-facing Fortis stamp.
@@ -390,6 +393,233 @@ impl PyTimeFamily {
     }
 }
 
+/// Python-facing TimeFamilyServer — wraps the full Rust server with Phase 4 features.
+///
+/// Provides: stamp(), verify(), integrity_check(), get_calendar(), get_calendar_slice(),
+/// save(), is_dormant(), daemon_tick(), and related properties.
+/// Supports persistence via persist_path and dormant (verify-only) mode.
+#[pyclass]
+pub struct PyTimeFamilyServer {
+    server: Arc<crate::server::TimeFamilyServer>,
+}
+
+#[pymethods]
+impl PyTimeFamilyServer {
+    /// Create a new TimeFamilyServer with a fresh identity.
+    ///
+    /// Args:
+    ///     listen_addr: TCP listen address (default "127.0.0.1:4001").
+    ///     chronon_ns: Chronon interval in nanoseconds (default 60s = 60_000_000_000ns).
+    ///     persist_path: Optional directory path for calendar persistence.
+    #[new]
+    #[pyo3(signature = (listen_addr = "127.0.0.1:4001", chronon_ns = 60_000_000_000, persist_path = None))]
+    fn new(listen_addr: &str, chronon_ns: u64, persist_path: Option<String>) -> PyResult<Self> {
+        let persist = persist_path.map(PathBuf::from);
+        let server = Arc::new(
+            crate::server::TimeFamilyServer::new_with_persist(
+                listen_addr,
+                chronon_ns,
+                persist,
+            ).map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?,
+        );
+        Ok(Self { server })
+    }
+
+    /// Create a dormant (verify-only) server from a persisted calendar JSON file.
+    ///
+    /// Args:
+    ///     calendar_path: Path to the calendar JSON file.
+    ///     listen_addr: TCP listen address (default "127.0.0.1:4001").
+    #[classmethod]
+    #[pyo3(signature = (calendar_path, listen_addr = "127.0.0.1:4001"))]
+    fn from_calendar(_cls: &Bound<'_, PyType>, calendar_path: String, listen_addr: &str) -> PyResult<Self> {
+        let crypto = crypto_server::new_software(FortiasCurve::Ed25519)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+        let server = Arc::new(
+            crate::server::TimeFamilyServer::from_calendar(
+                &calendar_path,
+                listen_addr,
+                crypto,
+            ).map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?,
+        );
+        Ok(Self { server })
+    }
+
+    /// Stamp content, producing a Fortis attestation.
+    ///
+    /// Args:
+    ///     content: Raw bytes to attesting.
+    ///     echo: Optional echo string.
+    ///
+    /// Returns:
+    ///     PyFortis attestation record.
+    ///
+    /// Raises RuntimeError if the server is in dormant mode.
+    #[pyo3(signature = (content, echo = ""))]
+    fn stamp(&self, content: &[u8], echo: &str) -> PyResult<PyFortis> {
+        let fortis = crate::server::handlers::do_stamp(&self.server, content.to_vec(), echo.to_string())
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+        Ok(PyFortis::from(&fortis))
+    }
+
+    /// Verify a Fortis attestation against content.
+    ///
+    /// Args:
+    ///     content: Raw bytes to verify.
+    ///     fortis: The Fortis attestation to verify.
+    ///
+    /// Returns:
+    ///     True if the attestation is valid.
+    fn verify(&self, content: &[u8], fortis: &PyFortis) -> PyResult<bool> {
+        let content_hash: [u8; 32] = fortis.content_hash[..].try_into()
+            .map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("content_hash must be 32 bytes"))?;
+        let tbid: [u8; 16] = fortis.tbid[..].try_into()
+            .map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("tbid must be 16 bytes"))?;
+
+        let inner_fortis = FortisInner {
+            tick_number: fortis.tick_number,
+            content_hash,
+            signature: fortis.signature.clone(),
+            tbid,
+            echo: fortis.echo.clone(),
+            tbn: fortis.tbn.clone(),
+            time_being_reference_time: fortis.time_being_reference_time.clone(),
+        };
+
+        let cal = self.server.calendar.read();
+        let result = fortias::tick::verify(
+            self.server.server.as_ref(),
+            &inner_fortis,
+            content,
+            &*cal,
+        ).map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+        Ok(result)
+    }
+
+    /// Verify a Fortis attestation from a JSON string.
+    ///
+    /// Args:
+    ///     content: Raw bytes to verify.
+    ///     fortis_json: JSON string of the Fortis attestation.
+    ///
+    /// Returns:
+    ///     True if the attestation is valid.
+    fn verify_json(&self, content: &[u8], fortis_json: &str) -> PyResult<bool> {
+        let fortis: FortisInner = serde_json::from_str(fortis_json)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
+
+        let cal = self.server.calendar.read();
+        let result = fortias::tick::verify(
+            self.server.server.as_ref(),
+            &fortis,
+            content,
+            &*cal,
+        ).map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+        Ok(result)
+    }
+
+    /// Check chain integrity over a tick range.
+    ///
+    /// Returns JSON string with keys: all_valid, pair_results, pairs_checked.
+    #[pyo3(signature = (start = None, end = None))]
+    fn integrity_check(&self, start: Option<u64>, end: Option<u64>) -> PyResult<String> {
+        let result = crate::server::handlers::do_integrity_check(&self.server, start, end)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+        Ok(serde_json::to_string(&result)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?)
+    }
+
+    /// Return the full calendar as a PyCalendar.
+    fn get_calendar(&self) -> PyResult<PyCalendar> {
+        let cal = self.server.calendar.read();
+        Ok(PyCalendar::from(&*cal))
+    }
+
+    /// Return a slice of calendar tick records.
+    ///
+    /// Args:
+    ///     cal_tick_start: Starting tick number (default 0).
+    ///     count: Number of records to return (default 10).
+    ///
+    /// Returns:
+    ///     List of PyTickRecord objects.
+    #[pyo3(signature = (cal_tick_start = 0, count = 10))]
+    fn get_calendar_slice(&self, cal_tick_start: u64, count: usize) -> PyResult<Vec<PyTickRecord>> {
+        let cal = self.server.calendar.read();
+        let records = cal.get(cal_tick_start, count)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+        Ok(records.iter().map(PyTickRecord::from).collect())
+    }
+
+    /// Persist the calendar to disk if a persist_path was configured.
+    fn save(&self) -> PyResult<()> {
+        self.server.save()
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))
+    }
+
+    /// Create a daemon tick (auto-attestation tick with no content).
+    ///
+    /// Not available in dormant mode.
+    fn daemon_tick(&self) -> PyResult<()> {
+        if self.server.is_dormant() {
+            return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "daemon_tick not available in dormant mode".to_string(),
+            ));
+        }
+        self.server.daemon_tick()
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))
+    }
+
+    /// Return True if this server is in dormant (verify-only) mode.
+    fn is_dormant(&self) -> bool {
+        self.server.is_dormant()
+    }
+
+    /// Return the TimeBeing identifier as a hex string.
+    fn get_tbid(&self) -> String {
+        hex::encode(self.server.get_tbid())
+    }
+
+    /// Return the TimeBeing name.
+    fn get_tbn(&self) -> String {
+        self.server.get_tbn().to_string()
+    }
+
+    /// Return the chronon interval in nanoseconds.
+    fn get_chronon(&self) -> u64 {
+        self.server.chronon_ns
+    }
+
+    /// Return the latest tick number, or None if no ticks yet.
+    fn get_latest_tick(&self) -> Option<u64> {
+        let cal = self.server.calendar.read();
+        cal.ticks.last().map(|t| t.tick_number)
+    }
+
+    /// Return the current tick counter.
+    fn get_current_tick(&self) -> u64 {
+        let tick = self.server.current_tick.lock();
+        *tick
+    }
+
+    /// Return the public key (main crypto server) as hex.
+    fn get_public_key(&self) -> PyResult<String> {
+        Ok(hex::encode(pubkey_to_vec(self.server.server.public_key())))
+    }
+
+    fn __repr__(&self) -> String {
+        let tick = self.server.current_tick.lock();
+        let dormant = if self.server.is_dormant() { " (dormant)" } else { "" };
+        format!(
+            "TimeFamilyServer(tbn={}, tbid={}, ticks={}{})",
+            self.server.get_tbn(),
+            &hex::encode(self.server.get_tbid())[..8],
+            *tick,
+            dormant
+        )
+    }
+}
+
 /// Fortias P2P Python module.
 #[pymodule]
 fn fortias_p2p(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -398,5 +628,6 @@ fn fortias_p2p(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyTickRecord>()?;
     m.add_class::<PyCalendar>()?;
     m.add_class::<PyTimeFamily>()?;
+    m.add_class::<PyTimeFamilyServer>()?;
     Ok(())
 }

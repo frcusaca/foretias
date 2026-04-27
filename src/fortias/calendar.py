@@ -1,6 +1,17 @@
-"""Fortias v1 — Calendar: append-only log of tick records."""
+"""Fortias v1 — Calendar: append-only log of tick records.
+
+.. deprecated:: Use ``fortias_p2p.PyCalendar`` (Rust) instead.
+"""
 
 from __future__ import annotations
+
+import warnings
+
+warnings.warn(
+    "fortias.calendar is deprecated. Use fortias (Rust-backed) instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 import json
 import pathlib

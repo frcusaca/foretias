@@ -71,7 +71,7 @@ pub fn handle_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse
     }
 }
 
-fn do_stamp(server: &TimeFamilyServer, content: Vec<u8>, echo: String) -> Result<Fortis, NodeError> {
+pub(crate) fn do_stamp(server: &TimeFamilyServer, content: Vec<u8>, echo: String) -> Result<Fortis, NodeError> {
     let tick = {
         let mut counter = server.current_tick.lock();
         *counter += 1;
@@ -229,7 +229,7 @@ pub fn handle_integrity_check(server: &TimeFamilyServer, params: Value) -> JsonR
     }
 }
 
-fn do_integrity_check(
+pub(crate) fn do_integrity_check(
     server: &TimeFamilyServer,
     start: Option<u64>,
     end: Option<u64>,

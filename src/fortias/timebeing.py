@@ -2,9 +2,19 @@
 
 All time beings inherit from this class, which provides identity (tbid, tbn)
 and a reference to the family that owns them.
+
+.. deprecated:: Use ``fortias_p2p.PyTimeFamily`` (Rust) instead.
 """
 
 from __future__ import annotations
+
+import warnings
+
+warnings.warn(
+    "fortias.timebeing is deprecated. Use fortias (Rust-backed) instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 import uuid
 from typing import Any

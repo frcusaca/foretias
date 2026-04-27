@@ -33,13 +33,13 @@ pub struct TimeFamilyServer {
     /// TimeBeing name (human-readable identifier).
     tbn: String,
     /// The cryptographic backend used for signing and verification.
-    server: Box<dyn CryptoServer>,
+    pub(crate) server: Box<dyn CryptoServer>,
     /// The append-only calendar of tick records.
-    calendar: parking_lot::RwLock<Calendar>,
+    pub(crate) calendar: parking_lot::RwLock<Calendar>,
     /// Monotonically increasing tick counter.
-    current_tick: parking_lot::Mutex<u64>,
+    pub(crate) current_tick: parking_lot::Mutex<u64>,
     /// Chronon interval in nanoseconds, defining the tick period.
-    chronon_ns: u64,
+    pub(crate) chronon_ns: u64,
     /// Network address this server listens on.
     listen_addr: String,
     /// Per-tick keypairs for auto-attestation.

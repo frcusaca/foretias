@@ -3,9 +3,19 @@
 Coordinates between Chronomatter (the Time Authority) and Calendar (passive tick storage),
 providing a user-facing API that delegates to the Chronomatter for stamping/ticking and
 to Calendar for storage.
+
+.. deprecated:: Use ``fortias_p2p.PyTimeFamilyServer`` (Rust) instead.
 """
 
 from __future__ import annotations
+
+import warnings
+
+warnings.warn(
+    "fortias.time_family is deprecated. Use fortias (Rust-backed) instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 import pathlib
 import uuid

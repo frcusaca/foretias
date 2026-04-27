@@ -1,108 +1,129 @@
-"""Fortias CLI — ``fortis`` command-line tool."""
-
+"""Fortias CLI — ``fortis`` command-line tool (Rust-backed)."""
 from __future__ import annotations
 
 import argparse
 import json
 import sys
 
-
-def _hex_to_bytes(value: str) -> bytes:
-    return bytes.fromhex(value)
-
-
-def _load_fortis(path: str):
-    """Load a Fortis from a JSON file."""
-    data = json.loads(open(path).read())
-    from fortias.models import Fortis
-
-    return Fortis(
-        tick_number=data["tick_number"],
-        my_content_hash=_hex_to_bytes(data["my_content_hash"]),
-        signature=_hex_to_bytes(data["signature"]),
-        tbid=_hex_to_bytes(data["tbid"]),
-        echo=data.get("echo", ""),
-        tbn=data.get("tbn", ""),
-    )
-
-
-def _load_calendar(path: str):
-    """Load a Calendar from a JSON file."""
-    from fortias.calendar import Calendar
-
-    return Calendar.load(path)
+from fortias_p2p import PyTimeFamilyServer, PyFortis
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry point."""
-    parser = argparse.ArgumentParser(
-        prog="fortis",
-        description="Fortias — Time Integrity Attestation",
-    )
+    parser = argparse.ArgumentParser(prog="fortis", description="Fortias CLI (Rust-backed)")
     sub = parser.add_subparsers(dest="command")
 
-    verify_parser = sub.add_parser("verify", help="Verify a Fortis artifact")
-    verify_parser.add_argument(
-        "--calendar", required=True, help="Path to calendar.json"
-    )
-    verify_parser.add_argument(
-        "--fortis", required=True, help="Path to fortis.json"
-    )
-    verify_parser.add_argument(
-        "--file", required=True, help="Path to the message file"
-    )
-    verify_parser.add_argument(
-        "--chain",
-        action="store_true",
-        default=False,
-        help="Run chain integrity check on the calendar",
-    )
+    # stamp
+    stamp_p = sub.add_parser("stamp", help="Stamp content")
+    stamp_p.add_argument("-m", "--message", help="Message text")
+    stamp_p.add_argument("-M", "--message-file", help="Read message from file")
+    stamp_p.add_argument("-o", "--output", help="Write Fortis JSON to file")
+    stamp_p.add_argument("--persist-path", help="Calendar persistence directory")
+    stamp_p.add_argument("--echo", default="", help="Echo field")
+
+    # verify
+    verify_p = sub.add_parser("verify", help="Verify a Fortis")
+    verify_p.add_argument("-m", "--message", help="Message text")
+    verify_p.add_argument("-M", "--message-file", help="Read message from file")
+    verify_p.add_argument("-f", "--fortis", required=True, help="Fortis JSON")
+    verify_p.add_argument("-F", "--fortis-file", help="Load Fortis from file")
+    verify_p.add_argument("--persist-path", help="Calendar persistence directory (dormant mode)")
+
+    # integrity
+    integrity_p = sub.add_parser("integrity", help="Chain integrity check")
+    integrity_p.add_argument("--start", type=int, default=None, help="Start tick")
+    integrity_p.add_argument("--end", type=int, default=None, help="End tick")
+    integrity_p.add_argument("--persist-path", required=True, help="Calendar directory (dormant mode)")
+
+    # serve (stub - requires async)
+    sub.add_parser("serve", help="Start server (use Rust binary: fortias serve)")
 
     args = parser.parse_args(argv)
-
     if args.command is None:
         parser.print_help()
         return 1
 
-    if args.command == "verify":
-        # Load calendar
-        calendar = _load_calendar(args.calendar)
-
-        # Optional chain check
-        if args.chain:
-            chain_ok = calendar.integrity_check()
-            if not chain_ok:
-                print("chain: INVALID")
-                return 1
-            print("chain: valid")
-
-        # Load Fortis
-        fortis = _load_fortis(args.fortis)
-
-        # Read message content
-        content = open(args.file, "rb").read()
-
-        # Verify
-        result = fortias_verify(content, fortis, calendar)
-        if result:
-            print("valid")
-            return 0
-        else:
-            print("invalid")
+    try:
+        if args.command == "stamp":
+            return cmd_stamp(args)
+        elif args.command == "verify":
+            return cmd_verify(args)
+        elif args.command == "integrity":
+            return cmd_integrity(args)
+        elif args.command == "serve":
+            print("Use the Rust binary: cargo run -- serve", file=sys.stderr)
             return 1
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
 
     return 0
 
 
-def fortias_verify(content, fortis, calendar):
-    """Verify a Fortis against content and calendar."""
-    from fortias._timebeing import _timebeing
+def cmd_stamp(args) -> int:
+    if args.message_file:
+        content = open(args.message_file, "rb").read()
+    elif args.message:
+        content = args.message.encode()
+    else:
+        print("Error: provide -m or -M", file=sys.stderr)
+        return 1
 
-    return _timebeing._verify(
-        content=content,
-        fortis=fortis,
-        calendar_ticks=calendar.ticks,
+    server = PyTimeFamilyServer(
+        persist_path=getattr(args, "persist_path", None),
     )
+    fortis = server.stamp(content, args.echo)
+    j = json.loads(fortis.to_json())
+
+    if args.output:
+        with open(args.output, "w") as f:
+            json.dump(j, f, indent=2)
+    else:
+        print(json.dumps(j, indent=2))
+
+    return 0
+
+
+def cmd_verify(args) -> int:
+    # Load content
+    if getattr(args, "message_file", None):
+        content = open(args.message_file, "rb").read()
+    elif getattr(args, "message", None):
+        content = args.message.encode()
+    else:
+        print("Error: provide -m or -M", file=sys.stderr)
+        return 1
+
+    # Load Fortis
+    if getattr(args, "fortis_file", None):
+        fortis_json = json.loads(open(args.fortis_file).read())
+    else:
+        fortis_json = json.loads(args.fortis)
+
+    pf = PyFortis.from_json(json.dumps(fortis_json))
+
+    # Create server in dormant mode (verify only)
+    persist_path = getattr(args, "persist_path", None)
+    if persist_path:
+        server = PyTimeFamilyServer.from_calendar(calendar_path=persist_path)
+    else:
+        print("Error: --persist-path required for verify", file=sys.stderr)
+        return 1
+
+    valid = server.verify(content, pf)
+    print(json.dumps({"valid": valid}))
+    return 0 if valid else 1
+
+
+def cmd_integrity(args) -> int:
+    server = PyTimeFamilyServer.from_calendar(
+        calendar_path=args.persist_path,
+    )
+    result = json.loads(server.integrity_check(
+        start=args.start,
+        end=args.end,
+    ))
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("all_valid") else 1
 
 
 if __name__ == "__main__":

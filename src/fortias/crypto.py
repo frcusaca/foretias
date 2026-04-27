@@ -2,9 +2,19 @@
 
 Ed25519 signatures over raw bytes (no pre-hash inside the signature input).
 SHA-256 for content hashing.
+
+.. deprecated:: Use ``fortias_p2p.CryptoServer`` (Rust) instead.
 """
 
 from __future__ import annotations
+
+import warnings
+
+warnings.warn(
+    "fortias.crypto is deprecated. Use fortias (Rust-backed) instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 import hashlib
 

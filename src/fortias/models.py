@@ -1,6 +1,17 @@
-"""Fortias v1 — Data models."""
+"""Fortias v1 — Data models.
+
+.. deprecated:: Use ``fortias_p2p.PyFortis`` / ``fortias_p2p.PyTickRecord`` (Rust) instead.
+"""
 
 from __future__ import annotations
+
+import warnings
+
+warnings.warn(
+    "fortias.models is deprecated. Use fortias (Rust-backed) instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 from dataclasses import dataclass
 

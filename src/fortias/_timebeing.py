@@ -4,9 +4,19 @@ All methods are static, pure, and side-effect-free. They take state as
 arguments and return new state or booleans. The mutable
 :class:`~fortias.time_family.TimeFamily` class calls these
 functions behind a mutex.
+
+.. deprecated:: Use ``fortias_p2p.PyTimeFamilyServer`` (Rust) instead.
 """
 
 from __future__ import annotations
+
+import warnings
+
+warnings.warn(
+    "fortias._timebeing is deprecated. Use fortias (Rust-backed) instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 from .crypto import generate_keypair, sha256, sign, verify
 from .models import Fortis, TickRecord
