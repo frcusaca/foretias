@@ -189,3 +189,157 @@ pub fn handle_get_calendar_slice(server: &TimeFamilyServer, params: Value) -> Js
         serde_json::to_value(&records).unwrap_or(Value::Null),
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn max_content_bytes_is_1gb() {
+        assert_eq!(MAX_CONTENT_BYTES, 1_073_741_824);
+    }
+
+    #[test]
+    fn max_calendar_slice_count_is_10k() {
+        assert_eq!(MAX_CALENDAR_SLICE_COUNT, 10_000);
+    }
+
+    fn make_server() -> TimeFamilyServer {
+        TimeFamilyServer::new("127.0.0.1:0", 1_000_000_000)
+            .expect("failed to create server")
+    }
+
+    #[test]
+    fn handle_stamp_missing_content_returns_error() {
+        let server = make_server();
+        let params = serde_json::json!({});
+        let resp = handle_stamp(&server, params);
+        assert!(resp.error.is_some());
+        assert!(resp.result.is_none());
+    }
+
+    #[test]
+    fn handle_stamp_invalid_hex_returns_error() {
+        let server = make_server();
+        let params = serde_json::json!({"content": "not-hex"});
+        let resp = handle_stamp(&server, params);
+        assert!(resp.error.is_some());
+    }
+
+    #[test]
+    fn handle_stamp_valid_content_returns_fortis() {
+        let server = make_server();
+        let params = serde_json::json!({
+            "content": hex::encode(b"hello"),
+            "echo": "test-stamp"
+        });
+        let resp = handle_stamp(&server, params);
+        assert!(resp.error.is_none());
+        assert!(resp.result.is_some());
+        let result = resp.result.unwrap();
+        assert!(result.get("tick_number").is_some());
+        assert!(result.get("content_hash").is_some());
+        assert!(result.get("signature").is_some());
+    }
+
+    #[test]
+    fn handle_stamp_empty_content_succeeds() {
+        let server = make_server();
+        let params = serde_json::json!({
+            "content": hex::encode(b""),
+        });
+        let resp = handle_stamp(&server, params);
+        assert!(resp.error.is_none());
+    }
+
+    #[test]
+    fn handle_verify_missing_content_returns_error() {
+        let server = make_server();
+        let params = serde_json::json!({});
+        let resp = handle_verify(&server, params);
+        assert!(resp.error.is_some());
+    }
+
+    #[test]
+    fn handle_verify_missing_fortis_returns_error() {
+        let server = make_server();
+        let params = serde_json::json!({"content": hex::encode(b"test")});
+        let resp = handle_verify(&server, params);
+        assert!(resp.error.is_some());
+    }
+
+    #[test]
+    fn handle_verify_valid_fortis_returns_valid_true() {
+        let server = make_server();
+        let stamp_params = serde_json::json!({
+            "content": hex::encode(b"verify-me"),
+            "echo": "verify-test"
+        });
+        let stamp_resp = handle_stamp(&server, stamp_params);
+        let fortis_json = stamp_resp.result.unwrap();
+
+        let verify_params = serde_json::json!({
+            "content": hex::encode(b"verify-me"),
+            "fortis": fortis_json,
+        });
+        let verify_resp = handle_verify(&server, verify_params);
+        assert!(verify_resp.error.is_none());
+        let result = verify_resp.result.unwrap();
+        assert_eq!(result.get("valid").and_then(|v| v.as_bool()), Some(true));
+    }
+
+    #[test]
+    fn handle_verify_wrong_content_returns_valid_false() {
+        let server = make_server();
+        let stamp_params = serde_json::json!({
+            "content": hex::encode(b"original"),
+            "echo": "verify-test"
+        });
+        let stamp_resp = handle_stamp(&server, stamp_params);
+        let fortis_json = stamp_resp.result.unwrap();
+
+        let verify_params = serde_json::json!({
+            "content": hex::encode(b"tampered"),
+            "fortis": fortis_json,
+        });
+        let verify_resp = handle_verify(&server, verify_params);
+        assert!(verify_resp.error.is_none());
+        let result = verify_resp.result.unwrap();
+        assert_eq!(result.get("valid").and_then(|v| v.as_bool()), Some(false));
+    }
+
+    #[test]
+    fn handle_get_calendar_slice_returns_records() {
+        let server = make_server();
+        for i in 0..3 {
+            let params = serde_json::json!({
+                "content": hex::encode(format!("item-{}", i).as_bytes()),
+            });
+            handle_stamp(&server, params);
+        }
+
+        let params = serde_json::json!({"cal_tick_start": 0, "count": 10});
+        let resp = handle_get_calendar_slice(&server, params);
+        assert!(resp.error.is_none());
+        let result = resp.result.unwrap();
+        let records = result.as_array().unwrap();
+        assert_eq!(records.len(), 3);
+    }
+
+    #[test]
+    fn handle_get_calendar_slice_exceeds_count_returns_error() {
+        let server = make_server();
+        let params = serde_json::json!({"cal_tick_start": 0, "count": 10_001});
+        let resp = handle_get_calendar_slice(&server, params);
+        assert!(resp.error.is_some());
+    }
+
+    #[test]
+    fn do_stamp_produces_valid_fortis() {
+        let server = make_server();
+        let fortis = do_stamp(&server, b"test".to_vec(), "echo".to_string()).unwrap();
+        assert_eq!(fortis.tick_number, 1);
+        assert!(!fortis.signature.is_empty());
+        assert_eq!(fortis.echo, "echo");
+    }
+}

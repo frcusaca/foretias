@@ -119,6 +119,74 @@ pip install pytest-cov
 python -m pytest tests/ --cov=fortias --cov-report=term-missing
 ```
 
+## Build & Package
+
+Fortias has two implementations: a pure Python prototype (`src/fortias/`) and a production Rust implementation via PyO3 (`p2p/node/`), wrapped by the `pyfortias` package.
+
+### Python (pure prototype)
+
+```bash
+# Install in development mode
+pip install -e .
+
+# Run tests
+python -m pytest tests/ -v
+
+# Build distribution
+pip install build
+python -m build
+
+# The package is built via hatchling
+# Entry point: fortis → fortias.cli:main
+```
+
+### pyfortias (Rust-backed, production)
+
+```bash
+# Install maturin (needed for PyO3 builds)
+pip install maturin
+
+# Build the Rust library with Python bindings
+cd p2p/node && maturin build --release
+
+# This produces a .whl file in target/wheels/
+# Install: pip install target/wheels/pyfortias-*.whl
+
+# The pyfortias package wraps the Rust fortias_p2p library
+# Usage: import pyfortias; pyfortias.stamp(...), pyfortias.verify(...)
+```
+
+### Native Dependencies
+
+- **libsodium** (`libsodium-dev` on Debian/Ubuntu) — required for the Rust library
+- **Rust toolchain** — required to build pyfortias
+- **libclang** (`clang-dev`) — needed during build for bindgen
+
+## Testing
+
+```bash
+# Python prototype tests
+python -m pytest tests/ -v
+
+# Rust unit tests
+cd p2p/node && cargo test
+
+# Cross-language integration tests (Rust vs pyfortias)
+python -m pytest p2p/node/tests/python/test_cross_language.py -v
+
+# All tests
+python -m pytest tests/ -v && cd p2p/node && cargo test
+```
+
+## Publishing
+
+```bash
+# To publish on PyPI:
+pip install twine
+python -m build
+twine upload dist/*
+```
+
 ## Tests
 
 The test suite is organized into two tiers — **functional** (fast, deterministic) and **aggressive** (slow, destructive, edge-case coverage).

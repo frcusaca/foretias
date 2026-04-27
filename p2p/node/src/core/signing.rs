@@ -30,3 +30,25 @@ pub fn ed25519_verify(
         c_result_to_error(rc).map(|_| false)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::identity::generate_ed25519_keypair;
+
+    #[test]
+    fn ed25519_sign_produces_valid_signature() {
+        let (_pub_key, priv_key) = generate_ed25519_keypair().unwrap();
+        let msg = b"test message for signing";
+        let sig = ed25519_sign(&priv_key, msg).unwrap();
+        assert!(!sig.bytes.iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn ed25519_signatures_are_different_for_different_messages() {
+        let (_pub_key, priv_key) = generate_ed25519_keypair().unwrap();
+        let sig1 = ed25519_sign(&priv_key, b"msg1").unwrap();
+        let sig2 = ed25519_sign(&priv_key, b"msg2").unwrap();
+        assert_ne!(sig1.bytes, sig2.bytes);
+    }
+}

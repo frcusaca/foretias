@@ -18,6 +18,7 @@ find_path(SODIUM_INCLUDE_DIR sodium.h REQUIRED)
 
 # ── Source files ────────────────────────────────────────────────────────
 set(FORTIAS_CORE_SOURCES
+    src/version.c
     src/memzero.c
     src/rng_mix.c
     src/identity_ed25519.c

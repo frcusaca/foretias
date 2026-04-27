@@ -110,3 +110,113 @@ pub fn verify(
 
     Ok(server.verify_ed25519(&pub_key, &sig_input, &sig)?)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::crypto_server;
+    use crate::fortias::calendar::Calendar;
+
+    fn make_server() -> Box<dyn CryptoServer> {
+        crypto_server::new_software(crate::crypto_server::FortiasCurve::Ed25519)
+            .expect("failed to create software crypto server")
+    }
+
+    fn make_cal(server: &dyn CryptoServer) -> Calendar {
+        let tbid: [u8; 16] = [0xAA; 16];
+        let mut cal = Calendar::new(tbid, "test-cal");
+        let tick_number = 1;
+        let content = b"init";
+        let fortis = stamp(server, &tbid, tick_number, content, "init", "test-cal")
+            .expect("stamp init tick");
+        let public_key = match server.public_key() {
+            crate::crypto_server::PublicKeyBytes::Ed25519(pk) => pk.bytes.to_vec(),
+            crate::crypto_server::PublicKeyBytes::P256Compressed(pk) => pk.bytes.to_vec(),
+        };
+        cal.append(TickRecord {
+            tick_number,
+            public_key,
+            forward_fortis: serde_json::to_vec(&fortis).unwrap(),
+            backward_fortis: vec![],
+        }).unwrap();
+        cal
+    }
+
+    #[test]
+    fn stamp_creates_valid_fortis() {
+        let server = make_server();
+        let tbid: [u8; 16] = [1u8; 16];
+        let fortis = stamp(server.as_ref(), &tbid, 42, b"hello", "echo-42", "tbn")
+            .expect("stamp should succeed");
+        assert_eq!(fortis.tick_number, 42);
+        assert_eq!(fortis.tbid, tbid);
+        assert_eq!(fortis.echo, "echo-42");
+        assert_eq!(fortis.tbn, "tbn");
+        assert!(!fortis.signature.is_empty());
+        assert!(!fortis.time_being_reference_time.is_empty());
+    }
+
+    #[test]
+    fn stamp_different_content_different_hash() {
+        let server = make_server();
+        let tbid: [u8; 16] = [2u8; 16];
+        let f1 = stamp(server.as_ref(), &tbid, 1, b"aaa", "e", "t").unwrap();
+        let f2 = stamp(server.as_ref(), &tbid, 1, b"bbb", "e", "t").unwrap();
+        assert_ne!(f1.content_hash, f2.content_hash);
+    }
+
+    #[test]
+    fn stamp_empty_content_produces_valid_stamp() {
+        let server = make_server();
+        let tbid: [u8; 16] = [3u8; 16];
+        let fortis = stamp(server.as_ref(), &tbid, 1, b"", "empty", "t").unwrap();
+        assert_eq!(fortis.tick_number, 1);
+        assert!(!fortis.signature.is_empty());
+    }
+
+    #[test]
+    fn verify_succeeds_with_correct_content() {
+        let server = make_server();
+        let cal = make_cal(server.as_ref());
+        let tbid: [u8; 16] = [0xAA; 16];
+        let content = b"init";
+        let fortis = stamp(server.as_ref(), &tbid, 1, content, "init", "test-cal")
+            .expect("stamp");
+        let valid = verify(server.as_ref(), &fortis, content, &cal)
+            .expect("verify should not error");
+        assert!(valid);
+    }
+
+    #[test]
+    fn verify_fails_with_wrong_content() {
+        let server = make_server();
+        let cal = make_cal(server.as_ref());
+        let tbid: [u8; 16] = [0xAA; 16];
+        let content = b"init";
+        let fortis = stamp(server.as_ref(), &tbid, 1, content, "init", "test-cal")
+            .expect("stamp");
+        let valid = verify(server.as_ref(), &fortis, b"wrong", &cal)
+            .expect("verify should not error");
+        assert!(!valid);
+    }
+
+    #[test]
+    fn verify_fails_with_wrong_public_key() {
+        let server = make_server();
+        let tbid: [u8; 16] = [0xBB; 16];
+        let mut cal = Calendar::new(tbid, "bad-cal");
+        cal.append(TickRecord {
+            tick_number: 1,
+            public_key: vec![0u8; 32],
+            forward_fortis: vec![],
+            backward_fortis: vec![],
+        }).unwrap();
+        let content = b"test";
+        let fortis = stamp(server.as_ref(), &tbid, 1, content, "e", "bad-cal")
+            .expect("stamp");
+        let result = verify(server.as_ref(), &fortis, content, &cal);
+        if let Ok(valid) = result {
+            assert!(!valid);
+        }
+    }
+}

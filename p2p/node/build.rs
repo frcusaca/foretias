@@ -6,6 +6,7 @@ fn main() {
     let core_dir = PathBuf::from(&manifest).join("../core");
 
     let sources = [
+        "src/version.c",
         "src/identity_ed25519.c", "src/identity_p256.c",
         "src/signing_ed25519.c", "src/signing_p256.c",
         "src/hash_sha256.c", "src/hash_blake3.c",

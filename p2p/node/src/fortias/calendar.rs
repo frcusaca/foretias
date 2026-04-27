@@ -87,3 +87,121 @@ impl CalendarLookup for Calendar {
         self.ticks.last().map(|t| t.tick_number)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::crypto_server;
+
+    fn make_tick(tick_number: u64) -> TickRecord {
+        TickRecord {
+            tick_number,
+            public_key: vec![0u8; 32],
+            forward_fortis: vec![],
+            backward_fortis: vec![],
+        }
+    }
+
+    #[test]
+    fn append_valid_tick_succeeds() {
+        let mut cal = Calendar::new([0u8; 16], "test");
+        assert!(cal.append(make_tick(1)).is_ok());
+        assert_eq!(cal.ticks.len(), 1);
+    }
+
+    #[test]
+    fn append_duplicate_tick_returns_error() {
+        let mut cal = Calendar::new([0u8; 16], "test");
+        cal.append(make_tick(5)).unwrap();
+        let result = cal.append(make_tick(5));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn append_out_of_order_tick_returns_error() {
+        let mut cal = Calendar::new([0u8; 16], "test");
+        cal.append(make_tick(10)).unwrap();
+        let result = cal.append(make_tick(3));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn get_returns_correct_ticks() {
+        let mut cal = Calendar::new([0u8; 16], "test");
+        cal.append(make_tick(1)).unwrap();
+        cal.append(make_tick(2)).unwrap();
+        cal.append(make_tick(3)).unwrap();
+
+        let results = cal.get(2, 10).unwrap();
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].tick_number, 2);
+        assert_eq!(results[1].tick_number, 3);
+    }
+
+    #[test]
+    fn get_returns_empty_for_out_of_bounds() {
+        let mut cal = Calendar::new([0u8; 16], "test");
+        cal.append(make_tick(1)).unwrap();
+        let results = cal.get(100, 10).unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn get_respects_count_limit() {
+        let mut cal = Calendar::new([0u8; 16], "test");
+        cal.append(make_tick(1)).unwrap();
+        cal.append(make_tick(2)).unwrap();
+        cal.append(make_tick(3)).unwrap();
+
+        let results = cal.get(1, 2).unwrap();
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].tick_number, 1);
+        assert_eq!(results[1].tick_number, 2);
+    }
+
+    #[test]
+    fn latest_returns_none_on_empty() {
+        let cal = Calendar::new([0u8; 16], "test");
+        assert_eq!(cal.latest(), None);
+    }
+
+    #[test]
+    fn latest_returns_correct_tick_number() {
+        let mut cal = Calendar::new([0u8; 16], "test");
+        cal.append(make_tick(7)).unwrap();
+        cal.append(make_tick(14)).unwrap();
+        assert_eq!(cal.latest(), Some(14));
+    }
+
+    #[test]
+    fn integrity_check_passes_on_valid_calendar() {
+        let mut cal = Calendar::new([0u8; 16], "test");
+        cal.append(make_tick(1)).unwrap();
+        cal.append(make_tick(2)).unwrap();
+        cal.append(make_tick(3)).unwrap();
+        let server = crypto_server::new_software(crate::crypto_server::FortiasCurve::Ed25519).unwrap();
+        assert!(cal.integrity_check(server.as_ref()).unwrap());
+    }
+
+    #[test]
+    fn integrity_check_passes_on_empty_calendar() {
+        let cal = Calendar::new([0u8; 16], "test");
+        let server = crypto_server::new_software(crate::crypto_server::FortiasCurve::Ed25519).unwrap();
+        assert!(cal.integrity_check(server.as_ref()).unwrap());
+    }
+
+    #[test]
+    fn integrity_check_passes_on_single_tick() {
+        let mut cal = Calendar::new([0u8; 16], "test");
+        cal.append(make_tick(1)).unwrap();
+        let server = crypto_server::new_software(crate::crypto_server::FortiasCurve::Ed25519).unwrap();
+        assert!(cal.integrity_check(server.as_ref()).unwrap());
+    }
+
+    #[test]
+    fn latest_tick_number_via_calendar_lookup() {
+        let mut cal = Calendar::new([0u8; 16], "test");
+        cal.append(make_tick(42)).unwrap();
+        assert_eq!(cal.latest(), Some(42));
+    }
+}
