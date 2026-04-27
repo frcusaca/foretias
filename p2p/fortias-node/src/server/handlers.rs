@@ -1,6 +1,5 @@
 use serde_json::Value;
 
-use fortias_core::core::bindings::FortiasPrivKey32;
 use fortias_core::error::NodeError;
 use fortias_core::fortias::tick::CalendarLookup;
 use fortias_core::fortias::{auto_attestation_blob, Fortis, TickRecord};
@@ -113,10 +112,9 @@ pub fn do_stamp(server: &TimeFamilyServer, content: Vec<u8>, echo: String) -> Re
     sig_input.extend_from_slice(&tick.to_be_bytes());
     sig_input.extend_from_slice(&content);
 
-    let sig = fortias_core::core::signing::ed25519_sign(
-        &FortiasPrivKey32 { bytes: *server.keypairs.read().get(kp_idx).unwrap().priv_key },
-        &sig_input,
-    )?;
+    let sig = server.keypairs.read().get(kp_idx).unwrap().priv_key
+        .sign(&sig_input)
+        .map_err(|e| NodeError::Crypto(e))?;
 
     let content_hash = server.server.sha256(&content)?;
 

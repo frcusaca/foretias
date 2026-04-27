@@ -4,21 +4,19 @@ use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio::io::{AsyncBufReadExt, BufReader, AsyncWriteExt};
 use tokio::task::JoinHandle;
-use zeroize::Zeroizing;
 
 use fortias_core::crypto_server::{self, CryptoServer};
-use fortias_core::core::bindings::FortiasPrivKey32;
+use fortias_core::core::identity::PrivKeyHandle;
 use fortias_core::error::NodeError;
 use fortias_core::fortias::{auto_attestation_blob, Calendar, TickRecord};
 use fortias_core::fortias::tick::CalendarLookup;
 
 use self::jsonrpc::{JsonRpcRequest, JsonRpcResponse};
 
-/// A keypair for a single tick, with the private key zeroized on drop.
-#[derive(Debug)]
+/// A keypair for a single tick. Private key is held as an opaque handle.
 pub struct TickKeyPair {
     pub pub_key: [u8; 32],
-    pub priv_key: Zeroizing<[u8; 32]>,
+    pub priv_key: PrivKeyHandle,
 }
 
 /// JSON-RPC 2.0 protocol types and error codes.
@@ -92,11 +90,12 @@ impl TimeFamilyServer {
 
     /// Generate a new Ed25519 keypair and store it, returning its tick index.
     pub fn generate_and_store_keypair(&self) -> Result<usize, NodeError> {
-        let (pub_key, priv_key) = fortias_core::core::identity::generate_ed25519_keypair()
+        let handle = PrivKeyHandle::generate()
             .map_err(|e| NodeError::Crypto(e))?;
+        let pub_key = handle.public_key().map_err(|e| NodeError::Crypto(e))?;
         let kp = TickKeyPair {
-            pub_key: pub_key.bytes,
-            priv_key: Zeroizing::new(priv_key.bytes),
+            pub_key,
+            priv_key: handle,
         };
         let mut keypairs = self.keypairs.write();
         let idx = keypairs.len();
@@ -115,10 +114,8 @@ impl TimeFamilyServer {
         let kp = keypairs.get(idx).ok_or_else(|| {
             NodeError::Internal(format!("keypair index {} out of range", idx))
         })?;
-        let sig = fortias_core::core::signing::ed25519_sign(
-            &FortiasPrivKey32 { bytes: *kp.priv_key },
-            msg,
-        )?;
+        let sig = kp.priv_key.sign(msg)
+            .map_err(|e| NodeError::Crypto(e))?;
         Ok(sig.bytes.to_vec())
     }
 

@@ -1,7 +1,71 @@
 //! Safe wrappers for Ed25519 identity operations.
 
+use std::ptr::NonNull;
+use std::mem::ManuallyDrop;
+
 use crate::core::bindings::*;
 use crate::error::{CryptoError, c_result_to_error};
+
+/// Opaque private key handle — private key bytes never leave C memory.
+///
+/// This type does NOT implement `Clone`, `Copy`, or `Debug`, preventing
+/// accidental key exposure through copies or debug output.
+pub struct PrivKeyHandle(ManuallyDrop<NonNull<FortiasPrivKey>>);
+
+unsafe impl Send for PrivKeyHandle {}
+unsafe impl Sync for PrivKeyHandle {}
+
+impl PrivKeyHandle {
+    /// Generate a fresh Ed25519 keypair, returning an opaque handle.
+    pub fn generate() -> Result<Self, CryptoError> {
+        let ptr = unsafe { fortias_privkey_ed25519_generate() };
+        if ptr.is_null() {
+            return Err(CryptoError::Internal(-99));
+        }
+        Ok(Self(ManuallyDrop::new(NonNull::new(ptr).unwrap())))
+    }
+
+    /// Create a handle from an existing 32-byte seed.
+    pub fn from_seed(seed: &[u8; 32]) -> Result<Self, CryptoError> {
+        let ptr = unsafe { fortias_privkey_ed25519_from_seed(seed.as_ptr()) };
+        if ptr.is_null() {
+            return Err(CryptoError::Internal(-99));
+        }
+        Ok(Self(ManuallyDrop::new(NonNull::new(ptr).unwrap())))
+    }
+
+    /// Derive the public key for this handle.
+    pub fn public_key(&self) -> Result<[u8; 32], CryptoError> {
+        let mut out = [0u8; 32];
+        unsafe {
+            fortias_privkey_ed25519_public(self.0.as_ptr(), out.as_mut_ptr());
+        }
+        Ok(out)
+    }
+
+    /// Sign a message with this handle. Private key bytes never leave C.
+    pub fn sign(&self, msg: &[u8]) -> Result<FortiasSig64, CryptoError> {
+        let mut sig = [0u8; 64];
+        let rc = unsafe {
+            fortias_privkey_ed25519_sign(
+                self.0.as_ptr(),
+                msg.as_ptr(),
+                msg.len(),
+                sig.as_mut_ptr(),
+            )
+        };
+        c_result_to_error(rc as i32)?;
+        Ok(FortiasSig64 { bytes: sig })
+    }
+}
+
+impl Drop for PrivKeyHandle {
+    fn drop(&mut self) {
+        unsafe {
+            fortias_privkey_free(self.0.as_ptr());
+        }
+    }
+}
 
 /// Generate a fresh Ed25519 keypair.
 pub fn generate_ed25519_keypair() -> Result<(FortiasPubKey32, FortiasPrivKey32), CryptoError> {

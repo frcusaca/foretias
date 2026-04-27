@@ -12,7 +12,7 @@ fn main() {
         "src/hash_sha256.c", "src/hash_blake3.c",
         "src/hash_legacy_insecure_md5.c", "src/hash_legacy_insecure_sha1.c",
         "src/noise_xx.c", "src/merkle.c",
-        "src/frost_ed25519.c", "src/nullifier.c",
+        "src/frost_ed25519.c", "src/nullifier.c", "src/privkey.c",
         "src/rng_mix.c", "src/memzero.c",
     ];
     for s in &sources {

@@ -12,6 +12,7 @@ int test_blake3_stub_main(void);
 int test_noise_stub_main(void);
 int test_frost_stub_main(void);
 int test_legacy_hash_stub_main(void);
+int test_privkey_main(void);
 
 int main(void) {
     printf("Fortias Core Test Suite\n");
@@ -31,6 +32,7 @@ int main(void) {
     failures += test_noise_stub_main();
     failures += test_frost_stub_main();
     failures += test_legacy_hash_stub_main();
+    failures += test_privkey_main();
 
     printf("\n=======================\n");
     if (failures == 0) {

@@ -6,14 +6,15 @@ use chacha20poly1305::{ChaCha20Poly1305, Nonce, aead::{Aead, KeyInit}};
 use zeroize::Zeroizing;
 
 use crate::core::bindings::*;
+use crate::core::identity::PrivKeyHandle;
 use crate::error::CryptoError;
 use super::{CryptoServer, CryptoServerCapabilities, FortiasCurve, PublicKeyBytes, SharedSecret, SealedBlob};
 
-/// Derive seal key via HMAC-SHA256(priv_key, "fortias-seal-v1").
-fn derive_seal_key(priv_bytes: &[u8; 32]) -> [u8; 32] {
+/// Derive seal key via HMAC-SHA256(pub_key, "fortias-seal-v1").
+fn derive_seal_key(pub_bytes: &[u8; 32]) -> [u8; 32] {
     use hmac::{Hmac, Mac};
     type HmacSha256 = Hmac<sha2::Sha256>;
-    let mut mac = <HmacSha256 as Mac>::new_from_slice(priv_bytes)
+    let mut mac = <HmacSha256 as Mac>::new_from_slice(pub_bytes)
         .expect("HMAC key length is always valid");
     mac.update(b"fortias-seal-v1");
     let result = mac.finalize();
@@ -28,8 +29,8 @@ pub struct SoftwareCryptoServer {
     curve: FortiasCurve,
     /// The public key generated at construction time.
     pub_key: PublicKeyBytes,
-    /// The private key, zeroized on drop.
-    priv_key: Zeroizing<[u8; 32]>,
+    /// The opaque private key handle — bytes never leave C memory.
+    priv_key: PrivKeyHandle,
     /// The peer ID derived from the public key.
     peer_id: FortiasPeerID,
     /// Derived seal key for ChaCha20-Poly1305 encryption, zeroized on drop.
@@ -43,14 +44,16 @@ impl SoftwareCryptoServer {
     pub fn generate(curve: FortiasCurve) -> Result<Self, CryptoError> {
         match curve {
             FortiasCurve::Ed25519 => {
-                let (pub_key_bytes, priv_key_bytes) = crate::core::identity::generate_ed25519_keypair()?;
-                let peer_id = crate::core::identity::derive_ed25519_peer_id(&pub_key_bytes)?;
-                let seal_key = derive_seal_key(&priv_key_bytes.bytes);
+                let handle = PrivKeyHandle::generate()?;
+                let pub_key_bytes: [u8; 32] = handle.public_key()?;
+                let pub_key = FortiasPubKey32 { bytes: pub_key_bytes };
+                let peer_id = crate::core::identity::derive_ed25519_peer_id(&pub_key)?;
+                let seal_key = derive_seal_key(&pub_key_bytes);
 
                 Ok(Self {
                     curve: FortiasCurve::Ed25519,
-                    pub_key: PublicKeyBytes::Ed25519(pub_key_bytes),
-                    priv_key: Zeroizing::new(priv_key_bytes.bytes),
+                    pub_key: PublicKeyBytes::Ed25519(pub_key),
+                    priv_key: handle,
                     peer_id,
                     seal_key: Zeroizing::new(seal_key),
                     frost_shares: parking_lot::Mutex::new(HashMap::new()),
@@ -65,7 +68,6 @@ impl SoftwareCryptoServer {
 
 impl Drop for SoftwareCryptoServer {
     fn drop(&mut self) {
-        self.priv_key.fill(0);
         self.seal_key.fill(0);
     }
 }
@@ -88,7 +90,7 @@ impl CryptoServer for SoftwareCryptoServer {
     }
 
     fn sign(&self, msg: &[u8]) -> Result<FortiasSig64, CryptoError> {
-        crate::core::signing::ed25519_sign(&FortiasPrivKey32 { bytes: *self.priv_key }, msg)
+        crate::core::signing::ed25519_sign_with_handle(&self.priv_key, msg)
     }
 
     fn verify_ed25519(&self, pub_key: &FortiasPubKey32, msg: &[u8], sig: &FortiasSig64) -> Result<bool, CryptoError> {

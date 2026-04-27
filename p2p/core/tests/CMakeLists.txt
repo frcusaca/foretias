@@ -15,6 +15,7 @@ set(TEST_SOURCES
     test_noise_stub.c
     test_frost_stub.c
     test_legacy_hash_stub.c
+    test_privkey.c
 )
 
 # Build test executable

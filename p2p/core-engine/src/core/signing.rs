@@ -1,6 +1,7 @@
 //! Safe wrappers for Ed25519 signing operations.
 
 use crate::core::bindings::*;
+use crate::core::identity::PrivKeyHandle;
 use crate::error::{CryptoError, c_result_to_error};
 
 /// Sign a message with Ed25519.
@@ -11,6 +12,11 @@ pub fn ed25519_sign(priv_key: &FortiasPrivKey32, msg: &[u8]) -> Result<FortiasSi
     };
     c_result_to_error(rc)?;
     Ok(sig)
+}
+
+/// Sign a message using an opaque handle. Private key bytes never cross the FFI.
+pub fn ed25519_sign_with_handle(handle: &PrivKeyHandle, msg: &[u8]) -> Result<FortiasSig64, CryptoError> {
+    handle.sign(msg)
 }
 
 /// Verify an Ed25519 signature. Returns Ok(true) if valid.

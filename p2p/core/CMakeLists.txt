@@ -33,6 +33,7 @@ set(FORTIAS_CORE_SOURCES
     src/merkle.c
     src/frost_ed25519.c
     src/nullifier.c
+    src/privkey.c
 )
 
 # ── Static library ──────────────────────────────────────────────────────

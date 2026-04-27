@@ -450,3 +450,36 @@ extern "C" {
 extern "C" {
     pub fn fortias_memzero(ptr: *mut ::std::os::raw::c_void, len: usize);
 }
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct FortiasPrivKey {
+    _unused: [u8; 0],
+}
+extern "C" {
+    pub fn fortias_privkey_ed25519_generate() -> *mut FortiasPrivKey;
+}
+extern "C" {
+    pub fn fortias_privkey_ed25519_from_seed(seed: *const u8) -> *mut FortiasPrivKey;
+}
+extern "C" {
+    pub fn fortias_privkey_ed25519_public(key: *const FortiasPrivKey, out: *mut u8) -> *mut u8;
+}
+extern "C" {
+    pub fn fortias_privkey_ed25519_sign(
+        key: *const FortiasPrivKey,
+        msg: *const u8,
+        msg_len: usize,
+        sig: *mut u8,
+    ) -> ::std::os::raw::c_int;
+}
+extern "C" {
+    pub fn fortias_nullifier_derive_handle(
+        key: *const FortiasPrivKey,
+        context: *const u8,
+        context_len: usize,
+        out: *mut FortiasNullifier,
+    ) -> FortiasResult;
+}
+extern "C" {
+    pub fn fortias_privkey_free(key: *mut FortiasPrivKey);
+}

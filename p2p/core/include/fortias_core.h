@@ -281,6 +281,45 @@ FortiasResult fortias_rng_bytes(uint8_t* buf, size_t len);
 /* ── Secure zero ────────────────────────────────── */
 void fortias_memzero(void* ptr, size_t len);
 
+/* ── Opaque Private Key Handle ──────────────────── */
+/* C11 Secret Containment: private key bytes never cross
+   the C↔Rust boundary as raw bytes. The handle is an
+   opaque pointer; the struct definition is private to
+   privkey.c. */
+
+typedef struct FortiasPrivKey FortiasPrivKey;
+
+/* Generate a fresh Ed25519 keypair, returning an opaque handle.
+   The private key bytes are stored in C memory and never exposed. */
+FortiasPrivKey* fortias_privkey_ed25519_generate(void);
+
+/* Create a handle from an existing 32-byte seed.
+   The seed is copied into C memory and zeroed from the caller's buffer. */
+FortiasPrivKey* fortias_privkey_ed25519_from_seed(const uint8_t seed[32]);
+
+/* Derive and return the public key for the handle.
+   Writes 32 bytes into `out`; returns `out` for chaining. */
+uint8_t* fortias_privkey_ed25519_public(const FortiasPrivKey *key, uint8_t out[32]);
+
+/* Sign a message with the handle. Private key bytes never leave C. */
+int fortias_privkey_ed25519_sign(
+    const FortiasPrivKey *key,
+    const uint8_t *msg,
+    size_t msg_len,
+    uint8_t sig[64]
+);
+
+/* Derive a nullifier using the handle. */
+FortiasResult fortias_nullifier_derive_handle(
+    const FortiasPrivKey *key,
+    const uint8_t *context,
+    size_t context_len,
+    FortiasNullifier *out
+);
+
+/* Destroy the handle, securely zeroing all key material. */
+void fortias_privkey_free(FortiasPrivKey *key);
+
 #ifdef __cplusplus
 }
 #endif
