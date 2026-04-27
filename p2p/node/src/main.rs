@@ -7,6 +7,7 @@ use clap::{Parser, Subcommand};
 use serde::Deserialize;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
+use fortias_p2p::crypto_server::{self, CryptoServer};
 use fortias_p2p::server::TimeFamilyServer;
 use fortias_p2p::fortias::tick::TickRecord;
 
@@ -28,6 +29,12 @@ enum Commands {
         /// Chronon period in nanoseconds
         #[arg(short, long, default_value_t = 60_000_000_000)]
         chronon_ns: u64,
+        /// Persist calendar to this directory
+        #[arg(long)]
+        persist_path: Option<String>,
+        /// Start in dormant (verify-only) mode, loads calendar from --persist-path
+        #[arg(long, requires = "persist_path")]
+        dormant: bool,
     },
     /// Stamp content via TimeFamilyServer
     Stamp {
@@ -217,8 +224,12 @@ fn client_echo() -> String {
 
 // ── Subcommands ─────────────────────────────────────────────────────────────
 
-async fn cmd_serve(addr: String, chronon_ns: u64) -> Result<(), Box<dyn std::error::Error>> {
-    // Load config file; CLI args override config values
+async fn cmd_serve(
+    addr: String,
+    chronon_ns: u64,
+    persist_path: Option<String>,
+    dormant: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
     let cfg = load_config();
     let addr = if addr == "127.0.0.1:4001" {
         cfg.listen_addr.unwrap_or(addr)
@@ -231,7 +242,21 @@ async fn cmd_serve(addr: String, chronon_ns: u64) -> Result<(), Box<dyn std::err
         chronon_ns
     };
 
-    let server = TimeFamilyServer::new(&addr, chronon_ns)?;
+    let server: TimeFamilyServer = if dormant {
+        let persist = persist_path.ok_or("--persist-path is required for --dormant mode")?;
+        let json_path = PathBuf::from(&persist);
+        let crypto: Box<dyn CryptoServer> = crypto_server::new_software(
+            crypto_server::FortiasCurve::Ed25519,
+        )?;
+        TimeFamilyServer::from_calendar(
+            json_path.to_str().unwrap(),
+            &addr,
+            crypto,
+        )?
+    } else {
+        let persist: Option<PathBuf> = persist_path.map(PathBuf::from);
+        TimeFamilyServer::new_with_persist(&addr, chronon_ns, persist)?
+    };
     let server = Arc::new(server);
 
     // Print server info before starting
@@ -239,9 +264,14 @@ async fn cmd_serve(addr: String, chronon_ns: u64) -> Result<(), Box<dyn std::err
     println!("  Listen : {}", addr);
     println!("  TBN    : {}", server.get_tbn());
     println!("  TBID   : {}", hex::encode(server.get_tbid()));
-    println!("  Chronon: {}", humanize_nanoseconds(chronon_ns));
+    if dormant {
+        println!("  Mode   : dormant (verify-only)");
+    } else {
+        println!("  Chronon: {}", humanize_nanoseconds(chronon_ns));
+    }
 
-    let handle = server.start()?;
+    let handle = server.clone().start()?;
+    server.start_daemon_arc();
 
     // Wait for Ctrl+C
     tokio::select! {
@@ -249,6 +279,12 @@ async fn cmd_serve(addr: String, chronon_ns: u64) -> Result<(), Box<dyn std::err
             println!("\nShutting down...");
         }
         _ = handle => {}
+    }
+
+    server.stop_daemon_arc();
+
+    if let Err(e) = server.save() {
+        eprintln!("Warning: failed to persist calendar on shutdown: {}", e);
     }
 
     Ok(())
@@ -411,7 +447,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Serve { addr, chronon_ns } => cmd_serve(addr, chronon_ns).await,
+        Commands::Serve { addr, chronon_ns, persist_path, dormant } => cmd_serve(addr, chronon_ns, persist_path, dormant).await,
         Commands::Stamp { message, message_file, stamp_output, server } => {
             cmd_stamp(message, message_file, stamp_output, server).await
         }

@@ -111,6 +111,64 @@ pub fn verify(
     Ok(server.verify_ed25519(&pub_key, &sig_input, &sig)?)
 }
 
+/// Build auto-attestation blob: tbid || A.tick || A.pk || B.tick || B.pk
+///
+/// Used for cross-signing consecutive ticks in the auto-attestation chain.
+pub fn auto_attestation_blob(
+    tbid: &str,
+    a_tick: u64,
+    a_pk: &[u8; 32],
+    b_tick: u64,
+    b_pk: &[u8; 32],
+) -> Vec<u8> {
+    let mut blob = Vec::with_capacity(tbid.len() + 8 + 32 + 8 + 32);
+    blob.extend_from_slice(tbid.as_bytes());
+    blob.extend_from_slice(&a_tick.to_be_bytes());
+    blob.extend_from_slice(a_pk);
+    blob.extend_from_slice(&b_tick.to_be_bytes());
+    blob.extend_from_slice(b_pk);
+    blob
+}
+
+/// Verify the mutual attestation between two consecutive tick records.
+///
+/// Rebuilds the MA blob from the two ticks and verifies that:
+/// 1. `curr.forward_fortis` is a valid signature by `prev`'s key over the blob
+/// 2. `curr.backward_fortis` is a valid signature by `curr`'s key over the blob
+///
+/// The `tbid_str` must match the hex-encoded TBID used during stamping.
+pub fn verify_pair(
+    crypto: &dyn CryptoServer,
+    tbid_str: &str,
+    prev: &TickRecord,
+    curr: &TickRecord,
+) -> Result<bool, NodeError> {
+    let prev_pk: [u8; 32] = prev.public_key[..32].try_into()
+        .map_err(|_| NodeError::BadFormat("public_key"))?;
+    let curr_pk: [u8; 32] = curr.public_key[..32].try_into()
+        .map_err(|_| NodeError::BadFormat("public_key"))?;
+
+    let ma_blob = auto_attestation_blob(tbid_str, prev.tick_number, &prev_pk, curr.tick_number, &curr_pk);
+
+    let forward_sig: [u8; 64] = curr.forward_fortis[..64].try_into()
+        .map_err(|_| NodeError::BadFormat("forward_fortis"))?;
+    let forward_valid = crypto.verify_ed25519(
+        &FortiasPubKey32 { bytes: prev_pk },
+        &ma_blob,
+        &FortiasSig64 { bytes: forward_sig },
+    )?;
+
+    let backward_sig: [u8; 64] = curr.backward_fortis[..64].try_into()
+        .map_err(|_| NodeError::BadFormat("backward_fortis"))?;
+    let backward_valid = crypto.verify_ed25519(
+        &FortiasPubKey32 { bytes: curr_pk },
+        &ma_blob,
+        &FortiasSig64 { bytes: backward_sig },
+    )?;
+
+    Ok(forward_valid && backward_valid)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -218,5 +276,77 @@ mod tests {
         if let Ok(valid) = result {
             assert!(!valid);
         }
+    }
+
+    #[test]
+    fn verify_pair_valid_returns_true() {
+        let server = make_server();
+        let tbid: [u8; 16] = [0xCC; 16];
+        let tbid_str = hex::encode(tbid);
+        let pub_key = match server.public_key() {
+            crate::crypto_server::PublicKeyBytes::Ed25519(pk) => pk.bytes,
+            crate::crypto_server::PublicKeyBytes::P256Compressed(pk) => pk.bytes[..32].try_into().unwrap(),
+        };
+
+        let ma_blob = auto_attestation_blob(&tbid_str, 1, &pub_key, 2, &pub_key);
+        let sig = server.sign(&ma_blob).unwrap();
+        let sig_bytes = sig.bytes.to_vec();
+
+        let prev = TickRecord {
+            tick_number: 1,
+            public_key: pub_key.to_vec(),
+            forward_fortis: vec![],
+            backward_fortis: vec![],
+        };
+        let curr = TickRecord {
+            tick_number: 2,
+            public_key: pub_key.to_vec(),
+            forward_fortis: sig_bytes.clone(),
+            backward_fortis: sig_bytes,
+        };
+
+        let valid = verify_pair(server.as_ref(), &tbid_str, &prev, &curr).unwrap();
+        assert!(valid);
+    }
+
+    #[test]
+    fn verify_pair_tampered_returns_false() {
+        let server = make_server();
+        let tbid: [u8; 16] = [0xDD; 16];
+        let tbid_str = hex::encode(tbid);
+        let pub_key = match server.public_key() {
+            crate::crypto_server::PublicKeyBytes::Ed25519(pk) => pk.bytes,
+            crate::crypto_server::PublicKeyBytes::P256Compressed(pk) => pk.bytes[..32].try_into().unwrap(),
+        };
+
+        let ma_blob = auto_attestation_blob(&tbid_str, 1, &pub_key, 2, &pub_key);
+        let sig = server.sign(&ma_blob).unwrap();
+        let mut sig_bytes = sig.bytes.to_vec();
+
+        let prev = TickRecord {
+            tick_number: 1,
+            public_key: pub_key.to_vec(),
+            forward_fortis: vec![],
+            backward_fortis: vec![],
+        };
+        let curr = TickRecord {
+            tick_number: 2,
+            public_key: pub_key.to_vec(),
+            forward_fortis: sig_bytes.clone(),
+            backward_fortis: sig_bytes.clone(),
+        };
+
+        assert!(verify_pair(server.as_ref(), &tbid_str, &prev, &curr).unwrap());
+
+        sig_bytes[0] ^= 0xFF;
+        let curr_tampered = TickRecord {
+            tick_number: 2,
+            public_key: pub_key.to_vec(),
+            forward_fortis: sig_bytes,
+            backward_fortis: vec![0u8; 64],
+        };
+
+        let valid = verify_pair(server.as_ref(), &tbid_str, &prev, &curr_tampered).unwrap();
+        assert!(!valid);
     }
 }

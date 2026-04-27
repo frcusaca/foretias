@@ -65,6 +65,29 @@ impl JsonRpcResponse {
             dormant: false,
         }
     }
+
+    pub fn dormant_success(id: Option<Value>, result: Value) -> Self {
+        Self {
+            jsonrpc: "2.0".to_string(),
+            result: Some(result),
+            error: None,
+            id,
+            dormant: true,
+        }
+    }
+
+    pub fn dormant_error(id: Option<Value>, code: i32, message: impl Into<String>) -> Self {
+        Self {
+            jsonrpc: "2.0".to_string(),
+            result: None,
+            error: Some(JsonRpcError {
+                code,
+                message: message.into(),
+            }),
+            id,
+            dormant: true,
+        }
+    }
 }
 
 #[cfg(test)]

@@ -1,6 +1,6 @@
 //! In-memory Calendar with append-only tick records.
 
-use super::tick::{TickRecord, CalendarLookup};
+use super::tick::{TickRecord, CalendarLookup, verify_pair};
 use crate::crypto_server::CryptoServer;
 use crate::error::NodeError;
 use serde::{Deserialize, Serialize};
@@ -43,19 +43,37 @@ impl Calendar {
         Ok(())
     }
 
-    /// Verifies chain integrity by checking that tick numbers are strictly ascending.
-    pub fn integrity_check(&self, _server: &dyn CryptoServer) -> Result<bool, NodeError> {
-        if self.ticks.len() < 2 {
-            return Ok(true);
+    /// Verifies chain integrity by checking cryptographic attestations between consecutive ticks.
+    ///
+    /// Returns a `Vec<bool>` where each element corresponds to the integrity of one pair
+    /// `(tick[i], tick[i+1])`. An empty vec means 0 or 1 tick in range (nothing to verify).
+    ///
+    /// If `start` is `None`, verification begins from the first tick.
+    /// If `end` is `None`, verification proceeds to the last tick.
+    pub fn integrity_check(
+        &self,
+        crypto: &dyn CryptoServer,
+        tbid_str: &str,
+        start: Option<u64>,
+        end: Option<u64>,
+    ) -> Result<Vec<bool>, NodeError> {
+        let start_tick = start.unwrap_or(0);
+        let end_tick = end.unwrap_or(u64::MAX);
+
+        let ticks: Vec<&TickRecord> = self.ticks.iter()
+            .filter(|t| t.tick_number >= start_tick && t.tick_number <= end_tick)
+            .collect();
+
+        if ticks.len() < 2 {
+            return Ok(Vec::new());
         }
-        // Chain verification stub - would call _verify_pair for each pair
-        // For now, structural check only
-        for i in 1..self.ticks.len() {
-            if self.ticks[i].tick_number <= self.ticks[i-1].tick_number {
-                return Ok(false);
-            }
+
+        let mut results = Vec::with_capacity(ticks.len() - 1);
+        for i in 0..ticks.len() - 1 {
+            let valid = verify_pair(crypto, tbid_str, ticks[i], ticks[i + 1])?;
+            results.push(valid);
         }
-        Ok(true)
+        Ok(results)
     }
 
     /// Persists the calendar to a JSON file at the given path.
@@ -174,28 +192,108 @@ mod tests {
     }
 
     #[test]
-    fn integrity_check_passes_on_valid_calendar() {
-        let mut cal = Calendar::new([0u8; 16], "test");
-        cal.append(make_tick(1)).unwrap();
-        cal.append(make_tick(2)).unwrap();
-        cal.append(make_tick(3)).unwrap();
-        let server = crypto_server::new_software(crate::crypto_server::FortiasCurve::Ed25519).unwrap();
-        assert!(cal.integrity_check(server.as_ref()).unwrap());
-    }
-
-    #[test]
-    fn integrity_check_passes_on_empty_calendar() {
+    fn integrity_check_returns_empty_on_empty_calendar() {
         let cal = Calendar::new([0u8; 16], "test");
         let server = crypto_server::new_software(crate::crypto_server::FortiasCurve::Ed25519).unwrap();
-        assert!(cal.integrity_check(server.as_ref()).unwrap());
+        let results = cal.integrity_check(server.as_ref(), "test", None, None).unwrap();
+        assert!(results.is_empty());
     }
 
     #[test]
-    fn integrity_check_passes_on_single_tick() {
+    fn integrity_check_returns_empty_on_single_tick() {
         let mut cal = Calendar::new([0u8; 16], "test");
         cal.append(make_tick(1)).unwrap();
         let server = crypto_server::new_software(crate::crypto_server::FortiasCurve::Ed25519).unwrap();
-        assert!(cal.integrity_check(server.as_ref()).unwrap());
+        let results = cal.integrity_check(server.as_ref(), "test", None, None).unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn integrity_check_full_chain() {
+        use crate::core::identity::generate_ed25519_keypair;
+        use crate::core::signing::ed25519_sign;
+        use crate::core::bindings::FortiasPrivKey32;
+        use crate::fortias::tick::auto_attestation_blob;
+        use zeroize::Zeroizing;
+
+        let server = crypto_server::new_software(crate::crypto_server::FortiasCurve::Ed25519).unwrap();
+        let tbid: [u8; 16] = [0xEE; 16];
+        let tbid_str = hex::encode(tbid);
+        let mut cal = Calendar::new(tbid, "full-chain");
+
+        let mut keypairs: Vec<([u8; 32], Zeroizing<[u8; 32]>)> = Vec::new();
+        for _ in 0..5 {
+            let (pub_key, priv_key) = generate_ed25519_keypair().unwrap();
+            keypairs.push((pub_key.bytes, Zeroizing::new(priv_key.bytes)));
+        }
+
+        for i in 0..5u64 {
+            let (forward_fortis, backward_fortis) = if i == 0 {
+                let ma_blob = auto_attestation_blob(&tbid_str, i, &keypairs[0].0, i, &keypairs[0].0);
+                let sig = ed25519_sign(&FortiasPrivKey32 { bytes: *keypairs[0].1 }, &ma_blob).unwrap();
+                (sig.bytes.to_vec(), sig.bytes.to_vec())
+            } else {
+                let ma_blob = auto_attestation_blob(&tbid_str, i - 1, &keypairs[(i-1) as usize].0, i, &keypairs[i as usize].0);
+                let fwd = ed25519_sign(&FortiasPrivKey32 { bytes: *keypairs[(i-1) as usize].1 }, &ma_blob).unwrap();
+                let bwd = ed25519_sign(&FortiasPrivKey32 { bytes: *keypairs[i as usize].1 }, &ma_blob).unwrap();
+                (fwd.bytes.to_vec(), bwd.bytes.to_vec())
+            };
+
+            cal.append(TickRecord {
+                tick_number: i,
+                public_key: keypairs[i as usize].0.to_vec(),
+                forward_fortis,
+                backward_fortis,
+            }).unwrap();
+        }
+
+        let results = cal.integrity_check(server.as_ref(), &tbid_str, None, None).unwrap();
+        assert_eq!(results.len(), 4);
+        assert!(results.iter().all(|&v| v));
+    }
+
+    #[test]
+    fn integrity_check_partial_range() {
+        use crate::core::identity::generate_ed25519_keypair;
+        use crate::core::signing::ed25519_sign;
+        use crate::core::bindings::FortiasPrivKey32;
+        use crate::fortias::tick::auto_attestation_blob;
+        use zeroize::Zeroizing;
+
+        let server = crypto_server::new_software(crate::crypto_server::FortiasCurve::Ed25519).unwrap();
+        let tbid: [u8; 16] = [0xFF; 16];
+        let tbid_str = hex::encode(tbid);
+        let mut cal = Calendar::new(tbid, "partial-range");
+
+        let mut keypairs: Vec<([u8; 32], Zeroizing<[u8; 32]>)> = Vec::new();
+        for _ in 0..5 {
+            let (pub_key, priv_key) = generate_ed25519_keypair().unwrap();
+            keypairs.push((pub_key.bytes, Zeroizing::new(priv_key.bytes)));
+        }
+
+        for i in 0..5u64 {
+            let (forward_fortis, backward_fortis) = if i == 0 {
+                let ma_blob = auto_attestation_blob(&tbid_str, i, &keypairs[0].0, i, &keypairs[0].0);
+                let sig = ed25519_sign(&FortiasPrivKey32 { bytes: *keypairs[0].1 }, &ma_blob).unwrap();
+                (sig.bytes.to_vec(), sig.bytes.to_vec())
+            } else {
+                let ma_blob = auto_attestation_blob(&tbid_str, i - 1, &keypairs[(i-1) as usize].0, i, &keypairs[i as usize].0);
+                let fwd = ed25519_sign(&FortiasPrivKey32 { bytes: *keypairs[(i-1) as usize].1 }, &ma_blob).unwrap();
+                let bwd = ed25519_sign(&FortiasPrivKey32 { bytes: *keypairs[i as usize].1 }, &ma_blob).unwrap();
+                (fwd.bytes.to_vec(), bwd.bytes.to_vec())
+            };
+
+            cal.append(TickRecord {
+                tick_number: i,
+                public_key: keypairs[i as usize].0.to_vec(),
+                forward_fortis,
+                backward_fortis,
+            }).unwrap();
+        }
+
+        let results = cal.integrity_check(server.as_ref(), &tbid_str, Some(1), Some(3)).unwrap();
+        assert_eq!(results.len(), 2);
+        assert!(results.iter().all(|&v| v));
     }
 
     #[test]

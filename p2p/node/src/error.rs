@@ -26,6 +26,12 @@ pub enum NodeError {
     /// An unexpected internal error with a descriptive message.
     #[error("internal error: {0}")]
     Internal(String),
+    /// The server is in dormant (verify-only) mode and cannot perform the requested operation.
+    #[error("dormant: {0}")]
+    Dormant(String),
+    /// Chain integrity check failed at a specific tick number.
+    #[error("integrity check failed at tick {0}")]
+    IntegrityFailure(u64),
 }
 
 /// Errors originating from the cryptographic backend.
