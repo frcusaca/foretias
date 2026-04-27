@@ -42,6 +42,7 @@ pub struct SoftwareCryptoServer {
 impl SoftwareCryptoServer {
     /// Generates a new keypair and initializes a software crypto server for the given curve.
     pub fn generate(curve: FortiasCurve) -> Result<Self, CryptoError> {
+        PrivKeyHandle::init();
         match curve {
             FortiasCurve::Ed25519 => {
                 let handle = PrivKeyHandle::generate()?;

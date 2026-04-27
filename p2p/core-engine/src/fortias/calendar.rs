@@ -117,6 +117,7 @@ mod tests {
             public_key: vec![0u8; 32],
             forward_fortis: vec![],
             backward_fortis: vec![],
+            ma_nonce: [0u8; 16],
         }
     }
 
@@ -228,15 +229,15 @@ mod tests {
         }
 
         for i in 0..5u64 {
-            let (forward_fortis, backward_fortis) = if i == 0 {
-                let ma_blob = auto_attestation_blob(&tbid_str, i, &keypairs[0].0, i, &keypairs[0].0);
+            let (forward_fortis, backward_fortis, nonce) = if i == 0 {
+                let (ma_blob, nonce) = auto_attestation_blob(&tbid_str, i, &keypairs[0].0, i, &keypairs[0].0).unwrap();
                 let sig = ed25519_sign(&FortiasPrivKey32 { bytes: *keypairs[0].1 }, &ma_blob).unwrap();
-                (sig.bytes.to_vec(), sig.bytes.to_vec())
+                (sig.bytes.to_vec(), sig.bytes.to_vec(), nonce)
             } else {
-                let ma_blob = auto_attestation_blob(&tbid_str, i - 1, &keypairs[(i-1) as usize].0, i, &keypairs[i as usize].0);
+                let (ma_blob, nonce) = auto_attestation_blob(&tbid_str, i - 1, &keypairs[(i-1) as usize].0, i, &keypairs[i as usize].0).unwrap();
                 let fwd = ed25519_sign(&FortiasPrivKey32 { bytes: *keypairs[(i-1) as usize].1 }, &ma_blob).unwrap();
                 let bwd = ed25519_sign(&FortiasPrivKey32 { bytes: *keypairs[i as usize].1 }, &ma_blob).unwrap();
-                (fwd.bytes.to_vec(), bwd.bytes.to_vec())
+                (fwd.bytes.to_vec(), bwd.bytes.to_vec(), nonce)
             };
 
             cal.append(TickRecord {
@@ -244,6 +245,7 @@ mod tests {
                 public_key: keypairs[i as usize].0.to_vec(),
                 forward_fortis,
                 backward_fortis,
+                ma_nonce: nonce,
             }).unwrap();
         }
 
@@ -272,15 +274,15 @@ mod tests {
         }
 
         for i in 0..5u64 {
-            let (forward_fortis, backward_fortis) = if i == 0 {
-                let ma_blob = auto_attestation_blob(&tbid_str, i, &keypairs[0].0, i, &keypairs[0].0);
+            let (forward_fortis, backward_fortis, nonce) = if i == 0 {
+                let (ma_blob, nonce) = auto_attestation_blob(&tbid_str, i, &keypairs[0].0, i, &keypairs[0].0).unwrap();
                 let sig = ed25519_sign(&FortiasPrivKey32 { bytes: *keypairs[0].1 }, &ma_blob).unwrap();
-                (sig.bytes.to_vec(), sig.bytes.to_vec())
+                (sig.bytes.to_vec(), sig.bytes.to_vec(), nonce)
             } else {
-                let ma_blob = auto_attestation_blob(&tbid_str, i - 1, &keypairs[(i-1) as usize].0, i, &keypairs[i as usize].0);
+                let (ma_blob, nonce) = auto_attestation_blob(&tbid_str, i - 1, &keypairs[(i-1) as usize].0, i, &keypairs[i as usize].0).unwrap();
                 let fwd = ed25519_sign(&FortiasPrivKey32 { bytes: *keypairs[(i-1) as usize].1 }, &ma_blob).unwrap();
                 let bwd = ed25519_sign(&FortiasPrivKey32 { bytes: *keypairs[i as usize].1 }, &ma_blob).unwrap();
-                (fwd.bytes.to_vec(), bwd.bytes.to_vec())
+                (fwd.bytes.to_vec(), bwd.bytes.to_vec(), nonce)
             };
 
             cal.append(TickRecord {
@@ -288,6 +290,7 @@ mod tests {
                 public_key: keypairs[i as usize].0.to_vec(),
                 forward_fortis,
                 backward_fortis,
+                ma_nonce: nonce,
             }).unwrap();
         }
 

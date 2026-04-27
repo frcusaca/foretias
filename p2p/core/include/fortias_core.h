@@ -285,12 +285,29 @@ void fortias_memzero(void* ptr, size_t len);
 /* C11 Secret Containment: private key bytes never cross
    the C↔Rust boundary as raw bytes. The handle is an
    opaque pointer; the struct definition is private to
-   privkey.c. */
+   privkey.c.
+
+   Keys are encrypted at rest with a per-process KEK
+   (Key Encryption Key) using ChaCha20-Poly1305 AEAD.
+   The KEK never leaves C11 — even a memory dump of the
+   key handle is useless without this C11 instance.
+
+   Call fortias_privkey_init() once at process startup
+   before any key operations. Call fortias_privkey_cleanup()
+   at shutdown to zeroize the KEK. */
 
 typedef struct FortiasPrivKey FortiasPrivKey;
 
+/* Initialize the instance KEK. Must be called once at startup
+   before any key operations. Generates a random 32-byte KEK. */
+void fortias_privkey_init(void);
+
+/* Zeroize and destroy the instance KEK. Call at shutdown. */
+void fortias_privkey_cleanup(void);
+
 /* Generate a fresh Ed25519 keypair, returning an opaque handle.
-   The private key bytes are stored in C memory and never exposed. */
+   The private key bytes are encrypted with the instance KEK
+   and never exposed in plaintext outside C memory. */
 FortiasPrivKey* fortias_privkey_ed25519_generate(void);
 
 /* Create a handle from an existing 32-byte seed.

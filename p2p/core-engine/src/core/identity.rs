@@ -8,6 +8,8 @@ use crate::error::{CryptoError, c_result_to_error};
 
 /// Opaque private key handle — private key bytes never leave C memory.
 ///
+/// Encrypted with instance KEK — useless without this C11 instance.
+///
 /// This type does NOT implement `Clone`, `Copy`, or `Debug`, preventing
 /// accidental key exposure through copies or debug output.
 pub struct PrivKeyHandle(ManuallyDrop<NonNull<FortiasPrivKey>>);
@@ -16,7 +18,24 @@ unsafe impl Send for PrivKeyHandle {}
 unsafe impl Sync for PrivKeyHandle {}
 
 impl PrivKeyHandle {
+    /// Initialize the C11 instance KEK (Key Encryption Key).
+    ///
+    /// Must be called once at process startup before any key operations.
+    /// Generates a random 32-byte KEK used for ChaCha20-Poly1305
+    /// encryption of private key material at rest.
+    ///
+    /// # Safety
+    ///
+    /// The KEK is stored in C memory and never exposed to Rust.
+    /// Calling this multiple times is safe (idempotent).
+    pub fn init() {
+        unsafe { fortias_privkey_init() };
+    }
+
     /// Generate a fresh Ed25519 keypair, returning an opaque handle.
+    ///
+    /// The seed is encrypted with the instance KEK before storage.
+    /// Call [`PrivKeyHandle::init`] first.
     pub fn generate() -> Result<Self, CryptoError> {
         let ptr = unsafe { fortias_privkey_ed25519_generate() };
         if ptr.is_null() {
@@ -26,6 +45,9 @@ impl PrivKeyHandle {
     }
 
     /// Create a handle from an existing 32-byte seed.
+    ///
+    /// The seed is encrypted with the instance KEK before storage.
+    /// Call [`PrivKeyHandle::init`] first.
     pub fn from_seed(seed: &[u8; 32]) -> Result<Self, CryptoError> {
         let ptr = unsafe { fortias_privkey_ed25519_from_seed(seed.as_ptr()) };
         if ptr.is_null() {

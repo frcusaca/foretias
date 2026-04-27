@@ -219,10 +219,10 @@ impl TimeFamilyServer {
         let tbid_str = hex::encode(tbid);
         let new_pub = self.keypair_pub(kp_idx).unwrap();
 
-        let (forward_fortis, backward_fortis) = if self.calendar.read().ticks.is_empty() {
-            let ma_blob = auto_attestation_blob(&tbid_str, tick, &new_pub, tick, &new_pub);
+        let (forward_fortis, backward_fortis, ma_nonce) = if self.calendar.read().ticks.is_empty() {
+            let (ma_blob, nonce) = auto_attestation_blob(&tbid_str, tick, &new_pub, tick, &new_pub)?;
             let sig = self.sign_with_keypair(kp_idx, &ma_blob)?;
-            (sig.clone(), sig)
+            (sig.clone(), sig, nonce)
         } else {
             let cal = self.calendar.read();
             let latest_rec = cal.ticks.last().unwrap();
@@ -230,11 +230,11 @@ impl TimeFamilyServer {
             let prev_kp_idx = (prev_tick - 1) as usize;
             let prev_pub = self.keypair_pub(prev_kp_idx).unwrap();
 
-            let ma_blob = auto_attestation_blob(&tbid_str, prev_tick, &prev_pub, tick, &new_pub);
+            let (ma_blob, nonce) = auto_attestation_blob(&tbid_str, prev_tick, &prev_pub, tick, &new_pub)?;
 
             let forward_sig = self.sign_with_keypair(prev_kp_idx, &ma_blob)?;
             let backward_sig = self.sign_with_keypair(kp_idx, &ma_blob)?;
-            (forward_sig, backward_sig)
+            (forward_sig, backward_sig, nonce)
         };
 
         let record = TickRecord {
@@ -242,6 +242,7 @@ impl TimeFamilyServer {
             public_key: new_pub.to_vec(),
             forward_fortis,
             backward_fortis,
+            ma_nonce,
         };
 
         self.calendar.write().append(record.clone())?;

@@ -456,6 +456,12 @@ pub struct FortiasPrivKey {
     _unused: [u8; 0],
 }
 extern "C" {
+    pub fn fortias_privkey_init();
+}
+extern "C" {
+    pub fn fortias_privkey_cleanup();
+}
+extern "C" {
     pub fn fortias_privkey_ed25519_generate() -> *mut FortiasPrivKey;
 }
 extern "C" {

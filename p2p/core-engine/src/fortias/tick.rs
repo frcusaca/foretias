@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::crypto_server::CryptoServer;
 use crate::core::bindings::{FortiasPubKey32, FortiasSig64};
+use crate::core::rng::random_bytes;
 use crate::error::NodeError;
 
 /// A single entry in the Calendar, linking consecutive ticks via Fortis attestations.
@@ -17,6 +18,10 @@ pub struct TickRecord {
     pub forward_fortis: Vec<u8>,
     /// Serialized Fortis attesting backward to the previous tick.
     pub backward_fortis: Vec<u8>,
+    /// Cryptographic nonce (16 bytes) used in the auto-attestation blob for this tick pair.
+    /// This prevents replay attacks by ensuring each blob is unique even if the tick data repeats.
+    #[serde(default)]
+    pub ma_nonce: [u8; 16],
 }
 
 /// A cryptographically signed attestation of content at a specific tick.
@@ -111,32 +116,33 @@ pub fn verify(
     Ok(server.verify_ed25519(&pub_key, &sig_input, &sig)?)
 }
 
-/// Build auto-attestation blob: tbid || A.tick || A.pk || B.tick || B.pk
+/// Build auto-attestation blob: tbid || A.tick || A.pk || B.tick || B.pk || nonce
 ///
-/// Used for cross-signing consecutive ticks in the auto-attestation chain.
+/// Returns the signed blob and the 16-byte nonce for storage in TickRecord.
+/// The nonce ensures each blob is unique, preventing replay attacks.
 pub fn auto_attestation_blob(
     tbid: &str,
     a_tick: u64,
     a_pk: &[u8; 32],
     b_tick: u64,
     b_pk: &[u8; 32],
-) -> Vec<u8> {
-    let mut blob = Vec::with_capacity(tbid.len() + 8 + 32 + 8 + 32);
+) -> Result<(Vec<u8>, [u8; 16]), NodeError> {
+    let mut nonce = [0u8; 16];
+    random_bytes(&mut nonce)?;
+    let mut blob = Vec::with_capacity(tbid.len() + 8 + 32 + 8 + 32 + 16);
     blob.extend_from_slice(tbid.as_bytes());
     blob.extend_from_slice(&a_tick.to_be_bytes());
     blob.extend_from_slice(a_pk);
     blob.extend_from_slice(&b_tick.to_be_bytes());
     blob.extend_from_slice(b_pk);
-    blob
+    blob.extend_from_slice(&nonce);
+    Ok((blob, nonce))
 }
 
 /// Verify the mutual attestation between two consecutive tick records.
 ///
-/// Rebuilds the MA blob from the two ticks and verifies that:
-/// 1. `curr.forward_fortis` is a valid signature by `prev`'s key over the blob
-/// 2. `curr.backward_fortis` is a valid signature by `curr`'s key over the blob
-///
-/// The `tbid_str` must match the hex-encoded TBID used during stamping.
+/// Rebuilds the MA blob from the two ticks using the nonce stored in `curr.ma_nonce`,
+/// then verifies that both signatures cover the same blob.
 pub fn verify_pair(
     crypto: &dyn CryptoServer,
     tbid_str: &str,
@@ -148,7 +154,14 @@ pub fn verify_pair(
     let curr_pk: [u8; 32] = curr.public_key[..32].try_into()
         .map_err(|_| NodeError::BadFormat("public_key"))?;
 
-    let ma_blob = auto_attestation_blob(tbid_str, prev.tick_number, &prev_pk, curr.tick_number, &curr_pk);
+    let nonce = curr.ma_nonce;
+    let mut ma_blob = Vec::with_capacity(tbid_str.len() + 8 + 32 + 8 + 32 + 16);
+    ma_blob.extend_from_slice(tbid_str.as_bytes());
+    ma_blob.extend_from_slice(&prev.tick_number.to_be_bytes());
+    ma_blob.extend_from_slice(&prev_pk);
+    ma_blob.extend_from_slice(&curr.tick_number.to_be_bytes());
+    ma_blob.extend_from_slice(&curr_pk);
+    ma_blob.extend_from_slice(&nonce);
 
     let forward_sig: [u8; 64] = curr.forward_fortis[..64].try_into()
         .map_err(|_| NodeError::BadFormat("forward_fortis"))?;
@@ -196,6 +209,7 @@ mod tests {
             public_key,
             forward_fortis: serde_json::to_vec(&fortis).unwrap(),
             backward_fortis: vec![],
+            ma_nonce: [0u8; 16],
         }).unwrap();
         cal
     }
@@ -268,6 +282,7 @@ mod tests {
             public_key: vec![0u8; 32],
             forward_fortis: vec![],
             backward_fortis: vec![],
+            ma_nonce: [0u8; 16],
         }).unwrap();
         let content = b"test";
         let fortis = stamp(server.as_ref(), &tbid, 1, content, "e", "bad-cal")
@@ -288,7 +303,7 @@ mod tests {
             crate::crypto_server::PublicKeyBytes::P256Compressed(pk) => pk.bytes[..32].try_into().unwrap(),
         };
 
-        let ma_blob = auto_attestation_blob(&tbid_str, 1, &pub_key, 2, &pub_key);
+        let (ma_blob, nonce) = auto_attestation_blob(&tbid_str, 1, &pub_key, 2, &pub_key).unwrap();
         let sig = server.sign(&ma_blob).unwrap();
         let sig_bytes = sig.bytes.to_vec();
 
@@ -297,12 +312,14 @@ mod tests {
             public_key: pub_key.to_vec(),
             forward_fortis: vec![],
             backward_fortis: vec![],
+            ma_nonce: [0u8; 16],
         };
         let curr = TickRecord {
             tick_number: 2,
             public_key: pub_key.to_vec(),
             forward_fortis: sig_bytes.clone(),
             backward_fortis: sig_bytes,
+            ma_nonce: nonce,
         };
 
         let valid = verify_pair(server.as_ref(), &tbid_str, &prev, &curr).unwrap();
@@ -319,7 +336,7 @@ mod tests {
             crate::crypto_server::PublicKeyBytes::P256Compressed(pk) => pk.bytes[..32].try_into().unwrap(),
         };
 
-        let ma_blob = auto_attestation_blob(&tbid_str, 1, &pub_key, 2, &pub_key);
+        let (ma_blob, nonce) = auto_attestation_blob(&tbid_str, 1, &pub_key, 2, &pub_key).unwrap();
         let sig = server.sign(&ma_blob).unwrap();
         let mut sig_bytes = sig.bytes.to_vec();
 
@@ -328,12 +345,14 @@ mod tests {
             public_key: pub_key.to_vec(),
             forward_fortis: vec![],
             backward_fortis: vec![],
+            ma_nonce: [0u8; 16],
         };
         let curr = TickRecord {
             tick_number: 2,
             public_key: pub_key.to_vec(),
             forward_fortis: sig_bytes.clone(),
             backward_fortis: sig_bytes.clone(),
+            ma_nonce: nonce,
         };
 
         assert!(verify_pair(server.as_ref(), &tbid_str, &prev, &curr).unwrap());
@@ -344,9 +363,35 @@ mod tests {
             public_key: pub_key.to_vec(),
             forward_fortis: sig_bytes,
             backward_fortis: vec![0u8; 64],
+            ma_nonce: nonce,
         };
 
-        let valid = verify_pair(server.as_ref(), &tbid_str, &prev, &curr_tampered).unwrap();
+let valid = verify_pair(server.as_ref(), &tbid_str, &prev, &curr_tampered).unwrap();
         assert!(!valid);
+    }
+
+    #[test]
+    fn auto_attestation_blob_nonce_is_unique() {
+        let tbid: [u8; 16] = [0x12; 16];
+        let tbid_str = hex::encode(tbid);
+        let pk = [0xABu8; 32];
+
+        let (blob1, nonce1) = auto_attestation_blob(&tbid_str, 1, &pk, 2, &pk).unwrap();
+        let (blob2, nonce2) = auto_attestation_blob(&tbid_str, 1, &pk, 2, &pk).unwrap();
+
+        assert_ne!(nonce1, nonce2, "nonces must be unique");
+        assert_eq!(blob1.len(), tbid_str.len() + 8 + 32 + 8 + 32 + 16);
+        assert_ne!(blob1, blob2, "blobs with different nonces must differ");
+    }
+
+    #[test]
+    fn auto_attestation_blob_nonce_is_present() {
+        let tbid: [u8; 16] = [0x34; 16];
+        let tbid_str = hex::encode(tbid);
+        let pk = [0xCDu8; 32];
+
+        let (blob, nonce) = auto_attestation_blob(&tbid_str, 5, &pk, 6, &pk).unwrap();
+        let nonce_pos = blob.len() - 16;
+        assert_eq!(&blob[nonce_pos..], &nonce, "nonce must be appended to blob");
     }
 }
