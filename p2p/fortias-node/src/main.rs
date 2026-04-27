@@ -7,9 +7,10 @@ use clap::{Parser, Subcommand};
 use serde::Deserialize;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
-use fortias_p2p::crypto_server::{self, CryptoServer};
-use fortias_p2p::server::TimeFamilyServer;
-use fortias_p2p::fortias::tick::TickRecord;
+use fortias_core::crypto_server::{self, CryptoServer};
+use fortias_core::fortias::tick::TickRecord;
+
+use fortias_node::server::TimeFamilyServer;
 
 #[derive(Parser)]
 #[command(name = "fortias")]

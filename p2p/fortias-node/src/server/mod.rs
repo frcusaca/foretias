@@ -6,11 +6,11 @@ use tokio::io::{AsyncBufReadExt, BufReader, AsyncWriteExt};
 use tokio::task::JoinHandle;
 use zeroize::Zeroizing;
 
-use crate::crypto_server::{self, CryptoServer};
-use crate::core::bindings::FortiasPrivKey32;
-use crate::error::NodeError;
-use crate::fortias::{auto_attestation_blob, Calendar, TickRecord};
-use crate::fortias::tick::CalendarLookup;
+use fortias_core::crypto_server::{self, CryptoServer};
+use fortias_core::core::bindings::FortiasPrivKey32;
+use fortias_core::error::NodeError;
+use fortias_core::fortias::{auto_attestation_blob, Calendar, TickRecord};
+use fortias_core::fortias::tick::CalendarLookup;
 
 use self::jsonrpc::{JsonRpcRequest, JsonRpcResponse};
 
@@ -33,13 +33,13 @@ pub struct TimeFamilyServer {
     /// TimeBeing name (human-readable identifier).
     tbn: String,
     /// The cryptographic backend used for signing and verification.
-    pub(crate) server: Box<dyn CryptoServer>,
+    pub server: Box<dyn CryptoServer>,
     /// The append-only calendar of tick records.
-    pub(crate) calendar: parking_lot::RwLock<Calendar>,
+    pub calendar: parking_lot::RwLock<Calendar>,
     /// Monotonically increasing tick counter.
-    pub(crate) current_tick: parking_lot::Mutex<u64>,
+    pub current_tick: parking_lot::Mutex<u64>,
     /// Chronon interval in nanoseconds, defining the tick period.
-    pub(crate) chronon_ns: u64,
+    pub chronon_ns: u64,
     /// Network address this server listens on.
     listen_addr: String,
     /// Per-tick keypairs for auto-attestation.
@@ -92,7 +92,7 @@ impl TimeFamilyServer {
 
     /// Generate a new Ed25519 keypair and store it, returning its tick index.
     pub fn generate_and_store_keypair(&self) -> Result<usize, NodeError> {
-        let (pub_key, priv_key) = crate::core::identity::generate_ed25519_keypair()
+        let (pub_key, priv_key) = fortias_core::core::identity::generate_ed25519_keypair()
             .map_err(|e| NodeError::Crypto(e))?;
         let kp = TickKeyPair {
             pub_key: pub_key.bytes,
@@ -115,7 +115,7 @@ impl TimeFamilyServer {
         let kp = keypairs.get(idx).ok_or_else(|| {
             NodeError::Internal(format!("keypair index {} out of range", idx))
         })?;
-        let sig = crate::core::signing::ed25519_sign(
+        let sig = fortias_core::core::signing::ed25519_sign(
             &FortiasPrivKey32 { bytes: *kp.priv_key },
             msg,
         )?;

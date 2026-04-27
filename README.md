@@ -121,7 +121,7 @@ python -m pytest tests/ --cov=fortias --cov-report=term-missing
 
 ## Build & Package
 
-Fortias has two implementations: a pure Python prototype (`src/fortias/`) and a production Rust implementation via PyO3 (`p2p/node/`), wrapped by the `pyfortias` package.
+Fortias has two implementations: a pure Python prototype (`src/fortias/`) and a production Rust implementation via PyO3 (`p2p/fortias-python/`), wrapped by the `fortias_p2p` package.
 
 ### Python (pure prototype)
 
@@ -147,7 +147,7 @@ python -m build
 pip install maturin
 
 # Build the Rust library with Python bindings
-cd p2p/node && maturin build --release
+cd p2p/fortias-python && maturin build --release
 
 # This produces a .whl file in target/wheels/
 # Install: pip install target/wheels/pyfortias-*.whl
@@ -169,13 +169,13 @@ cd p2p/node && maturin build --release
 python -m pytest tests/ -v
 
 # Rust unit tests
-cd p2p/node && cargo test
+cd p2p && cargo test --workspace
 
 # Cross-language integration tests (Rust vs pyfortias)
-python -m pytest p2p/node/tests/python/test_cross_language.py -v
+python -m pytest p2p/fortias-python/tests/python/test_cross_language.py -v
 
 # All tests
-python -m pytest tests/ -v && cd p2p/node && cargo test
+python -m pytest tests/ -v && cd p2p && cargo test --workspace
 ```
 
 ## Publishing

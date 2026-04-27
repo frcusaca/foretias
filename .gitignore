@@ -60,5 +60,5 @@ src/fortias/_version.py
 uv.lock
 
 # Rust build artifacts
-p2p/node/target/
-p2p/node/Cargo.lock
+p2p/target/
+p2p/Cargo.lock

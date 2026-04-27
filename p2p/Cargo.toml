@@ -1,0 +1,23 @@
+[workspace]
+members = [
+    "core-engine",
+    "fortias-node",
+    "fortias-python",
+]
+resolver = "2"
+
+[workspace.lints.rust]
+unsafe_code = "warn"
+
+[profile.release]
+opt-level = 3
+lto       = true
+strip     = true
+
+[profile.dev]
+codegen-units = 256
+debug = 0
+opt-level = 0
+
+[profile.dev.package."*"]
+opt-level = 3

@@ -37,11 +37,11 @@ fn binary_path() -> String {
     if let Ok(path) = std::env::var("FORTIAS_CLI_PATH") {
         return path;
     }
-    let release = format!("{}/target/release/fortias", env!("CARGO_MANIFEST_DIR"));
+    let release = format!("{}/../target/release/fortias", env!("CARGO_MANIFEST_DIR"));
     if std::path::Path::new(&release).exists() {
         return release;
     }
-    format!("{}/target/debug/fortias", env!("CARGO_MANIFEST_DIR"))
+    format!("{}/../target/debug/fortias", env!("CARGO_MANIFEST_DIR"))
 }
 
 // ── tests ────────────────────────────────────────────────────────────────────

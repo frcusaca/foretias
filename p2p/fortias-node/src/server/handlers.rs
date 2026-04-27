@@ -1,9 +1,9 @@
 use serde_json::Value;
 
-use crate::core::bindings::FortiasPrivKey32;
-use crate::error::NodeError;
-use crate::fortias::tick::CalendarLookup;
-use crate::fortias::{auto_attestation_blob, Fortis, TickRecord};
+use fortias_core::core::bindings::FortiasPrivKey32;
+use fortias_core::error::NodeError;
+use fortias_core::fortias::tick::CalendarLookup;
+use fortias_core::fortias::{auto_attestation_blob, Fortis, TickRecord};
 use super::jsonrpc::{self, JsonRpcResponse};
 use super::TimeFamilyServer;
 
@@ -71,7 +71,7 @@ pub fn handle_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse
     }
 }
 
-pub(crate) fn do_stamp(server: &TimeFamilyServer, content: Vec<u8>, echo: String) -> Result<Fortis, NodeError> {
+pub fn do_stamp(server: &TimeFamilyServer, content: Vec<u8>, echo: String) -> Result<Fortis, NodeError> {
     let tick = {
         let mut counter = server.current_tick.lock();
         *counter += 1;
@@ -113,7 +113,7 @@ pub(crate) fn do_stamp(server: &TimeFamilyServer, content: Vec<u8>, echo: String
     sig_input.extend_from_slice(&tick.to_be_bytes());
     sig_input.extend_from_slice(&content);
 
-    let sig = crate::core::signing::ed25519_sign(
+    let sig = fortias_core::core::signing::ed25519_sign(
         &FortiasPrivKey32 { bytes: *server.keypairs.read().get(kp_idx).unwrap().priv_key },
         &sig_input,
     )?;
@@ -174,7 +174,7 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
             format!("content exceeds maximum size of {} bytes", MAX_CONTENT_BYTES));
     }
 
-    let valid = match crate::fortias::tick::verify(
+    let valid = match fortias_core::fortias::tick::verify(
         server.server.as_ref(),
         &fortis,
         &content,
@@ -229,7 +229,7 @@ pub fn handle_integrity_check(server: &TimeFamilyServer, params: Value) -> JsonR
     }
 }
 
-pub(crate) fn do_integrity_check(
+pub fn do_integrity_check(
     server: &TimeFamilyServer,
     start: Option<u64>,
     end: Option<u64>,

@@ -12,10 +12,10 @@ use pyo3::prelude::*;
 use pyo3::types::PyType;
 use serde::{Serialize, Deserialize};
 
-use crate::crypto_server::{self, CryptoServer, FortiasCurve, PublicKeyBytes};
-use crate::fortias::{self, calendar::Calendar as CalendarInner, tick::TickRecord as TickRecordInner};
-use crate::fortias::tick::{Fortis as FortisInner, CalendarLookup};
-use crate::core::bindings::{FortiasPubKey32, FortiasSig64};
+use fortias_core::crypto_server::{self, CryptoServer, FortiasCurve, PublicKeyBytes};
+use fortias_core::fortias::{self, calendar::Calendar as CalendarInner, tick::TickRecord as TickRecordInner};
+use fortias_core::fortias::tick::{Fortis as FortisInner, CalendarLookup};
+use fortias_core::core::bindings::{FortiasPubKey32, FortiasSig64};
 
 /// Python-facing Fortis stamp.
 #[pyclass]
@@ -400,7 +400,7 @@ impl PyTimeFamily {
 /// Supports persistence via persist_path and dormant (verify-only) mode.
 #[pyclass]
 pub struct PyTimeFamilyServer {
-    server: Arc<crate::server::TimeFamilyServer>,
+    server: Arc<fortias_node::server::TimeFamilyServer>,
 }
 
 #[pymethods]
@@ -416,7 +416,7 @@ impl PyTimeFamilyServer {
     fn new(listen_addr: &str, chronon_ns: u64, persist_path: Option<String>) -> PyResult<Self> {
         let persist = persist_path.map(PathBuf::from);
         let server = Arc::new(
-            crate::server::TimeFamilyServer::new_with_persist(
+            fortias_node::server::TimeFamilyServer::new_with_persist(
                 listen_addr,
                 chronon_ns,
                 persist,
@@ -436,7 +436,7 @@ impl PyTimeFamilyServer {
         let crypto = crypto_server::new_software(FortiasCurve::Ed25519)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
         let server = Arc::new(
-            crate::server::TimeFamilyServer::from_calendar(
+            fortias_node::server::TimeFamilyServer::from_calendar(
                 &calendar_path,
                 listen_addr,
                 crypto,
@@ -457,7 +457,7 @@ impl PyTimeFamilyServer {
     /// Raises RuntimeError if the server is in dormant mode.
     #[pyo3(signature = (content, echo = ""))]
     fn stamp(&self, content: &[u8], echo: &str) -> PyResult<PyFortis> {
-        let fortis = crate::server::handlers::do_stamp(&self.server, content.to_vec(), echo.to_string())
+        let fortis = fortias_node::server::handlers::do_stamp(&self.server, content.to_vec(), echo.to_string())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
         Ok(PyFortis::from(&fortis))
     }
@@ -523,7 +523,7 @@ impl PyTimeFamilyServer {
     /// Returns JSON string with keys: all_valid, pair_results, pairs_checked.
     #[pyo3(signature = (start = None, end = None))]
     fn integrity_check(&self, start: Option<u64>, end: Option<u64>) -> PyResult<String> {
-        let result = crate::server::handlers::do_integrity_check(&self.server, start, end)
+        let result = fortias_node::server::handlers::do_integrity_check(&self.server, start, end)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
         Ok(serde_json::to_string(&result)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?)

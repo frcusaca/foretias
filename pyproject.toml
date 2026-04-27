@@ -33,5 +33,5 @@ Homepage = "https://github.com/frcusaca/fortias"
 Repository = "https://github.com/frcusaca/fortias"
 
 [tool.maturin]
-manifest-path = "p2p/node/Cargo.toml"
+manifest-path = "p2p/fortias-python/Cargo.toml"
 module-name = "fortias_p2p"
