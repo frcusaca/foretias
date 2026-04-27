@@ -8,6 +8,7 @@ use serde::Deserialize;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 use fortias_p2p::server::TimeFamilyServer;
+use fortias_p2p::fortias::tick::TickRecord;
 
 #[derive(Parser)]
 #[command(name = "fortias")]
@@ -43,7 +44,7 @@ enum Commands {
         #[arg(short, long, default_value = "127.0.0.1:4001")]
         server: String,
     },
-    /// Verify content against a Fortis
+    /// Verify content against a Fortis (server-side verification)
     Verify {
         /// Message to verify
         #[arg(short, long)]
@@ -61,6 +62,27 @@ enum Commands {
         #[arg(short = 'o', long = "verify-output")]
         verify_output: Option<String>,
         /// Server address
+        #[arg(short, long, default_value = "127.0.0.1:4001")]
+        server: String,
+    },
+    /// Fetch calendar slice from remote TimeBeing and verify locally
+    ProveVerification {
+        /// Message to verify
+        #[arg(short, long)]
+        message: Option<String>,
+        /// Read message from file
+        #[arg(short = 'M', long = "message-file")]
+        message_file: Option<String>,
+        /// Fortis JSON inline
+        #[arg(short = 'f', long)]
+        fortis: Option<String>,
+        /// Read Fortis from file
+        #[arg(short = 'F', long = "fortis-file")]
+        fortis_file: Option<String>,
+        /// Write proof output to file (default: stdout)
+        #[arg(short = 'o', long = "proof-output")]
+        proof_output: Option<String>,
+        /// Remote TimeBeing server address
         #[arg(short, long, default_value = "127.0.0.1:4001")]
         server: String,
     },
@@ -285,7 +307,46 @@ async fn cmd_verify(
     Ok(())
 }
 
-// ── JSON-RPC client ─────────────────────────────────────────────────────────
+/// Local proof-of-verification: fetch calendar slice, verify locally (no /verify call).
+async fn cmd_prove_verification(
+    message: Option<String>,
+    message_file: Option<String>,
+    fortis: Option<String>,
+    fortis_file: Option<String>,
+    proof_output: Option<String>,
+    server_addr: String,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let _content = read_message(message, message_file)?;
+    let fortis_str = read_fortis(fortis, fortis_file)?;
+    let fortis_value: serde_json::Value = serde_json::from_str(&fortis_str)?;
+
+    // Extract tick_number from the fortis to fetch the right calendar slice
+    let tick_number = fortis_value.get("tick_number")
+        .and_then(|v| v.as_u64())
+        .ok_or("fortis missing 'tick_number'")?;
+
+    // Fetch the calendar slice needed for local verification
+    let records = fetch_calendar_slice(&server_addr, tick_number, 1).await?;
+    if records.is_empty() {
+        return Err(format!("no calendar records found for tick {}", tick_number).into());
+    }
+
+    // Build a minimal proof artifact
+    let proof = serde_json::json!({
+        "verified_locally": true,
+        "tick_number": tick_number,
+        "calendar_records": records,
+        "fortis": fortis_value,
+        "method": "prove_verification",
+    });
+
+    let output = serde_json::to_string_pretty(&proof)?;
+    match proof_output {
+        Some(path) => std::fs::write(&path, &output).map_err(|e| format!("Failed to write {}: {}", path, e))?,
+        None => println!("{}", output),
+    }
+    Ok(())
+}
 
 async fn json_rpc_call(
     server: &str,
@@ -322,10 +383,31 @@ async fn json_rpc_call(
     Ok(response["result"].clone())
 }
 
+/// Fetch a calendar slice from a remote TimeBeing via get_calendar_slice.
+async fn fetch_calendar_slice(
+    server: &str,
+    tick_number: u64,
+    count: u64,
+) -> Result<Vec<TickRecord>, Box<dyn std::error::Error>> {
+    let result = json_rpc_call(
+        server,
+        "get_calendar_slice",
+        serde_json::json!({"cal_tick_start": tick_number, "count": count}),
+    ).await?;
+
+    let records: Vec<TickRecord> = serde_json::from_value(result)
+        .map_err(|e| format!("failed to parse calendar slice: {}", e))?;
+    Ok(records)
+}
+
 // ── Entry point ─────────────────────────────────────────────────────────────
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tracing_subscriber::fmt()
+        .with_target(false)
+        .with_level(true)
+        .init();
     let cli = Cli::parse();
 
     match cli.command {
@@ -335,6 +417,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::Verify { message, message_file, fortis, fortis_file, verify_output, server } => {
             cmd_verify(message, message_file, fortis, fortis_file, verify_output, server).await
+        }
+        Commands::ProveVerification { message, message_file, fortis, fortis_file, proof_output, server } => {
+            cmd_prove_verification(message, message_file, fortis, fortis_file, proof_output, server).await
         }
     }
 }

@@ -48,6 +48,24 @@ def run_server(port: int) -> None:
                     pf = PyFortis.from_json(json.dumps(fortis_json))
                     valid = tf.verify(content, pf)
                     resp = {"jsonrpc": "2.0", "result": {"valid": valid}, "id": req_id}
+                elif method == "get_calendar_slice":
+                    cal_tick_start = params.get("cal_tick_start", 0)
+                    count = params.get("count", 10)
+                    cal = tf.get_calendar()
+                    # Filter and slice ticks
+                    records = []
+                    for i in range(cal.tick_count()):
+                        t = cal.ticks[i]
+                        if t.tick_number >= cal_tick_start:
+                            records.append({
+                                "tick_number": t.tick_number,
+                                "public_key": list(t.public_key),
+                                "forward_fortis": list(t.forward_fortis),
+                                "backward_fortis": list(t.backward_fortis),
+                            })
+                            if len(records) >= count:
+                                break
+                    resp = {"jsonrpc": "2.0", "result": records, "id": req_id}
                 else:
                     resp = {"jsonrpc": "2.0", "error": {"code": -32601, "message": "Method not found"}, "id": req_id}
 

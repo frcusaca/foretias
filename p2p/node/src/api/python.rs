@@ -209,9 +209,11 @@ impl PyCryptoServer {
         if sig.len() != 64 {
             return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>("sig must be 64 bytes"));
         }
-        let pub_key_bytes: [u8; 32] = pub_key.try_into().unwrap();
+        let pub_key_bytes: [u8; 32] = pub_key.try_into()
+            .map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("pub_key must be exactly 32 bytes"))?;
         let pub_key = FortiasPubKey32 { bytes: pub_key_bytes };
-        let sig_bytes: [u8; 64] = sig.try_into().unwrap();
+        let sig_bytes: [u8; 64] = sig.try_into()
+            .map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("sig must be exactly 64 bytes"))?;
         let sig = FortiasSig64 { bytes: sig_bytes };
         self.inner.verify_ed25519(&pub_key, msg, &sig)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))
@@ -311,7 +313,8 @@ impl PyTimeFamily {
         };
 
         let mut cal = self.calendar.write();
-        cal.append(record);
+        cal.append(record)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
 
         Ok(PyFortis::from(&fortis))
     }

@@ -6,6 +6,11 @@ use crate::fortias::{Fortis, TickRecord};
 use super::jsonrpc::{self, JsonRpcResponse};
 use super::TimeFamilyServer;
 
+/// Maximum content size for stamp/verify payloads (1 GB).
+const MAX_CONTENT_BYTES: usize = 1_073_741_824;
+/// Maximum calendar slice count per request.
+const MAX_CALENDAR_SLICE_COUNT: usize = 10_000;
+
 /// Handles a `stamp` JSON-RPC request: creates a Fortis attestation for the given content.
 pub fn handle_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
     let content_hex = match params.get("content").and_then(|v| v.as_str()) {
@@ -25,6 +30,14 @@ pub fn handle_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse
             format!("invalid hex: {}", e),
         ),
     };
+
+    if content.len() > MAX_CONTENT_BYTES {
+        return jsonrpc::JsonRpcResponse::error(
+            params.get("id").cloned(),
+            jsonrpc::INVALID_PARAMS,
+            format!("content exceeds maximum size of {} bytes", MAX_CONTENT_BYTES),
+        );
+    }
 
     let echo = params.get("echo")
         .and_then(|v| v.as_str())
@@ -82,7 +95,7 @@ fn do_stamp(server: &TimeFamilyServer, content: Vec<u8>, echo: String) -> Result
         backward_fortis,
     };
 
-    server.calendar.write().append(record);
+    server.calendar.write().append(record)?;
     Ok(fortis)
 }
 
@@ -115,6 +128,14 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
         ),
     };
 
+    if content.len() > MAX_CONTENT_BYTES {
+        return jsonrpc::JsonRpcResponse::error(
+            params.get("id").cloned(),
+            jsonrpc::INVALID_PARAMS,
+            format!("content exceeds maximum size of {} bytes", MAX_CONTENT_BYTES),
+        );
+    }
+
     let valid = match crate::fortias::tick::verify(
         server.server.as_ref(),
         &fortis,
@@ -145,9 +166,23 @@ pub fn handle_get_calendar_slice(server: &TimeFamilyServer, params: Value) -> Js
         .and_then(|v| v.as_u64())
         .unwrap_or(10) as usize;
 
+    if count > MAX_CALENDAR_SLICE_COUNT {
+        return jsonrpc::JsonRpcResponse::error(
+            params.get("id").cloned(),
+            jsonrpc::INVALID_PARAMS,
+            format!("count exceeds maximum of {}", MAX_CALENDAR_SLICE_COUNT),
+        );
+    }
+
     let cal = server.calendar.read();
-    let records = cal.get(cal_tick_start, count)
-        .unwrap_or_default();
+    let records = match cal.get(cal_tick_start, count) {
+        Ok(recs) => recs,
+        Err(e) => return jsonrpc::JsonRpcResponse::error(
+            params.get("id").cloned(),
+            jsonrpc::INTERNAL_ERROR,
+            format!("calendar lookup failed: {}", e),
+        ),
+    };
 
     jsonrpc::JsonRpcResponse::success(
         params.get("id").cloned(),

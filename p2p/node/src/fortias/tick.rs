@@ -65,7 +65,7 @@ pub fn stamp(
 
     let now_ns = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
+        .map_err(|e| NodeError::Internal(format!("SystemTime before UNIX_EPOCH: {}", e)))?
         .as_nanos() as u64;
     let time_being_reference_time = format!("UE+{}ns", now_ns);
 

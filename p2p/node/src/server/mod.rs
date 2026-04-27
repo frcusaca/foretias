@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use tokio::net::TcpListener;
 use tokio::io::{AsyncBufReadExt, BufReader, AsyncWriteExt};
@@ -98,6 +99,11 @@ impl TimeFamilyServer {
     }
 }
 
+/// Maximum size of a single JSON-RPC request line (4 KB).
+const MAX_REQUEST_LINE_BYTES: usize = 4096;
+/// Timeout for reading each request line (30 seconds).
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+
 async fn handle_connection(
     server: Arc<TimeFamilyServer>,
     stream: tokio::net::TcpStream,
@@ -108,10 +114,27 @@ async fn handle_connection(
     let mut writer = writer;
 
     loop {
-        let line = match lines.next_line().await? {
+        let line = match tokio::time::timeout(REQUEST_TIMEOUT, lines.next_line()).await {
+            Ok(Ok(l)) => l,
+            Ok(Err(e)) => {
+                tracing::warn!("read error: {}", e);
+                return Err(NodeError::from(e));
+            }
+            Err(_) => {
+                tracing::warn!("request timeout");
+                break;
+            }
+        };
+
+        let line = match line {
             Some(l) => l,
             None => break,
         };
+
+        if line.len() > MAX_REQUEST_LINE_BYTES {
+            tracing::warn!("request line exceeds {} bytes, dropping connection", MAX_REQUEST_LINE_BYTES);
+            break;
+        }
 
         let response = process_request(&server, &line)?;
         let response_line = serde_json::to_string(&response)?;

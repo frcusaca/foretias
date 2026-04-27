@@ -29,13 +29,18 @@ impl Calendar {
         }
     }
 
-    /// Appends a tick record; panics if the tick number is not strictly greater than the last.
-    pub fn append(&mut self, record: TickRecord) {
-        assert!(
-            self.ticks.last().map(|r| record.tick_number > r.tick_number).unwrap_or(true),
-            "tick numbers must be strictly ascending"
-        );
+    /// Appends a tick record; returns an error if the tick number is not strictly greater than the last.
+    pub fn append(&mut self, record: TickRecord) -> Result<(), NodeError> {
+        if let Some(last) = self.ticks.last() {
+            if record.tick_number <= last.tick_number {
+                return Err(NodeError::Internal(format!(
+                    "tick number {} is not strictly greater than last tick {}",
+                    record.tick_number, last.tick_number
+                )));
+            }
+        }
         self.ticks.push(record);
+        Ok(())
     }
 
     /// Verifies chain integrity by checking that tick numbers are strictly ascending.
