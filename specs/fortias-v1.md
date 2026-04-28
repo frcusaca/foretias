@@ -49,7 +49,7 @@ A **time being** is a computational entity devoted to maintaining temporal integ
 
 **Lifecycle:**
 
-1. **Created** with `tbid`, `tbn`, `chronon`, and `serialized`. Generates its first keypair for tick 0. The calendar is initialized with one record: `tick_number` = 0, `public_key` = the new public key, `forward_fortis` and `backward_fortis` are computed from a self-transition mutual acknowledgement (MA(genesis, genesis)).
+1. **Created** with `tbid`, `tbn`, `chronon`, and `serialized`. Generates its first keypair for tick 0. The calendar is initialized with one record: `tick_number` = 0, `public_key` = the new public key, `forward_fortis` and `backward_fortis` are computed from a self-transition auto-attestation (auto-attestation(genesis, genesis)).
 2. **Advances ticks**:
    - If `serialized = False`: a background daemon thread calls `tick()` every `chronon_ns` nanoseconds. `stamp()` simply signs under the current tick.
    - If `serialized = True`: no background thread. `tick()` advances only when `stamp()` is called, and only one caller is permitted at a time (mutex-protected).
@@ -65,7 +65,7 @@ A **time being** is a computational entity devoted to maintaining temporal integ
 
 - A time being never produces two different signatures for the same `(tick, content_hash)` pair.
 - No entry in the calendar has `forward_fortis = None` or `backward_fortis = None`. Genesis records a self-transition; every other record records a transition from its predecessor.
-- All consecutive pairs in the calendar are mutually attesting via `backward_fortis` and `forward_fortis`, verifiable using their respective public keys.
+- All consecutive pairs in the calendar are auto-attesting via `backward_fortis` and `forward_fortis`, verifiable using their respective public keys.
 - Public keys can only attest to Fortises signed after their own start boundary. The existence of a subsequent tick defines the end of the period during which a Fortis could have taken place.
 
 ### 2.2 Tick: the Fortias Self-Attestation Methodology
@@ -74,29 +74,36 @@ A **tick** is a discrete duration of time in the Fortias protocol. Each tick has
 
 Ticks are numbered from genesis; each `tick_number` represents nanoseconds past the Unix epoch. The `chronon_ns` is adhered to for non-serialized time beings at best effort — system load and clock synchronization may cause slight drift.  Nanoseconds are a practical convenience for v1 (fits in a float with sub-nanosecond jitter); not a fundamental limit of the protocol.
 
-**The tick: Fortias Method of Self-Attestation:**
+**The tick: Fortias Auto-Attestation:**
 
 A tick occurs between two chronon. For clarity sake, Let's call the chronon `OLD`, and `NEW`. `OLD` has duration preceeds NEW entirely.
 For the old chronon, we have it's begining `OLD.tick_number`, we also have `OLD.private_key`, `OLD.secrete_key`:
 
 1. Determine and store `NEW.tick_number`, roughly the current unix epoch nanoseconds.
 2. Generate keypair `(NEW.public_key, NEW.secret_key)`
-3. Compute the `mutual_acknowledgement=concat(TBID, OLD.tick_number, OLD.public_key, NEW.tick_number, NEW.public_key)`
-2. Compute **forward self-attestation** by signing the `mutual_acknowledgement` from the old chronon:
-   `forward_fortis = _stamp(content=mutual_acknowledgement, tbid=TBID, tick_number=OLD.tick_number, private_key=OLD.private_key)`
-   This proves the old time being acknowedges that NEW follows it.
-3. Compute **backward self-attestation** by signing `mutual_acknowledgement` with the new private key:
-   `backward_fortis = _stamp(content=mutual_acknowledgement, tbid=TBID, tick_number=NEW.tick_number, private_key=NEW.private_key)`
+3. Generate 16-byte RNG nonce (via `fortias_rng_bytes` in C11).
+4. Compute the `auto_attestation_blob=concat(TBID, OLD.tick_number, OLD.public_key, NEW.tick_number, NEW.public_key, nonce)`.
+5. Compute **forward auto-attestation** by signing the `auto_attestation_blob` from the old chronon:
+   `forward_fortis = _stamp(content=auto_attestation_blob, tbid=TBID, tick_number=OLD.tick_number, private_key=OLD.private_key)`
+   This proves the old time being acknowledges that NEW follows it.
+6. Compute **backward auto-attestation** by signing `auto_attestation_blob` with the new private key:
+   `backward_fortis = _stamp(content=auto_attestation_blob, tbid=TBID, tick_number=NEW.tick_number, private_key=NEW.private_key)`
     This proves the new key acknowledges that it follows the old chronon.
-4. Append the new tick record to the calendar: `TickRecord(NEW.tick_number, NEW.public_key, forward_fortis, backward_fortis)`.
-5. Destroy `old_sk` — it is never held in memory again.
-6. The new keypair becomes the active signing key.
+7. Append the new tick record to the calendar: `TickRecord(NEW.tick_number, NEW.public_key, forward_fortis, backward_fortis, nonce)`.
+8. Destroy `old_sk` — it is never held in memory again.
+9. The new keypair becomes the active signing key.
 
 **Why this matters:**
 
-- Self-attestation (`forward_fortis`) answers: "Can the new key sign for itself?" — proving the key was actively created at this tick.
-- Cross-attestation (`backward_fortis`) answers: "Does the new key acknowledge the old key?" — establishing the chain from the new end.
+- Forward auto-attestation (`forward_fortis`) answers: "Can the new key sign for itself?" — proving the key was actively created at this tick.
+- Backward auto-attestation (`backward_fortis`) answers: "Does the new key acknowledge the old key?" — establishing the chain from the new end.
 - Neither signature requires the old private key. This is critical: after `cur_sk` is destroyed, a successor can independently verify the entire transition.
+
+**Auto-Attestation Semantics:**
+
+**Auto-attestation** is the mechanism a time being uses to continue its own clock. When a tick advances, the old private key is destroyed and a new keypair generated. The new tick record contains `forward_fortis` (signed by the old key) and `backward_fortis` (signed by the new key) — both over the same auto-attestation blob. This proves both keys acknowledge the transition.
+
+Auto-attestation only applies when the TBID is the **same** — i.e., the time being is continuing its own clock. When TBID is different, the signatures represent a different relationship between entities and are **not** called "auto-attestation".
 
 **TickRecord:**
 
@@ -105,8 +112,9 @@ For the old chronon, we have it's begining `OLD.tick_number`, we also have `OLD.
 class TickRecord:
     tick_number: uint64      # Nanoseconds since Unix epoch; the tick's time boundary.
     public_key: bytes        # Ed25519 public key for this tick.
-    forward_fortis: bytes        # MA(prev) signed by prev_sk; genesis uses MA(self, self).
-    backward_fortis: bytes       # MA(self) signed by self_sk. Never None.
+    forward_fortis: bytes    # Auto-attestation signed by prev_sk; genesis signs itself.
+    backward_fortis: bytes   # Auto-attestation signed by self_sk. Never None.
+    aa_nonce: bytes          # RNG nonce (16 bytes) for replay protection.
 ```
 
 ### 2.3 Calendar (Latin: *Chronos graphus*)
@@ -278,8 +286,8 @@ If the signature and content checks pass, the Fortis is valid. The window check 
 The tick chain provides temporal ordering and continuity guarantees:
 
 - **Pair verification** (`_verify_pair(A, B)`): Given two consecutive tick records A and B, verify both cross-stamp signatures:
-  - `forward_fortis` of A verifies against B's public key.
-  - `backward_fortis` of B verifies against A's public key.
+  - `forward_fortis` of B verifies against A's public key.
+  - `backward_fortis` of B verifies against B's public key.
 - **Chain verification** (`_verify_chain(ticks, return_failures=False)`): Iterates `_verify_pair()` across the entire chain. Returns `(bool, list[int] | None)`. If `return_failures=True`, returns the indexes of failed pairs.
 
 The calendar loader runs full chain verification on load. The CLI `fortis verify` command also runs chain verification.

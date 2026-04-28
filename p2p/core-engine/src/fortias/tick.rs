@@ -20,8 +20,7 @@ pub struct TickRecord {
     pub backward_fortis: Vec<u8>,
     /// Cryptographic nonce (16 bytes) used in the auto-attestation blob for this tick pair.
     /// This prevents replay attacks by ensuring each blob is unique even if the tick data repeats.
-    #[serde(default)]
-    pub ma_nonce: [u8; 16],
+    pub aa_nonce: [u8; 16],
 }
 
 /// A cryptographically signed attestation of content at a specific tick.
@@ -139,9 +138,9 @@ pub fn auto_attestation_blob(
     Ok((blob, nonce))
 }
 
-/// Verify the mutual attestation between two consecutive tick records.
+/// Verify the auto-attestation between two consecutive tick records.
 ///
-/// Rebuilds the MA blob from the two ticks using the nonce stored in `curr.ma_nonce`,
+/// Rebuilds the blob from the two ticks using the nonce stored in `curr.aa_nonce`,
 /// then verifies that both signatures cover the same blob.
 pub fn verify_pair(
     crypto: &dyn CryptoServer,
@@ -154,7 +153,7 @@ pub fn verify_pair(
     let curr_pk: [u8; 32] = curr.public_key[..32].try_into()
         .map_err(|_| NodeError::BadFormat("public_key"))?;
 
-    let nonce = curr.ma_nonce;
+    let nonce = curr.aa_nonce;
     let mut ma_blob = Vec::with_capacity(tbid_str.len() + 8 + 32 + 8 + 32 + 16);
     ma_blob.extend_from_slice(tbid_str.as_bytes());
     ma_blob.extend_from_slice(&prev.tick_number.to_be_bytes());
@@ -209,7 +208,7 @@ mod tests {
             public_key,
             forward_fortis: serde_json::to_vec(&fortis).unwrap(),
             backward_fortis: vec![],
-            ma_nonce: [0u8; 16],
+            aa_nonce: [0u8; 16],
         }).unwrap();
         cal
     }
@@ -282,7 +281,7 @@ mod tests {
             public_key: vec![0u8; 32],
             forward_fortis: vec![],
             backward_fortis: vec![],
-            ma_nonce: [0u8; 16],
+            aa_nonce: [0u8; 16],
         }).unwrap();
         let content = b"test";
         let fortis = stamp(server.as_ref(), &tbid, 1, content, "e", "bad-cal")
@@ -312,14 +311,14 @@ mod tests {
             public_key: pub_key.to_vec(),
             forward_fortis: vec![],
             backward_fortis: vec![],
-            ma_nonce: [0u8; 16],
+            aa_nonce: [0u8; 16],
         };
         let curr = TickRecord {
             tick_number: 2,
             public_key: pub_key.to_vec(),
             forward_fortis: sig_bytes.clone(),
             backward_fortis: sig_bytes,
-            ma_nonce: nonce,
+            aa_nonce: nonce,
         };
 
         let valid = verify_pair(server.as_ref(), &tbid_str, &prev, &curr).unwrap();
@@ -345,14 +344,14 @@ mod tests {
             public_key: pub_key.to_vec(),
             forward_fortis: vec![],
             backward_fortis: vec![],
-            ma_nonce: [0u8; 16],
+            aa_nonce: [0u8; 16],
         };
         let curr = TickRecord {
             tick_number: 2,
             public_key: pub_key.to_vec(),
             forward_fortis: sig_bytes.clone(),
             backward_fortis: sig_bytes.clone(),
-            ma_nonce: nonce,
+            aa_nonce: nonce,
         };
 
         assert!(verify_pair(server.as_ref(), &tbid_str, &prev, &curr).unwrap());
@@ -363,7 +362,7 @@ mod tests {
             public_key: pub_key.to_vec(),
             forward_fortis: sig_bytes,
             backward_fortis: vec![0u8; 64],
-            ma_nonce: nonce,
+            aa_nonce: nonce,
         };
 
 let valid = verify_pair(server.as_ref(), &tbid_str, &prev, &curr_tampered).unwrap();

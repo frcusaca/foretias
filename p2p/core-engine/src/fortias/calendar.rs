@@ -117,7 +117,7 @@ mod tests {
             public_key: vec![0u8; 32],
             forward_fortis: vec![],
             backward_fortis: vec![],
-            ma_nonce: [0u8; 16],
+            aa_nonce: [0u8; 16],
         }
     }
 
@@ -245,7 +245,7 @@ mod tests {
                 public_key: keypairs[i as usize].0.to_vec(),
                 forward_fortis,
                 backward_fortis,
-                ma_nonce: nonce,
+                aa_nonce: nonce,
             }).unwrap();
         }
 
@@ -290,7 +290,7 @@ mod tests {
                 public_key: keypairs[i as usize].0.to_vec(),
                 forward_fortis,
                 backward_fortis,
-                ma_nonce: nonce,
+                aa_nonce: nonce,
             }).unwrap();
         }
 

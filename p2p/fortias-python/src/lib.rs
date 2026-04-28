@@ -99,7 +99,7 @@ pub struct PyTickRecord {
     #[pyo3(get)]
     pub backward_fortis: Vec<u8>,
     #[pyo3(get)]
-    pub ma_nonce: Vec<u8>,
+    pub aa_nonce: Vec<u8>,
 }
 
 impl From<&TickRecordInner> for PyTickRecord {
@@ -109,7 +109,7 @@ impl From<&TickRecordInner> for PyTickRecord {
             public_key: t.public_key.clone(),
             forward_fortis: t.forward_fortis.clone(),
             backward_fortis: t.backward_fortis.clone(),
-            ma_nonce: t.ma_nonce.to_vec(),
+            aa_nonce: t.aa_nonce.to_vec(),
         }
     }
 }
@@ -316,7 +316,7 @@ impl PyTimeFamily {
             public_key: pub_key_bytes,
             forward_fortis: serde_json::to_string(&fortis).unwrap_or_default().into_bytes(),
             backward_fortis: Vec::new(),
-            ma_nonce: [0u8; 16],
+            aa_nonce: [0u8; 16],
         };
 
         let mut cal = self.calendar.write();

@@ -141,7 +141,7 @@ Existing Python prototype uses Ed25519 throughout. This is preserved. P-256 supp
 
 The existing Python prototype defines:
 
-- **Tick semantics** (forward_fortis, backward_fortis, mutual acknowledgement)
+- **Tick semantics** (forward_fortis, backward_fortis, auto-attestation)
 - **Fortis format** (tick_number, content_hash, signature, tbid, echo, tbn)
 - **Calendar structure** (append-only, integrity check via `_verify_pair`)
 - **TimeFamily orchestration** (Chronomatter + Calendar)

@@ -23,10 +23,10 @@ class TickRecord:
     Attributes:
         tick_number: Nanoseconds since Unix epoch; the tick's starting time boundary. This tick represents chronon containing nothing before this moment.
         public_key: Ed25519 public key for this tick (32 bytes).
-        forward_fortis: Signature of mutual_acknowledgement by this tick's
+        forward_fortis: Auto-attestation signature by this tick's
                         *previous* private key.
-        backward_fortis: Signature of mutual_acknowledgement by this tick's
-                         private key.
+        backward_fortis: Auto-attestation signature by this tick's
+                          private key.
     """
 
     tick_number: int

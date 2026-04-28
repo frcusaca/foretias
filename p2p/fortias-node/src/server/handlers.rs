@@ -86,13 +86,13 @@ pub fn do_stamp(server: &TimeFamilyServer, content: Vec<u8>, echo: String) -> Re
     let new_pub = server.keypair_pub(kp_idx).unwrap();
 
     // Build auto-attestation (forward_fortis / backward_fortis)
-    let (forward_fortis, backward_fortis, ma_nonce) = if server.calendar.read().ticks.is_empty() {
+    let (forward_fortis, backward_fortis, aa_nonce) = if server.calendar.read().ticks.is_empty() {
         // Genesis: self-signed — both sides use the same keypair
         let (ma_blob, nonce) = auto_attestation_blob(&tbid_str, tick, &new_pub, tick, &new_pub)?;
         let sig = server.sign_with_keypair(kp_idx, &ma_blob)?;
         (sig.clone(), sig, nonce)
     } else {
-        // Non-genesis: cross-signed between previous tick and current tick
+        // Non-genesis: auto-attested between previous tick and current tick
         let cal = server.calendar.read();
         let latest_rec = cal.ticks.last().unwrap();
         let prev_tick = latest_rec.tick_number;
@@ -139,7 +139,7 @@ pub fn do_stamp(server: &TimeFamilyServer, content: Vec<u8>, echo: String) -> Re
         public_key: new_pub.to_vec(),
         forward_fortis,
         backward_fortis,
-        ma_nonce,
+        aa_nonce,
     };
 
     server.calendar.write().append(record)?;

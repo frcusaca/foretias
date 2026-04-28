@@ -28,7 +28,7 @@ def _uint64_be(value: int) -> bytes:
 
 
 def _genesis_ma(tbid: bytes, pk: bytes) -> bytes:
-    """Build the mutual acknowledgement for a genesis tick.
+    """Build the auto-attestation blob for a genesis tick.
 
     Format: tbid + 0 (tick) + 0 (no prev pk) + now (ns) + pk.
     """
@@ -92,9 +92,9 @@ class _timebeing:
     ) -> tuple[TickRecord, bytes]:
         """Advance from the current tick to a new tick.
 
-        Self-attestation model with mutual attestation between consecutive
-        ticks. Neither signature requires the old private key for later
-        verification.
+        Auto-attestation model: each tick signs the same auto-attestation blob
+        as its predecessor. Neither signature requires the old private key for
+        later verification.
 
         Args:
             tbid: Time being identity.
@@ -110,8 +110,8 @@ class _timebeing:
         current_public_key = current_tick_record.public_key
         current_tick = current_tick_record.tick_number
 
-        # Build mutual acknowledgement
-        mutual_acknowledgement = (
+        # Build auto-attestation blob
+        auto_attestation_blob = (
             tbid
             + _uint64_be(current_tick)
             + current_public_key
@@ -119,11 +119,11 @@ class _timebeing:
             + new_public_key
         )
 
-        # forward_fortis: OLD signs mutual_acknowledgement with OLD private key
-        forward_fortis = sign(mutual_acknowledgement, current_private_key)
+        # forward_fortis: OLD signs auto-attestation_blob with OLD private key
+        forward_fortis = sign(auto_attestation_blob, current_private_key)
 
-        # backward_fortis: NEW signs mutual_acknowledgement with NEW private key
-        backward_fortis = sign(mutual_acknowledgement, new_secret_key)
+        # backward_fortis: NEW signs auto-attestation_blob with NEW private key
+        backward_fortis = sign(auto_attestation_blob, new_secret_key)
 
         new_record = TickRecord(
             tick_number=new_tick_number,
@@ -136,12 +136,12 @@ class _timebeing:
 
     @staticmethod
     def _verify_pair(B: TickRecord, A: TickRecord, tbid: bytes) -> bool:
-        """Verify two consecutive tick records are mutually attesting.
+        """Verify two consecutive tick records form a valid auto-attestation pair.
 
         B is the later tick, A is the earlier tick.
 
         During _tick(B), two signatures are created over the same
-        mutual_acknowledgement = concat(A.tick, A.pk, B.tick, B.pk):
+        auto_attestation_blob = concat(tbid, A.tick, A.pk, B.tick, B.pk):
         - forward_fortis: signed by A.sk (current private key at tick time)
         - backward_fortis: signed by B.sk (new private key)
 
@@ -149,7 +149,7 @@ class _timebeing:
         - B.forward_fortis: verify against A.pk. Catches tampering with B.
         - B.backward_fortis: verify against B.pk. Cuts tampering with B.
         """
-        mutual_acknowledgement = (
+        auto_attestation_blob = (
             tbid
             + _uint64_be(A.tick_number)
             + A.public_key
@@ -161,14 +161,14 @@ class _timebeing:
         # Always present for non-genesis ticks.
         if B.forward_fortis is None:
             return False
-        if not verify(mutual_acknowledgement, B.forward_fortis, A.public_key):
+        if not verify(auto_attestation_blob, B.forward_fortis, A.public_key):
             return False
 
         # B.backward_fortis: signed by B.sk, verified against B.pk.
         # Always present for non-genesis ticks.
         if B.backward_fortis is None:
             return False
-        if not verify(mutual_acknowledgement, B.backward_fortis, B.public_key):
+        if not verify(auto_attestation_blob, B.backward_fortis, B.public_key):
             return False
 
         return True

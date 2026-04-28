@@ -132,7 +132,7 @@ class TestVerifyPair:
         # B.forward_fortis was signed by old key, verifies against old key
         from fortias.crypto import verify
         assert verify(
-            _mutual_ack(genesis, new_record),
+            _auto_attestation(genesis, new_record),
             new_record.forward_fortis,
             genesis.public_key,
         ) is True
@@ -144,14 +144,14 @@ class TestVerifyPair:
         # B.backward_fortis was signed by new key, verifies against new key
         from fortias.crypto import verify
         assert verify(
-            _mutual_ack(genesis, new_record),
+            _auto_attestation(genesis, new_record),
             new_record.backward_fortis,
             new_record.public_key,
         ) is True
 
 
-def _mutual_ack(A, B, tbid=b"test-tbid-123456789012345678901234"):
-    """Build mutual_acknowledgement for two tick records."""
+def _auto_attestation(A, B, tbid=b"test-tbid-123456789012345678901234"):
+    """Build auto_attestation_blob for two tick records."""
     return (
         tbid
         + _uint64_be(A.tick_number)

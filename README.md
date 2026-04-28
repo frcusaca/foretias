@@ -66,8 +66,22 @@ tbf = TimeFamily(name="alpha", chronon_ns=60_000_000_000.0)
 class TickRecord:
     tick_number: int     # Nanoseconds since Unix epoch
     public_key: bytes    # Ed25519 public key
-    forward_fortis: bytes   # MA(prev) signed by prev_sk
-    backward_fortis: bytes  # MA(self) signed by self_sk
+    forward_fortis: bytes   # auto-attestation signed by prev_sk
+    backward_fortis: bytes  # auto-attestation signed by self_sk
+    aa_nonce: bytes        # RNG nonce (16 bytes) for replay protection
+```
+
+### Auto-Attestation
+
+**Auto-attestation** is the mechanism a time being uses to continue its own clock.
+When a tick advances from tick *n* to tick *n+1*, the old private key is destroyed and
+a new keypair is generated. The new tick record contains two signatures over the same
+auto-attestation blob (both tick numbers, both public keys, and a 16-byte RNG nonce):
+`forward_fortis` (signed by the old key) and `backward_fortis` (signed by the new key).
+
+Auto-attestation only applies when the TBID is the **same** — i.e., the time being is
+continuing its own clock. When TBID is different, the signatures are no longer called
+"auto-attestation" (they represent a different relationship between entities).
 
 @dataclass(frozen=True)
 class Fortis:

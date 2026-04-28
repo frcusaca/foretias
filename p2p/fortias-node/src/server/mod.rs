@@ -219,7 +219,7 @@ impl TimeFamilyServer {
         let tbid_str = hex::encode(tbid);
         let new_pub = self.keypair_pub(kp_idx).unwrap();
 
-        let (forward_fortis, backward_fortis, ma_nonce) = if self.calendar.read().ticks.is_empty() {
+        let (forward_fortis, backward_fortis, aa_nonce) = if self.calendar.read().ticks.is_empty() {
             let (ma_blob, nonce) = auto_attestation_blob(&tbid_str, tick, &new_pub, tick, &new_pub)?;
             let sig = self.sign_with_keypair(kp_idx, &ma_blob)?;
             (sig.clone(), sig, nonce)
@@ -242,7 +242,7 @@ impl TimeFamilyServer {
             public_key: new_pub.to_vec(),
             forward_fortis,
             backward_fortis,
-            ma_nonce,
+            aa_nonce,
         };
 
         self.calendar.write().append(record.clone())?;

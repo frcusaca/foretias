@@ -25,7 +25,7 @@ Task 6 ("Python uses ONLY Rust") is **not** a simple import swap. The current st
 | Config / dormant instance loading | Full | **Missing** |
 | Shutdown / daemon lifecycle | Full | **Missing** |
 
-**Rust `PyTimeFamily.stamp()`** uses a simple counter increment with a **static keypair**. It does NOT rotate keys per tick, does NOT create mutual attestations, and does NOT have a daemon. Python `ChronomatterV1.stamp()` generates a new keypair each tick, creates forward/backward MA signatures, and runs on a background daemon.
+**Rust `PyTimeFamily.stamp()`** uses a simple counter increment with a **static keypair**. It does NOT rotate keys per tick, does NOT create auto-attestations, and does NOT have a daemon. Python `ChronomatterV1.stamp()` generates a new keypair each tick, creates forward/backward auto-attestation signatures, and runs on a background daemon.
 
 **This means Task 6 requires a full Rust protocol rewrite, not a build-system change.** It is its own engineering epic.
 

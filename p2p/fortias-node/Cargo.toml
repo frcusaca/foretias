@@ -1,6 +1,6 @@
 [package]
 name    = "fortias-node"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 [lib]
@@ -11,7 +11,7 @@ name = "fortias"
 path = "src/main.rs"
 
 [dependencies]
-fortias-core = { path = "../core-engine" }
+fortias-core = { version = "0.2", path = "../core-engine" }
 
 tokio        = { version = "1", features = ["full"] }
 clap         = { version = "4", features = ["derive"] }
