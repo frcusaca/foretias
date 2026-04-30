@@ -122,6 +122,14 @@ impl CalendarLookup for Calendar {
     fn latest(&self) -> Option<u64> {
         self.ticks.last().map(|t| t.tick_number)
     }
+
+    fn tbid(&self) -> [u8; 16] {
+        self.tbid
+    }
+
+    fn tbn(&self) -> &str {
+        &self.tbn
+    }
 }
 
 #[cfg(test)]

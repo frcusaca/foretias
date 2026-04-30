@@ -6,15 +6,15 @@ use tokio::io::{AsyncBufReadExt, BufReader, AsyncWriteExt};
 
 use fortias_core::chronomatter::Chronomatter;
 use fortias_core::fortias::callbacks::TickObserver;
-use fortias_core::fortias::types::{PublicKey, TickNumber};
+use fortias_core::fortias::TickRecord;
 use fortias_core::error::NodeError;
 
+use super::calendar::Calendar;
 use self::jsonrpc::{JsonRpcRequest, JsonRpcResponse};
 
-/// No-op observer for the server layer — Calendar integration happens in Phase 4.
 struct NoOpObserver;
 impl TickObserver for NoOpObserver {
-    fn on_tick_advance(&self, _tick_number: TickNumber, _public_key: &PublicKey) {}
+    fn on_tick_advance(&self, _tick_number: u64, _public_key: &[u8; 32], _tick_record: &TickRecord) {}
 }
 
 pub mod jsonrpc;
@@ -22,16 +22,23 @@ pub mod handlers;
 
 pub struct TimeFamilyServer {
     chronomatter: Arc<Chronomatter>,
+    calendar: Arc<Calendar>,
     listen_addr: String,
     persist_path: Option<std::path::PathBuf>,
 }
 
 impl TimeFamilyServer {
     pub fn new(listen_addr: &str, chronon_ns: u64) -> Result<Self, NodeError> {
-        let observer = Arc::new(NoOpObserver);
-        let chronomatter = Arc::new(Chronomatter::new(chronon_ns, observer)?);
+        let calendar = Arc::new(Calendar::new([0u8; 16], "init"));
+        let cm = Chronomatter::new(chronon_ns, Arc::clone(&calendar) as Arc<dyn TickObserver>)?;
+        let (tbid, tbn) = (cm.get_tbid(), cm.get_tbn().to_string());
+        let binding = calendar.inner();
+        let mut cal_inner = binding.write();
+        cal_inner.tbid = tbid;
+        cal_inner.tbn = tbn.clone();
         Ok(Self {
-            chronomatter,
+            chronomatter: Arc::new(cm),
+            calendar,
             listen_addr: listen_addr.to_string(),
             persist_path: None,
         })
@@ -42,10 +49,16 @@ impl TimeFamilyServer {
         chronon_ns: u64,
         persist_path: Option<std::path::PathBuf>,
     ) -> Result<Self, NodeError> {
-        let observer = Arc::new(NoOpObserver);
-        let chronomatter = Arc::new(Chronomatter::new(chronon_ns, observer)?);
+        let calendar = Arc::new(Calendar::new([0u8; 16], "init"));
+        let cm = Chronomatter::new(chronon_ns, Arc::clone(&calendar) as Arc<dyn TickObserver>)?;
+        let (tbid, tbn) = (cm.get_tbid(), cm.get_tbn().to_string());
+        let binding = calendar.inner();
+        let mut cal_inner = binding.write();
+        cal_inner.tbid = tbid;
+        cal_inner.tbn = tbn.clone();
         Ok(Self {
-            chronomatter,
+            chronomatter: Arc::new(cm),
+            calendar,
             listen_addr: listen_addr.to_string(),
             persist_path,
         })
@@ -60,10 +73,11 @@ impl TimeFamilyServer {
         let crypto = StdArc::from(crypto_server::new_software(
             crypto_server::FortiasCurve::Ed25519,
         )?);
-        let observer = Arc::new(NoOpObserver);
-        let chronomatter = Arc::new(Chronomatter::from_calendar(path, crypto, observer)?);
+        let cm = Chronomatter::from_calendar(path, crypto, Arc::new(NoOpObserver))?;
+        let calendar = Arc::new(Calendar::from_persisted(path)?);
         Ok(Self {
-            chronomatter,
+            chronomatter: Arc::new(cm),
+            calendar,
             listen_addr: listen_addr.to_string(),
             persist_path: None,
         })
@@ -85,23 +99,23 @@ impl TimeFamilyServer {
         &self.chronomatter
     }
 
+    pub fn calendar(&self) -> &Calendar {
+        &self.calendar
+    }
+
     pub fn current_tick(&self) -> u64 {
         self.chronomatter.current_tick()
     }
 
-    pub fn calendar_read(&self) -> parking_lot::RwLockReadGuard<'_, fortias_core::fortias::Calendar> {
-        self.chronomatter.calendar().read()
-    }
-
     pub fn integrity_check(&self, start: Option<u64>, end: Option<u64>) -> Result<Vec<bool>, NodeError> {
-        self.chronomatter.integrity_check(start, end)
+        self.chronomatter.integrity_check(&*self.calendar, start, end)
     }
 
     pub fn save(&self) -> Result<(), NodeError> {
         if let Some(ref p) = self.persist_path {
             let json_path = p.join(format!("{}.json", hex::encode(self.get_tbid())));
             std::fs::create_dir_all(p)?;
-            self.chronomatter.calendar().read().save(json_path.to_str().unwrap())
+            self.calendar.save(json_path.to_str().unwrap())
         } else {
             Ok(())
         }

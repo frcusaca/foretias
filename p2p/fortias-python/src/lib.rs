@@ -491,6 +491,7 @@ impl PyTimeFamilyServer {
         let result = self.server.chronomatter().verify(
             &inner_fortis,
             &content.to_vec(),
+            &*self.server.calendar().inner().read(),
         ).map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
         Ok(result)
     }
@@ -510,6 +511,7 @@ impl PyTimeFamilyServer {
         let result = self.server.chronomatter().verify(
             &fortis,
             &content.to_vec(),
+            &*self.server.calendar().inner().read(),
         ).map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
         Ok(result)
     }
@@ -534,7 +536,8 @@ impl PyTimeFamilyServer {
 
     /// Return the full calendar as a PyCalendar.
     fn get_calendar(&self) -> PyResult<PyCalendar> {
-        let cal = self.server.calendar_read();
+        let binding = self.server.calendar().inner();
+        let cal = binding.read();
         Ok(PyCalendar::from(&*cal))
     }
 
@@ -548,7 +551,8 @@ impl PyTimeFamilyServer {
     ///     List of PyTickRecord objects.
     #[pyo3(signature = (cal_tick_start = 0, count = 10))]
     fn get_calendar_slice(&self, cal_tick_start: u64, count: usize) -> PyResult<Vec<PyTickRecord>> {
-        let cal = self.server.calendar_read();
+        let binding = self.server.calendar().inner();
+        let cal = binding.read();
         let records = cal.get(cal_tick_start, count)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
         Ok(records.iter().map(PyTickRecord::from).collect())
@@ -595,7 +599,8 @@ impl PyTimeFamilyServer {
 
     /// Return the latest tick number, or None if no ticks yet.
     fn get_latest_tick(&self) -> Option<u64> {
-        let cal = self.server.calendar_read();
+        let binding = self.server.calendar().inner();
+        let cal = binding.read();
         cal.ticks.last().map(|t| t.tick_number)
     }
 

@@ -46,11 +46,18 @@ pub struct Fortis {
 }
 
 /// Trait for looking up TickRecords from a calendar or calendar-like store.
+///
+/// Implemented by the Calendar component. Chronomatter uses this for verification
+/// without owning calendar data.
 pub trait CalendarLookup: Send + Sync {
     /// Retrieves up to `count` tick records starting from `tick_number`.
     fn get(&self, tick_number: u64, count: usize) -> Result<Vec<TickRecord>, NodeError>;
     /// Returns the tick number of the most recent record, if any.
     fn latest(&self) -> Option<u64>;
+    /// Returns the TBID of this calendar's owner.
+    fn tbid(&self) -> [u8; 16];
+    /// Returns the TimeBeing name.
+    fn tbn(&self) -> &str;
 }
 
 /// Stamp content under the current tick's key.

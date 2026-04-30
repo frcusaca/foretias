@@ -90,7 +90,7 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
     }
 
     let cm = server.chronomatter();
-    let valid = match cm.verify(&fortis, &content) {
+    let valid = match cm.verify(&fortis, &content, &*server.calendar().inner().read()) {
         Ok(v) => v,
         Err(e) => return resp_error(server, id, jsonrpc::INTERNAL_ERROR,
             format!("verify failed: {}", e)),
@@ -115,14 +115,15 @@ pub fn handle_get_calendar_slice(server: &TimeFamilyServer, params: Value) -> Js
             format!("count exceeds maximum of {}", MAX_CALENDAR_SLICE_COUNT));
     }
 
-    let cal = server.chronomatter().calendar().read();
-    let records = match cal.get(cal_tick_start, count) {
-        Ok(recs) => recs,
-        Err(e) => return resp_error(server, id, jsonrpc::INTERNAL_ERROR,
-            format!("calendar lookup failed: {}", e)),
-    };
+    let calendar = server.calendar().inner();
+    let cal = calendar.read();
+    let records = cal.get(cal_tick_start, count)
+        .map_err(|e| NodeError::Internal(format!("calendar lookup failed: {}", e)));
 
-    resp_success(server, id, serde_json::to_value(&records).unwrap_or(Value::Null))
+    match records {
+        Ok(recs) => resp_success(server, id, serde_json::to_value(&recs).unwrap_or(Value::Null)),
+        Err(e) => resp_error(server, id, jsonrpc::INTERNAL_ERROR, format!("{}", e)),
+    }
 }
 
 pub fn handle_integrity_check(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
@@ -132,7 +133,7 @@ pub fn handle_integrity_check(server: &TimeFamilyServer, params: Value) -> JsonR
     let end = params.get("end").and_then(|v| v.as_u64());
 
     let cm = server.chronomatter();
-    match cm.integrity_check(start, end) {
+    match cm.integrity_check(&*server.calendar().inner().read(), start, end) {
         Ok(results) => {
             let all_valid = results.iter().all(|&v| v);
             resp_success(server, id, serde_json::json!({

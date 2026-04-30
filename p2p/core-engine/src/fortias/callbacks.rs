@@ -4,25 +4,16 @@
 //! and short-lived callbacks. No channels, no message passing, no serialization.
 
 use crate::error::NodeError;
+use crate::fortias::tick::{Fortis, TickRecord};
 use crate::fortias::types::{Message, PublicKey, TickNumber};
-use crate::fortias::tick::Fortis;
 
-/// Called by Chronomatter when a new tick advances.
-/// Calendar implements this to receive tick notifications.
 pub trait TickObserver: Send + Sync {
-    /// Called synchronously on each tick advance.
-    fn on_tick_advance(&self, tick_number: TickNumber, public_key: &PublicKey);
+    fn on_tick_advance(&self, tick_number: TickNumber, public_key: &PublicKey, tick_record: &TickRecord);
 }
 
-/// Stamping interface — Chronomatter implements this.
-/// Calendar calls this to stamp arbitrary content.
-pub trait Stamper: Send + Sync {
-    /// Stamp content with an echo string.
-    fn stamp(&self, content: Message, echo: String)
-        -> Result<Fortis, NodeError>;
-    /// Verify a Fortis against content.
-    fn verify(&self, fortis: &Fortis, content: &Message)
-        -> Result<bool, NodeError>;
+pub trait Attester: Send + Sync {
+    fn stamp(&self, content: Message, echo: String) -> Result<Fortis, NodeError>;
+    fn verify(&self, fortis: &Fortis, content: &Message) -> Result<bool, NodeError>;
 }
 
 /// Peer address for extra-family communication.
