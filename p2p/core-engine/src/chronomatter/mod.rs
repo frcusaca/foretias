@@ -17,7 +17,7 @@ use crate::error::NodeError;
 use crate::fortias::{auto_attestation_blob, Fortis, TickRecord};
 use crate::fortias::tick::CalendarLookup;
 use crate::fortias::callbacks::TickObserver;
-use crate::fortias::types::{Tbid, PublicKey, TickNumber};
+use crate::fortias::types::Tbid;
 
 struct TickKeyPair {
     pub_key: [u8; 32],
@@ -335,6 +335,7 @@ impl Chronomatter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fortias::types::{PublicKey, TickNumber};
     use std::sync::atomic::AtomicU64 as AtomicU64Std;
     use parking_lot::RwLock;
     use crate::fortias::Calendar;

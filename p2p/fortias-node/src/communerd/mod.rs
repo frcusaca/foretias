@@ -6,15 +6,19 @@
 pub mod transport;
 pub mod json_rpc_transport;
 pub mod peer_pool;
+pub mod p2p;
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use fortias_core::config::NodeConfig;
+use fortias_core::error::NodeError;
 use fortias_core::fortias::callbacks::{CommunityQuery, CommunityResponse, PeerAddr as CorePeerAddr, PeerMessenger, TransportError as CoreTransportError};
 use fortias_core::fortias::tick::{Fortis, TickRecord};
 
 use self::json_rpc_transport::JsonRpcTransport;
 use self::peer_pool::PeerPool;
+use self::p2p::events::NetworkEvent;
+use self::p2p::swarm::build_and_spawn_swarm;
 use self::transport::{PeerAddr, PeerTransport, TransportError};
 
 /// Communerd — all P2P traffic flows through this component.
@@ -25,6 +29,12 @@ pub struct Communerd {
     transport: Arc<dyn PeerTransport>,
     peer_pool: PeerPool,
     config: NodeConfig,
+    /// libp2p PeerId of this node, set once by `enable_p2p`.
+    local_peer_id: Arc<OnceLock<libp2p::PeerId>>,
+    /// Shared event receiver for p2p events (owned by whoever calls `enable_p2p`).
+    p2p_events: Arc<OnceLock<tokio::sync::mpsc::UnboundedReceiver<NetworkEvent>>>,
+    /// Background task handle for the p2p event loop.
+    p2p_task: Arc<OnceLock<tokio::task::JoinHandle<()>>>,
 }
 
 impl Clone for Communerd {
@@ -33,6 +43,9 @@ impl Clone for Communerd {
             transport: Arc::clone(&self.transport),
             peer_pool: self.peer_pool.clone(),
             config: self.config.clone(),
+            local_peer_id: Arc::clone(&self.local_peer_id),
+            p2p_events: Arc::clone(&self.p2p_events),
+            p2p_task: Arc::clone(&self.p2p_task),
         }
     }
 }
@@ -44,10 +57,17 @@ impl Communerd {
             config.request_timeout_secs.max(1),
         ));
         let peers: Vec<PeerAddr> = config.peers.iter()
-            .map(|p| PeerAddr { json_rpc: p.clone() })
+            .map(|p| PeerAddr { json_rpc: p.clone(), peer_id: None })
             .collect();
         let peer_pool = PeerPool::new(peers, Arc::clone(&transport), 30);
-        Self { transport, peer_pool, config }
+        Self {
+            transport,
+            peer_pool,
+            config,
+            local_peer_id: Arc::new(OnceLock::new()),
+            p2p_events: Arc::new(OnceLock::new()),
+            p2p_task: Arc::new(OnceLock::new()),
+        }
     }
 
     /// Start background liveness pings for known peers.
@@ -100,6 +120,38 @@ impl Communerd {
     pub fn config(&self) -> &NodeConfig {
         &self.config
     }
+
+    /// Return the local libp2p PeerId, if p2p is enabled.
+    pub fn local_peer_id(&self) -> Option<libp2p::PeerId> {
+        self.local_peer_id.get().copied()
+    }
+
+    /// Enable libp2p p2p transport.
+    ///
+    /// Spawns a swarm on the given listen address and dials the provided peers.
+    /// Returns the swarm handle and an event receiver so the server layer can
+    /// run the event loop.  Only the first call succeeds (idempotent guard).
+    pub async fn enable_p2p(
+        &self,
+        listen: libp2p::Multiaddr,
+        dials: Vec<libp2p::Multiaddr>,
+    ) -> Result<(), NodeError> {
+        // Fast path: already enabled
+        if self.local_peer_id.get().is_some() {
+            return Ok(());
+        }
+
+        let handle = build_and_spawn_swarm(listen, dials).await?;
+
+        let peer_id = handle.local_peer_id;
+        let _ = self.local_peer_id.set(peer_id);
+        let _ = self.p2p_task.set(handle.task);
+
+        tracing::info!(peer = %peer_id, "libp2p swarm started");
+
+        Ok(())
+    }
+
 }
 
 /// Implement PeerMessenger trait (used by Calendar for mutual attestation).
@@ -167,7 +219,7 @@ mod tests {
         let communerd = Communerd::new(make_config());
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
-            communerd.add_peer(PeerAddr { json_rpc: "127.0.0.1:4003".into() }).await;
+            communerd.add_peer(PeerAddr { json_rpc: "127.0.0.1:4003".into(), peer_id: None }).await;
             let peers = communerd.get_peers().await;
             assert_eq!(peers.len(), 2);
         });
@@ -178,7 +230,7 @@ mod tests {
         let communerd = Communerd::new(make_config());
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
-            communerd.remove_peer(&PeerAddr { json_rpc: "127.0.0.1:4002".into() }).await;
+            communerd.remove_peer(&PeerAddr { json_rpc: "127.0.0.1:4002".into(), peer_id: None }).await;
             assert!(communerd.get_peers().await.is_empty());
         });
     }
@@ -189,7 +241,7 @@ mod tests {
         let c2 = communerd.clone();
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
-            c2.add_peer(PeerAddr { json_rpc: "127.0.0.1:4004".into() }).await;
+            c2.add_peer(PeerAddr { json_rpc: "127.0.0.1:4004".into(), peer_id: None }).await;
             let peers = communerd.get_peers().await;
             assert_eq!(peers.len(), 2);
         });

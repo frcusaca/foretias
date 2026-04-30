@@ -10,6 +10,8 @@ use fortias_core::fortias::TickRecord;
 pub struct PeerAddr {
     /// JSON-RPC endpoint (host:port).
     pub json_rpc: String,
+    /// Optional libp2p PeerId for transport-layer identity.
+    pub peer_id: Option<libp2p::PeerId>,
 }
 
 impl std::fmt::Display for PeerAddr {

@@ -47,6 +47,12 @@ enum Commands {
         /// RPC request timeout in seconds (default: 5)
         #[arg(long, default_value_t = 5)]
         request_timeout_secs: u64,
+        /// libp2p listen multiaddr (e.g. "/ip4/0.0.0.0/tcp/9901")
+        #[arg(long)]
+        p2p_listen: Option<String>,
+        /// libp2p peer multiaddr to dial (repeatable, e.g. "/ip4/127.0.0.1/tcp/9901/p2p/<PeerId>")
+        #[arg(long)]
+        p2p_dial: Vec<String>,
     },
     /// Stamp content via TimeFamilyServer
     Stamp {
@@ -250,6 +256,8 @@ async fn cmd_serve(
     peers: Vec<String>,
     mutual_attest_every_chronons: u64,
     request_timeout_secs: u64,
+    p2p_listen: Option<String>,
+    p2p_dial: Vec<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let cfg = load_config();
     let addr = if addr == "127.0.0.1:4001" {
@@ -287,6 +295,20 @@ async fn cmd_serve(
     } else {
         Arc::new(server)
     };
+
+    // Enable libp2p swarm if --p2p-listen is provided
+    if let Some(ref p2p_listen) = p2p_listen {
+        let listen_addr: libp2p::Multiaddr = p2p_listen.parse()
+            .map_err(|e| format!("invalid --p2p-listen {}: {}", p2p_listen, e))?;
+        let dials: Vec<libp2p::Multiaddr> = p2p_dial.iter()
+            .map(|s| s.parse::<libp2p::Multiaddr>()
+                .map_err(|e| format!("invalid --p2p-dial {}: {}", s, e)))
+            .collect::<Result<Vec<_>, String>>()?;
+        if let Some(communerd) = server.communerd() {
+            communerd.enable_p2p(listen_addr, dials).await
+                .map_err(|e| format!("failed to start libp2p swarm: {}", e))?;
+        }
+    }
 
     // Print server info before starting
     println!("Fortias TimeFamilyServer starting...");
@@ -574,8 +596,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Serve { addr, chronon_ns, persist_path, dormant, peer, mutual_attest_every_chronons, request_timeout_secs } => {
-            cmd_serve(addr, chronon_ns, persist_path, dormant, peer, mutual_attest_every_chronons, request_timeout_secs).await
+        Commands::Serve { addr, chronon_ns, persist_path, dormant, peer, mutual_attest_every_chronons, request_timeout_secs, p2p_listen, p2p_dial } => {
+            cmd_serve(addr, chronon_ns, persist_path, dormant, peer, mutual_attest_every_chronons, request_timeout_secs, p2p_listen, p2p_dial).await
         }
         Commands::Stamp { message, message_file, stamp_output, server } => {
             cmd_stamp(message, message_file, stamp_output, server).await

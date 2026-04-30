@@ -30,6 +30,12 @@ pub struct NodeConfig {
     /// RPC request timeout in seconds (default 5).
     #[serde(default = "default_request_timeout_secs")]
     pub request_timeout_secs: u64,
+    /// libp2p listen address as a multiaddr string (e.g. "/ip4/0.0.0.0/tcp/9901").
+    #[serde(default)]
+    pub p2p_listen: Option<String>,
+    /// libp2p peers to dial at startup (e.g. "/ip4/127.0.0.1/tcp/9901/p2p/<PeerId>").
+    #[serde(default)]
+    pub p2p_dial: Vec<String>,
 }
 
 fn default_listen_addr() -> String { "127.0.0.1:4001".to_string() }

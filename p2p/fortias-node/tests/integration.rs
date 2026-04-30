@@ -228,6 +228,7 @@ async fn test_two_nodes_mutual_attest() {
         let result = com.stamp_peer(
             &fortias_node::communerd::transport::PeerAddr {
                 json_rpc: addr_b.clone(),
+                peer_id: None,
             },
             &hex::encode(b"mutual attest test"),
             "ma-test",
@@ -276,6 +277,7 @@ async fn test_peer_unreachable_does_not_crash() {
         let result = com.stamp_peer(
             &fortias_node::communerd::transport::PeerAddr {
                 json_rpc: "127.0.0.1:59999".to_string(),
+                peer_id: None,
             },
             &hex::encode(b"test"),
             "test",
@@ -345,4 +347,67 @@ fn test_crash_recovery_calendar() {
 
     // Cleanup
     let _ = std::fs::remove_dir_all(&tmp_dir);
+}
+
+#[tokio::test]
+async fn two_swarms_connect_and_identify() {
+    use fortias_node::communerd::p2p::swarm::build_and_spawn_swarm;
+    use fortias_node::communerd::p2p::events::NetworkEvent;
+
+    let port_a = find_available_port();
+    let port_b = find_available_port();
+    let ma_a: libp2p::Multiaddr = format!("/ip4/127.0.0.1/tcp/{}", port_a).parse().unwrap();
+    let ma_b: libp2p::Multiaddr = format!("/ip4/127.0.0.1/tcp/{}", port_b).parse().unwrap();
+
+    let mut handle_a = build_and_spawn_swarm(ma_a.clone(), vec![]).await.unwrap();
+    let peer_id_a = handle_a.local_peer_id.clone();
+
+    let dial_a: libp2p::Multiaddr = format!("{}/p2p/{}", ma_a, peer_id_a).parse().unwrap();
+    let mut handle_b = build_and_spawn_swarm(ma_b, vec![dial_a]).await.unwrap();
+
+    let mut a_connected = false;
+    let mut b_connected = false;
+    let mut a_identified = false;
+    let mut b_identified = false;
+
+    let deadline = std::time::Instant::now() + Duration::from_secs(15);
+    while std::time::Instant::now() < deadline {
+        while let Ok(Some(event)) = tokio::time::timeout(
+            Duration::from_millis(100),
+            handle_a.events.recv(),
+        )
+        .await
+        {
+            match event {
+                NetworkEvent::Connected { .. } => a_connected = true,
+                NetworkEvent::Identified { .. } => a_identified = true,
+                _ => {}
+            }
+        }
+        while let Ok(Some(event)) = tokio::time::timeout(
+            Duration::from_millis(100),
+            handle_b.events.recv(),
+        )
+        .await
+        {
+            match event {
+                NetworkEvent::Connected { .. } => b_connected = true,
+                NetworkEvent::Identified { .. } => b_identified = true,
+                _ => {}
+            }
+        }
+        if a_connected && b_connected && a_identified && b_identified {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+
+    assert!(a_connected, "Swarm A never connected");
+    assert!(b_connected, "Swarm B never connected");
+    assert!(a_identified, "Swarm A never identified B");
+    assert!(b_identified, "Swarm B never identified A");
+    assert_ne!(peer_id_a, handle_b.local_peer_id);
+
+    handle_a.task.abort();
+    handle_b.task.abort();
 }
