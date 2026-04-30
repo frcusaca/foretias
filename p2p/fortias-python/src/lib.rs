@@ -13,7 +13,7 @@ use pyo3::types::PyType;
 use serde::{Serialize, Deserialize};
 
 use fortias_core::crypto_server::{self, CryptoServer, FortiasCurve, PublicKeyBytes};
-use fortias_core::fortias::{self, calendar::Calendar as CalendarInner, tick::TickRecord as TickRecordInner};
+use fortias_core::fortias::{self, calendar::Calendar as CalendarInner, tick::TickRecord as TickRecordInner, external_attestation::ExternalAttestation as ExternalAttestationInner};
 use fortias_core::fortias::tick::{Fortis as FortisInner, CalendarLookup};
 use fortias_core::core::bindings::{FortiasPubKey32, FortiasSig64};
 
@@ -86,6 +86,31 @@ impl PyFortis {
     }
 }
 
+/// Python-facing ExternalAttestation.
+#[pyclass]
+#[derive(Clone, Serialize)]
+pub struct PyExternalAttestation {
+    #[pyo3(get)]
+    pub attester_tbid: String,
+    #[pyo3(get)]
+    pub fortis: PyFortis,
+    #[pyo3(get)]
+    pub attester_tick_record: PyTickRecord,
+    #[pyo3(get)]
+    pub received_at_ns: u64,
+}
+
+impl From<&ExternalAttestationInner> for PyExternalAttestation {
+    fn from(att: &ExternalAttestationInner) -> Self {
+        Self {
+            attester_tbid: att.attester_tbid.clone(),
+            fortis: PyFortis::from(&att.fortis),
+            attester_tick_record: PyTickRecord::from(&att.attester_tick_record),
+            received_at_ns: att.received_at_ns,
+        }
+    }
+}
+
 /// Python-facing TickRecord.
 #[pyclass]
 #[derive(Clone, Serialize)]
@@ -100,6 +125,8 @@ pub struct PyTickRecord {
     pub backward_fortis: Vec<u8>,
     #[pyo3(get)]
     pub aa_nonce: Vec<u8>,
+    #[pyo3(get)]
+    pub external_attestations: Vec<PyExternalAttestation>,
 }
 
 impl From<&TickRecordInner> for PyTickRecord {
@@ -110,6 +137,7 @@ impl From<&TickRecordInner> for PyTickRecord {
             forward_fortis: t.forward_fortis.clone(),
             backward_fortis: t.backward_fortis.clone(),
             aa_nonce: t.aa_nonce.to_vec(),
+            external_attestations: t.external_attestations.iter().map(PyExternalAttestation::from).collect(),
         }
     }
 }
@@ -632,6 +660,7 @@ impl PyTimeFamilyServer {
 fn fortias_p2p(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyCryptoServer>()?;
     m.add_class::<PyFortis>()?;
+    m.add_class::<PyExternalAttestation>()?;
     m.add_class::<PyTickRecord>()?;
     m.add_class::<PyCalendar>()?;
     m.add_class::<PyTimeFamily>()?;
