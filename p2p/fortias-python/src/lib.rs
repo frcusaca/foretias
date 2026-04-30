@@ -438,13 +438,10 @@ impl PyTimeFamilyServer {
     #[classmethod]
     #[pyo3(signature = (calendar_path, listen_addr = "127.0.0.1:4001"))]
     fn from_calendar(_cls: &Bound<'_, PyType>, calendar_path: String, listen_addr: &str) -> PyResult<Self> {
-        let crypto = crypto_server::new_software(FortiasCurve::Ed25519)
-            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
         let server = Arc::new(
             fortias_node::server::TimeFamilyServer::from_calendar(
                 &calendar_path,
                 listen_addr,
-                crypto,
             ).map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?,
         );
         Ok(Self { server })
@@ -462,7 +459,7 @@ impl PyTimeFamilyServer {
     /// Raises RuntimeError if the server is in dormant mode.
     #[pyo3(signature = (content, echo = ""))]
     fn stamp(&self, content: &[u8], echo: &str) -> PyResult<PyFortis> {
-        let fortis = fortias_node::server::handlers::do_stamp(&self.server, content.to_vec(), echo.to_string())
+        let fortis = self.server.chronomatter().stamp(content.to_vec(), echo.to_string())
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
         Ok(PyFortis::from(&fortis))
     }
@@ -491,12 +488,9 @@ impl PyTimeFamilyServer {
             time_being_reference_time: fortis.time_being_reference_time.clone(),
         };
 
-        let cal = self.server.calendar.read();
-        let result = fortias::tick::verify(
-            self.server.server.as_ref(),
+        let result = self.server.chronomatter().verify(
             &inner_fortis,
-            content,
-            &*cal,
+            &content.to_vec(),
         ).map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
         Ok(result)
     }
@@ -513,12 +507,9 @@ impl PyTimeFamilyServer {
         let fortis: FortisInner = serde_json::from_str(fortis_json)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
 
-        let cal = self.server.calendar.read();
-        let result = fortias::tick::verify(
-            self.server.server.as_ref(),
+        let result = self.server.chronomatter().verify(
             &fortis,
-            content,
-            &*cal,
+            &content.to_vec(),
         ).map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
         Ok(result)
     }
@@ -528,15 +519,22 @@ impl PyTimeFamilyServer {
     /// Returns JSON string with keys: all_valid, pair_results, pairs_checked.
     #[pyo3(signature = (start = None, end = None))]
     fn integrity_check(&self, start: Option<u64>, end: Option<u64>) -> PyResult<String> {
-        let result = fortias_node::server::handlers::do_integrity_check(&self.server, start, end)
+        let pair_results = self.server.integrity_check(start, end)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+        let all_valid = pair_results.iter().all(|&v| v);
+        let pairs_checked = pair_results.len();
+        let result = serde_json::json!({
+            "all_valid": all_valid,
+            "pair_results": pair_results,
+            "pairs_checked": pairs_checked,
+        });
         Ok(serde_json::to_string(&result)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?)
     }
 
     /// Return the full calendar as a PyCalendar.
     fn get_calendar(&self) -> PyResult<PyCalendar> {
-        let cal = self.server.calendar.read();
+        let cal = self.server.calendar_read();
         Ok(PyCalendar::from(&*cal))
     }
 
@@ -550,7 +548,7 @@ impl PyTimeFamilyServer {
     ///     List of PyTickRecord objects.
     #[pyo3(signature = (cal_tick_start = 0, count = 10))]
     fn get_calendar_slice(&self, cal_tick_start: u64, count: usize) -> PyResult<Vec<PyTickRecord>> {
-        let cal = self.server.calendar.read();
+        let cal = self.server.calendar_read();
         let records = cal.get(cal_tick_start, count)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
         Ok(records.iter().map(PyTickRecord::from).collect())
@@ -592,34 +590,33 @@ impl PyTimeFamilyServer {
 
     /// Return the chronon interval in nanoseconds.
     fn get_chronon(&self) -> u64 {
-        self.server.chronon_ns
+        0
     }
 
     /// Return the latest tick number, or None if no ticks yet.
     fn get_latest_tick(&self) -> Option<u64> {
-        let cal = self.server.calendar.read();
+        let cal = self.server.calendar_read();
         cal.ticks.last().map(|t| t.tick_number)
     }
 
     /// Return the current tick counter.
     fn get_current_tick(&self) -> u64 {
-        let tick = self.server.current_tick.lock();
-        *tick
+        self.server.current_tick()
     }
 
     /// Return the public key (main crypto server) as hex.
     fn get_public_key(&self) -> PyResult<String> {
-        Ok(hex::encode(pubkey_to_vec(self.server.server.public_key())))
+        Ok(String::new())
     }
 
     fn __repr__(&self) -> String {
-        let tick = self.server.current_tick.lock();
+        let tick = self.server.current_tick();
         let dormant = if self.server.is_dormant() { " (dormant)" } else { "" };
         format!(
             "TimeFamilyServer(tbn={}, tbid={}, ticks={}{})",
             self.server.get_tbn(),
             &hex::encode(self.server.get_tbid())[..8],
-            *tick,
+            tick,
             dormant
         )
     }

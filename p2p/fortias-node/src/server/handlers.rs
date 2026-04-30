@@ -2,13 +2,11 @@ use serde_json::Value;
 
 use fortias_core::error::NodeError;
 use fortias_core::fortias::tick::CalendarLookup;
-use fortias_core::fortias::{auto_attestation_blob, Fortis, TickRecord};
+use fortias_core::fortias::Fortis;
 use super::jsonrpc::{self, JsonRpcResponse};
 use super::TimeFamilyServer;
 
-/// Maximum content size for stamp/verify payloads (1 GB).
 const MAX_CONTENT_BYTES: usize = 1_073_741_824;
-/// Maximum calendar slice count per request.
 const MAX_CALENDAR_SLICE_COUNT: usize = 10_000;
 
 fn resp_success(server: &TimeFamilyServer, id: Option<Value>, result: Value) -> JsonRpcResponse {
@@ -27,7 +25,6 @@ fn resp_error(server: &TimeFamilyServer, id: Option<Value>, code: i32, message: 
     }
 }
 
-/// Handles a `stamp` JSON-RPC request: creates a Fortis attestation for the given content.
 pub fn handle_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
     let id = params.get("id").cloned();
 
@@ -48,17 +45,13 @@ pub fn handle_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse
             format!("content exceeds maximum size of {} bytes", MAX_CONTENT_BYTES));
     }
 
-    if server.is_dormant() {
-        return resp_error(server, id, jsonrpc::INTERNAL_ERROR,
-            "Cannot stamp: server is in verify-only mode".into());
-    }
-
     let echo = params.get("echo")
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
 
-    match do_stamp(server, content, echo) {
+    let cm = server.chronomatter();
+    match cm.stamp(content, echo) {
         Ok(fortis) => {
             if let Err(e) = server.save() {
                 tracing::warn!("failed to persist calendar after stamp: {}", e);
@@ -70,84 +63,6 @@ pub fn handle_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse
     }
 }
 
-pub fn do_stamp(server: &TimeFamilyServer, content: Vec<u8>, echo: String) -> Result<Fortis, NodeError> {
-    let tick = {
-        let mut counter = server.current_tick.lock();
-        *counter += 1;
-        *counter
-    };
-
-    let tbid = server.tbid;
-    let tbn = server.tbn.clone();
-    let tbid_str = hex::encode(tbid);
-
-    // Generate new keypair for this tick
-    let kp_idx = server.generate_and_store_keypair()?;
-    let new_pub = server.keypair_pub(kp_idx).unwrap();
-
-    // Build auto-attestation (forward_fortis / backward_fortis)
-    let (forward_fortis, backward_fortis, aa_nonce) = if server.calendar.read().ticks.is_empty() {
-        // Genesis: self-signed — both sides use the same keypair
-        let (ma_blob, nonce) = auto_attestation_blob(&tbid_str, tick, &new_pub, tick, &new_pub)?;
-        let sig = server.sign_with_keypair(kp_idx, &ma_blob)?;
-        (sig.clone(), sig, nonce)
-    } else {
-        // Non-genesis: auto-attested between previous tick and current tick
-        let cal = server.calendar.read();
-        let latest_rec = cal.ticks.last().unwrap();
-        let prev_tick = latest_rec.tick_number;
-        let prev_kp_idx = (prev_tick - 1) as usize;
-        let prev_pub = server.keypair_pub(prev_kp_idx).unwrap();
-
-        let (ma_blob, nonce) = auto_attestation_blob(&tbid_str, prev_tick, &prev_pub, tick, &new_pub)?;
-
-        let forward_sig = server.sign_with_keypair(prev_kp_idx, &ma_blob)?;
-        let backward_sig = server.sign_with_keypair(kp_idx, &ma_blob)?;
-        (forward_sig, backward_sig, nonce)
-    };
-
-    // Sign the content with this tick's keypair
-    let mut sig_input = Vec::with_capacity(16 + 8 + content.len());
-    sig_input.extend_from_slice(&tbid);
-    sig_input.extend_from_slice(&tick.to_be_bytes());
-    sig_input.extend_from_slice(&content);
-
-    let sig = server.keypairs.read().get(kp_idx).unwrap().priv_key
-        .sign(&sig_input)
-        .map_err(|e| NodeError::Crypto(e))?;
-
-    let content_hash = server.server.sha256(&content)?;
-
-    let now_ns = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|e| NodeError::Internal(format!("SystemTime before UNIX_EPOCH: {}", e)))?
-        .as_nanos() as u64;
-    let time_being_reference_time = format!("UE+{}ns", now_ns);
-
-    let fortis = Fortis {
-        tick_number: tick,
-        content_hash: content_hash.bytes,
-        signature: sig.bytes.to_vec(),
-        tbid,
-        echo,
-        tbn,
-        time_being_reference_time,
-    };
-
-    let record = TickRecord {
-        tick_number: tick,
-        public_key: new_pub.to_vec(),
-        forward_fortis,
-        backward_fortis,
-        aa_nonce,
-        external_attestations: Vec::new(),
-    };
-
-    server.calendar.write().append(record)?;
-    Ok(fortis)
-}
-
-/// Handles a `verify` JSON-RPC request: verifies a Fortis attestation against content and calendar.
 pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
     let id = params.get("id").cloned();
 
@@ -174,12 +89,8 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
             format!("content exceeds maximum size of {} bytes", MAX_CONTENT_BYTES));
     }
 
-    let valid = match fortias_core::fortias::tick::verify(
-        server.server.as_ref(),
-        &fortis,
-        &content,
-        &*server.calendar.read(),
-    ) {
+    let cm = server.chronomatter();
+    let valid = match cm.verify(&fortis, &content) {
         Ok(v) => v,
         Err(e) => return resp_error(server, id, jsonrpc::INTERNAL_ERROR,
             format!("verify failed: {}", e)),
@@ -188,7 +99,6 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
     resp_success(server, id, serde_json::json!({"valid": valid}))
 }
 
-/// Handles a `get_calendar_slice` JSON-RPC request: returns tick records from a given starting tick.
 pub fn handle_get_calendar_slice(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
     let id = params.get("id").cloned();
 
@@ -205,7 +115,7 @@ pub fn handle_get_calendar_slice(server: &TimeFamilyServer, params: Value) -> Js
             format!("count exceeds maximum of {}", MAX_CALENDAR_SLICE_COUNT));
     }
 
-    let cal = server.calendar.read();
+    let cal = server.chronomatter().calendar().read();
     let records = match cal.get(cal_tick_start, count) {
         Ok(recs) => recs,
         Err(e) => return resp_error(server, id, jsonrpc::INTERNAL_ERROR,
@@ -215,38 +125,25 @@ pub fn handle_get_calendar_slice(server: &TimeFamilyServer, params: Value) -> Js
     resp_success(server, id, serde_json::to_value(&records).unwrap_or(Value::Null))
 }
 
-/// Handles an `integrity_check` JSON-RPC request: verifies chain integrity over a tick range.
 pub fn handle_integrity_check(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
     let id = params.get("id").cloned();
 
     let start = params.get("start").and_then(|v| v.as_u64());
     let end = params.get("end").and_then(|v| v.as_u64());
 
-    match do_integrity_check(server, start, end) {
-        Ok(result) => resp_success(server, id, result),
+    let cm = server.chronomatter();
+    match cm.integrity_check(start, end) {
+        Ok(results) => {
+            let all_valid = results.iter().all(|&v| v);
+            resp_success(server, id, serde_json::json!({
+                "all_valid": all_valid,
+                "pair_results": results,
+                "pairs_checked": results.len(),
+            }))
+        }
         Err(e) => resp_error(server, id, jsonrpc::INTERNAL_ERROR,
             format!("integrity check failed: {}", e)),
     }
-}
-
-pub fn do_integrity_check(
-    server: &TimeFamilyServer,
-    start: Option<u64>,
-    end: Option<u64>,
-) -> Result<Value, NodeError> {
-    let results = server.calendar.read().integrity_check(
-        server.server.as_ref(),
-        &hex::encode(server.tbid),
-        start,
-        end,
-    )?;
-
-    let all_valid = results.iter().all(|&v| v);
-    Ok(serde_json::json!({
-        "all_valid": all_valid,
-        "pair_results": results,
-        "pairs_checked": results.len(),
-    }))
 }
 
 #[cfg(test)]
@@ -391,15 +288,6 @@ mod tests {
         let params = serde_json::json!({"cal_tick_start": 0, "count": 10_001});
         let resp = handle_get_calendar_slice(&server, params);
         assert!(resp.error.is_some());
-    }
-
-    #[test]
-    fn do_stamp_produces_valid_fortis() {
-        let server = make_server();
-        let fortis = do_stamp(&server, b"test".to_vec(), "echo".to_string()).unwrap();
-        assert_eq!(fortis.tick_number, 1);
-        assert!(!fortis.signature.is_empty());
-        assert_eq!(fortis.echo, "echo");
     }
 
     #[test]

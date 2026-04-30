@@ -246,13 +246,9 @@ async fn cmd_serve(
     let server: TimeFamilyServer = if dormant {
         let persist = persist_path.ok_or("--persist-path is required for --dormant mode")?;
         let json_path = PathBuf::from(&persist);
-        let crypto: Box<dyn CryptoServer> = crypto_server::new_software(
-            crypto_server::FortiasCurve::Ed25519,
-        )?;
         TimeFamilyServer::from_calendar(
             json_path.to_str().unwrap(),
             &addr,
-            crypto,
         )?
     } else {
         let persist: Option<PathBuf> = persist_path.map(PathBuf::from);
