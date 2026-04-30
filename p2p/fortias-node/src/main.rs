@@ -7,8 +7,9 @@ use clap::{Parser, Subcommand};
 use serde::Deserialize;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
-use fortias_core::crypto_server::{self, CryptoServer};
-use fortias_core::fortias::tick::TickRecord;
+use fortias_core::config::NodeConfig;
+use fortias_core::crypto_server;
+use fortias_core::fortias::tick::{TickRecord, CalendarLookup};
 
 use fortias_node::server::TimeFamilyServer;
 
@@ -36,6 +37,15 @@ enum Commands {
         /// Start in dormant (verify-only) mode, loads calendar from --persist-path
         #[arg(long, requires = "persist_path")]
         dormant: bool,
+        /// Peer address for mutual attestation (can specify multiple times)
+        #[arg(long)]
+        peer: Vec<String>,
+        /// Mutual attestation frequency in chronons (default: 1 = every tick)
+        #[arg(long, default_value_t = 1)]
+        mutual_attest_every_chronons: u64,
+        /// RPC request timeout in seconds (default: 5)
+        #[arg(long, default_value_t = 5)]
+        request_timeout_secs: u64,
     },
     /// Stamp content via TimeFamilyServer
     Stamp {
@@ -93,6 +103,12 @@ enum Commands {
         /// Remote TimeBeing server address
         #[arg(short, long, default_value = "127.0.0.1:4001")]
         server: String,
+    },
+    /// Inspect external attestations in a persisted calendar
+    InspectAttestations {
+        /// Path to calendar JSON file
+        #[arg(short, long)]
+        calendar: String,
     },
 }
 
@@ -230,6 +246,9 @@ async fn cmd_serve(
     chronon_ns: u64,
     persist_path: Option<String>,
     dormant: bool,
+    peers: Vec<String>,
+    mutual_attest_every_chronons: u64,
+    request_timeout_secs: u64,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let cfg = load_config();
     let addr = if addr == "127.0.0.1:4001" {
@@ -254,7 +273,19 @@ async fn cmd_serve(
         let persist: Option<PathBuf> = persist_path.map(PathBuf::from);
         TimeFamilyServer::new_with_persist(&addr, chronon_ns, persist)?
     };
-    let server = Arc::new(server);
+
+    let server = if !peers.is_empty() {
+        let node_config = NodeConfig {
+            listen_addr: addr.clone(),
+            peers,
+            mutual_attest_every_n: mutual_attest_every_chronons,
+            request_timeout_secs,
+            ..Default::default()
+        };
+        Arc::new(server.with_config(node_config))
+    } else {
+        Arc::new(server)
+    };
 
     // Print server info before starting
     println!("Fortias TimeFamilyServer starting...");
@@ -265,6 +296,10 @@ async fn cmd_serve(
         println!("  Mode   : dormant (verify-only)");
     } else {
         println!("  Chronon: {}", humanize_nanoseconds(chronon_ns));
+    }
+    if server.communerd().is_some() {
+        println!("  Peers  : {}", server.communerd().unwrap().config().peers.join(", "));
+        println!("  Mutual Attest Every: {} chronons", server.communerd().unwrap().config().mutual_attest_every_n);
     }
 
     let handle = server.clone().start()?;
@@ -433,6 +468,100 @@ async fn fetch_calendar_slice(
     Ok(records)
 }
 
+/// Inspect external attestations in a persisted calendar file.
+/// Loads the calendar, re-verifies each attestation's signature and hash,
+/// prints results, exits 0 if all valid, 1 if any invalid.
+fn cmd_inspect_attestations(calendar_path: String) -> Result<(), Box<dyn std::error::Error>> {
+    let contents = std::fs::read_to_string(&calendar_path)
+        .map_err(|e| format!("Failed to read {}: {}", calendar_path, e))?;
+
+    let calendar: fortias_core::fortias::calendar::Calendar = serde_json::from_str(&contents)
+        .map_err(|e| format!("Failed to parse calendar JSON: {}", e))?;
+
+    let crypto = crypto_server::new_software(
+        crypto_server::FortiasCurve::Ed25519,
+    )?;
+    let cal_lookup = CalendarInspect { calendar: &calendar };
+    let mut total_attestations = 0u64;
+    let mut valid_count = 0u64;
+    let mut invalid_count = 0u64;
+
+    for tick in &calendar.ticks {
+        for att in &tick.external_attestations {
+            total_attestations += 1;
+
+            let content = match serde_json::to_vec(&tick) {
+                Ok(c) => c,
+                Err(e) => {
+                    println!("tick={} attester={} sig=INVALID (serialize error: {})",
+                        tick.tick_number, att.attester_tbid, e);
+                    invalid_count += 1;
+                    continue;
+                }
+            };
+
+            let valid = match fortias_core::fortias::tick::verify(
+                &*crypto, &att.fortis, &content, &cal_lookup,
+            ) {
+                Ok(v) => v,
+                Err(e) => {
+                    println!("tick={} attester={} sig=INVALID (verify error: {})",
+                        tick.tick_number, att.attester_tbid, e);
+                    invalid_count += 1;
+                    continue;
+                }
+            };
+
+            if valid {
+                println!("tick={} attester={} attester_tick={} sig=VALID",
+                    tick.tick_number, att.attester_tbid, att.fortis.tick_number);
+                valid_count += 1;
+            } else {
+                println!("tick={} attester={} attester_tick={} sig=INVALID",
+                    tick.tick_number, att.attester_tbid, att.fortis.tick_number);
+                invalid_count += 1;
+            }
+        }
+    }
+
+    println!("\n--- Summary ---");
+    println!("Total attestations: {}", total_attestations);
+    println!("Valid:              {}", valid_count);
+    println!("Invalid:            {}", invalid_count);
+
+    if invalid_count > 0 {
+        std::process::exit(1);
+    }
+
+    Ok(())
+}
+
+struct CalendarInspect<'a> {
+    calendar: &'a fortias_core::fortias::calendar::Calendar,
+}
+
+impl CalendarLookup for CalendarInspect<'_> {
+    fn get(&self, start: u64, count: usize) -> Result<Vec<TickRecord>, fortias_core::error::NodeError> {
+        Ok(self.calendar.ticks.iter()
+            .skip(start as usize)
+            .take(count)
+            .cloned()
+            .collect())
+    }
+
+    fn latest(&self) -> Option<u64> {
+        self.calendar.ticks.last().map(|t| t.tick_number)
+    }
+
+    fn tbid(&self) -> [u8; 16] {
+        self.calendar.tbid
+    }
+
+    fn tbn(&self) -> &str {
+        &self.calendar.tbn
+    }
+}
+
 // ── Entry point ─────────────────────────────────────────────────────────────
 
 #[tokio::main]
@@ -444,7 +573,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Serve { addr, chronon_ns, persist_path, dormant } => cmd_serve(addr, chronon_ns, persist_path, dormant).await,
+        Commands::Serve { addr, chronon_ns, persist_path, dormant, peer, mutual_attest_every_chronons, request_timeout_secs } => {
+            cmd_serve(addr, chronon_ns, persist_path, dormant, peer, mutual_attest_every_chronons, request_timeout_secs).await
+        }
         Commands::Stamp { message, message_file, stamp_output, server } => {
             cmd_stamp(message, message_file, stamp_output, server).await
         }
@@ -453,6 +584,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::ProveVerification { message, message_file, fortis, fortis_file, proof_output, server } => {
             cmd_prove_verification(message, message_file, fortis, fortis_file, proof_output, server).await
+        }
+        Commands::InspectAttestations { calendar } => {
+            cmd_inspect_attestations(calendar)?;
+            Ok(())
         }
     }
 }
