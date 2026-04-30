@@ -2,8 +2,8 @@
 //!
 //! Exposes: CryptoServer, Fortis, TickRecord, Calendar, TimeFamily.
 
+#![cfg_attr(debug_assertions, allow(rustdoc::all))]
 #![allow(unsafe_op_in_unsafe_fn)]
-#![allow(missing_docs)]
 
 use std::path::PathBuf;
 use std::sync::Arc;

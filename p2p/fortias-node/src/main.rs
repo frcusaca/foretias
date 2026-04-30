@@ -1,4 +1,5 @@
 //! Fortias CLI — command-line interface for TimeFamilyServer.
+#![cfg_attr(debug_assertions, allow(rustdoc::all))]
 
 use std::path::PathBuf;
 use std::sync::Arc;

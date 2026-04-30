@@ -1,6 +1,7 @@
 //! Fortias Core — Rust library wrapping C11 verified core.
+#![cfg_attr(debug_assertions, allow(rustdoc::all))]
 
-#![warn(missing_docs)]
+#![allow(missing_docs)]
 #![deny(unsafe_op_in_unsafe_fn)]
 
 pub mod error;
