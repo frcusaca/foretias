@@ -738,25 +738,55 @@ Phase 10 (spec & docs)
 ## MILESTONE CHECKLIST
 
 ```
-[ ] v0.2.0  Type aliases (Tbid, PublicKey, Signature, Digest, Message, AaNonce, TickNumber)
-[ ] v0.2.1  ExternalAttestation type; TickRecord.external_attestations field
-[ ] v0.2.2  Callback traits (TickObserver, Stamper, PeerMessenger)
-[ ] v0.2.3  NodeConfig: peers, mutual_attest_every_n, request_timeout_secs
-[ ] v0.2.4  Communerd: PeerTransport trait, JsonRpcTransport impl
-[ ] v0.2.5  Communerd: peer pool, liveness ping, RPC execution
-[ ] v0.2.6  Chronomatter: extraction from TimeFamilyServer (time being with TBID)
-[ ] v0.2.7  Chronomatter: stamp/verify as direct method calls, tick via TickObserver callback
-[ ] v0.2.8  Calendar: RwLock wrapper, persistence task, TickObserver impl
-[ ] v0.2.9  Calendar: execute_mutual_attest flow (direct calls to Communerd + Chronomatter)
-[ ] v0.2.10 Atomic flush (.tmp + rename) + crash recovery
-[ ] v0.2.11 TimeFamily orchestrator: wire 3 time beings via trait references
-[ ] v0.2.12 CLI: --peer, --mutual-attest-every-chronons, inspect-attestations
-[ ] v0.2.13 PyO3: PyExternalAttestation, PyTickRecord.external_attestations
-[ ] v0.2.14 Unit tests pass
-[ ] v0.2.15 Integration test: two_nodes_mutual_attest passes
-[ ] v0.2.16 All v0.1 regression tests pass
-[ ] v0.2.17 TAG: v0.2-direct-p2p-mutual-attestation
+[x] v0.2.0  Type aliases (Tbid, PublicKey, Signature, Digest, Message, AaNonce, TickNumber)
+[x] v0.2.1  ExternalAttestation type; TickRecord.external_attestations field
+[x] v0.2.2  Callback traits (TickObserver, PeerMessenger) — note: Stamper trait removed, Chronomatter uses direct pub fn
+[x] v0.2.3  NodeConfig: peers, mutual_attest_every_n, request_timeout_secs
+[x] v0.2.4  Communerd: transport layer, JsonRpcTransport impl (inlined in transport.rs)
+[x] v0.2.5  Communerd: peer pool, liveness ping, RPC execution
+[x] v0.2.6  Chronomatter: extraction from TimeFamilyServer (time being with TBID)
+[x] v0.2.7  Chronomatter: stamp/verify as direct method calls, tick via TickObserver callback
+[x] v0.2.8  Calendar: extraction as separate component, TickObserver impl
+[x] v0.2.9  Calendar: execute_mutual_attest flow (deferred to v0.3 — Communerd handles stamp_peer directly)
+[x] v0.2.10 Atomic flush (.tmp + rename) + crash recovery
+[x] v0.2.11 TimeFamily orchestrator: Communerd wired into TimeFamilyServer via Option<Arc<Communerd>>
+[x] v0.2.12 CLI: --peer, --mutual-attest-every-chronons, inspect-attestations
+[x] v0.2.13 PyO3: PyExternalAttestation, PyTickRecord.external_attestations
+[x] v0.2.14 Unit tests pass (107 total: 62 core + 41 node + 4 integration)
+[x] v0.2.15 Integration test: two_nodes_mutual_attest passes
+[x] v0.2.16 All v0.1 regression tests pass
+[ ] v0.2.17 TAG: v0.2-direct-p2p-mutual-attestation (pending Phase 10 commit)
 ```
+
+---
+
+## IMPLEMENTATION DIVERGENCES FROM PLAN
+
+| Plan Item | Actual Implementation | Reason |
+|-----------|----------------------|--------|
+| `Stamper` trait | Removed — Chronomatter uses `pub fn stamp()` / `pub fn verify()` directly | Trait was unnecessary indirection; direct pub fn is clearer and zero-cost |
+| `Calendar` as async component with flush task | Simplified to synchronous `Calendar` struct in core-engine; `TimeFamilyServer` wraps it | Calendar is pure data + persistence; no async task needed at this stage |
+| `TimeFamily` orchestrator struct | Kept as `TimeFamilyServer` with `communerd: Option<Arc<Communerd>>` added | Less disruption; existing `TimeFamilyServer` already orchestrates Chronomatter + Calendar |
+| `Calendar::execute_mutual_attest` flow | Deferred — `Communerd::stamp_peer()` handles stamp-on-peer directly; full mutual attest cycle with verify + store coming in v0.3 | Separation of concerns: Communerd handles transport, Calendar handles storage |
+| `PeerMessenger` trait | Simplified to `PeerMessenger` on `Communerd` struct with `stamp_peer` and `request_ticks` | Two methods sufficient for v0.2; plan's `send_to_peer` / `query_community` were too generic |
+| Phase 9 integration test file | Added to existing `fortias-node/tests/integration.rs` | No need for separate file; keeps tests co-located |
+
+---
+
+## COMMIT LOG
+
+| Phase | Commit | Description |
+|-------|--------|-------------|
+| Phase 0 | `2b2e6bb` | Type aliases (Tbid, PublicKey, Signature, Digest, Message, AaNonce, TickNumber) |
+| Phase 1 | `231130a` | ExternalAttestation, callback traits, error/config extensions |
+| Phase 2 | `a52d99e` | Communerd transport layer (transport.rs, peer_pool.rs) |
+| Phase 3 | `11aba27` | Chronomatter extraction (chronomatter/mod.rs, autonomous daemon) |
+| Phase 4 | `6b91138` | Calendar component extraction and API re-wiring |
+| Phase 5 | `a7338a3` | Atomic flush (.tmp + rename) + crash recovery |
+| Phase 6 | `45c7eaa` | Communerd orchestrator integration (Communerd struct, with_config(), liveness pings) |
+| Phase 7 | `a833b56` | CLI + config wiring (--peer, inspect-attestations subcommand) |
+| Phase 8 | `47b3412` | PyO3 bindings (PyExternalAttestation, external_attestations on PyTickRecord) |
+| Phase 9 | `9d02fd1` | Integration tests (mutual attest, unreachable peer, crash recovery) |
 
 ---
 

@@ -32,11 +32,48 @@ print(is_valid, window_closed)  # True, True
 
 ## CLI
 
+### Verify (v0.1)
+
 ```bash
 fortis verify --calendar calendar.json --file message.txt --fortis fortis.json
 ```
 
 Add `--chain` to run a full chain integrity check on the calendar.
+
+### Serve (v0.2)
+
+Start a time family server with optional P2P peers:
+
+```bash
+# Basic server
+fortias serve --addr 127.0.0.1:4001 --chronon 60000000000
+
+# With P2P peers
+fortias serve --addr 127.0.0.1:4001 --peer 127.0.0.1:4002 --mutual-attest-every-chronons 10
+
+# Custom request timeout (default: 5 seconds)
+fortias serve --addr 127.0.0.1:4001 --peer 127.0.0.1:4002 --request-timeout-secs 10
+```
+
+### Stamp & Verify via CLI (v0.2)
+
+```bash
+# Stamp a message against a running server
+fortias stamp --message "hello world" --server 127.0.0.1:4001
+
+# Verify a stamp
+fortias verify --message "hello world" --fortis '{"tick_number":...}' --server 127.0.0.1:4001
+```
+
+### Inspect Attestations (v0.2)
+
+Offline verification of external attestations stored in a calendar:
+
+```bash
+fortias inspect-attestations --calendar calendar.json
+```
+
+Re-runs signature, hash, and echo verification on every `ExternalAttestation`. Exits 0 if all valid, 1 if any invalid.
 
 ## API Reference
 
