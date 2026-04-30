@@ -21,6 +21,9 @@ pub struct TickRecord {
     /// Cryptographic nonce (16 bytes) used in the auto-attestation blob for this tick pair.
     /// This prevents replay attacks by ensuring each blob is unique even if the tick data repeats.
     pub aa_nonce: [u8; 16],
+    /// External attestations from other Time Families.
+    #[serde(default)]
+    pub external_attestations: Vec<super::external_attestation::ExternalAttestation>,
 }
 
 /// A cryptographically signed attestation of content at a specific tick.
@@ -209,6 +212,7 @@ mod tests {
             forward_fortis: serde_json::to_vec(&fortis).unwrap(),
             backward_fortis: vec![],
             aa_nonce: [0u8; 16],
+            external_attestations: Vec::new(),
         }).unwrap();
         cal
     }
@@ -282,6 +286,7 @@ mod tests {
             forward_fortis: vec![],
             backward_fortis: vec![],
             aa_nonce: [0u8; 16],
+            external_attestations: Vec::new(),
         }).unwrap();
         let content = b"test";
         let fortis = stamp(server.as_ref(), &tbid, 1, content, "e", "bad-cal")
@@ -312,6 +317,7 @@ mod tests {
             forward_fortis: vec![],
             backward_fortis: vec![],
             aa_nonce: [0u8; 16],
+            external_attestations: Vec::new(),
         };
         let curr = TickRecord {
             tick_number: 2,
@@ -319,6 +325,7 @@ mod tests {
             forward_fortis: sig_bytes.clone(),
             backward_fortis: sig_bytes,
             aa_nonce: nonce,
+            external_attestations: Vec::new(),
         };
 
         let valid = verify_pair(server.as_ref(), &tbid_str, &prev, &curr).unwrap();
@@ -345,6 +352,7 @@ mod tests {
             forward_fortis: vec![],
             backward_fortis: vec![],
             aa_nonce: [0u8; 16],
+            external_attestations: Vec::new(),
         };
         let curr = TickRecord {
             tick_number: 2,
@@ -352,6 +360,7 @@ mod tests {
             forward_fortis: sig_bytes.clone(),
             backward_fortis: sig_bytes.clone(),
             aa_nonce: nonce,
+            external_attestations: Vec::new(),
         };
 
         assert!(verify_pair(server.as_ref(), &tbid_str, &prev, &curr).unwrap());
@@ -363,6 +372,7 @@ mod tests {
             forward_fortis: sig_bytes,
             backward_fortis: vec![0u8; 64],
             aa_nonce: nonce,
+            external_attestations: Vec::new(),
         };
 
 let valid = verify_pair(server.as_ref(), &tbid_str, &prev, &curr_tampered).unwrap();

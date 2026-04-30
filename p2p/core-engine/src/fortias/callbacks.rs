@@ -1,0 +1,75 @@
+//! Intra-family callback traits.
+//!
+//! Chronomatter, Calendar, and Communerd communicate via direct method calls
+//! and short-lived callbacks. No channels, no message passing, no serialization.
+
+use crate::error::NodeError;
+use crate::fortias::types::{Message, PublicKey, TickNumber};
+use crate::fortias::tick::Fortis;
+
+/// Called by Chronomatter when a new tick advances.
+/// Calendar implements this to receive tick notifications.
+pub trait TickObserver: Send + Sync {
+    /// Called synchronously on each tick advance.
+    fn on_tick_advance(&self, tick_number: TickNumber, public_key: &PublicKey);
+}
+
+/// Stamping interface — Chronomatter implements this.
+/// Calendar calls this to stamp arbitrary content.
+pub trait Stamper: Send + Sync {
+    /// Stamp content with an echo string.
+    fn stamp(&self, content: Message, echo: String)
+        -> Result<Fortis, NodeError>;
+    /// Verify a Fortis against content.
+    fn verify(&self, fortis: &Fortis, content: &Message)
+        -> Result<bool, NodeError>;
+}
+
+/// Peer address for extra-family communication.
+#[derive(Debug, Clone)]
+pub struct PeerAddr {
+    /// JSON-RPC endpoint address.
+    pub json_rpc: String,
+}
+
+/// Query types for community state.
+#[derive(Debug, Clone)]
+pub enum CommunityQuery {
+    /// Get known peers.
+    KnownPeers,
+    /// Get peer by address.
+    PeerByAddr(PeerAddr),
+}
+
+/// Response types for community queries.
+#[derive(Debug, Clone)]
+pub enum CommunityResponse {
+    /// List of known peer addresses.
+    KnownPeers(Vec<PeerAddr>),
+    /// Peer status.
+    PeerStatus { peer: PeerAddr, alive: bool },
+}
+
+/// Transport-level error.
+#[derive(Debug)]
+pub enum TransportError {
+    /// Connection failed.
+    Connect(String),
+    /// RPC error from peer.
+    Rpc { code: i32, message: String },
+    /// Request timed out.
+    Timeout,
+    /// Response decode failed.
+    Decode(String),
+}
+
+/// Community query interface — Communerd implements this.
+/// Calendar calls this for all extra-family communication.
+pub trait PeerMessenger: Send + Sync {
+    /// Send a JSON-RPC call to a peer and receive the result.
+    fn send_to_peer(&self, addr: &PeerAddr, method: &str, params: serde_json::Value)
+        -> Result<serde_json::Value, TransportError>;
+    /// Query community state.
+    fn query_community(&self, query: CommunityQuery)
+        -> Result<CommunityResponse, TransportError>;
+}

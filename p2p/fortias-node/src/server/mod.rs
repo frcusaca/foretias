@@ -243,6 +243,7 @@ impl TimeFamilyServer {
             forward_fortis,
             backward_fortis,
             aa_nonce,
+            external_attestations: Vec::new(),
         };
 
         self.calendar.write().append(record.clone())?;

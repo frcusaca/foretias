@@ -21,12 +21,23 @@ pub struct NodeConfig {
     /// Whether the node operates in serialized mode.
     #[serde(default)]
     pub serialized: bool,
+    /// Peer addresses for mutual attestation (e.g., "host:port").
+    #[serde(default)]
+    pub peers: Vec<String>,
+    /// Mutual attestation frequency in chronons (default 1 = every tick).
+    #[serde(default = "default_mutual_attest_every_n")]
+    pub mutual_attest_every_n: u64,
+    /// RPC request timeout in seconds (default 5).
+    #[serde(default = "default_request_timeout_secs")]
+    pub request_timeout_secs: u64,
 }
 
 fn default_listen_addr() -> String { "127.0.0.1:4001".to_string() }
 fn default_version() -> String { env!("CARGO_PKG_VERSION").to_string() }
 fn default_calendar_path() -> PathBuf { PathBuf::from(".fortias/calendars") }
 fn default_chronon_ns() -> u64 { 60_000_000_000 }
+fn default_mutual_attest_every_n() -> u64 { 1 }
+fn default_request_timeout_secs() -> u64 { 5 }
 
 impl NodeConfig {
     /// Loads configuration from a TOML file at the given path; returns defaults on any error.

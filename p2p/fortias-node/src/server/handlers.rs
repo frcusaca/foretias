@@ -140,6 +140,7 @@ pub fn do_stamp(server: &TimeFamilyServer, content: Vec<u8>, echo: String) -> Re
         forward_fortis,
         backward_fortis,
         aa_nonce,
+        external_attestations: Vec::new(),
     };
 
     server.calendar.write().append(record)?;

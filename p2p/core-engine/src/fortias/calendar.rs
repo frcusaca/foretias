@@ -90,6 +90,24 @@ impl Calendar {
         let cal: Calendar = serde_json::from_str(&data)?;
         Ok(cal)
     }
+
+    /// Add an external attestation to a specific tick.
+    pub fn add_external_attestation(
+        &mut self,
+        tick_number: u64,
+        att: super::external_attestation::ExternalAttestation,
+    ) -> Result<(), NodeError> {
+        for tick in self.ticks.iter_mut() {
+            if tick.tick_number == tick_number {
+                tick.external_attestations.push(att);
+                return Ok(());
+            }
+        }
+        Err(NodeError::Internal(format!(
+            "tick number {} not found for external attestation",
+            tick_number
+        )))
+    }
 }
 
 impl CalendarLookup for Calendar {
@@ -118,6 +136,7 @@ mod tests {
             forward_fortis: vec![],
             backward_fortis: vec![],
             aa_nonce: [0u8; 16],
+            external_attestations: Vec::new(),
         }
     }
 
@@ -246,6 +265,7 @@ mod tests {
                 forward_fortis,
                 backward_fortis,
                 aa_nonce: nonce,
+                external_attestations: Vec::new(),
             }).unwrap();
         }
 
@@ -291,6 +311,7 @@ mod tests {
                 forward_fortis,
                 backward_fortis,
                 aa_nonce: nonce,
+                external_attestations: Vec::new(),
             }).unwrap();
         }
 

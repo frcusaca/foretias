@@ -32,6 +32,18 @@ pub enum NodeError {
     /// Chain integrity check failed at a specific tick number.
     #[error("integrity check failed at tick {0}")]
     IntegrityFailure(u64),
+    /// Transport connection failed.
+    #[error("transport connect: {0}")]
+    TransportConnect(String),
+    /// Transport request timed out.
+    #[error("transport timeout")]
+    TransportTimeout,
+    /// Transport response decode failed.
+    #[error("transport decode: {0}")]
+    TransportDecode(String),
+    /// External attestation verification failed.
+    #[error("attestation verification failed: {0}")]
+    AttestationVerificationFailed(String),
 }
 
 /// Errors originating from the cryptographic backend.

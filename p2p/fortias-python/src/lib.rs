@@ -317,6 +317,7 @@ impl PyTimeFamily {
             forward_fortis: serde_json::to_string(&fortis).unwrap_or_default().into_bytes(),
             backward_fortis: Vec::new(),
             aa_nonce: [0u8; 16],
+            external_attestations: Vec::new(),
         };
 
         let mut cal = self.calendar.write();

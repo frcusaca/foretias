@@ -11,7 +11,7 @@
 ## READING ORDER
 
 1. Confirm `v0.2-direct-p2p-mutual-attestation` is tagged.
-2. Read `FORTIAS_2_P2P_2_direct_p2p_mutual_attestation.md` end to end — the `PeerMessenger` trait (§5) and `Communerd` component are the seam this sub-spec extends.
+2. Read `FORTIAS_2_P2P_2_direct_p2p_mutual_attestation.md` end to end — the `PeerTransport` trait (§5) and `Communerd` component are the seam this sub-spec extends.
 3. Read this document end to end.
 4. Confirm the identity-bridge approach (§4.4) is understood before touching `CryptoServer`.
 
@@ -39,12 +39,11 @@ design decision made during brainstorming.)
 # Add p2p flags to each:
 
 $ fortias serve --addr 127.0.0.1:4001 --peer 127.0.0.1:4002 \
-    --p2p-listen /ip4/127.0.0.1/tcp/4101 \
-    --chronon-ns 20000000000
+    --p2p-listen /ip4/127.0.0.1/tcp/9901 \
 
-$ fortias serve --addr 127.0.0.1:4002 --peer 127.0.0.1:4001 \
-    --p2p-listen /ip4/127.0.0.1/tcp/4102 \
-    --p2p-dial /ip4/127.0.0.1/tcp/4101/p2p/<PeerID-A>
+$ fortias serve --addr 127.0.0.1:9902 --peer 127.0.0.1:9901 \
+    --p2p-listen /ip4/127.0.0.1/tcp/9902 \
+    --p2p-dial /ip4/127.0.0.1/tcp/9901/p2p/<PeerID-A>
 
 # Expected logs on B within 10 s:
 INFO swarm: connection established peer=<PeerID-A>
@@ -60,7 +59,7 @@ v0.2 mutual-attestation logs must still appear alongside the libp2p logs — bot
 
 | Symbol | Extension |
 |---|---|
-| `PeerMessenger` trait | v0.3 adds `Libp2pTransport` impl (unused for mutual-attest yet; used in v0.4) |
+| `PeerTransport` trait | v0.3 adds `Libp2pTransport` impl (unused for mutual-attest yet; used in v0.4) |
 | `PeerAddr` struct | Gains `peer_id: Option<libp2p::PeerId>` field (may already be there per v0.2 spec) |
 | `NetworkEvent` enum | New enum; swarm events surface here to `Communerd` |
 | `Communerd` | Gains `swarm_handle: Option<SwarmHandle>` field for swarm event loop |
