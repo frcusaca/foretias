@@ -5,11 +5,13 @@ use tokio::net::TcpListener;
 use tokio::io::{AsyncBufReadExt, BufReader, AsyncWriteExt};
 
 use fortias_core::chronomatter::Chronomatter;
+use fortias_core::config::NodeConfig;
 use fortias_core::fortias::callbacks::TickObserver;
 use fortias_core::fortias::TickRecord;
 use fortias_core::error::NodeError;
 
 use super::calendar::Calendar;
+use super::communerd::Communerd;
 use self::jsonrpc::{JsonRpcRequest, JsonRpcResponse};
 
 struct NoOpObserver;
@@ -23,31 +25,29 @@ pub mod handlers;
 pub struct TimeFamilyServer {
     chronomatter: Arc<Chronomatter>,
     calendar: Arc<Calendar>,
+    communerd: Option<Arc<Communerd>>,
     listen_addr: String,
     persist_path: Option<std::path::PathBuf>,
 }
 
 impl TimeFamilyServer {
     pub fn new(listen_addr: &str, chronon_ns: u64) -> Result<Self, NodeError> {
-        let calendar = Arc::new(Calendar::new([0u8; 16], "init"));
-        let cm = Chronomatter::new(chronon_ns, Arc::clone(&calendar) as Arc<dyn TickObserver>)?;
-        let (tbid, tbn) = (cm.get_tbid(), cm.get_tbn().to_string());
-        let binding = calendar.inner();
-        let mut cal_inner = binding.write();
-        cal_inner.tbid = tbid;
-        cal_inner.tbn = tbn.clone();
-        Ok(Self {
-            chronomatter: Arc::new(cm),
-            calendar,
-            listen_addr: listen_addr.to_string(),
-            persist_path: None,
-        })
+        Self::new_with_config(listen_addr, chronon_ns, None, None)
     }
 
     pub fn new_with_persist(
         listen_addr: &str,
         chronon_ns: u64,
         persist_path: Option<std::path::PathBuf>,
+    ) -> Result<Self, NodeError> {
+        Self::new_with_config(listen_addr, chronon_ns, persist_path, None)
+    }
+
+    fn new_with_config(
+        listen_addr: &str,
+        chronon_ns: u64,
+        persist_path: Option<std::path::PathBuf>,
+        config: Option<NodeConfig>,
     ) -> Result<Self, NodeError> {
         let calendar = Arc::new(Calendar::new([0u8; 16], "init"));
         let cm = Chronomatter::new(chronon_ns, Arc::clone(&calendar) as Arc<dyn TickObserver>)?;
@@ -56,9 +56,13 @@ impl TimeFamilyServer {
         let mut cal_inner = binding.write();
         cal_inner.tbid = tbid;
         cal_inner.tbn = tbn.clone();
+        let communerd = config.map(|c| {
+            Arc::new(Communerd::new(c))
+        });
         Ok(Self {
             chronomatter: Arc::new(cm),
             calendar,
+            communerd,
             listen_addr: listen_addr.to_string(),
             persist_path,
         })
@@ -78,9 +82,15 @@ impl TimeFamilyServer {
         Ok(Self {
             chronomatter: Arc::new(cm),
             calendar,
+            communerd: None,
             listen_addr: listen_addr.to_string(),
             persist_path: None,
         })
+    }
+
+    pub fn with_config(mut self, config: NodeConfig) -> Self {
+        self.communerd = Some(Arc::new(Communerd::new(config)));
+        self
     }
 
     pub fn get_tbid(&self) -> [u8; 16] {
@@ -101,6 +111,10 @@ impl TimeFamilyServer {
 
     pub fn calendar(&self) -> &Calendar {
         &self.calendar
+    }
+
+    pub fn communerd(&self) -> Option<&Arc<Communerd>> {
+        self.communerd.as_ref()
     }
 
     pub fn current_tick(&self) -> u64 {
@@ -127,6 +141,9 @@ impl TimeFamilyServer {
 
     pub fn start_daemon_arc(self: &Arc<Self>) {
         self.chronomatter.start_daemon();
+        if let Some(ref communerd) = self.communerd {
+            communerd.start_liveness_pings();
+        }
     }
 
     pub fn stop_daemon_arc(&self) {
