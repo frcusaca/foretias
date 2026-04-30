@@ -2,7 +2,7 @@
 
 **Milestone tag:** `v0.2-direct-p2p-mutual-attestation`
 **Prereq:** `v0.1-local-server-mvp` must be tagged.
-**Next:** `FORTIAS_2_P2P_2_libp2p_handshake.md` (v0.3 — adds libp2p as a second transport alongside this one).
+**Next:** `FORTIAS_2_P2P_3_libp2p_handshake.md` (v0.3 — adds libp2p as a second transport alongside this one).
 
 **Target:** AI Coding Specialist. `(@human ...)` blocks are for human readers.
 
@@ -20,7 +20,9 @@
 
 ## 1. GOAL
 
-Restructure `TimeFamilyServer` into three time beings — **Chronomatter** (*Chronos fidelis authenticus*), **Calendar** (*Chronos fidelis grapha*), **Communerd** (*Chronos fidelis locutus*) — each with its own TBID, coordinated by a **TimeFamily** (*Chronos fidelis adunatrix*, the orchestrator). Intra-family communication uses direct method calls and callbacks. Only Communerd communicates with extra-family peers. Then, using only the existing v0.1 JSON-RPC primitives (`/stamp`, `/verify`, `/get_calendar_slice`), implement **mutual attestation**: two statically-configured Fortias nodes periodically call each other's `/stamp` with their current `TickRecord` as content, verify the returned `Fortis`, and store it as an `ExternalAttestation` in their local calendar.
+Restructure `TimeFamilyServer` into three time beings — **Chronomatter** (*Chronos fidelis authenticus*), **Calendar** (*Chronos fidelis grapha*), **Communerd** (*Chronos fidelis Locutus*)— each with its own TBID, coordinated by a **TimeFamily** (*Chronos fidelis adunatrix*, the orchestrator). Intra-family communication uses direct method calls and callbacks. Only Communerd communicates with extra-family peers. Then, using only the existing v0.1 JSON-RPC primitives (`/stamp`, `/verify`, `/get_calendar_slice`), implement **mutual attestation**: two statically-configured Fortias nodes periodically call each other's `/stamp` with their current `TickRecord` as content, verify the returned `Fortis`, and store it as an `ExternalAttestation` in their local calendar.
+
+**Terminology note:** "auto-attestation" (v0.1/v0.2.0) refers to **intra-node** tick chaining (same TBID, consecutive ticks linked by `aa_nonce`). "Mutual attestation" (this sub-spec) refers to **cross-node** stamping (different TBID). When TBID is different, it is no longer called "auto-attestation."
 
 (@human — nothing about this sub-spec requires transport confidentiality.
 `/stamp` and `/verify` are not secrets; their content is public unless the
@@ -91,7 +93,7 @@ both sides.)
 All three components are **time beings** with their own TBID. They communicate via direct method calls and callbacks within the family. Only Communerd communicates outside the family.
 
 ```
-TimeFamily (Arc<TimeFamilyInner>) — orchestrator, owns all shared state
+TimeFamily — orchestrator, creates and wires all three time beings
 │
 ├── Chronomatter (Chronos fidelis authenticus) ─────────────────────────
 │     Time being with its own TBID.
@@ -111,7 +113,7 @@ TimeFamily (Arc<TimeFamilyInner>) — orchestrator, owns all shared state
 │     calls Chronomatter.verify() directly, stores the result).
 │     Communicates ONLY through Communerd for extra-family calls.
 │
-└── Communerd (Chronos fidelis locutus) ──────────────────────────────────────
+└── Communerd (P2P communication) ──────────────────────────────────────
       Time being with its own TBID.
       All point-to-point and peer-to-peer communication.
       Maintains a pool of direct JSON-RPC TCP clients to configured peers.
@@ -133,7 +135,7 @@ TimeFamily (Arc<TimeFamilyInner>) — orchestrator, owns all shared state
 - **Communerd**: all network communication (Calendar calls Communerd, never talks network directly)
 - **TimeFamily**: orchestrator — creates/wires all three time beings
 
-**Communerd etymology:** /KAH-myuh-nerd/ A Communerd is a communard of a Time Family commune where timing information is shared in communal communion between families, AND he's a nerd about communications.
+**Communerd etymology:** A Communerd is a communard of a Time Family commune where timing information is shared in communal communion between families, AND he's a nerd about communications.
 
 **Rate limiting and version checks:** Deferred to v0.5 hardening. Not implemented in v0.2.
 
@@ -146,26 +148,46 @@ TimeFamily (Arc<TimeFamilyInner>) — orchestrator, owns all shared state
 
 /// Time Being ID — 16-byte unique identifier for a time being.
 pub type Tbid = [u8; 16];
+
+/// Ed25519 public key — 32 bytes.
 pub type PublicKey = [u8; 32];
+
+/// Ed25519 signature — 64 bytes.
 pub type Signature = [u8; 64];
+
+/// SHA-256 hash digest — 32 bytes.
 pub type Digest = [u8; 32];
+
+/// Message payload (before/after encryption).
 pub type Message = Vec<u8>;
+
+/// Auto-attestation nonce — 16 bytes of entropy.
 pub type AaNonce = [u8; 16];
+
+/// Tick number.
 pub type TickNumber = u64;
 ```
 
 ### 4.3 Intra-family trait interfaces
 
 ```rust
+// Called by Chronomatter when a new tick advances.
+#[async_trait::async_trait]
 pub trait TickObserver: Send + Sync {
     fn on_tick_advance(&self, tick_number: TickNumber, public_key: &PublicKey);
 }
 
+// Stamper interface — Chronomatter implements this.
+#[async_trait::async_trait]
 pub trait Stamper: Send + Sync {
-    async fn stamp(&self, content: Message, echo: String) -> Result<Fortis, NodeError>;
-    async fn verify(&self, fortis: &Fortis, content: &Message) -> Result<bool, NodeError>;
+    async fn stamp(&self, content: Message, echo: String)
+        -> Result<Fortis, NodeError>;
+    async fn verify(&self, fortis: &Fortis, content: &Message)
+        -> Result<bool, NodeError>;
 }
 
+// PeerMessenger interface — Communerd implements this.
+#[async_trait::async_trait]
 pub trait PeerMessenger: Send + Sync {
     async fn send_to_peer(&self, addr: &PeerAddr, method: &str, params: serde_json::Value)
         -> Result<serde_json::Value, TransportError>;
@@ -177,13 +199,18 @@ pub trait PeerMessenger: Send + Sync {
 ### 4.4 Key types
 
 ```rust
+// src/time_family/mod.rs
+
 pub struct TimeFamily {
     chronomatter_task: tokio::task::JoinHandle<()>,
     calendar_task:     tokio::task::JoinHandle<()>,
     communerd_task:    tokio::task::JoinHandle<()>,
+    /// Direct references to time beings for JSON-RPC handlers
     chronomatter:      Arc<dyn Stamper>,
     calendar:          Arc<RwLock<CalendarData>>,
+    /// Config
     config:            NodeConfig,
+    /// Dormant flag
     dormant:           AtomicBool,
 }
 ```
@@ -426,7 +453,7 @@ async fn run(mut self, chronon_ns: u64) {
 }
 ```
 
-`advance_tick` generates a new keypair, destroys the old private key via `zeroize`, appends the new `TickRecord` to the Calendar, and broadcasts a `TickEvent`.
+`advance_tick` generates a new keypair, destroys the old private key via `zeroize`, creates the `TickRecord`, and calls `calendar.on_tick_advance(tick_number, &public_key)`.
 
 (@human — the tick advancing independently of /stamp calls changes the
 v0.1 behaviour where every stamp advanced the tick. Under the new model
@@ -442,14 +469,19 @@ background timer; this is the correct behavior per the design intent.)
 ## 8. CALENDAR — AUTONOMOUS PERSISTENCE
 
 ```rust
-// src/calendar/mod.rs
+// src/fortias-node/src/calendar/mod.rs
 
+/// Calendar is a time being with its own TBID.
 pub struct Calendar {
-    inner:            RwLock<Calendar>,      // in-memory calendar
+    tbid:             Tbid,
+    inner:            RwLock<CalendarData>,   // in-memory calendar data
     persist_path:     PathBuf,
-    flush_interval:   Duration,              // default 30 s
-    dirty:            AtomicBool,            // set on any mutation
-    flush_tx:         mpsc::Sender<()>,      // signal: flush now
+    flush_interval:   Duration,               // default 30 s
+    dirty:            AtomicBool,             // set on any mutation
+    flush_rx:         mpsc::Receiver<()>,     // signal: flush now
+    chronomatter:     Arc<dyn Stamper>,       // direct ref for stamp/verify
+    communerd:        Arc<dyn PeerMessenger>, // direct ref for extra-family RPC
+    config:           NodeConfig,
 }
 
 impl Calendar {
@@ -467,26 +499,37 @@ impl Calendar {
         Ok(())
     }
 
-    pub fn snapshot(&self) -> Calendar { self.inner.read().clone() }
+    pub fn snapshot(&self) -> CalendarData { self.inner.read().clone() }
+}
+
+/// Calendar implements TickObserver — called by Chronomatter on each tick advance.
+impl TickObserver for Calendar {
+    fn on_tick_advance(&self, tick_number: TickNumber, _public_key: &PublicKey) {
+        // Check if we should mutual attest this tick
+        if tick_number > 0 && tick_number % self.config.mutual_attest_every_n == 0 {
+            let this = Arc::clone(self);
+            tokio::spawn(async move { this.execute_mutual_attest(tick_number).await });
+        }
+    }
 }
 ```
 
 The calendar task:
 
 ```rust
-async fn run(component: Arc<Calendar>) {
-    let mut interval = tokio::time::interval(component.flush_interval);
+async fn run(self: Arc<Self>) {
+    let mut interval = tokio::time::interval(self.flush_interval);
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     loop {
         tokio::select! {
             _ = interval.tick() => {
-                if component.dirty.swap(false, Ordering::Relaxed) {
-                    component.flush_to_disk();
+                if self.dirty.swap(false, Ordering::Relaxed) {
+                    self.flush_to_disk();
                 }
             }
-            Some(()) = component.flush_rx.recv() => {
-                component.dirty.store(false, Ordering::Relaxed);
-                component.flush_to_disk();
+            Some(()) = self.flush_rx.recv() => {
+                self.dirty.store(false, Ordering::Relaxed);
+                self.flush_to_disk();
             }
         }
     }
