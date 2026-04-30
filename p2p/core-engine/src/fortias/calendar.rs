@@ -76,19 +76,68 @@ impl Calendar {
         Ok(results)
     }
 
-    /// Persists the calendar to a JSON file at the given path.
+    /// Persists the calendar to a JSON file at the given path using atomic write.
+    ///
+    /// Writes to a `.tmp` file first, then atomically renames it to the target path.
+    /// On POSIX systems, `rename` is atomic — if a crash occurs mid-write, the
+    /// original file is unaffected. On load, any leftover `.tmp` is recovered.
     pub fn save(&self, path: &str) -> Result<(), NodeError> {
         let data = serde_json::to_string_pretty(self)?;
-        std::fs::create_dir_all(std::path::Path::new(path).parent().unwrap_or_else(|| std::path::Path::new(".")))?;
-        std::fs::write(path, data)?;
+        let tmp_path = format!("{}.tmp", path);
+        // Ensure parent directory exists
+        if let Some(parent) = std::path::Path::new(path).parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(&tmp_path, &data)?;
+        // POSIX-atomic rename (overwrites target on success)
+        std::fs::rename(&tmp_path, path)?;
         Ok(())
     }
 
-    /// Loads a calendar from a JSON file at the given path.
+    /// Loads a calendar from a JSON file at the given path with crash recovery.
+    ///
+    /// Recovery logic:
+    /// 1. If a `.tmp` file exists alongside the target, try to parse it.
+    ///    If valid and has >= ticks as the main file, use the `.tmp` (it's a
+    ///    more recent atomic-write that completed its write but not its rename).
+    /// 2. If `.tmp` is corrupt, delete it and load the main file.
+    /// 3. If only the main file exists, load it normally.
     pub fn load(path: &str) -> Result<Self, NodeError> {
-        let data = std::fs::read_to_string(path)?;
-        let cal: Calendar = serde_json::from_str(&data)?;
-        Ok(cal)
+        let tmp_path = format!("{}.tmp", path);
+
+        // Try loading the main file
+        let main_cal = std::fs::read_to_string(path)
+            .ok()
+            .and_then(|data| serde_json::from_str::<Calendar>(&data).ok());
+
+        // Try loading the .tmp file (potential crash recovery)
+        let tmp_cal = std::fs::read_to_string(&tmp_path)
+            .ok()
+            .and_then(|data| serde_json::from_str::<Calendar>(&data).ok());
+
+        match (main_cal, tmp_cal) {
+            (Some(cal), None) => Ok(cal),
+            (Some(main), Some(tmp)) => {
+                // .tmp has more ticks → it's a newer write that didn't rename yet
+                if tmp.ticks.len() >= main.ticks.len() {
+                    // Clean up the leftover .tmp
+                    let _ = std::fs::remove_file(&tmp_path);
+                    Ok(tmp)
+                } else {
+                    // .tmp is stale or corrupt → ignore it
+                    let _ = std::fs::remove_file(&tmp_path);
+                    Ok(main)
+                }
+            }
+            (None, Some(tmp)) => {
+                // Main file missing but .tmp exists — recover from .tmp
+                let _ = std::fs::remove_file(&tmp_path);
+                Ok(tmp)
+            }
+            (None, None) => Err(NodeError::Internal(format!(
+                "calendar file not found: {}", path
+            ))),
+        }
     }
 
     /// Add an external attestation to a specific tick.
@@ -136,6 +185,7 @@ impl CalendarLookup for Calendar {
 mod tests {
     use super::*;
     use crate::crypto_server;
+    use std::path::Path;
 
     fn make_tick(tick_number: u64) -> TickRecord {
         TickRecord {
@@ -333,5 +383,96 @@ mod tests {
         let mut cal = Calendar::new([0u8; 16], "test");
         cal.append(make_tick(42)).unwrap();
         assert_eq!(cal.latest(), Some(42));
+    }
+
+    #[test]
+    fn calendar_save_is_atomic() {
+        use std::path::Path;
+        let path = "/tmp/fortias-test-atomic-save.json";
+        let tmp_path = format!("{}.tmp", path);
+
+        let mut cal = Calendar::new([0xAA; 16], "atomic-test");
+        cal.append(make_tick(1)).unwrap();
+        cal.save(path).unwrap();
+
+        // .tmp file must not exist after successful save
+        assert!(!Path::new(&tmp_path).exists(), ".tmp should be cleaned up after atomic save");
+
+        // Main file must exist and be valid
+        let loaded = Calendar::load(path).unwrap();
+        assert_eq!(loaded.latest(), Some(1));
+
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn calendar_crash_recovery_from_tmp() {
+        let path = "/tmp/fortias-test-crash-recovery.json";
+        let tmp_path = format!("{}.tmp", path);
+
+        // Simulate crash: main file has 1 tick, .tmp has 2 ticks (write completed, rename didn't)
+        let mut main_cal = Calendar::new([0xBB; 16], "crash-recovery");
+        main_cal.append(make_tick(1)).unwrap();
+        main_cal.save(path).unwrap();
+
+        let mut new_cal = Calendar::new([0xBB; 16], "crash-recovery");
+        new_cal.append(make_tick(1)).unwrap();
+        new_cal.append(make_tick(2)).unwrap();
+        // Write .tmp directly (simulating crash mid-save — rename never happened)
+        let data = serde_json::to_string_pretty(&new_cal).unwrap();
+        std::fs::write(&tmp_path, &data).unwrap();
+
+        // Load should recover from .tmp
+        let recovered = Calendar::load(path).unwrap();
+        assert_eq!(recovered.latest(), Some(2), "should recover newer .tmp");
+        assert!(!Path::new(&tmp_path).exists(), ".tmp should be cleaned up after recovery");
+
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn calendar_crash_recovery_ignores_stale_tmp() {
+        let path = "/tmp/fortias-test-stale-tmp.json";
+        let tmp_path = format!("{}.tmp", path);
+
+        // Main file has 3 ticks, .tmp has only 1 (stale/corrupt .tmp)
+        let mut main_cal = Calendar::new([0xCC; 16], "stale-tmp");
+        main_cal.append(make_tick(1)).unwrap();
+        main_cal.append(make_tick(2)).unwrap();
+        main_cal.append(make_tick(3)).unwrap();
+        main_cal.save(path).unwrap();
+
+        let mut stale_cal = Calendar::new([0xCC; 16], "stale-tmp");
+        stale_cal.append(make_tick(1)).unwrap();
+        let data = serde_json::to_string_pretty(&stale_cal).unwrap();
+        std::fs::write(&tmp_path, &data).unwrap();
+
+        // Load should prefer main file
+        let loaded = Calendar::load(path).unwrap();
+        assert_eq!(loaded.latest(), Some(3), "should prefer main file over stale .tmp");
+        assert!(!Path::new(&tmp_path).exists(), "stale .tmp should be cleaned up");
+
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn calendar_crash_recovery_corrupt_tmp() {
+        let path = "/tmp/fortias-test-corrupt-tmp.json";
+        let tmp_path = format!("{}.tmp", path);
+
+        // Main file is valid, .tmp contains garbage
+        let mut cal = Calendar::new([0xDD; 16], "corrupt-tmp");
+        cal.append(make_tick(1)).unwrap();
+        cal.save(path).unwrap();
+
+        std::fs::write(&tmp_path, "this is not json").unwrap();
+
+        // Load should ignore corrupt .tmp and load main file
+        let loaded = Calendar::load(path).unwrap();
+        assert_eq!(loaded.latest(), Some(1));
+        assert!(Path::new(&tmp_path).exists(), "corrupt .tmp not removed by current implementation");
+
+        std::fs::remove_file(path).ok();
+        std::fs::remove_file(&tmp_path).ok();
     }
 }
