@@ -9,7 +9,7 @@ crate-type  = ["cdylib"]
 
 [dependencies]
 fortias-core = { version = "0.3", path = "../core-engine" }
-fortias-node = { version = "0.3", path = "../fortias-node" }
+fortias-node = { version = "0.4", path = "../fortias-node" }
 
 pyo3         = { version = "0.21", features = ["extension-module", "abi3-py37"] }
 serde        = { version = "1", features = ["derive"] }

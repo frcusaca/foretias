@@ -38,12 +38,12 @@ enum Commands {
         /// Start in dormant (verify-only) mode, loads calendar from --persist-path
         #[arg(long, requires = "persist_path")]
         dormant: bool,
-        /// Peer address for mutual attestation (can specify multiple times)
+        /// Peer address for auto attestation (can specify multiple times)
         #[arg(long)]
         peer: Vec<String>,
         /// Mutual attestation frequency in chronons (default: 1 = every tick)
         #[arg(long, default_value_t = 1)]
-        mutual_attest_every_chronons: u64,
+        auto_attest_every_chronons: u64,
         /// RPC request timeout in seconds (default: 5)
         #[arg(long, default_value_t = 5)]
         request_timeout_secs: u64,
@@ -53,6 +53,12 @@ enum Commands {
         /// libp2p peer multiaddr to dial (repeatable, e.g. "/ip4/127.0.0.1/tcp/9901/p2p/<PeerId>")
         #[arg(long)]
         p2p_dial: Vec<String>,
+        /// DHT namespace for Kademlia protocol isolation (default: "mainnet")
+        #[arg(long, default_value = "mainnet")]
+        dht_namespace: String,
+        /// DHT bootstrap peer multiaddr (repeatable)
+        #[arg(long)]
+        dht_bootstrap: Vec<String>,
     },
     /// Stamp content via TimeFamilyServer
     Stamp {
@@ -254,10 +260,12 @@ async fn cmd_serve(
     persist_path: Option<String>,
     dormant: bool,
     peers: Vec<String>,
-    mutual_attest_every_chronons: u64,
+    auto_attest_every_chronons: u64,
     request_timeout_secs: u64,
     p2p_listen: Option<String>,
     p2p_dial: Vec<String>,
+    dht_namespace: String,
+    dht_bootstrap: Vec<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let cfg = load_config();
     let addr = if addr == "127.0.0.1:4001" {
@@ -287,7 +295,7 @@ async fn cmd_serve(
         let node_config = NodeConfig {
             listen_addr: addr.clone(),
             peers,
-            mutual_attest_every_n: mutual_attest_every_chronons,
+            auto_attest_every_n: auto_attest_every_chronons,
             request_timeout_secs,
             ..Default::default()
         };
@@ -305,8 +313,15 @@ async fn cmd_serve(
                 .map_err(|e| format!("invalid --p2p-dial {}: {}", s, e)))
             .collect::<Result<Vec<_>, String>>()?;
         if let Some(communerd) = server.communerd() {
-            communerd.enable_p2p(listen_addr, dials).await
+            communerd.enable_p2p(listen_addr, dials, &dht_namespace, Some(&addr)).await
                 .map_err(|e| format!("failed to start libp2p swarm: {}", e))?;
+        }
+    }
+
+    // Bootstrap DHT if bootstrap peers configured
+    if let Some(communerd) = server.communerd() {
+        if !dht_bootstrap.is_empty() {
+            communerd.bootstrap_dht(dht_bootstrap.clone()).await.ok();
         }
     }
 
@@ -322,7 +337,7 @@ async fn cmd_serve(
     }
     if server.communerd().is_some() {
         println!("  Peers  : {}", server.communerd().unwrap().config().peers.join(", "));
-        println!("  Mutual Attest Every: {} chronons", server.communerd().unwrap().config().mutual_attest_every_n);
+        println!("  Auto Attest Every: {} chronons", server.communerd().unwrap().config().auto_attest_every_n);
     }
 
     let handle = server.clone().start()?;
@@ -596,8 +611,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Serve { addr, chronon_ns, persist_path, dormant, peer, mutual_attest_every_chronons, request_timeout_secs, p2p_listen, p2p_dial } => {
-            cmd_serve(addr, chronon_ns, persist_path, dormant, peer, mutual_attest_every_chronons, request_timeout_secs, p2p_listen, p2p_dial).await
+        Commands::Serve { addr, chronon_ns, persist_path, dormant, peer, auto_attest_every_chronons, request_timeout_secs, p2p_listen, p2p_dial, dht_namespace, dht_bootstrap } => {
+            cmd_serve(addr, chronon_ns, persist_path, dormant, peer, auto_attest_every_chronons, request_timeout_secs, p2p_listen, p2p_dial, dht_namespace, dht_bootstrap).await
         }
         Commands::Stamp { message, message_file, stamp_output, server } => {
             cmd_stamp(message, message_file, stamp_output, server).await

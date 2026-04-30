@@ -186,7 +186,7 @@ fn test_stamp_and_verify_e2e() {
 // ── In-process integration tests ─────────────────────────────────────────────
 
 #[tokio::test]
-async fn test_two_nodes_mutual_attest() {
+async fn test_two_nodes_auto_attest() {
     use fortias_node::server::TimeFamilyServer;
 
     let port_a = find_available_port();
@@ -202,7 +202,7 @@ async fn test_two_nodes_mutual_attest() {
     let config = fortias_core::config::NodeConfig {
         listen_addr: addr_b.clone(),
         peers: vec![addr_b.clone()],
-        mutual_attest_every_n: 1,
+        auto_attest_every_n: 1,
         request_timeout_secs: 5,
         ..Default::default()
     };
@@ -230,7 +230,7 @@ async fn test_two_nodes_mutual_attest() {
                 json_rpc: addr_b.clone(),
                 peer_id: None,
             },
-            &hex::encode(b"mutual attest test"),
+            &hex::encode(b"auto attest test"),
             "ma-test",
         ).await;
         // Peer B may not be listening yet, so error is acceptable
@@ -259,7 +259,7 @@ async fn test_peer_unreachable_does_not_crash() {
     let config = NodeConfig {
         listen_addr: addr.clone(),
         peers: vec!["127.0.0.1:59999".to_string()],
-        mutual_attest_every_n: 1,
+        auto_attest_every_n: 1,
         request_timeout_secs: 1,
         ..Default::default()
     };
@@ -359,11 +359,11 @@ async fn two_swarms_connect_and_identify() {
     let ma_a: libp2p::Multiaddr = format!("/ip4/127.0.0.1/tcp/{}", port_a).parse().unwrap();
     let ma_b: libp2p::Multiaddr = format!("/ip4/127.0.0.1/tcp/{}", port_b).parse().unwrap();
 
-    let mut handle_a = build_and_spawn_swarm(ma_a.clone(), vec![]).await.unwrap();
+    let mut handle_a = build_and_spawn_swarm(ma_a.clone(), vec![], "mainnet", None).await.unwrap();
     let peer_id_a = handle_a.local_peer_id.clone();
 
     let dial_a: libp2p::Multiaddr = format!("{}/p2p/{}", ma_a, peer_id_a).parse().unwrap();
-    let mut handle_b = build_and_spawn_swarm(ma_b, vec![dial_a]).await.unwrap();
+    let mut handle_b = build_and_spawn_swarm(ma_b, vec![dial_a], "mainnet", None).await.unwrap();
 
     let mut a_connected = false;
     let mut b_connected = false;
@@ -410,4 +410,101 @@ async fn two_swarms_connect_and_identify() {
 
     handle_a.task.abort();
     handle_b.task.abort();
+}
+
+#[tokio::test]
+async fn three_nodes_discover_and_attest() {
+    use fortias_node::communerd::p2p::swarm::build_and_spawn_swarm;
+    use fortias_node::communerd::p2p::events::NetworkEvent;
+
+    let port_a = find_available_port();
+    let port_b = find_available_port();
+    let port_c = find_available_port();
+    let ma_a: libp2p::Multiaddr = format!("/ip4/127.0.0.1/tcp/{}", port_a).parse().unwrap();
+    let ma_b: libp2p::Multiaddr = format!("/ip4/127.0.0.1/tcp/{}", port_b).parse().unwrap();
+    let ma_c: libp2p::Multiaddr = format!("/ip4/127.0.0.1/tcp/{}", port_c).parse().unwrap();
+
+    let namespace = "testnet";
+
+    // Start node A (isolated, no dials)
+    let mut handle_a = build_and_spawn_swarm(ma_a.clone(), vec![], namespace, Some("127.0.0.1:3001")).await.unwrap();
+    let peer_id_a = handle_a.local_peer_id;
+
+    // Start node B (isolated, no dials)
+    let mut handle_b = build_and_spawn_swarm(ma_b.clone(), vec![], namespace, Some("127.0.0.1:3002")).await.unwrap();
+    let peer_id_b = handle_b.local_peer_id;
+
+    // Start node C (connects to both A and B — acts as bridge)
+    let dial_a: libp2p::Multiaddr = format!("{}/p2p/{}", ma_a, peer_id_a).parse().unwrap();
+    let dial_b: libp2p::Multiaddr = format!("{}/p2p/{}", ma_b, peer_id_b).parse().unwrap();
+    let mut handle_c = build_and_spawn_swarm(ma_c, vec![dial_a, dial_b], namespace, Some("127.0.0.1:3003")).await.unwrap();
+
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+
+    // Collect events per node
+    let mut a_connected_to = std::collections::HashSet::new();
+    let mut b_connected_to = std::collections::HashSet::new();
+    let mut c_connected_to = std::collections::HashSet::new();
+    let mut dht_discoveries: Vec<(String, libp2p::PeerId)> = Vec::new();
+
+    while std::time::Instant::now() < deadline {
+        // Drain A events
+        while let Ok(Some(event)) = tokio::time::timeout(
+            Duration::from_millis(50),
+            handle_a.events.recv(),
+        ).await {
+            match event {
+                NetworkEvent::Connected { peer_id, .. } => { a_connected_to.insert(peer_id); }
+                NetworkEvent::DhtPeerDiscovered { peer_id, .. } => { dht_discoveries.push(("A".into(), peer_id)); }
+                NetworkEvent::Identified { peer_id, .. } => { a_connected_to.insert(peer_id); }
+                _ => {}
+            }
+        }
+
+        // Drain B events
+        while let Ok(Some(event)) = tokio::time::timeout(
+            Duration::from_millis(50),
+            handle_b.events.recv(),
+        ).await {
+            match event {
+                NetworkEvent::Connected { peer_id, .. } => { b_connected_to.insert(peer_id); }
+                NetworkEvent::DhtPeerDiscovered { peer_id, .. } => { dht_discoveries.push(("B".into(), peer_id)); }
+                NetworkEvent::Identified { peer_id, .. } => { b_connected_to.insert(peer_id); }
+                _ => {}
+            }
+        }
+
+        // Drain C events
+        while let Ok(Some(event)) = tokio::time::timeout(
+            Duration::from_millis(50),
+            handle_c.events.recv(),
+        ).await {
+            match event {
+                NetworkEvent::Connected { peer_id, .. } => { c_connected_to.insert(peer_id); }
+                NetworkEvent::DhtPeerDiscovered { peer_id, .. } => { dht_discoveries.push(("C".into(), peer_id)); }
+                NetworkEvent::Identified { peer_id, .. } => { c_connected_to.insert(peer_id); }
+                _ => {}
+            }
+        }
+
+        // C should have connected to both A and B
+        if c_connected_to.len() >= 2 {
+            break;
+        }
+
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+
+    // C connected to both A and B
+    assert!(c_connected_to.contains(&peer_id_a), "C never connected to A");
+    assert!(c_connected_to.contains(&peer_id_b), "C never connected to B");
+
+    // A and B each connected to C
+    assert!(a_connected_to.contains(&handle_c.local_peer_id), "A never connected to C");
+    assert!(b_connected_to.contains(&handle_c.local_peer_id), "B never connected to C");
+
+    // Cleanup
+    handle_a.task.abort();
+    handle_b.task.abort();
+    handle_c.task.abort();
 }

@@ -31,6 +31,26 @@ pub enum TransportError {
     Timeout,
     #[error("decode error: {0}")]
     Decode(String),
+    #[error("transport unsupported: {0}")]
+    Unsupported(String),
+}
+
+/// Which transport to use for a peer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TransportKind {
+    /// Direct TCP JSON-RPC — "close friend" low latency.
+    DirectJsonRpc,
+    /// libp2p streams — general purpose (v0.5+).
+    Libp2p,
+}
+
+/// Select the best transport for a peer.
+pub fn select_transport(peer: &PeerAddr) -> TransportKind {
+    if !peer.json_rpc.is_empty() {
+        TransportKind::DirectJsonRpc
+    } else {
+        TransportKind::Libp2p
+    }
 }
 
 /// PeerTransport — abstract P2P communication.

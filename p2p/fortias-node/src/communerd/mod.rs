@@ -6,6 +6,7 @@
 pub mod transport;
 pub mod json_rpc_transport;
 pub mod peer_pool;
+pub mod dht_peer_source;
 pub mod p2p;
 
 use std::sync::{Arc, OnceLock};
@@ -15,11 +16,13 @@ use fortias_core::error::NodeError;
 use fortias_core::fortias::callbacks::{CommunityQuery, CommunityResponse, PeerAddr as CorePeerAddr, PeerMessenger, TransportError as CoreTransportError};
 use fortias_core::fortias::tick::{Fortis, TickRecord};
 
+use self::dht_peer_source::DhtPeerSource;
 use self::json_rpc_transport::JsonRpcTransport;
 use self::peer_pool::PeerPool;
 use self::p2p::events::NetworkEvent;
-use self::p2p::swarm::build_and_spawn_swarm;
+use self::p2p::swarm::{build_and_spawn_swarm, SwarmCommand};
 use self::transport::{PeerAddr, PeerTransport, TransportError};
+use libp2p::kad;
 
 /// Communerd — all P2P traffic flows through this component.
 ///
@@ -35,6 +38,8 @@ pub struct Communerd {
     p2p_events: Arc<OnceLock<tokio::sync::mpsc::UnboundedReceiver<NetworkEvent>>>,
     /// Background task handle for the p2p event loop.
     p2p_task: Arc<OnceLock<tokio::task::JoinHandle<()>>>,
+    /// Command sender for the p2p swarm.
+    p2p_cmd_tx: Arc<OnceLock<tokio::sync::mpsc::UnboundedSender<SwarmCommand>>>,
 }
 
 impl Clone for Communerd {
@@ -46,6 +51,7 @@ impl Clone for Communerd {
             local_peer_id: Arc::clone(&self.local_peer_id),
             p2p_events: Arc::clone(&self.p2p_events),
             p2p_task: Arc::clone(&self.p2p_task),
+            p2p_cmd_tx: Arc::clone(&self.p2p_cmd_tx),
         }
     }
 }
@@ -67,6 +73,7 @@ impl Communerd {
             local_peer_id: Arc::new(OnceLock::new()),
             p2p_events: Arc::new(OnceLock::new()),
             p2p_task: Arc::new(OnceLock::new()),
+            p2p_cmd_tx: Arc::new(OnceLock::new()),
         }
     }
 
@@ -135,26 +142,51 @@ impl Communerd {
         &self,
         listen: libp2p::Multiaddr,
         dials: Vec<libp2p::Multiaddr>,
+        namespace: &str,
+        json_rpc_addr: Option<&str>,
     ) -> Result<(), NodeError> {
         // Fast path: already enabled
         if self.local_peer_id.get().is_some() {
             return Ok(());
         }
 
-        let handle = build_and_spawn_swarm(listen, dials).await?;
+        let handle = build_and_spawn_swarm(listen, dials, namespace, json_rpc_addr).await?;
 
         let peer_id = handle.local_peer_id;
         let _ = self.local_peer_id.set(peer_id);
         let _ = self.p2p_task.set(handle.task);
+        let _ = self.p2p_cmd_tx.set(handle.cmd_tx);
 
         tracing::info!(peer = %peer_id, "libp2p swarm started");
 
         Ok(())
     }
 
+    /// Bootstrap DHT by dialing bootstrap peers and triggering bootstrap query.
+    pub async fn bootstrap_dht(&self, bootstrap_addrs: Vec<String>) -> Result<(), NodeError> {
+        let Some(cmd_tx) = self.p2p_cmd_tx.get() else {
+            return Ok(());
+        };
+        for addr_str in bootstrap_addrs {
+            let bootstrap_addr: libp2p::Multiaddr = addr_str.parse()
+                .map_err(|e| NodeError::Internal(format!("invalid dht_bootstrap addr: {e}")))?;
+            let _ = cmd_tx.send(SwarmCommand::Dial { addr: bootstrap_addr });
+        }
+        let _ = cmd_tx.send(SwarmCommand::Bootstrap);
+        Ok(())
+    }
+
+    /// Publish this node as willing to auto-attest via Kademlia provider records.
+    pub async fn publish_attest_willing(&self, namespace: &str) {
+        if let Some(cmd_tx) = self.p2p_cmd_tx.get() {
+            let key = kad::RecordKey::new(&format!("{}/fortias/attest-willing/v1", namespace));
+            let _ = cmd_tx.send(SwarmCommand::Provide { key });
+        }
+    }
+
 }
 
-/// Implement PeerMessenger trait (used by Calendar for mutual attestation).
+/// Implement PeerMessenger trait (used by Calendar for auto attestation).
 impl PeerMessenger for Communerd {
     fn send_to_peer(
         &self,
@@ -196,7 +228,7 @@ mod tests {
         NodeConfig {
             listen_addr: "127.0.0.1:0".into(),
             peers: vec!["127.0.0.1:4002".into()],
-            mutual_attest_every_n: 1,
+            auto_attest_every_n: 1,
             request_timeout_secs: 5,
             ..Default::default()
         }
@@ -252,6 +284,6 @@ mod tests {
         let config = make_config();
         let communerd = Communerd::new(config.clone());
         assert_eq!(communerd.config().peers, config.peers);
-        assert_eq!(communerd.config().mutual_attest_every_n, 1);
+        assert_eq!(communerd.config().auto_attest_every_n, 1);
     }
 }

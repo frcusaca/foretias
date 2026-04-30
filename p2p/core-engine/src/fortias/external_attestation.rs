@@ -1,4 +1,4 @@
-//! External attestation types for cross-node mutual attestation.
+//! External attestation types for cross-node auto attestation.
 
 use serde::{Deserialize, Serialize};
 
