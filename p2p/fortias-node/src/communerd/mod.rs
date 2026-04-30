@@ -63,7 +63,7 @@ impl Communerd {
             config.request_timeout_secs.max(1),
         ));
         let peers: Vec<PeerAddr> = config.peers.iter()
-            .map(|p| PeerAddr { json_rpc: p.clone(), peer_id: None })
+            .map(|p| PeerAddr { json_rpc: p.clone(), peer_id: None, last_seen_ns: 0 })
             .collect();
         let peer_pool = PeerPool::new(peers, Arc::clone(&transport), 30);
         Self {
@@ -251,7 +251,7 @@ mod tests {
         let communerd = Communerd::new(make_config());
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
-            communerd.add_peer(PeerAddr { json_rpc: "127.0.0.1:4003".into(), peer_id: None }).await;
+            communerd.add_peer(PeerAddr { json_rpc: "127.0.0.1:4003".into(), peer_id: None, last_seen_ns: 0 }).await;
             let peers = communerd.get_peers().await;
             assert_eq!(peers.len(), 2);
         });
@@ -262,7 +262,7 @@ mod tests {
         let communerd = Communerd::new(make_config());
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
-            communerd.remove_peer(&PeerAddr { json_rpc: "127.0.0.1:4002".into(), peer_id: None }).await;
+            communerd.remove_peer(&PeerAddr { json_rpc: "127.0.0.1:4002".into(), peer_id: None, last_seen_ns: 0 }).await;
             assert!(communerd.get_peers().await.is_empty());
         });
     }
@@ -273,7 +273,7 @@ mod tests {
         let c2 = communerd.clone();
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
-            c2.add_peer(PeerAddr { json_rpc: "127.0.0.1:4004".into(), peer_id: None }).await;
+            c2.add_peer(PeerAddr { json_rpc: "127.0.0.1:4004".into(), peer_id: None, last_seen_ns: 0 }).await;
             let peers = communerd.get_peers().await;
             assert_eq!(peers.len(), 2);
         });

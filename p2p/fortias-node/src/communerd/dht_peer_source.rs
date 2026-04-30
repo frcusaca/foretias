@@ -9,6 +9,9 @@ use parking_lot::RwLock;
 
 use super::transport::PeerAddr;
 
+/// Maximum number of peers allowed in the DHT peer source.
+const MAX_PEERS: usize = 256;
+
 /// Abstract source of peers for auto-attestation scheduling.
 #[async_trait]
 pub trait PeerSource: Send + Sync {
@@ -31,8 +34,14 @@ impl Default for DhtPeerSource {
 
 impl DhtPeerSource {
     /// Insert or update a discovered peer.
+    /// If the peer table is full and the peer is not already known, the insertion is rejected.
     pub fn upsert(&self, peer_id: PeerId, addr: PeerAddr) {
-        self.peers.write().insert(peer_id, addr);
+        let mut guard = self.peers.write();
+        if guard.len() >= MAX_PEERS && !guard.contains_key(&peer_id) {
+            tracing::warn!(peer = %peer_id, max_peers = MAX_PEERS, "DHT peer table full, rejecting new peer");
+            return;
+        }
+        guard.insert(peer_id, addr);
     }
 
     /// Remove a peer.
@@ -69,7 +78,7 @@ mod tests {
 
         src.upsert(
             pid,
-            PeerAddr { json_rpc: "127.0.0.1:4001".into(), peer_id: Some(pid) },
+            PeerAddr { json_rpc: "127.0.0.1:4001".into(), peer_id: Some(pid), last_seen_ns: 0 },
         );
 
         let peers = src.list().await;

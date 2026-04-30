@@ -66,4 +66,14 @@ impl NodeConfig {
             .map(|h| format!("{}/.config/fortias/fortias.settings.json", h))
             .unwrap_or_else(|_| ".config/fortias/fortias.settings.json".to_string())
     }
+    /// Validates the configuration, returning an error string if invalid.
+    pub fn validate(&self) -> Result<(), String> {
+        if self.dht_namespace.is_empty() {
+            return Err("dht_namespace must not be empty".to_string());
+        }
+        if self.dht_namespace.len() > 64 {
+            return Err("dht_namespace must be 64 bytes or fewer".to_string());
+        }
+        Ok(())
+    }
 }

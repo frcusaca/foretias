@@ -12,6 +12,8 @@ pub struct PeerAddr {
     pub json_rpc: String,
     /// Optional libp2p PeerId for transport-layer identity.
     pub peer_id: Option<libp2p::PeerId>,
+    /// Monotonic timestamp (nanoseconds) of the last time this peer was seen.
+    pub last_seen_ns: u64,
 }
 
 impl std::fmt::Display for PeerAddr {

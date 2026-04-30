@@ -121,7 +121,7 @@ mod tests {
                 Arc::new(DummyTransport),
                 30,
             );
-            pool.add_peer(PeerAddr { json_rpc: "127.0.0.1:4001".into(), peer_id: None }).await;
+            pool.add_peer(PeerAddr { json_rpc: "127.0.0.1:4001".into(), peer_id: None, last_seen_ns: 0 }).await;
             let peers = pool.get_peers().await;
             assert_eq!(peers.len(), 1);
             assert_eq!(peers[0].json_rpc, "127.0.0.1:4001");
@@ -133,11 +133,11 @@ mod tests {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             let pool = PeerPool::new(
-                vec![PeerAddr { json_rpc: "127.0.0.1:4001".into(), peer_id: None }],
+                vec![PeerAddr { json_rpc: "127.0.0.1:4001".into(), peer_id: None, last_seen_ns: 0 }],
                 Arc::new(DummyTransport),
                 30,
             );
-            pool.remove_peer(&PeerAddr { json_rpc: "127.0.0.1:4001".into(), peer_id: None }).await;
+            pool.remove_peer(&PeerAddr { json_rpc: "127.0.0.1:4001".into(), peer_id: None, last_seen_ns: 0 }).await;
             let peers = pool.get_peers().await;
             assert!(peers.is_empty());
         });
@@ -148,11 +148,11 @@ mod tests {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             let pool = PeerPool::new(
-                vec![PeerAddr { json_rpc: "127.0.0.1:4001".into(), peer_id: None }],
+                vec![PeerAddr { json_rpc: "127.0.0.1:4001".into(), peer_id: None, last_seen_ns: 0 }],
                 Arc::new(DummyTransport),
                 30,
             );
-            pool.add_peer(PeerAddr { json_rpc: "127.0.0.1:4001".into(), peer_id: None }).await;
+            pool.add_peer(PeerAddr { json_rpc: "127.0.0.1:4001".into(), peer_id: None, last_seen_ns: 0 }).await;
             assert_eq!(pool.get_peers().await.len(), 1);
         });
     }

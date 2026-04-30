@@ -2,6 +2,11 @@
 #include "fortias_core.h"
 #include <sodium.h>
 
+/*@ requires \valid(a + (0 .. 31));
+  @ requires \valid(b + (0 .. 31));
+  @ requires \valid(out + (0 .. 31));
+  @ assigns out->bytes[0 .. 31];
+  @*/
 static void sha256_two_32byte(const uint8_t* a, const uint8_t* b, uint8_t* out) {
     crypto_hash_sha256_state state;
     crypto_hash_sha256_init(&state);
@@ -10,6 +15,11 @@ static void sha256_two_32byte(const uint8_t* a, const uint8_t* b, uint8_t* out) 
     crypto_hash_sha256_final(&state, out);
 }
 
+/*@ requires data == NULL || \valid_read(data + (0 .. len-1));
+  @ requires \valid(leaf_out);
+  @ assigns leaf_out->bytes[0 .. 31];
+  @ ensures \result == FORTIAS_OK ==> \valid_read(leaf_out->bytes + (0 .. 31));
+  @*/
 FortiasResult fortias_merkle_leaf(const uint8_t* data, size_t len, FortiasHash32* leaf_out) {
     if (data == NULL || leaf_out == NULL) {
         return FORTIAS_ERR_BAD_INPUT;
@@ -36,6 +46,19 @@ FortiasResult fortias_merkle_leaf(const uint8_t* data, size_t len, FortiasHash32
     return FORTIAS_OK;
 }
 
+/*@ requires \valid(root);
+  @ requires \valid(leaf);
+  @ requires \valid(proof);
+  @ requires proof->depth > 0 && proof->depth <= FORTIAS_MERKLE_MAX_DEPTH;
+  @ requires \valid(proof->siblings + (0 .. proof->depth-1));
+  @ requires \valid(proof->directions + (0 .. proof->depth-1));
+  @ ensures \result == FORTIAS_OK || \result == FORTIAS_ERR_BAD_PROOF;
+  @ behavior pure:
+  @   reads root->bytes[0 .. 31];
+  @   reads leaf->bytes[0 .. 31];
+  @   reads proof->siblings[0 .. proof->depth-1]->bytes[0 .. 31];
+  @   reads proof->directions[0 .. proof->depth-1];
+  @*/
 FortiasResult fortias_merkle_verify(
     const FortiasHash32*      root,
     const FortiasHash32*      leaf,

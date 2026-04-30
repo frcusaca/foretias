@@ -10,17 +10,10 @@ use crate::core::identity::PrivKeyHandle;
 use crate::error::CryptoError;
 use super::{CryptoServer, CryptoServerCapabilities, FortiasCurve, PublicKeyBytes, SharedSecret, SealedBlob};
 
-/// Derive seal key via HMAC-SHA256(pub_key, "fortias-seal-v1").
-fn derive_seal_key(pub_bytes: &[u8; 32]) -> [u8; 32] {
-    use hmac::{Hmac, Mac};
-    type HmacSha256 = Hmac<sha2::Sha256>;
-    let mut mac = <HmacSha256 as Mac>::new_from_slice(pub_bytes)
-        .expect("HMAC key length is always valid");
-    mac.update(b"fortias-seal-v1");
-    let result = mac.finalize();
-    let mut key = [0u8; 32];
-    key.copy_from_slice(&result.into_bytes());
-    key
+/// Derive seal key via HKDF-SHA256 over the Ed25519 seed.
+/// The seed never leaves C memory; the derivation happens inside C11.
+fn derive_seal_key(handle: &PrivKeyHandle) -> Result<[u8; 32], CryptoError> {
+    handle.derive_seal_key(b"fortias-calendar-seal-v1")
 }
 
 /// Software-based crypto server backed by libsodium and ChaCha20-Poly1305.
@@ -49,7 +42,7 @@ impl SoftwareCryptoServer {
                 let pub_key_bytes: [u8; 32] = handle.public_key()?;
                 let pub_key = FortiasPubKey32 { bytes: pub_key_bytes };
                 let peer_id = crate::core::identity::derive_ed25519_peer_id(&pub_key)?;
-                let seal_key = derive_seal_key(&pub_key_bytes);
+                let seal_key = derive_seal_key(&handle)?;
 
                 Ok(Self {
                     curve: FortiasCurve::Ed25519,
@@ -136,7 +129,7 @@ impl CryptoServer for SoftwareCryptoServer {
             data.as_ref(),
         )
             .map_err(|_| CryptoError::Internal(1))?;
-        Ok(SealedBlob { ciphertext: ct, nonce, version: 1 })
+        Ok(SealedBlob { ciphertext: ct, nonce: nonce.to_vec() })
     }
 
     fn unseal_for_self(&self, blob: &SealedBlob) -> Result<Vec<u8>, CryptoError> {
@@ -166,5 +159,31 @@ impl CryptoServer for SoftwareCryptoServer {
 
     fn backend_self_proof(&self, _challenge: &[u8]) -> Result<Option<Vec<u8>>, CryptoError> {
         Ok(None)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn seal_unseal_roundtrip() {
+        let server = SoftwareCryptoServer::generate(FortiasCurve::Ed25519).unwrap();
+        let plaintext = b"the quick brown fox jumps over the lazy calendar";
+        let blob = server.seal_for_self(plaintext).unwrap();
+        assert!(!blob.ciphertext.is_empty());
+        assert_eq!(blob.nonce.len(), 12);
+        let decrypted = server.unseal_for_self(&blob).unwrap();
+        assert_eq!(decrypted, plaintext);
+    }
+
+    #[test]
+    fn seal_wrong_key_fails() {
+        let server_a = SoftwareCryptoServer::generate(FortiasCurve::Ed25519).unwrap();
+        let server_b = SoftwareCryptoServer::generate(FortiasCurve::Ed25519).unwrap();
+        let plaintext = b"secret message for server a only";
+        let blob = server_a.seal_for_self(plaintext).unwrap();
+        let result = server_b.unseal_for_self(&blob);
+        assert!(result.is_err());
     }
 }

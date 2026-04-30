@@ -229,6 +229,7 @@ async fn test_two_nodes_auto_attest() {
             &fortias_node::communerd::transport::PeerAddr {
                 json_rpc: addr_b.clone(),
                 peer_id: None,
+                last_seen_ns: 0,
             },
             &hex::encode(b"auto attest test"),
             "ma-test",
@@ -278,6 +279,7 @@ async fn test_peer_unreachable_does_not_crash() {
             &fortias_node::communerd::transport::PeerAddr {
                 json_rpc: "127.0.0.1:59999".to_string(),
                 peer_id: None,
+                last_seen_ns: 0,
             },
             &hex::encode(b"test"),
             "test",

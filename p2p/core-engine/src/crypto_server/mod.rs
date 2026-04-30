@@ -1,5 +1,7 @@
 //! CryptoServer abstraction — pluggable cryptographic backend.
 
+use serde::{Deserialize, Serialize};
+
 use crate::core::bindings::*;
 use crate::error::CryptoError;
 
@@ -41,14 +43,12 @@ impl Drop for SharedSecret {
 }
 
 /// An encrypted blob sealed with the node's derived seal key.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SealedBlob {
-    /// The encrypted payload.
-    pub ciphertext: Vec<u8>,
     /// The 12-byte nonce used for ChaCha20-Poly1305 encryption.
-    pub nonce: [u8; 12],
-    /// Format version of the sealed blob.
-    pub version: u32,
+    pub nonce: Vec<u8>,
+    /// The encrypted payload (plaintext length + 16-byte AEAD tag).
+    pub ciphertext: Vec<u8>,
 }
 
 /// Describes the capabilities and performance characteristics of a crypto backend.

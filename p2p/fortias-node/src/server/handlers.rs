@@ -4,6 +4,7 @@ use fortias_core::error::NodeError;
 use fortias_core::fortias::tick::CalendarLookup;
 use fortias_core::fortias::Fortis;
 use super::jsonrpc::{self, JsonRpcResponse};
+use crate::metrics::MetricField;
 use super::TimeFamilyServer;
 
 const MAX_CONTENT_BYTES: usize = 1_073_741_824;
@@ -53,6 +54,7 @@ pub fn handle_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse
     let cm = server.chronomatter();
     match cm.stamp(content, echo) {
         Ok(fortis) => {
+            server.metrics().inc(MetricField::StampsTotal);
             if let Err(e) = server.save() {
                 tracing::warn!("failed to persist calendar after stamp: {}", e);
             }

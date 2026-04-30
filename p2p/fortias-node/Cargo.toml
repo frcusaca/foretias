@@ -30,6 +30,8 @@ uuid                = { version = "1", features = ["v4", "serde"] }
 hex                 = "0.4"
 zeroize             = "1"
 rand                = "0.8"
+serde_cbor          = "0.11"
+base64              = "0.21"
 
 libp2p = { version = "0.56", default-features = false, features = [
     "tokio", "tcp", "noise", "yamux", "identify", "ping", "macros", "ed25519", "kad",

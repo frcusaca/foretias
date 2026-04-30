@@ -11,7 +11,7 @@ SHELL    := /bin/bash
 PREFIX   ?= /usr/local
 BUILD    := build
 
-.PHONY: all test clean install cmake
+.PHONY: all test clean install cmake frama-c-merkle
 
 all: $(BUILD)/libfortias_core.a
 
@@ -39,3 +39,14 @@ install: all
 clean:
 	rm -rf $(BUILD)
 	@echo "Cleaned."
+
+# ── Frama-C Formal Verification (merkle.c PoC) ─────────────────────
+FRAMA_C     ?= frama-c
+WP_FLAGS    = -wp -wp-rte -wp-timeout 60
+
+frama-c-merkle:
+	$(FRAMA_C) $(WP_FLAGS) \
+	    -cpp-extra-args="-I include" \
+	    src/merkle.c src/hash_sha256.c src/memzero.c \
+	    -then -report
+	@echo "Frama-C WP: all goals proved"

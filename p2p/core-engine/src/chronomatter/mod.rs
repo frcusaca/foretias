@@ -16,7 +16,7 @@ use crate::core::identity::PrivKeyHandle;
 use crate::error::NodeError;
 use crate::fortias::{auto_attestation_blob, Fortis, TickRecord};
 use crate::fortias::tick::CalendarLookup;
-use crate::fortias::callbacks::TickObserver;
+use crate::fortias::callbacks::{TickObserver, AutoAttestObserver};
 use crate::fortias::types::Tbid;
 
 struct TickKeyPair {
@@ -31,6 +31,7 @@ pub struct Chronomatter {
     keypairs: RwLock<Vec<TickKeyPair>>,
     crypto: Arc<dyn CryptoServer>,
     tick_observer: Arc<dyn TickObserver>,
+    auto_attest_observer: Option<Arc<dyn AutoAttestObserver>>,
     chronon_ns: u64,
     daemon_handle: Mutex<Option<JoinHandle<()>>>,
     is_dormant: bool,
@@ -53,6 +54,7 @@ impl Chronomatter {
             keypairs: RwLock::new(Vec::new()),
             crypto,
             tick_observer,
+            auto_attest_observer: None,
             chronon_ns,
             daemon_handle: Mutex::new(None),
             is_dormant: false,
@@ -78,6 +80,7 @@ impl Chronomatter {
             keypairs: RwLock::new(Vec::new()),
             crypto,
             tick_observer,
+            auto_attest_observer: None,
             chronon_ns: 0,
             daemon_handle: Mutex::new(None),
             is_dormant: true,
@@ -98,6 +101,11 @@ impl Chronomatter {
 
     pub fn current_tick(&self) -> u64 {
         self.current_tick.load(SeqCst)
+    }
+
+    /// Set the auto-attestation observer (for metrics).
+    pub fn set_auto_attest_observer(&mut self, observer: Arc<dyn AutoAttestObserver>) {
+        self.auto_attest_observer = Some(observer);
     }
 
     fn generate_and_store_keypair(&self) -> Result<usize, NodeError> {
@@ -147,7 +155,17 @@ impl Chronomatter {
     }
 
     fn build_tick_record(&self, tick: u64, new_pub: [u8; 32]) -> Result<TickRecord, NodeError> {
-        let (forward_fortis, backward_fortis, aa_nonce) = self.build_auto_attestation(tick, new_pub)?;
+        if let Some(ref obs) = self.auto_attest_observer {
+            obs.on_auto_attest_sent();
+        }
+        let result = self.build_auto_attestation(tick, new_pub);
+        if let Some(ref obs) = self.auto_attest_observer {
+            match &result {
+                Ok(_) => obs.on_auto_attest_ok(),
+                Err(_) => obs.on_auto_attest_failed(),
+            }
+        }
+        let (forward_fortis, backward_fortis, aa_nonce) = result?;
 
         Ok(TickRecord {
             tick_number: tick,

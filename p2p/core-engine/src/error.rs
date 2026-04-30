@@ -44,6 +44,12 @@ pub enum NodeError {
     /// External attestation verification failed.
     #[error("attestation verification failed: {0}")]
     AttestationVerificationFailed(String),
+    /// The outbound message queue is full; the request cannot be enqueued.
+    #[error("queue full")]
+    QueueFull,
+    /// No more evictable entries available in the LRU cache.
+    #[error("out of space: no unused entries to evict")]
+    OutOfSpace,
 }
 
 /// Errors originating from the cryptographic backend.

@@ -6,12 +6,13 @@ use tokio::io::{AsyncBufReadExt, BufReader, AsyncWriteExt};
 
 use fortias_core::chronomatter::Chronomatter;
 use fortias_core::config::NodeConfig;
-use fortias_core::fortias::callbacks::TickObserver;
+use fortias_core::fortias::callbacks::{TickObserver, AutoAttestObserver};
 use fortias_core::fortias::TickRecord;
 use fortias_core::error::NodeError;
 
 use super::calendar::Calendar;
 use super::communerd::Communerd;
+use super::metrics::{NodeMetrics, MetricField};
 use self::jsonrpc::{JsonRpcRequest, JsonRpcResponse};
 
 struct NoOpObserver;
@@ -28,6 +29,7 @@ pub struct TimeFamilyServer {
     communerd: Option<Arc<Communerd>>,
     listen_addr: String,
     persist_path: Option<std::path::PathBuf>,
+    metrics: Arc<NodeMetrics>,
 }
 
 impl TimeFamilyServer {
@@ -49,8 +51,10 @@ impl TimeFamilyServer {
         persist_path: Option<std::path::PathBuf>,
         config: Option<NodeConfig>,
     ) -> Result<Self, NodeError> {
+        let metrics = Arc::new(NodeMetrics::new());
         let calendar = Arc::new(Calendar::new([0u8; 16], "init"));
-        let cm = Chronomatter::new(chronon_ns, Arc::clone(&calendar) as Arc<dyn TickObserver>)?;
+        let mut cm = Chronomatter::new(chronon_ns, Arc::clone(&calendar) as Arc<dyn TickObserver>)?;
+        cm.set_auto_attest_observer(Arc::clone(&metrics) as Arc<dyn AutoAttestObserver>);
         let (tbid, tbn) = (cm.get_tbid(), cm.get_tbn().to_string());
         let binding = calendar.inner();
         let mut cal_inner = binding.write();
@@ -65,6 +69,7 @@ impl TimeFamilyServer {
             communerd,
             listen_addr: listen_addr.to_string(),
             persist_path,
+            metrics,
         })
     }
 
@@ -77,7 +82,9 @@ impl TimeFamilyServer {
         let crypto = StdArc::from(crypto_server::new_software(
             crypto_server::FortiasCurve::Ed25519,
         )?);
-        let cm = Chronomatter::from_calendar(path, crypto, Arc::new(NoOpObserver))?;
+        let mut cm = Chronomatter::from_calendar(path, crypto, Arc::new(NoOpObserver))?;
+        let metrics = Arc::new(NodeMetrics::new());
+        cm.set_auto_attest_observer(Arc::clone(&metrics) as Arc<dyn AutoAttestObserver>);
         let calendar = Arc::new(Calendar::from_persisted(path)?);
         Ok(Self {
             chronomatter: Arc::new(cm),
@@ -85,6 +92,7 @@ impl TimeFamilyServer {
             communerd: None,
             listen_addr: listen_addr.to_string(),
             persist_path: None,
+            metrics,
         })
     }
 
@@ -117,6 +125,10 @@ impl TimeFamilyServer {
         self.communerd.as_ref()
     }
 
+    pub fn metrics(&self) -> &Arc<NodeMetrics> {
+        &self.metrics
+    }
+
     pub fn current_tick(&self) -> u64 {
         self.chronomatter.current_tick()
     }
@@ -129,10 +141,10 @@ impl TimeFamilyServer {
         if let Some(ref p) = self.persist_path {
             let json_path = p.join(format!("{}.json", hex::encode(self.get_tbid())));
             std::fs::create_dir_all(p)?;
-            self.calendar.save(json_path.to_str().unwrap())
-        } else {
-            Ok(())
+            self.calendar.save(json_path.to_str().unwrap())?;
+            self.metrics.inc(MetricField::CalendarFlushCount);
         }
+        Ok(())
     }
 
     pub fn daemon_tick(&self) -> Result<(), NodeError> {

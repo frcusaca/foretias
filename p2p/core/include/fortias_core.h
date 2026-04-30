@@ -334,6 +334,16 @@ FortiasResult fortias_nullifier_derive_handle(
     FortiasNullifier *out
 );
 
+/* Derive a 32-byte seal key via HKDF-SHA256 from the handle's seed.
+   The seed never leaves C memory. The info string identifies the
+   derived key's purpose (e.g. "fortias-calendar-seal-v1"). */
+FortiasResult fortias_privkey_derive_seal_key(
+    const FortiasPrivKey *key,
+    const uint8_t *info,
+    size_t            info_len,
+    uint8_t           seal_key[32]
+);
+
 /* Destroy the handle, securely zeroing all key material. */
 void fortias_privkey_free(FortiasPrivKey *key);
 

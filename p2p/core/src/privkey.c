@@ -211,6 +211,44 @@ FortiasResult fortias_nullifier_derive_handle(const FortiasPrivKey *key, const u
     return FORTIAS_OK;
 }
 
+FortiasResult fortias_privkey_derive_seal_key(
+    const FortiasPrivKey *key,
+    const uint8_t *info,
+    size_t info_len,
+    uint8_t seal_key[32]
+) {
+    if (!key || !info || !seal_key) return FORTIAS_ERR_BAD_INPUT;
+
+    /* 1. Decrypt seed */
+    uint8_t tmp[32];
+    if (!decrypt_seed(tmp, key->encrypted_key, key->nonce)) {
+        return FORTIAS_ERR_INTERNAL;
+    }
+
+    /* 2. HKDF-SHA256 per RFC 5869:
+       Extract: LMK = HMAC-SHA256(salt=0x00..0x00, seed)
+       Expand:  OKM = HMAC-SHA256(LMK, info || 0x01) truncated to 32 bytes */
+    uint8_t lmk[32];
+    uint8_t salt[32] = {0};
+    crypto_auth_hmacsha256(lmk, tmp, 32, salt);
+
+    /* Expand: okm = HMAC(LMK, info || 0x01) */
+    uint8_t expand_input[64];
+    memcpy(expand_input, info, info_len);
+    expand_input[info_len] = 0x01;
+    unsigned char okm[32];
+    crypto_auth_hmacsha256(okm, expand_input, info_len + 1, lmk);
+    memcpy(seal_key, okm, 32);
+
+    /* 3. Zeroize all temporary buffers */
+    fortias_memzero(lmk, sizeof lmk);
+    fortias_memzero(expand_input, sizeof expand_input);
+    fortias_memzero(okm, sizeof okm);
+    fortias_memzero(tmp, sizeof tmp);
+
+    return FORTIAS_OK;
+}
+
 void fortias_privkey_free(FortiasPrivKey *key) {
     if (key) {
         fortias_memzero(key, sizeof(FortiasPrivKey));

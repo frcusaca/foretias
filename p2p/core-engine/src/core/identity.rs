@@ -79,6 +79,22 @@ impl PrivKeyHandle {
         c_result_to_error(rc as i32)?;
         Ok(FortiasSig64 { bytes: sig })
     }
+
+    /// Derive a 32-byte seal key via HKDF-SHA256 from the seed.
+    /// The seed never leaves C memory.
+    pub fn derive_seal_key(&self, info: &[u8]) -> Result<[u8; 32], CryptoError> {
+        let mut seal_key = [0u8; 32];
+        let rc = unsafe {
+            fortias_privkey_derive_seal_key(
+                self.0.as_ptr(),
+                info.as_ptr(),
+                info.len(),
+                seal_key.as_mut_ptr(),
+            )
+        };
+        c_result_to_error(rc)?;
+        Ok(seal_key)
+    }
 }
 
 impl Drop for PrivKeyHandle {

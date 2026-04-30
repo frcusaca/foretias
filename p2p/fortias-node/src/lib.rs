@@ -4,3 +4,5 @@
 pub mod server;
 pub mod communerd;
 pub mod calendar;
+pub mod metrics;
+pub mod calendar_store;
