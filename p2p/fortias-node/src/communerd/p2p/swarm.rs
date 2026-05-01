@@ -2,10 +2,13 @@
 
 use super::behaviour::{FortiasBehaviour, FortiasBehaviourEvent};
 use super::events::NetworkEvent;
+use super::gossip::{probity_topic, heartbeat_topic};
+use crate::probity::ProbityReport;
+use fortias_core::collision::Heartbeat;
 use fortias_core::error::NodeError;
 use futures::StreamExt;
 use libp2p::{
-    identify, kad,
+    identify, kad, gossipsub,
     swarm::{derive_prelude::ListenerId, SwarmEvent},
     tcp, noise, yamux,
     SwarmBuilder, PeerId,
@@ -27,6 +30,8 @@ pub enum SwarmCommand {
     GetProviders { key: kad::RecordKey },
     Dial { addr: libp2p::Multiaddr },
     EnterDormancy,
+    PublishProbity { report: ProbityReport, namespace: String },
+    PublishHeartbeat { heartbeat: Heartbeat, namespace: String },
 }
 
 /// Build and spawn a libp2p swarm.
@@ -57,13 +62,23 @@ pub async fn build_and_spawn_swarm(
     swarm.listen_on(listen)
         .map_err(|e| NodeError::Internal(format!("{e}")))?;
 
+    // Subscribe to probity topic
+    let topic = probity_topic(namespace);
+    swarm.behaviour_mut().gossip.subscribe(&topic)
+        .map_err(|e| NodeError::Internal(format!("gossip subscribe: {e}")))?;
+
+    // Subscribe to heartbeat topic for collision detection
+    let hbt = heartbeat_topic(namespace);
+    swarm.behaviour_mut().gossip.subscribe(&hbt)
+        .map_err(|e| NodeError::Internal(format!("gossip subscribe heartbeat: {e}")))?;
+
     for ma in dials {
         let _ = swarm.dial(ma);
     }
 
     let (events_tx, events_rx) = mpsc::unbounded_channel();
     let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
-    let task = tokio::spawn(swarm_loop(swarm, events_tx, cmd_rx));
+    let task = tokio::spawn(swarm_loop(swarm, events_tx, cmd_rx, namespace.to_string()));
 
     Ok(SwarmHandle {
         local_peer_id,
@@ -77,6 +92,7 @@ async fn swarm_loop(
     mut swarm: libp2p::Swarm<FortiasBehaviour>,
     tx: mpsc::UnboundedSender<NetworkEvent>,
     mut cmd_rx: mpsc::UnboundedReceiver<SwarmCommand>,
+    _namespace: String,
 ) {
     let mut listener_ids: HashSet<ListenerId> = HashSet::new();
 
@@ -104,6 +120,32 @@ async fn swarm_loop(
                         }
                         for lid in listener_ids.drain() {
                             let _ = swarm.remove_listener(lid);
+                        }
+                    }
+                    Some(SwarmCommand::PublishProbity { report, namespace }) => {
+                        let bytes = match serde_json::to_vec(&report) {
+                            Ok(b) => b,
+                            Err(e) => {
+                                tracing::warn!("failed to serialize ProbityReport: {e}");
+                                continue;
+                            }
+                        };
+                        let topic = probity_topic(&namespace);
+                        if let Err(e) = swarm.behaviour_mut().gossip.publish(topic, bytes) {
+                            tracing::warn!("failed to publish probity report: {e}");
+                        }
+                    }
+                    Some(SwarmCommand::PublishHeartbeat { heartbeat, namespace }) => {
+                        let bytes = match serde_json::to_vec(&heartbeat) {
+                            Ok(b) => b,
+                            Err(e) => {
+                                tracing::warn!("failed to serialize Heartbeat: {e}");
+                                continue;
+                            }
+                        };
+                        let topic = heartbeat_topic(&namespace);
+                        if let Err(e) = swarm.behaviour_mut().gossip.publish(topic, bytes) {
+                            tracing::warn!("failed to publish heartbeat: {e}");
                         }
                     }
                     None => break,
@@ -177,6 +219,35 @@ async fn swarm_loop(
                                     }
                                     _ => {}
                                 }
+                            }
+                            _ => {}
+                        }
+                    }
+                    SwarmEvent::Behaviour(FortiasBehaviourEvent::Gossip(event)) => {
+                        match event {
+                            gossipsub::Event::Message { propagation_source, message, .. } => {
+                                tracing::debug!(
+                                    peer = %propagation_source,
+                                    "received gossipsub message"
+                                );
+                                let topic_str = message.topic.to_string();
+                                if topic_str.starts_with("/fortias/") && topic_str.ends_with("/heartbeat/v1") {
+                                    let _ = tx.send(NetworkEvent::HeartbeatMessage {
+                                        data: message.data.clone(),
+                                        source: propagation_source,
+                                    });
+                                } else {
+                                    let _ = tx.send(NetworkEvent::GossipMessage {
+                                        data: message.data.clone(),
+                                        source: propagation_source,
+                                    });
+                                }
+                            }
+                            gossipsub::Event::Subscribed { peer_id, topic } => {
+                                tracing::info!(peer = %peer_id, ?topic, "peer subscribed to gossip topic");
+                            }
+                            gossipsub::Event::Unsubscribed { peer_id, topic } => {
+                                tracing::info!(peer = %peer_id, ?topic, "peer unsubscribed from gossip topic");
                             }
                             _ => {}
                         }

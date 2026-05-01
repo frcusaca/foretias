@@ -17,8 +17,8 @@ pub enum FortiasCurve {
 impl From<FortiasCurve> for u32 {
     fn from(curve: FortiasCurve) -> Self {
         match curve {
-            FortiasCurve::Ed25519 => FortiasCurve_FORTIAS_CURVE_ED25519,
-            FortiasCurve::P256 => FortiasCurve_FORTIAS_CURVE_P256,
+            FortiasCurve::Ed25519 => FORTIASCURVE_FORTIAS_CURVE_ED25519,
+            FortiasCurve::P256 => FORTIASCURVE_FORTIAS_CURVE_P256,
         }
     }
 }

@@ -10,4 +10,6 @@ pub enum NetworkEvent {
     PingSuccess { peer_id: PeerId, rtt: std::time::Duration },
     DhtPeerDiscovered { peer_id: PeerId, addresses: Vec<Multiaddr> },
     DhtBootstrapComplete,
+    GossipMessage { data: Vec<u8>, source: PeerId },
+    HeartbeatMessage { data: Vec<u8>, source: PeerId },
 }

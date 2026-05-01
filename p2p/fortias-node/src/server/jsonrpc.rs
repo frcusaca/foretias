@@ -41,6 +41,7 @@ pub const INVALID_REQUEST: i32 = -32600;
 pub const METHOD_NOT_FOUND: i32 = -32601;
 pub const INVALID_PARAMS: i32 = -32602;
 pub const INTERNAL_ERROR: i32 = -32603;
+pub const DORMANT_ERROR: i32 = -32001;
 
 impl JsonRpcResponse {
     pub fn success(id: Option<Value>, result: Value) -> Self {
@@ -196,5 +197,6 @@ mod tests {
         assert_eq!(METHOD_NOT_FOUND, -32601);
         assert_eq!(INVALID_PARAMS, -32602);
         assert_eq!(INTERNAL_ERROR, -32603);
+        assert_eq!(DORMANT_ERROR, -32001);
     }
 }

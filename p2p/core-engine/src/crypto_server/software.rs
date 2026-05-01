@@ -58,6 +58,24 @@ impl SoftwareCryptoServer {
             }
         }
     }
+
+    pub fn from_seed(seed: &[u8; 32]) -> Result<Self, CryptoError> {
+        PrivKeyHandle::init();
+        let handle = PrivKeyHandle::from_seed(seed)?;
+        let pub_key_bytes: [u8; 32] = handle.public_key()?;
+        let pub_key = FortiasPubKey32 { bytes: pub_key_bytes };
+        let peer_id = crate::core::identity::derive_ed25519_peer_id(&pub_key)?;
+        let seal_key = derive_seal_key(&handle)?;
+
+        Ok(Self {
+            curve: FortiasCurve::Ed25519,
+            pub_key: PublicKeyBytes::Ed25519(pub_key),
+            priv_key: handle,
+            peer_id,
+            seal_key: Zeroizing::new(seal_key),
+            frost_shares: parking_lot::Mutex::new(HashMap::new()),
+        })
+    }
 }
 
 impl Drop for SoftwareCryptoServer {

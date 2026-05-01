@@ -5,6 +5,7 @@
 //! - Transport-level Noise XX handshake
 //! - DHT routing (v0.4)
 //! - Peer identification
+//! - GossipSub message signing (v0.6)
 //!
 //! The TBID (application identity) is separate and managed by the C11 enclave.
 
@@ -12,6 +13,7 @@ pub mod tbid_handshake;
 pub mod swarm;
 pub mod behaviour;
 pub mod events;
+pub mod gossip;
 
 use libp2p::identity::{Keypair, PublicKey};
 
@@ -36,7 +38,6 @@ mod tests {
     fn libp2p_keypair_generates_valid_peer_id() {
         let keypair = generate_transport_keypair();
         let peer_id = public_key_to_peer_id(&keypair.public());
-        // PeerId is a base58-encoded multihash — non-empty string
         assert!(!peer_id.to_string().is_empty());
     }
 

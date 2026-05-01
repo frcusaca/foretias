@@ -510,3 +510,99 @@ async fn three_nodes_discover_and_attest() {
     handle_b.task.abort();
     handle_c.task.abort();
 }
+
+#[tokio::test]
+async fn gossip_probity_propagation() {
+    use fortias_node::communerd::p2p::swarm::{build_and_spawn_swarm, SwarmCommand};
+    use fortias_node::communerd::p2p::events::NetworkEvent;
+    use fortias_node::probity::ProbityReport;
+
+    let port_a = find_available_port();
+    let port_b = find_available_port();
+    let ma_a: libp2p::Multiaddr = format!("/ip4/127.0.0.1/tcp/{}", port_a).parse().unwrap();
+    let ma_b: libp2p::Multiaddr = format!("/ip4/127.0.0.1/tcp/{}", port_b).parse().unwrap();
+
+    let namespace = "testnet";
+
+    let mut handle_a = build_and_spawn_swarm(ma_a.clone(), vec![], namespace, None).await.unwrap();
+    let peer_id_a = handle_a.local_peer_id;
+
+    let dial_a: libp2p::Multiaddr = format!("{}/p2p/{}", ma_a, peer_id_a).parse().unwrap();
+    let mut handle_b = build_and_spawn_swarm(ma_b, vec![dial_a], namespace, None).await.unwrap();
+    let peer_id_b = handle_b.local_peer_id;
+
+    let deadline = std::time::Instant::now() + Duration::from_secs(15);
+    let mut both_connected = false;
+
+    while std::time::Instant::now() < deadline {
+        let mut a_conn = false;
+        let mut b_conn = false;
+
+        while let Ok(Some(event)) = tokio::time::timeout(Duration::from_millis(100), handle_a.events.recv()).await {
+            if matches!(event, NetworkEvent::Connected { .. } | NetworkEvent::Identified { .. }) {
+                a_conn = true;
+            }
+        }
+        while let Ok(Some(event)) = tokio::time::timeout(Duration::from_millis(100), handle_b.events.recv()).await {
+            if matches!(event, NetworkEvent::Connected { .. } | NetworkEvent::Identified { .. }) {
+                b_conn = true;
+            }
+        }
+
+        if a_conn && b_conn {
+            both_connected = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(300)).await;
+    }
+
+    assert!(both_connected, "Swarms never connected");
+
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Publish probity report from A
+    let now_ns = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0);
+    let report = ProbityReport {
+        subject: peer_id_b.to_string(),
+        reporter: peer_id_a.to_string(),
+        attribute: "correctness".to_string(),
+        value: 10.0,
+        timestamp_ns: now_ns,
+        signature: vec![],
+        curve: 1u8,
+    };
+    let _ = handle_a.cmd_tx.send(SwarmCommand::PublishProbity {
+        report: report.clone(),
+        namespace: namespace.to_string(),
+    });
+
+    // B should receive the gossip message
+    let mut gossip_received = false;
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while std::time::Instant::now() < deadline {
+        while let Ok(Some(event)) = tokio::time::timeout(Duration::from_millis(200), handle_b.events.recv()).await {
+            if let NetworkEvent::GossipMessage { data, .. } = event {
+                let received: Result<ProbityReport, _> = serde_json::from_slice(&data);
+                if let Ok(received_report) = received {
+                    assert_eq!(received_report.subject, peer_id_b.to_string());
+                    assert_eq!(received_report.reporter, peer_id_a.to_string());
+                    assert_eq!(received_report.attribute, "correctness");
+                    assert_eq!(received_report.value, 10.0);
+                    gossip_received = true;
+                }
+            }
+        }
+        if gossip_received {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+
+    assert!(gossip_received, "B never received gossip message from A");
+
+    handle_a.task.abort();
+    handle_b.task.abort();
+}

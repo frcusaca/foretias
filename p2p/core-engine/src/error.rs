@@ -50,6 +50,12 @@ pub enum NodeError {
     /// No more evictable entries available in the LRU cache.
     #[error("out of space: no unused entries to evict")]
     OutOfSpace,
+    /// A message or report is stale or future-dated.
+    #[error("stale: {0}")]
+    Stale(&'static str),
+    /// The requested feature or curve is not supported.
+    #[error("unsupported: {0}")]
+    Unsupported(&'static str),
 }
 
 /// Errors originating from the cryptographic backend.

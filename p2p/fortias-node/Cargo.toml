@@ -34,7 +34,7 @@ serde_cbor          = "0.11"
 base64              = "0.21"
 
 libp2p = { version = "0.56", default-features = false, features = [
-    "tokio", "tcp", "noise", "yamux", "identify", "ping", "macros", "ed25519", "kad",
+    "tokio", "tcp", "noise", "yamux", "identify", "ping", "macros", "ed25519", "kad", "gossipsub",
 ]}
 multiaddr = "0.18"
 

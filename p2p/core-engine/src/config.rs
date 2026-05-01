@@ -42,6 +42,23 @@ pub struct NodeConfig {
     /// DHT bootstrap peer multiaddrs (e.g. "/ip4/bootstrap.fortias.example/tcp/4101/p2p/<PeerId>").
     #[serde(default)]
     pub dht_bootstrap: Vec<String>,
+    /// Collision detection configuration.
+    #[serde(default)]
+    pub collision: CollisionConfig,
+}
+
+/// Collision detection configuration.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CollisionConfig {
+    /// Heartbeat broadcast interval in seconds (default: 30).
+    #[serde(default = "default_heartbeat_interval_secs")]
+    pub heartbeat_interval_secs: u64,
+    /// Number of recent nonces to track for collision detection (default: 10).
+    #[serde(default = "default_nonce_window")]
+    pub nonce_window: usize,
+    /// Seconds to wait for liege response after collision (default: 30).
+    #[serde(default = "default_liege_wait_secs")]
+    pub liege_wait_secs: u64,
 }
 
 fn default_listen_addr() -> String { "127.0.0.1:4001".to_string() }
@@ -51,6 +68,9 @@ fn default_chronon_ns() -> u64 { 60_000_000_000 }
 fn default_auto_attest_every_n() -> u64 { 1 }
 fn default_request_timeout_secs() -> u64 { 5 }
 fn default_dht_namespace() -> String { "mainnet".to_string() }
+fn default_heartbeat_interval_secs() -> u64 { 30 }
+fn default_nonce_window() -> usize { 10 }
+fn default_liege_wait_secs() -> u64 { 30 }
 
 impl NodeConfig {
     /// Loads configuration from a TOML file at the given path; returns defaults on any error.

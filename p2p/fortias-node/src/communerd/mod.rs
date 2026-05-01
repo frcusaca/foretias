@@ -12,16 +12,19 @@ pub mod p2p;
 use std::sync::{Arc, OnceLock};
 
 use fortias_core::config::NodeConfig;
+use fortias_core::collision::{CollisionDetector, CollisionEvent};
+use fortias_core::core::bindings::FortiasPubKey32;
+use fortias_core::crypto_server::{CryptoServer, new_software, FortiasCurve};
 use fortias_core::error::NodeError;
 use fortias_core::fortias::callbacks::{CommunityQuery, CommunityResponse, PeerAddr as CorePeerAddr, PeerMessenger, TransportError as CoreTransportError};
 use fortias_core::fortias::tick::{Fortis, TickRecord};
 
-use self::dht_peer_source::DhtPeerSource;
 use self::json_rpc_transport::JsonRpcTransport;
 use self::peer_pool::PeerPool;
 use self::p2p::events::NetworkEvent;
 use self::p2p::swarm::{build_and_spawn_swarm, SwarmCommand};
 use self::transport::{PeerAddr, PeerTransport, TransportError};
+use crate::probity::{ProbityReport, ProbityStore, handle_gossip_message};
 use libp2p::kad;
 
 /// Communerd — all P2P traffic flows through this component.
@@ -32,14 +35,17 @@ pub struct Communerd {
     transport: Arc<dyn PeerTransport>,
     peer_pool: PeerPool,
     config: NodeConfig,
-    /// libp2p PeerId of this node, set once by `enable_p2p`.
     local_peer_id: Arc<OnceLock<libp2p::PeerId>>,
-    /// Shared event receiver for p2p events (owned by whoever calls `enable_p2p`).
     p2p_events: Arc<OnceLock<tokio::sync::mpsc::UnboundedReceiver<NetworkEvent>>>,
-    /// Background task handle for the p2p event loop.
     p2p_task: Arc<OnceLock<tokio::task::JoinHandle<()>>>,
-    /// Command sender for the p2p swarm.
     p2p_cmd_tx: Arc<OnceLock<tokio::sync::mpsc::UnboundedSender<SwarmCommand>>>,
+    probity_store: Arc<ProbityStore>,
+    crypto: Arc<dyn CryptoServer>,
+    namespace: Arc<std::sync::Mutex<String>>,
+    gossip_task: Arc<OnceLock<tokio::task::JoinHandle<()>>>,
+    recompute_task: Arc<OnceLock<tokio::task::JoinHandle<()>>>,
+    collision_task: Arc<OnceLock<tokio::task::JoinHandle<()>>>,
+    heartbeat_task: Arc<OnceLock<tokio::task::JoinHandle<()>>>,
 }
 
 impl Clone for Communerd {
@@ -52,12 +58,18 @@ impl Clone for Communerd {
             p2p_events: Arc::clone(&self.p2p_events),
             p2p_task: Arc::clone(&self.p2p_task),
             p2p_cmd_tx: Arc::clone(&self.p2p_cmd_tx),
+            probity_store: Arc::clone(&self.probity_store),
+            crypto: Arc::clone(&self.crypto),
+            namespace: Arc::clone(&self.namespace),
+            gossip_task: Arc::clone(&self.gossip_task),
+            recompute_task: Arc::clone(&self.recompute_task),
+            collision_task: Arc::clone(&self.collision_task),
+            heartbeat_task: Arc::clone(&self.heartbeat_task),
         }
     }
 }
 
 impl Communerd {
-    /// Create a new Communerd with the given configuration.
     pub fn new(config: NodeConfig) -> Self {
         let transport: Arc<dyn PeerTransport> = Arc::new(JsonRpcTransport::new(
             config.request_timeout_secs.max(1),
@@ -66,6 +78,7 @@ impl Communerd {
             .map(|p| PeerAddr { json_rpc: p.clone(), peer_id: None, last_seen_ns: 0 })
             .collect();
         let peer_pool = PeerPool::new(peers, Arc::clone(&transport), 30);
+        let crypto = Arc::from(new_software(FortiasCurve::Ed25519).expect("failed to create crypto server"));
         Self {
             transport,
             peer_pool,
@@ -74,10 +87,16 @@ impl Communerd {
             p2p_events: Arc::new(OnceLock::new()),
             p2p_task: Arc::new(OnceLock::new()),
             p2p_cmd_tx: Arc::new(OnceLock::new()),
+            probity_store: Arc::new(ProbityStore::new()),
+            crypto,
+            namespace: Arc::new(std::sync::Mutex::new("mainnet".to_string())),
+            gossip_task: Arc::new(OnceLock::new()),
+            recompute_task: Arc::new(OnceLock::new()),
+            collision_task: Arc::new(OnceLock::new()),
+            heartbeat_task: Arc::new(OnceLock::new()),
         }
     }
 
-    /// Start background liveness pings for known peers.
     pub fn start_liveness_pings(&self) {
         if !self.config.peers.is_empty() {
             let pool = self.peer_pool.clone();
@@ -85,7 +104,6 @@ impl Communerd {
         }
     }
 
-    /// Send a stamp request to a peer.
     pub async fn stamp_peer(
         &self,
         peer: &PeerAddr,
@@ -98,7 +116,6 @@ impl Communerd {
         Ok(fortis)
     }
 
-    /// Fetch a calendar slice from a peer.
     pub async fn get_calendar_slice(
         &self,
         peer: &PeerAddr,
@@ -108,36 +125,42 @@ impl Communerd {
         self.transport.get_calendar_slice(peer, tick_start, count).await
     }
 
-    /// Get known peers.
     pub async fn get_peers(&self) -> Vec<PeerAddr> {
         self.peer_pool.get_peers().await
     }
 
-    /// Add a peer dynamically.
     pub async fn add_peer(&self, addr: PeerAddr) {
         self.peer_pool.add_peer(addr).await;
     }
 
-    /// Remove a peer.
     pub async fn remove_peer(&self, addr: &PeerAddr) {
         self.peer_pool.remove_peer(addr).await;
     }
 
-    /// Return the config.
     pub fn config(&self) -> &NodeConfig {
         &self.config
     }
 
-    /// Return the local libp2p PeerId, if p2p is enabled.
     pub fn local_peer_id(&self) -> Option<libp2p::PeerId> {
         self.local_peer_id.get().copied()
     }
 
-    /// Enable libp2p p2p transport.
-    ///
-    /// Spawns a swarm on the given listen address and dials the provided peers.
-    /// Returns the swarm handle and an event receiver so the server layer can
-    /// run the event loop.  Only the first call succeeds (idempotent guard).
+    pub fn probity_store(&self) -> &Arc<ProbityStore> {
+        &self.probity_store
+    }
+
+    pub fn p2p_cmd_tx(&self) -> Option<tokio::sync::mpsc::UnboundedSender<SwarmCommand>> {
+        self.p2p_cmd_tx.get().cloned()
+    }
+
+    pub fn crypto_server(&self) -> Arc<dyn CryptoServer> {
+        Arc::clone(&self.crypto)
+    }
+
+    pub fn namespace(&self) -> String {
+        self.namespace.lock().unwrap().clone()
+    }
+
     pub async fn enable_p2p(
         &self,
         listen: libp2p::Multiaddr,
@@ -145,10 +168,11 @@ impl Communerd {
         namespace: &str,
         json_rpc_addr: Option<&str>,
     ) -> Result<(), NodeError> {
-        // Fast path: already enabled
         if self.local_peer_id.get().is_some() {
             return Ok(());
         }
+
+        *self.namespace.lock().unwrap() = namespace.to_string();
 
         let handle = build_and_spawn_swarm(listen, dials, namespace, json_rpc_addr).await?;
 
@@ -159,10 +183,128 @@ impl Communerd {
 
         tracing::info!(peer = %peer_id, "libp2p swarm started");
 
+        // Create collision detector (shared between gossip loop and heartbeat broadcaster)
+        let pub_key = self.crypto.public_key();
+        let my_pub_key = match pub_key {
+            fortias_core::crypto_server::PublicKeyBytes::Ed25519(pk) => pk,
+            _ => FortiasPubKey32 { bytes: [0u8; 32] },
+        };
+        let detector = Arc::new(CollisionDetector::new(
+            peer_id.to_string(), my_pub_key, self.config.collision.nonce_window,
+        ));
+
+        // Start gossip event loop
+        let events = handle.events;
+        let probity_store = Arc::clone(&self.probity_store);
+        let crypto = Arc::clone(&self.crypto);
+        let det = Arc::clone(&detector);
+        let task = tokio::spawn(async move {
+            Self::gossip_event_loop(events, probity_store, crypto, Some(det)).await;
+        });
+        let _ = self.gossip_task.set(task);
+
+        // Start probity score recompute timer
+        let probity_store = Arc::clone(&self.probity_store);
+        let recompute_task = tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+            loop {
+                interval.tick().await;
+                let now_ns = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_nanos() as u64)
+                    .unwrap_or(0);
+                probity_store.recompute_all(now_ns);
+            }
+        });
+        let _ = self.recompute_task.set(recompute_task);
+
+        // Start heartbeat broadcast task
+        let cmd_tx = self.p2p_cmd_tx.get().cloned();
+        let ns = self.namespace.clone();
+        let interval_secs = self.config.collision.heartbeat_interval_secs.max(5) as u64;
+        let crypto_hb = Arc::clone(&self.crypto);
+        let peer_id_str = peer_id.to_string();
+        let det_hb = Arc::clone(&detector);
+        let heartbeat_broadcaster = tokio::spawn(async move {
+            Self::heartbeat_broadcast_loop(
+                cmd_tx, ns, interval_secs, crypto_hb, peer_id_str, det_hb,
+            ).await;
+        });
+        let _ = self.heartbeat_task.set(heartbeat_broadcaster);
+
         Ok(())
     }
 
-    /// Bootstrap DHT by dialing bootstrap peers and triggering bootstrap query.
+    async fn heartbeat_broadcast_loop(
+        cmd_tx: Option<tokio::sync::mpsc::UnboundedSender<SwarmCommand>>,
+        ns: Arc<std::sync::Mutex<String>>,
+        interval_secs: u64,
+        crypto: Arc<dyn CryptoServer>,
+        peer_id_str: String,
+        detector: Arc<CollisionDetector>,
+    ) {
+        let _ = detector;
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(interval_secs));
+        loop {
+            interval.tick().await;
+            let mut nonce = [0u8; 16];
+            if let Err(e) = crypto.random_bytes(&mut nonce) {
+                tracing::warn!("heartbeat nonce generation failed: {e}");
+                continue;
+            }
+            detector.register_own_nonce(nonce);
+            let timestamp_ns = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos() as u64)
+                .unwrap_or(0);
+            let mut hb = fortias_core::collision::Heartbeat {
+                peer_id: peer_id_str.clone(),
+                timestamp_ns,
+                nonce,
+                curve: 1,
+                signature: vec![],
+            };
+            if let Ok(sig) = crypto.sign(&hb.canonical()) {
+                hb.signature = sig.bytes.to_vec();
+            }
+            if let Some(ref tx) = cmd_tx {
+                let n = ns.lock().unwrap().clone();
+                let _ = tx.send(SwarmCommand::PublishHeartbeat { heartbeat: hb, namespace: n });
+            }
+        }
+    }
+
+    async fn gossip_event_loop(
+        mut events: tokio::sync::mpsc::UnboundedReceiver<NetworkEvent>,
+        probity_store: Arc<ProbityStore>,
+        crypto: Arc<dyn CryptoServer>,
+        detector: Option<Arc<CollisionDetector>>,
+    ) {
+        while let Some(event) = events.recv().await {
+            match event {
+                NetworkEvent::GossipMessage { data, .. } => {
+                    let now_ns = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_nanos() as u64)
+                        .unwrap_or(0);
+                    if let Err(e) = handle_gossip_message(&data, &probity_store, crypto.as_ref(), now_ns) {
+                        tracing::warn!("gossip message rejected: {e}");
+                    }
+                }
+                NetworkEvent::HeartbeatMessage { data, .. } => {
+                    if let Ok(hb) = serde_json::from_slice::<fortias_core::collision::Heartbeat>(&data) {
+                        if let Some(det) = &detector {
+                            if let Some(CollisionEvent::Confirmed { .. }) = det.on_heartbeat(&hb, crypto.as_ref()) {
+                                tracing::error!("identity collision detected! entering dormancy");
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
     pub async fn bootstrap_dht(&self, bootstrap_addrs: Vec<String>) -> Result<(), NodeError> {
         let Some(cmd_tx) = self.p2p_cmd_tx.get() else {
             return Ok(());
@@ -176,7 +318,6 @@ impl Communerd {
         Ok(())
     }
 
-    /// Publish this node as willing to auto-attest via Kademlia provider records.
     pub async fn publish_attest_willing(&self, namespace: &str) {
         if let Some(cmd_tx) = self.p2p_cmd_tx.get() {
             let key = kad::RecordKey::new(&format!("{}/fortias/attest-willing/v1", namespace));
@@ -184,9 +325,42 @@ impl Communerd {
         }
     }
 
+    pub fn report_probity(&self, subject: &str, attribute: &str, value: f32) {
+        let now_ns = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(0);
+        let reporter = match self.local_peer_id() {
+            Some(pid) => pid.to_string(),
+            None => return,
+        };
+        let crypto = self.crypto.clone();
+        let mut report = ProbityReport {
+            subject: subject.to_string(),
+            reporter: reporter.clone(),
+            attribute: attribute.to_string(),
+            value,
+            timestamp_ns: now_ns,
+            signature: vec![],
+            curve: 1u8,
+        };
+        if let Ok(sig) = crypto.sign(&report.canonical()) {
+            report.signature = sig.bytes.to_vec();
+        }
+        let _ = self.probity_store.ingest(report.clone());
+        if let Some(cmd_tx) = self.p2p_cmd_tx.get() {
+            let ns = self.namespace.lock().unwrap().clone();
+            let _ = cmd_tx.send(SwarmCommand::PublishProbity { report, namespace: ns });
+        }
+    }
+
+    pub fn get_peer_score(&self, peer_id: &str) -> (f32, usize) {
+        let score = self.probity_store.score(peer_id);
+        let count = self.probity_store.report_count(peer_id);
+        (score, count)
+    }
 }
 
-/// Implement PeerMessenger trait (used by Calendar for auto attestation).
 impl PeerMessenger for Communerd {
     fn send_to_peer(
         &self,
@@ -194,9 +368,6 @@ impl PeerMessenger for Communerd {
         _method: &str,
         _params: serde_json::Value,
     ) -> Result<serde_json::Value, CoreTransportError> {
-        // PeerMessenger is sync; actual transport is async.
-        // This is a stub for the sync trait — the Calendar component
-        // will use the async methods directly via Arc<Communerd>.
         Err(CoreTransportError::Connect(
             "sync PeerMessenger not implemented; use async methods".into(),
         ))
@@ -285,5 +456,13 @@ mod tests {
         let communerd = Communerd::new(config.clone());
         assert_eq!(communerd.config().peers, config.peers);
         assert_eq!(communerd.config().auto_attest_every_n, 1);
+    }
+
+    #[test]
+    fn probity_store_default_score_is_zero() {
+        let communerd = Communerd::new(make_config());
+        let (score, count) = communerd.get_peer_score("unknown-peer");
+        assert_eq!(score, 0.0);
+        assert_eq!(count, 0);
     }
 }

@@ -25,19 +25,33 @@ const _: () = {
 extern "C" {
     pub fn fortias_core_version() -> FortiasCoreVersion;
 }
-pub const FortiasResult_FORTIAS_OK: FortiasResult = 0;
-pub const FortiasResult_FORTIAS_ERR_BAD_SIG: FortiasResult = -1;
-pub const FortiasResult_FORTIAS_ERR_BAD_PROOF: FortiasResult = -2;
-pub const FortiasResult_FORTIAS_ERR_BAD_KEY: FortiasResult = -3;
-pub const FortiasResult_FORTIAS_ERR_STALE: FortiasResult = -4;
-pub const FortiasResult_FORTIAS_ERR_REPLAY: FortiasResult = -5;
-pub const FortiasResult_FORTIAS_ERR_BAD_INPUT: FortiasResult = -6;
-pub const FortiasResult_FORTIAS_ERR_OVERFLOW: FortiasResult = -7;
-pub const FortiasResult_FORTIAS_ERR_UNSUPPORTED: FortiasResult = -8;
-pub const FortiasResult_FORTIAS_ERR_INTERNAL: FortiasResult = -99;
+/// Successful result — operation completed without error.
+pub const FORTIASRESULT_FORTIAS_OK: FortiasResult = 0;
+/// Bad signature — the provided signature does not verify.
+pub const FORTIASRESULT_FORTIAS_ERR_BAD_SIG: FortiasResult = -1;
+/// Bad proof — the Merkle or ZK proof verification failed.
+pub const FORTIASRESULT_FORTIAS_ERR_BAD_PROOF: FortiasResult = -2;
+/// Bad key — the public or private key is malformed or invalid.
+pub const FORTIASRESULT_FORTIAS_ERR_BAD_KEY: FortiasResult = -3;
+/// Stale — the message timestamp is outside the acceptable window.
+pub const FORTIASRESULT_FORTIAS_ERR_STALE: FortiasResult = -4;
+/// Replay — a previously seen nonce was detected.
+pub const FORTIASRESULT_FORTIAS_ERR_REPLAY: FortiasResult = -5;
+/// Bad input — the input data is malformed or truncated.
+pub const FORTIASRESULT_FORTIAS_ERR_BAD_INPUT: FortiasResult = -6;
+/// Overflow — an integer or buffer overflow occurred.
+pub const FORTIASRESULT_FORTIAS_ERR_OVERFLOW: FortiasResult = -7;
+/// Unsupported — the requested operation is not supported by this backend.
+pub const FORTIASRESULT_FORTIAS_ERR_UNSUPPORTED: FortiasResult = -8;
+/// Internal error — an unexpected internal condition occurred.
+pub const FORTIASRESULT_FORTIAS_ERR_INTERNAL: FortiasResult = -99;
+/// C11 FortiasResult error code type.
 pub type FortiasResult = ::std::os::raw::c_int;
-pub const FortiasCurve_FORTIAS_CURVE_ED25519: FortiasCurve = 1;
-pub const FortiasCurve_FORTIAS_CURVE_P256: FortiasCurve = 2;
+/// Ed25519 curve identifier.
+pub const FORTIASCURVE_FORTIAS_CURVE_ED25519: FortiasCurve = 1;
+/// NIST P-256 curve identifier.
+pub const FORTIASCURVE_FORTIAS_CURVE_P256: FortiasCurve = 2;
+/// C11 FortiasCurve type — selects the elliptic curve for operations.
 pub type FortiasCurve = ::std::os::raw::c_uint;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -388,10 +402,15 @@ extern "C" {
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
+#[allow(non_snake_case)]
 pub struct FortiasFrostRound1 {
+    /// Random nonce D for FROST round 1.
     pub nonce_d: [u8; 32usize],
+    /// Random nonce E for FROST round 1.
     pub nonce_e: [u8; 32usize],
+    /// Commitment D (hash of nonce D) — FROST round 1.
     pub commit_D: [u8; 32usize],
+    /// Commitment E (hash of nonce E) — FROST round 1.
     pub commit_E: [u8; 32usize],
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]

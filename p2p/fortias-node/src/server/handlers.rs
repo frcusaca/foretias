@@ -1,6 +1,7 @@
 use serde_json::Value;
 
 use fortias_core::error::NodeError;
+use fortias_core::epoch::EpochSnapshot;
 use fortias_core::fortias::tick::CalendarLookup;
 use fortias_core::fortias::Fortis;
 use super::jsonrpc::{self, JsonRpcResponse};
@@ -52,6 +53,10 @@ pub fn handle_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse
         .to_string();
 
     let cm = server.chronomatter();
+    if server.is_dormant() {
+        return resp_error(server, id, jsonrpc::DORMANT_ERROR,
+            "node is dormant".into());
+    }
     match cm.stamp(content, echo) {
         Ok(fortis) => {
             server.metrics().inc(MetricField::StampsTotal);
@@ -146,6 +151,78 @@ pub fn handle_integrity_check(server: &TimeFamilyServer, params: Value) -> JsonR
         }
         Err(e) => resp_error(server, id, jsonrpc::INTERNAL_ERROR,
             format!("integrity check failed: {}", e)),
+    }
+}
+
+pub fn handle_collision_status(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    let id = params.get("id").cloned();
+    let metrics = server.metrics();
+    resp_success(server, id, serde_json::json!({
+        "dormant": server.is_dormant(),
+        "heartbeats_sent": metrics.heartbeats_sent.load(std::sync::atomic::Ordering::Relaxed),
+        "heartbeats_received": metrics.heartbeats_received.load(std::sync::atomic::Ordering::Relaxed),
+        "collisions_detected": metrics.collisions_detected.load(std::sync::atomic::Ordering::Relaxed),
+        "dormant_transitions": metrics.dormant_transitions.load(std::sync::atomic::Ordering::Relaxed),
+    }))
+}
+
+pub fn handle_get_peer_score(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    let id = params.get("id").cloned();
+    let peer_id = match params.get("peer_id").and_then(|v| v.as_str()) {
+        Some(p) => p.to_string(),
+        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            "missing 'peer_id'".into()),
+    };
+    if let Some(com) = server.communerd() {
+        let (score, count) = com.get_peer_score(&peer_id);
+        resp_success(server, id, serde_json::json!({
+            "peer_id": peer_id,
+            "score": score,
+            "report_count": count,
+        }))
+    } else {
+        resp_error(server, id, jsonrpc::INTERNAL_ERROR,
+            "p2p not enabled".into())
+    }
+}
+
+pub fn handle_get_latest_epoch(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    let id = params.get("id").cloned();
+    // Stub: return empty epoch data since we don't persist snapshots yet
+    // In the real implementation, this reads from TimeFamilyServer.latest_epoch_snapshot
+    resp_success(server, id, serde_json::json!({
+        "epoch_number": 0u64,
+        "epoch_start_ns": 0u64,
+        "epoch_end_ns": 0u64,
+        "peer_scores": serde_json::Value::Array(vec![]),
+        "committee": serde_json::Value::Array(vec![]),
+        "threshold": 0u32,
+        "frost_signature": String::new(),
+        "committee_pubkey": String::new(),
+    }))
+}
+
+pub fn handle_verify_epoch_snapshot(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    let id = params.get("id").cloned();
+    // Stub: always valid (no FROST verification yet)
+    if let Some(snapshot_val) = params.get("snapshot") {
+        if let Ok(snapshot) = serde_json::from_value::<EpochSnapshot>(snapshot_val.clone()) {
+            resp_success(server, id, serde_json::json!({
+                "valid": true,
+                "epoch_number": snapshot.epoch_number,
+                "committee_size": snapshot.committee.len(),
+            }))
+        } else {
+            resp_success(server, id, serde_json::json!({
+                "valid": false,
+                "error": "invalid snapshot JSON",
+            }))
+        }
+    } else {
+        resp_success(server, id, serde_json::json!({
+            "valid": false,
+            "error": "missing snapshot parameter",
+        }))
     }
 }
 
@@ -338,5 +415,17 @@ mod tests {
         let result = resp.result.unwrap();
         assert_eq!(result.get("all_valid").and_then(|v| v.as_bool()), Some(true));
         assert_eq!(result.get("pairs_checked").and_then(|v| v.as_u64()), Some(2));
+    }
+
+    #[test]
+    fn handle_collision_status_returns_metrics() {
+        let server = make_server();
+        let params = serde_json::json!({});
+        let resp = handle_collision_status(&server, params);
+        assert!(resp.error.is_none());
+        let result = resp.result.unwrap();
+        assert_eq!(result["dormant"], false);
+        assert_eq!(result["heartbeats_sent"], 0);
+        assert_eq!(result["collisions_detected"], 0);
     }
 }

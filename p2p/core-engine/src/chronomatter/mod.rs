@@ -5,7 +5,7 @@
 //! Calendar receives tick notifications via `TickObserver` callback.
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering::SeqCst};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering::SeqCst};
 
 use parking_lot::{Mutex, RwLock};
 use tokio::task::JoinHandle;
@@ -34,7 +34,7 @@ pub struct Chronomatter {
     auto_attest_observer: Option<Arc<dyn AutoAttestObserver>>,
     chronon_ns: u64,
     daemon_handle: Mutex<Option<JoinHandle<()>>>,
-    is_dormant: bool,
+    is_dormant: AtomicBool,
 }
 
 impl Chronomatter {
@@ -57,7 +57,7 @@ impl Chronomatter {
             auto_attest_observer: None,
             chronon_ns,
             daemon_handle: Mutex::new(None),
-            is_dormant: false,
+            is_dormant: AtomicBool::new(false),
         })
     }
 
@@ -83,12 +83,20 @@ impl Chronomatter {
             auto_attest_observer: None,
             chronon_ns: 0,
             daemon_handle: Mutex::new(None),
-            is_dormant: true,
+            is_dormant: AtomicBool::new(true),
         })
     }
 
     pub fn is_dormant(&self) -> bool {
-        self.is_dormant
+        self.is_dormant.load(SeqCst)
+    }
+
+    pub fn set_dormant(&self, dormant: bool) {
+        self.is_dormant.store(dormant, SeqCst);
+    }
+
+    pub fn crypto_server(&self) -> Arc<dyn CryptoServer> {
+        Arc::clone(&self.crypto)
     }
 
     pub fn get_tbid(&self) -> Tbid {
@@ -184,7 +192,7 @@ impl Chronomatter {
     // ── Stamp ────────────────────────────────────────────────────────────────
 
     pub fn stamp(&self, content: Vec<u8>, echo: String) -> Result<Fortis, NodeError> {
-        if self.is_dormant {
+        if self.is_dormant.load(SeqCst) {
             return Err(NodeError::Internal(
                 "Cannot stamp: Chronomatter is in verify-only mode".into(),
             ));
@@ -293,7 +301,7 @@ impl Chronomatter {
     }
 
     pub fn daemon_tick(&self) -> Result<(), NodeError> {
-        if self.is_dormant {
+        if self.is_dormant.load(SeqCst) {
             return Ok(());
         }
 

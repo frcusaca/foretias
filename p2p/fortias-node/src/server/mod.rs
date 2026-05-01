@@ -256,6 +256,10 @@ fn process_request(server: &TimeFamilyServer, line: &str) -> Result<JsonRpcRespo
         "verify" => Ok(handlers::handle_verify(server, request.params)),
         "get_calendar_slice" => Ok(handlers::handle_get_calendar_slice(server, request.params)),
         "integrity_check" => Ok(handlers::handle_integrity_check(server, request.params)),
+        "get_peer_score" => Ok(handlers::handle_get_peer_score(server, request.params)),
+        "collision_status" => Ok(handlers::handle_collision_status(server, request.params)),
+        "get_latest_epoch" => Ok(handlers::handle_get_latest_epoch(server, request.params)),
+        "verify_epoch_snapshot" => Ok(handlers::handle_verify_epoch_snapshot(server, request.params)),
         _ => Ok(jsonrpc::JsonRpcResponse::error(
             request.id.clone(),
             jsonrpc::METHOD_NOT_FOUND,
