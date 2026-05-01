@@ -13,11 +13,11 @@ pub fn handle_gossip_message(
     now_ns:       u64,
 ) -> Result<(), NodeError> {
     let report: ProbityReport = serde_json::from_slice(data)
-        .map_err(|_| NodeError::BadFormat("ProbityReport deserialization"))?;
+        .map_err(|_| NodeError::BadFormat("ProbityReport deserialization".to_string()))?;
 
     // 1. Reject future-dated reports (> 5 min clock skew tolerance)
     if report.timestamp_ns > now_ns + 5 * 60 * 1_000_000_000 {
-        return Err(NodeError::Stale("future-dated probity report"));
+        return Err(NodeError::Stale("future-dated probity report".to_string()));
     }
 
     // 2. Reject reports from peers with score < -50 (too dishonourable to report)
@@ -36,13 +36,17 @@ pub fn handle_gossip_message(
 fn verify_report_signature(report: &ProbityReport, _crypto: &dyn CryptoServer)
     -> Result<(), NodeError>
 {
-    // For v0.6, require Ed25519 (curve == 1). P-256 path added when needed.
     if report.curve != 1 {
         return Err(NodeError::Unsupported("only Ed25519 probity signatures in v0.6"));
     }
-    // TODO v0.7: resolve reporter public key and verify.
-    // For v0.6: signature verification is deferred. The demo works because
-    // test peers have already exchanged public keys via mutual-attest.
+    // Stub verification: signature must be non-empty (64 bytes for Ed25519)
+    // TODO v0.9: resolve reporter public key and verify Ed25519 signature
+    if report.signature.len() < 64 {
+        return Err(NodeError::BadFormat(format!(
+            "probity report signature too short: {} bytes (expected 64)",
+            report.signature.len()
+        )));
+    }
     Ok(())
 }
 
@@ -63,7 +67,7 @@ mod tests {
             attribute: "correctness".to_string(),
             value: -10.0,
             timestamp_ns: ts,
-            signature: vec![],
+            signature: vec![0xAB; 64],
             curve: 1,
         }
     }

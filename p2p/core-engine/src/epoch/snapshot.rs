@@ -39,6 +39,10 @@ impl EpochSnapshot {
                     .cmp(b["peer_id"].as_str().unwrap_or(""))
             });
         }
+        // Sort committee for deterministic canonical bytes
+        if let Some(arr) = val["committee"].as_array_mut() {
+            arr.sort_by(|a, b| a.as_str().unwrap_or("").cmp(b.as_str().unwrap_or("")));
+        }
         serde_json::to_vec(&val).unwrap()
     }
 }

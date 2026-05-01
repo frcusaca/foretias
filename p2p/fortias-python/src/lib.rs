@@ -342,9 +342,10 @@ impl PyTimeFamily {
         let record = TickRecordInner {
             tick_number,
             public_key: pub_key_bytes,
-            forward_fortis: serde_json::to_string(&fortis).unwrap_or_default().into_bytes(),
-            backward_fortis: Vec::new(),
+            forward_fortis: vec![],
+            backward_fortis: vec![],
             aa_nonce: [0u8; 16],
+            stamps_per_tick: 0,
             external_attestations: Vec::new(),
         };
 

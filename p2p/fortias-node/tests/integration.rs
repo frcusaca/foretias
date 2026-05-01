@@ -315,6 +315,7 @@ fn test_crash_recovery_calendar() {
             forward_fortis: vec![],
             backward_fortis: vec![],
             aa_nonce: [0u8; 16],
+            stamps_per_tick: 0,
             external_attestations: Vec::new(),
         };
         cal.append(record).expect("append failed");
@@ -332,6 +333,7 @@ fn test_crash_recovery_calendar() {
             forward_fortis: vec![],
             backward_fortis: vec![],
             aa_nonce: [0u8; 16],
+            stamps_per_tick: 0,
             external_attestations: Vec::new(),
         };
         cal2.append(record).expect("append failed");

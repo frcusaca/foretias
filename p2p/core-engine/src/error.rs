@@ -13,7 +13,7 @@ pub enum NodeError {
     NotFound(&'static str),
     /// Data did not match the expected format.
     #[error("bad format: {0}")]
-    BadFormat(&'static str),
+    BadFormat(String),
     /// The requested feature is not yet implemented.
     #[error("not implemented: {0}")]
     NotImplemented(&'static str),
@@ -52,7 +52,7 @@ pub enum NodeError {
     OutOfSpace,
     /// A message or report is stale or future-dated.
     #[error("stale: {0}")]
-    Stale(&'static str),
+    Stale(String),
     /// The requested feature or curve is not supported.
     #[error("unsupported: {0}")]
     Unsupported(&'static str),

@@ -13,15 +13,27 @@ pub fn handle_epoch_snapshot(
     scheduler: &EpochScheduler,
 ) -> Result<EpochSnapshot, NodeError> {
     let snapshot: EpochSnapshot = serde_json::from_slice(data)
-        .map_err(|_| NodeError::BadFormat("EpochSnapshot deserialization"))?;
+        .map_err(|_| NodeError::BadFormat("EpochSnapshot deserialization".to_string()))?;
 
     let current = scheduler.current_epoch_number();
-    if snapshot.epoch_number < current {
-        return Err(NodeError::Stale("stale epoch snapshot"));
+    if snapshot.epoch_number != current {
+        return Err(NodeError::Stale(format!(
+            "epoch snapshot {} not for current epoch {}",
+            snapshot.epoch_number, current
+        )));
     }
 
-    // Stub: skip FROST signature verification (deferred to v0.9)
-    // Real implementation: verify frost_signature against committee_pubkey
+    // Stub verification: FROST signature must be non-empty (64 bytes for Ed25519)
+    // TODO v0.9: verify frost_signature against committee_pubkey using FROST-Ed25519
+    if snapshot.frost_signature.is_empty() {
+        return Err(NodeError::BadFormat("epoch snapshot has empty FROST signature".to_string()));
+    }
+    if snapshot.frost_signature.len() != 64 {
+        return Err(NodeError::BadFormat(format!(
+            "epoch snapshot FROST signature wrong size: {} bytes (expected 64)",
+            snapshot.frost_signature.len()
+        )));
+    }
 
     Ok(snapshot)
 }

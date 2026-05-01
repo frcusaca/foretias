@@ -16,7 +16,10 @@ pub struct Heartbeat {
 impl Heartbeat {
     pub fn canonical(&self) -> Vec<u8> {
         let mut buf = Vec::new();
-        buf.extend_from_slice(self.peer_id.as_bytes());
+        // Length-prefixed peer_id to prevent canonicalization collision attacks
+        let pid = self.peer_id.as_bytes();
+        buf.extend_from_slice(&(pid.len() as u16).to_le_bytes());
+        buf.extend_from_slice(pid);
         buf.extend_from_slice(&self.timestamp_ns.to_le_bytes());
         buf.extend_from_slice(&self.nonce);
         buf.push(self.curve);
@@ -38,11 +41,13 @@ mod tests {
             signature: vec![0xFF; 64],
         };
         let canon = hb.canonical();
-        assert_eq!(canon.len(), "test-peer".len() + 8 + 16 + 1);
-        assert_eq!(&canon[0..9], b"test-peer");
-        assert_eq!(&canon[9..17], &1234567890u64.to_le_bytes());
-        assert_eq!(&canon[17..33], &[0xAB; 16]);
-        assert_eq!(canon[33], 1);
+        // len2+peer_id + timestamp(8) + nonce(16) + curve(1)
+        assert_eq!(canon.len(), 2 + "test-peer".len() + 8 + 16 + 1);
+        assert_eq!(&canon[0..2], &("test-peer".len() as u16).to_le_bytes());
+        assert_eq!(&canon[2..11], b"test-peer");
+        assert_eq!(&canon[11..19], &1234567890u64.to_le_bytes());
+        assert_eq!(&canon[19..35], &[0xAB; 16]);
+        assert_eq!(canon[35], 1);
     }
 
     #[test]

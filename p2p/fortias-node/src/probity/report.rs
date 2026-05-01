@@ -25,12 +25,27 @@ impl ProbityReport {
     /// no signature field. Any change to this function is a wire-breaking change.
     pub fn canonical(&self) -> Vec<u8> {
         let mut buf = Vec::new();
-        buf.extend_from_slice(self.subject.as_bytes());   buf.push(0);
-        buf.extend_from_slice(self.reporter.as_bytes());  buf.push(0);
-        buf.extend_from_slice(self.attribute.as_bytes()); buf.push(0);
-        buf.extend_from_slice(&self.value.to_le_bytes());
+        // Length-prefixed strings to prevent null-byte collision attacks
+        let subject = self.subject.as_bytes();
+        buf.extend_from_slice(&(subject.len() as u16).to_le_bytes());
+        buf.extend_from_slice(subject);
+        let reporter = self.reporter.as_bytes();
+        buf.extend_from_slice(&(reporter.len() as u16).to_le_bytes());
+        buf.extend_from_slice(reporter);
+        let attribute = self.attribute.as_bytes();
+        buf.extend_from_slice(&(attribute.len() as u16).to_le_bytes());
+        buf.extend_from_slice(attribute);
+        // Canonicalize f32: reject NaN/Infinity, normalize negative zero
+        let value = if self.value.is_nan() || self.value.is_infinite() {
+            0.0f32
+        } else if self.value == 0.0 {
+            0.0f32  // normalize -0.0 to +0.0
+        } else {
+            self.value
+        };
+        buf.extend_from_slice(&value.to_le_bytes());
         buf.extend_from_slice(&self.timestamp_ns.to_le_bytes());
-        buf.push(self.curve);
+        buf.extend_from_slice(&self.curve.to_le_bytes());
         buf
     }
 }
@@ -73,8 +88,8 @@ mod tests {
     fn canonical_includes_all_other_fields() {
         let r = make_report();
         let canon = r.canonical();
-        // subject\0reporter\0attribute\0value(4)timestamp(8)curve(1)
-        let expected_len = r.subject.len() + 1 + r.reporter.len() + 1 + r.attribute.len() + 1 + 4 + 8 + 1;
+        // len2+subject + len2+reporter + len2+attribute + value(4) + timestamp(8) + curve(1)
+        let expected_len = 2 + r.subject.len() + 2 + r.reporter.len() + 2 + r.attribute.len() + 4 + 8 + 1;
         assert_eq!(canon.len(), expected_len);
     }
 }

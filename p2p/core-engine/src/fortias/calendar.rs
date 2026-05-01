@@ -194,6 +194,7 @@ mod tests {
             forward_fortis: vec![],
             backward_fortis: vec![],
             aa_nonce: [0u8; 16],
+            stamps_per_tick: 0,
             external_attestations: Vec::new(),
         }
     }
@@ -323,6 +324,7 @@ mod tests {
                 forward_fortis,
                 backward_fortis,
                 aa_nonce: nonce,
+                stamps_per_tick: 0,
                 external_attestations: Vec::new(),
             }).unwrap();
         }
@@ -369,6 +371,7 @@ mod tests {
                 forward_fortis,
                 backward_fortis,
                 aa_nonce: nonce,
+                stamps_per_tick: 0,
                 external_attestations: Vec::new(),
             }).unwrap();
         }

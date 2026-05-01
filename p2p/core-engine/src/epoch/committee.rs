@@ -19,7 +19,11 @@ pub struct TopProbitySelector {
 impl CommitteeSelector for TopProbitySelector {
     fn select(&self, store: &ProbityStore) -> (Vec<String>, u32) {
         let mut scored: Vec<(String, f32)> = store.all_scores();
-        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
+        scored.sort_by(|a, b| {
+            b.1.partial_cmp(&a.1)
+                .unwrap_or(Ordering::Equal)
+                .then_with(|| a.0.cmp(&b.0))
+        });
         let members: Vec<String> = scored.into_iter()
             .take(self.committee_size)
             .map(|(id, _)| id)

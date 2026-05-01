@@ -195,11 +195,12 @@ impl Communerd {
 
         // Start gossip event loop
         let events = handle.events;
+        let cmd_tx = self.p2p_cmd_tx.get().cloned();
         let probity_store = Arc::clone(&self.probity_store);
         let crypto = Arc::clone(&self.crypto);
         let det = Arc::clone(&detector);
         let task = tokio::spawn(async move {
-            Self::gossip_event_loop(events, probity_store, crypto, Some(det)).await;
+            Self::gossip_event_loop(events, cmd_tx, probity_store, crypto, Some(det)).await;
         });
         let _ = self.gossip_task.set(task);
 
@@ -276,6 +277,7 @@ impl Communerd {
 
     async fn gossip_event_loop(
         mut events: tokio::sync::mpsc::UnboundedReceiver<NetworkEvent>,
+        cmd_tx: Option<tokio::sync::mpsc::UnboundedSender<SwarmCommand>>,
         probity_store: Arc<ProbityStore>,
         crypto: Arc<dyn CryptoServer>,
         detector: Option<Arc<CollisionDetector>>,
@@ -294,8 +296,16 @@ impl Communerd {
                 NetworkEvent::HeartbeatMessage { data, .. } => {
                     if let Ok(hb) = serde_json::from_slice::<fortias_core::collision::Heartbeat>(&data) {
                         if let Some(det) = &detector {
-                            if let Some(CollisionEvent::Confirmed { .. }) = det.on_heartbeat(&hb, crypto.as_ref()) {
-                                tracing::error!("identity collision detected! entering dormancy");
+                            if let Some(CollisionEvent::Confirmed { foreign_heartbeat }) = det.on_heartbeat(&hb, crypto.as_ref()) {
+                                tracing::error!(
+                                    peer_id = %foreign_heartbeat.peer_id,
+                                    nonce = ?foreign_heartbeat.nonce,
+                                    "identity collision detected! entering dormancy"
+                                );
+                                if let Some(ref cmd_tx) = cmd_tx {
+                                    let _ = cmd_tx.send(SwarmCommand::EnterDormancy);
+                                    tracing::warn!("EnterDormancy command sent to swarm");
+                                }
                             }
                         }
                     }

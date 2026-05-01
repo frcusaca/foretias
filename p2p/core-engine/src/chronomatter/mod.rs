@@ -14,7 +14,7 @@ use tracing::{debug, error, info, warn};
 use crate::crypto_server::{self, CryptoServer};
 use crate::core::identity::PrivKeyHandle;
 use crate::error::NodeError;
-use crate::fortias::{auto_attestation_blob, Fortis, TickRecord};
+use crate::fortias::{auto_attestation_blob_with_count, Fortis, TickRecord};
 use crate::fortias::tick::CalendarLookup;
 use crate::fortias::callbacks::{TickObserver, AutoAttestObserver};
 use crate::fortias::types::Tbid;
@@ -35,6 +35,9 @@ pub struct Chronomatter {
     chronon_ns: u64,
     daemon_handle: Mutex<Option<JoinHandle<()>>>,
     is_dormant: AtomicBool,
+    /// Per-tick stamp counter — counts user-initiated stamps since last tick advance.
+    /// Does not include auto-attestation itself, but may include mutual attestations.
+    stamps_per_tick: AtomicU64,
 }
 
 impl Chronomatter {
@@ -58,6 +61,7 @@ impl Chronomatter {
             chronon_ns,
             daemon_handle: Mutex::new(None),
             is_dormant: AtomicBool::new(false),
+            stamps_per_tick: AtomicU64::new(0),
         })
     }
 
@@ -84,6 +88,7 @@ impl Chronomatter {
             chronon_ns: 0,
             daemon_handle: Mutex::new(None),
             is_dormant: AtomicBool::new(true),
+            stamps_per_tick: AtomicU64::new(0),
         })
     }
 
@@ -141,24 +146,25 @@ impl Chronomatter {
         self.keypairs.read().get(idx).map(|kp| kp.pub_key)
     }
 
-    fn build_auto_attestation(&self, tick: u64, new_pub: [u8; 32]) -> Result<(Vec<u8>, Vec<u8>, [u8; 16]), NodeError> {
+    fn build_auto_attestation(&self, tick: u64, new_pub: [u8; 32]) -> Result<(Vec<u8>, Vec<u8>, [u8; 16], u64), NodeError> {
         let tbid_str = hex::encode(self.tbid);
         let kp_idx = (tick - 1) as usize;
+        let stamps = self.stamps_per_tick.swap(0, SeqCst);
 
         if tick == 1 {
-            let (ma_blob, nonce) = auto_attestation_blob(&tbid_str, tick, &new_pub, tick, &new_pub)?;
+            let (ma_blob, nonce) = auto_attestation_blob_with_count(&tbid_str, tick, &new_pub, tick, &new_pub, stamps)?;
             let sig = self.sign_with_keypair(kp_idx, &ma_blob)?;
-            Ok((sig.clone(), sig, nonce))
+            Ok((sig.clone(), sig, nonce, stamps))
         } else {
             let prev_tick = tick - 1;
             let prev_kp_idx = (prev_tick - 1) as usize;
             let prev_pub = self.keypair_pub(prev_kp_idx)
                 .ok_or_else(|| NodeError::Internal("missing previous keypair".into()))?;
 
-            let (ma_blob, nonce) = auto_attestation_blob(&tbid_str, prev_tick, &prev_pub, tick, &new_pub)?;
+            let (ma_blob, nonce) = auto_attestation_blob_with_count(&tbid_str, prev_tick, &prev_pub, tick, &new_pub, stamps)?;
             let forward_sig = self.sign_with_keypair(prev_kp_idx, &ma_blob)?;
             let backward_sig = self.sign_with_keypair(kp_idx, &ma_blob)?;
-            Ok((forward_sig, backward_sig, nonce))
+            Ok((forward_sig, backward_sig, nonce, stamps))
         }
     }
 
@@ -173,7 +179,7 @@ impl Chronomatter {
                 Err(_) => obs.on_auto_attest_failed(),
             }
         }
-        let (forward_fortis, backward_fortis, aa_nonce) = result?;
+        let (forward_fortis, backward_fortis, aa_nonce, stamps) = result?;
 
         Ok(TickRecord {
             tick_number: tick,
@@ -181,6 +187,7 @@ impl Chronomatter {
             forward_fortis,
             backward_fortis,
             aa_nonce,
+            stamps_per_tick: stamps,
             external_attestations: Vec::new(),
         })
     }
@@ -205,6 +212,9 @@ impl Chronomatter {
             ).map_err(|e| NodeError::Internal(format!("tick counter conflict: {}", e)))?;
             old + 1
         };
+
+        // Increment stamp counter — this count is included in the auto-attestation blob
+        self.stamps_per_tick.fetch_add(1, SeqCst);
 
         self.create_fortis(tick, content, echo)
     }
