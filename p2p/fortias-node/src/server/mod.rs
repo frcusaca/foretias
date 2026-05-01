@@ -1,6 +1,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use axum::extract::State;
+use axum::routing::post;
+use axum::Json;
 use tokio::net::TcpListener;
 use tokio::io::{AsyncBufReadExt, BufReader, AsyncWriteExt};
 
@@ -13,7 +16,7 @@ use fortias_core::error::NodeError;
 use super::calendar::Calendar;
 use super::communerd::Communerd;
 use super::metrics::{NodeMetrics, MetricField};
-use self::jsonrpc::{JsonRpcRequest, JsonRpcResponse};
+use self::jsonrpc::JsonRpcResponse;
 
 struct NoOpObserver;
 impl TickObserver for NoOpObserver {
@@ -163,6 +166,10 @@ impl TimeFamilyServer {
     }
 
     pub fn start(self: Arc<Self>) -> Result<tokio::task::JoinHandle<()>, NodeError> {
+        Self::start_tcp(self)
+    }
+
+    pub fn start_tcp(self: Arc<Self>) -> Result<tokio::task::JoinHandle<()>, NodeError> {
         let addr = self.listen_addr.clone();
 
         Ok(tokio::spawn(async move {
@@ -173,7 +180,7 @@ impl TimeFamilyServer {
                     return;
                 }
             };
-            tracing::info!("TimeFamilyServer listening on {}", addr);
+            tracing::info!("TimeFamilyServer TCP listening on {}", addr);
             loop {
                 match listener.accept().await {
                     Ok((stream, _addr)) => {
@@ -191,6 +198,40 @@ impl TimeFamilyServer {
             }
         }))
     }
+
+    pub fn start_http(self: Arc<Self>, http_addr: &str) -> Result<tokio::task::JoinHandle<()>, NodeError> {
+        let http_addr = http_addr.to_string();
+        let app = axum::Router::new()
+            .route("/jsonrpc", post(jsonrpc_handler))
+            .with_state(Arc::clone(&self));
+
+        Ok(tokio::spawn(async move {
+            let listener = match tokio::net::TcpListener::bind(&http_addr).await {
+                Ok(l) => l,
+                Err(e) => {
+                    tracing::error!("failed to bind HTTP to {}: {}", http_addr, e);
+                    return;
+                }
+            };
+            tracing::info!("TimeFamilyServer HTTP listening on {}", http_addr);
+            if let Err(e) = axum::serve(listener, app).await {
+                tracing::error!("HTTP server error: {}", e);
+            }
+        }))
+    }
+}
+
+async fn jsonrpc_handler(
+    State(server): State<Arc<TimeFamilyServer>>,
+    Json(req): Json<serde_json::Value>,
+) -> Json<serde_json::Value> {
+    let resp = process_request_from_value(&server, req)
+        .unwrap_or_else(|e| jsonrpc::JsonRpcResponse::error(
+            None,
+            jsonrpc::INTERNAL_ERROR,
+            e.to_string(),
+        ));
+    Json(serde_json::to_value(resp).unwrap_or(serde_json::Value::Null))
 }
 
 const MAX_REQUEST_LINE_BYTES: usize = 4096;
@@ -239,31 +280,43 @@ async fn handle_connection(
     Ok(())
 }
 
-fn process_request(server: &TimeFamilyServer, line: &str) -> Result<JsonRpcResponse, NodeError> {
-    let request: JsonRpcRequest = serde_json::from_str(line)
-        .map_err(|e| NodeError::Internal(format!("JSON parse: {}", e)))?;
-
-    if request.jsonrpc != "2.0" {
+fn process_request_from_value(server: &TimeFamilyServer, req: serde_json::Value) -> Result<JsonRpcResponse, NodeError> {
+    let jsonrpc = req.get("jsonrpc")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| NodeError::Internal("missing jsonrpc field".into()))?;
+    if jsonrpc != "2.0" {
         return Ok(jsonrpc::JsonRpcResponse::error(
-            request.id.clone(),
+            req.get("id").cloned(),
             jsonrpc::INVALID_REQUEST,
             "invalid jsonrpc version",
         ));
     }
 
-    match request.method.as_str() {
-        "stamp" => Ok(handlers::handle_stamp(server, request.params)),
-        "verify" => Ok(handlers::handle_verify(server, request.params)),
-        "get_calendar_slice" => Ok(handlers::handle_get_calendar_slice(server, request.params)),
-        "integrity_check" => Ok(handlers::handle_integrity_check(server, request.params)),
-        "get_peer_score" => Ok(handlers::handle_get_peer_score(server, request.params)),
-        "collision_status" => Ok(handlers::handle_collision_status(server, request.params)),
-        "get_latest_epoch" => Ok(handlers::handle_get_latest_epoch(server, request.params)),
-        "verify_epoch_snapshot" => Ok(handlers::handle_verify_epoch_snapshot(server, request.params)),
+    let id = req.get("id").clone();
+    let method = req.get("method")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| NodeError::Internal("missing method field".into()))?;
+    let params = req.get("params").cloned().unwrap_or(serde_json::Value::Null);
+
+    match method {
+        "stamp" => Ok(handlers::handle_stamp(server, params)),
+        "verify" => Ok(handlers::handle_verify(server, params)),
+        "get_calendar_slice" => Ok(handlers::handle_get_calendar_slice(server, params)),
+        "integrity_check" => Ok(handlers::handle_integrity_check(server, params)),
+        "get_peer_score" => Ok(handlers::handle_get_peer_score(server, params)),
+        "collision_status" => Ok(handlers::handle_collision_status(server, params)),
+        "get_latest_epoch" => Ok(handlers::handle_get_latest_epoch(server, params)),
+        "verify_epoch_snapshot" => Ok(handlers::handle_verify_epoch_snapshot(server, params)),
         _ => Ok(jsonrpc::JsonRpcResponse::error(
-            request.id.clone(),
+            id.cloned(),
             jsonrpc::METHOD_NOT_FOUND,
-            format!("method '{}' not found", request.method),
+            format!("method '{}' not found", method),
         )),
     }
+}
+
+fn process_request(server: &TimeFamilyServer, line: &str) -> Result<JsonRpcResponse, NodeError> {
+    let req: serde_json::Value = serde_json::from_str(line)
+        .map_err(|e| NodeError::Internal(format!("JSON parse: {}", e)))?;
+    process_request_from_value(server, req)
 }

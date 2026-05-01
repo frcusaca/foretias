@@ -66,7 +66,7 @@ A: Implement in separate worktree branches and merge.
 
 14. **Makefile** — Should I create the Makefile from Part 16 now (v0.1) or defer until all components exist?
 
-A: Update this question #14 with a little more explanation and delete this answer, I will review again. I thought cargo was able to build c11 files ?? Is this about bridging to other langauges so they can use fortias library?
+**Clarification**: The Rust crate `fortias-core` already builds C11 sources via `build.rs` (cc crate compiles `fortias_core.c`, `hash_blake3.c`, `hash_md5_sha1.c`, `noise_xx.c`, `merkle.c`, `frost.c` directly — no separate Makefile needed for the Rust/C11 bridge). The Makefile from Part 16 is intended for standalone C11 consumers (e.g., a pure-C application that wants to `#include "fortias.h"` and link against `libfortias_core.a` without going through Rust/cargo). This Makefile would produce a standalone static/shared library for non-Rust languages. Should this standalone C11 build target be created now or deferred?
 
 ---
 
@@ -78,4 +78,10 @@ A: stub out for now, we'll preserve the ability to implement P-256 later when we
 
 16. **Noise_XX vs libp2p Noise** — libp2p has its own Noise implementation. Should the C11 Noise_XX be designed to interop with libp2p's Noise transport, or is it independent?
 
-A: Update #16 with a little more detail. Why did we use Noise_XX outside of libp2p? I believe we should preserve the ability to make a point-to-point connection using noise_xx independent of libp2p noise connection where libp2p establish its connections for peer-to-peer stuff. Update with explanation if this does not resolve this question.
+**Clarification**: libp2p's Noise transport (libp2p-noise) handles encrypted multiplexed connections for P2P swarm communication — this is how Communerd connects to other peers in the gossip/kad network. However, we also need a point-to-point encrypted channel independent of libp2p for direct mutual attestation handshakes between two TimeBeings. This is the role of Noise_XX in C11 — it establishes a raw encrypted tunnel between two parties without libp2p overhead (no muxing, no swarm, no peer discovery).
+
+**Two distinct use cases**:
+1. **libp2p Noise** → swarm P2P gossip, KAD, heartbeat propagation (many-to-many)
+2. **C11 Noise_XX** → direct point-to-point mutual attestation channel (one-to-one, outside libp2p)
+
+These are independent. Noise_XX is stubbed for now per "crypto stuff can happen later." When implemented, it should interoperate with libp2p Noise at the cryptographic protocol level (both using the Noise_XX handshake pattern) but serve different purposes.
