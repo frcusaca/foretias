@@ -7,18 +7,18 @@ use crate::error::CryptoError;
 
 /// Supported elliptic curve types for signing and key exchange.
 #[derive(Debug, Clone, Copy)]
-pub enum FortiasCurve {
+pub enum ForetiasCurve {
     /// Ed25519 curve — the primary and fully supported curve.
     Ed25519,
     /// NIST P-256 curve — supported but currently stubbed.
     P256,
 }
 
-impl From<FortiasCurve> for u32 {
-    fn from(curve: FortiasCurve) -> Self {
+impl From<ForetiasCurve> for u32 {
+    fn from(curve: ForetiasCurve) -> Self {
         match curve {
-            FortiasCurve::Ed25519 => FORTIASCURVE_FORTIAS_CURVE_ED25519,
-            FortiasCurve::P256 => FORTIASCURVE_FORTIAS_CURVE_P256,
+            ForetiasCurve::Ed25519 => ForetiasCurve_FORETIAS_CURVE_ED25519,
+            ForetiasCurve::P256 => ForetiasCurve_FORETIAS_CURVE_P256,
         }
     }
 }
@@ -27,9 +27,9 @@ impl From<FortiasCurve> for u32 {
 #[derive(Debug, Clone, Copy)]
 pub enum PublicKeyBytes {
     /// 32-byte Ed25519 public key.
-    Ed25519(FortiasPubKey32),
+    Ed25519(ForetiasPubKey32),
     /// 33-byte compressed P-256 public key.
-    P256Compressed(FortiasPubKey33),
+    P256Compressed(ForetiasPubKey33),
 }
 
 /// A 32-byte shared secret derived via ECDH; zeroized on drop.
@@ -57,7 +57,7 @@ pub struct CryptoServerCapabilities {
     /// Human-readable name of the backend (e.g. `"software"`).
     pub backend_name: &'static str,
     /// The curve this backend operates on.
-    pub curve: FortiasCurve,
+    pub curve: ForetiasCurve,
     /// Whether the backend can produce a proof of authentic execution.
     pub supports_proof: bool,
     /// Whether sealing/unsealing operations are supported.
@@ -77,32 +77,32 @@ pub trait CryptoServer: Send + Sync {
     /// Returns the public key of this server.
     fn public_key(&self) -> PublicKeyBytes;
     /// Returns the peer ID derived from the public key.
-    fn peer_id(&self) -> FortiasPeerID;
+    fn peer_id(&self) -> ForetiasPeerID;
     /// Returns the curve this server operates on.
-    fn curve(&self) -> FortiasCurve;
+    fn curve(&self) -> ForetiasCurve;
     /// Returns the capabilities and performance characteristics of this backend.
     fn capabilities(&self) -> CryptoServerCapabilities;
 
     /// Signs the given message with the server's private key.
-    fn sign(&self, msg: &[u8]) -> Result<FortiasSig64, CryptoError>;
+    fn sign(&self, msg: &[u8]) -> Result<ForetiasSig64, CryptoError>;
     /// Verifies an Ed25519 signature against a public key and message.
-    fn verify_ed25519(&self, pub_key: &FortiasPubKey32, msg: &[u8], sig: &FortiasSig64) -> Result<bool, CryptoError>;
+    fn verify_ed25519(&self, pub_key: &ForetiasPubKey32, msg: &[u8], sig: &ForetiasSig64) -> Result<bool, CryptoError>;
     /// Verifies a P-256 signature against a public key and message.
-    fn verify_p256(&self, pub_key: &FortiasPubKey33, msg: &[u8], sig: &FortiasSig64) -> Result<bool, CryptoError>;
+    fn verify_p256(&self, pub_key: &ForetiasPubKey33, msg: &[u8], sig: &ForetiasSig64) -> Result<bool, CryptoError>;
 
     /// Performs Ed25519-based ECDH to derive a shared secret with a peer.
-    fn ecdh_ed25519(&self, peer_pub: &FortiasPubKey32) -> Result<SharedSecret, CryptoError>;
+    fn ecdh_ed25519(&self, peer_pub: &ForetiasPubKey32) -> Result<SharedSecret, CryptoError>;
     /// Performs P-256 ECDH to derive a shared secret with a peer.
-    fn ecdh_p256(&self, peer_pub: &FortiasPubKey33) -> Result<SharedSecret, CryptoError>;
+    fn ecdh_p256(&self, peer_pub: &ForetiasPubKey33) -> Result<SharedSecret, CryptoError>;
 
     /// Computes the SHA-256 hash of the given data.
-    fn sha256(&self, data: &[u8]) -> Result<FortiasHash32, CryptoError>;
+    fn sha256(&self, data: &[u8]) -> Result<ForetiasHash32, CryptoError>;
     /// Computes the BLAKE3 hash of the given data.
-    fn blake3(&self, data: &[u8]) -> Result<FortiasHash32, CryptoError>;
+    fn blake3(&self, data: &[u8]) -> Result<ForetiasHash32, CryptoError>;
     /// Computes MD5 hash (legacy, insecure — for compatibility only).
-    fn legacy_insecure_md5(&self, data: &[u8]) -> Result<FortiasHash16, CryptoError>;
+    fn legacy_insecure_md5(&self, data: &[u8]) -> Result<ForetiasHash16, CryptoError>;
     /// Computes SHA-1 hash (legacy, insecure — for compatibility only).
-    fn legacy_insecure_sha1(&self, data: &[u8]) -> Result<FortiasHash20, CryptoError>;
+    fn legacy_insecure_sha1(&self, data: &[u8]) -> Result<ForetiasHash20, CryptoError>;
 
     /// Encrypts data using the server's derived seal key, returning a sealed blob.
     fn seal_for_self(&self, data: &[u8]) -> Result<SealedBlob, CryptoError>;
@@ -122,11 +122,11 @@ pub trait CryptoServer: Send + Sync {
 pub mod software;
 
 /// Creates a software-backed crypto server using the specified curve.
-pub fn new_software(curve: FortiasCurve) -> Result<Box<dyn CryptoServer>, CryptoError> {
+pub fn new_software(curve: ForetiasCurve) -> Result<Box<dyn CryptoServer>, CryptoError> {
     Ok(Box::new(software::SoftwareCryptoServer::generate(curve)?))
 }
 
 /// Creates the best available crypto server (currently falls back to software).
-pub fn new_best_available(curve: FortiasCurve) -> Result<Box<dyn CryptoServer>, CryptoError> {
+pub fn new_best_available(curve: ForetiasCurve) -> Result<Box<dyn CryptoServer>, CryptoError> {
     new_software(curve)
 }

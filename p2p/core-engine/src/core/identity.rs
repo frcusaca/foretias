@@ -12,7 +12,7 @@ use crate::error::{CryptoError, c_result_to_error};
 ///
 /// This type does NOT implement `Clone`, `Copy`, or `Debug`, preventing
 /// accidental key exposure through copies or debug output.
-pub struct PrivKeyHandle(ManuallyDrop<NonNull<FortiasPrivKey>>);
+pub struct PrivKeyHandle(ManuallyDrop<NonNull<ForetiasPrivKey>>);
 
 unsafe impl Send for PrivKeyHandle {}
 unsafe impl Sync for PrivKeyHandle {}
@@ -29,7 +29,7 @@ impl PrivKeyHandle {
     /// The KEK is stored in C memory and never exposed to Rust.
     /// Calling this multiple times is safe (idempotent).
     pub fn init() {
-        unsafe { fortias_privkey_init() };
+        unsafe { foretias_privkey_init() };
     }
 
     /// Generate a fresh Ed25519 keypair, returning an opaque handle.
@@ -37,7 +37,7 @@ impl PrivKeyHandle {
     /// The seed is encrypted with the instance KEK before storage.
     /// Call [`PrivKeyHandle::init`] first.
     pub fn generate() -> Result<Self, CryptoError> {
-        let ptr = unsafe { fortias_privkey_ed25519_generate() };
+        let ptr = unsafe { foretias_privkey_ed25519_generate() };
         if ptr.is_null() {
             return Err(CryptoError::Internal(-99));
         }
@@ -49,7 +49,7 @@ impl PrivKeyHandle {
     /// The seed is encrypted with the instance KEK before storage.
     /// Call [`PrivKeyHandle::init`] first.
     pub fn from_seed(seed: &[u8; 32]) -> Result<Self, CryptoError> {
-        let ptr = unsafe { fortias_privkey_ed25519_from_seed(seed.as_ptr()) };
+        let ptr = unsafe { foretias_privkey_ed25519_from_seed(seed.as_ptr()) };
         if ptr.is_null() {
             return Err(CryptoError::Internal(-99));
         }
@@ -60,16 +60,16 @@ impl PrivKeyHandle {
     pub fn public_key(&self) -> Result<[u8; 32], CryptoError> {
         let mut out = [0u8; 32];
         unsafe {
-            fortias_privkey_ed25519_public(self.0.as_ptr(), out.as_mut_ptr());
+            foretias_privkey_ed25519_public(self.0.as_ptr(), out.as_mut_ptr());
         }
         Ok(out)
     }
 
     /// Sign a message with this handle. Private key bytes never leave C.
-    pub fn sign(&self, msg: &[u8]) -> Result<FortiasSig64, CryptoError> {
+    pub fn sign(&self, msg: &[u8]) -> Result<ForetiasSig64, CryptoError> {
         let mut sig = [0u8; 64];
         let rc = unsafe {
-            fortias_privkey_ed25519_sign(
+            foretias_privkey_ed25519_sign(
                 self.0.as_ptr(),
                 msg.as_ptr(),
                 msg.len(),
@@ -77,7 +77,7 @@ impl PrivKeyHandle {
             )
         };
         c_result_to_error(rc as i32)?;
-        Ok(FortiasSig64 { bytes: sig })
+        Ok(ForetiasSig64 { bytes: sig })
     }
 
     /// Derive a 32-byte seal key via HKDF-SHA256 from the seed.
@@ -85,7 +85,7 @@ impl PrivKeyHandle {
     pub fn derive_seal_key(&self, info: &[u8]) -> Result<[u8; 32], CryptoError> {
         let mut seal_key = [0u8; 32];
         let rc = unsafe {
-            fortias_privkey_derive_seal_key(
+            foretias_privkey_derive_seal_key(
                 self.0.as_ptr(),
                 info.as_ptr(),
                 info.len(),
@@ -100,24 +100,24 @@ impl PrivKeyHandle {
 impl Drop for PrivKeyHandle {
     fn drop(&mut self) {
         unsafe {
-            fortias_privkey_free(self.0.as_ptr());
+            foretias_privkey_free(self.0.as_ptr());
         }
     }
 }
 
 /// Generate a fresh Ed25519 keypair.
-pub fn generate_ed25519_keypair() -> Result<(FortiasPubKey32, FortiasPrivKey32), CryptoError> {
+pub fn generate_ed25519_keypair() -> Result<(ForetiasPubKey32, ForetiasPrivKey32), CryptoError> {
     let mut pub_key = unsafe { std::mem::zeroed() };
     let mut priv_key = unsafe { std::mem::zeroed() };
-    let rc = unsafe { fortias_ed25519_generate_keypair(&mut pub_key, &mut priv_key) };
+    let rc = unsafe { foretias_ed25519_generate_keypair(&mut pub_key, &mut priv_key) };
     c_result_to_error(rc)?;
     Ok((pub_key, priv_key))
 }
 
 /// Derive a PeerID from an Ed25519 public key.
-pub fn derive_ed25519_peer_id(pub_key: &FortiasPubKey32) -> Result<FortiasPeerID, CryptoError> {
+pub fn derive_ed25519_peer_id(pub_key: &ForetiasPubKey32) -> Result<ForetiasPeerID, CryptoError> {
     let mut peer_id = unsafe { std::mem::zeroed() };
-    let rc = unsafe { fortias_ed25519_derive_peer_id(pub_key, &mut peer_id) };
+    let rc = unsafe { foretias_ed25519_derive_peer_id(pub_key, &mut peer_id) };
     c_result_to_error(rc)?;
     Ok(peer_id)
 }

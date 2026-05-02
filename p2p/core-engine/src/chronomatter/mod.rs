@@ -14,10 +14,10 @@ use tracing::{debug, error, info, warn};
 use crate::crypto_server::{self, CryptoServer};
 use crate::core::identity::PrivKeyHandle;
 use crate::error::NodeError;
-use crate::fortias::{auto_attestation_blob_with_count, Fortis, TickRecord};
-use crate::fortias::tick::CalendarLookup;
-use crate::fortias::callbacks::{TickObserver, AutoAttestObserver};
-use crate::fortias::types::Tbid;
+use crate::foretias::{auto_attestation_blob_with_count, Foretis, TickRecord};
+use crate::foretias::tick::CalendarLookup;
+use crate::foretias::callbacks::{TickObserver, AutoAttestObserver};
+use crate::foretias::types::Tbid;
 
 struct TickKeyPair {
     pub_key: [u8; 32],
@@ -43,7 +43,7 @@ pub struct Chronomatter {
 impl Chronomatter {
     pub fn new(chronon_ns: u64, tick_observer: Arc<dyn TickObserver>) -> Result<Self, NodeError> {
         let crypto = Arc::from(crypto_server::new_software(
-            crypto_server::FortiasCurve::Ed25519,
+            crypto_server::ForetiasCurve::Ed25519,
         )?);
 
         let uuid = uuid::Uuid::new_v4();
@@ -66,20 +66,26 @@ impl Chronomatter {
     }
 
     /// Create from a persisted calendar (dormant, verify-only mode).
+    ///
+    /// The calendar is loaded for verification, but this Chronomatter
+    /// gets its own unique TBID — a dormant time being never reuses
+    /// the original TBID from the loaded calendar.
     pub fn from_calendar(
         path: &str,
         crypto: Arc<dyn CryptoServer>,
         tick_observer: Arc<dyn TickObserver>,
     ) -> Result<Self, NodeError> {
-        use crate::fortias::Calendar;
+        use crate::foretias::Calendar;
         let calendar_data = Calendar::load(path)?;
         let latest_tick = CalendarLookup::latest(&calendar_data).unwrap_or(0);
-        let loaded_tbid = calendar_data.tbid;
-        let loaded_tbn = calendar_data.tbn.clone();
+
+        let uuid = uuid::Uuid::new_v4();
+        let tbid = *uuid.as_bytes();
+        let tbn = format!("tf-{}", hex::encode(&tbid[..8]));
 
         Ok(Self {
-            tbid: loaded_tbid,
-            tbn: loaded_tbn,
+            tbid,
+            tbn,
             current_tick: AtomicU64::new(latest_tick),
             keypairs: RwLock::new(Vec::new()),
             crypto,
@@ -114,6 +120,16 @@ impl Chronomatter {
 
     pub fn current_tick(&self) -> u64 {
         self.current_tick.load(SeqCst)
+    }
+
+    /// Return the chronon interval in nanoseconds.
+    pub fn chronon_ns(&self) -> u64 {
+        self.chronon_ns
+    }
+
+    /// Return the public key of the most recently generated tick keypair, if any.
+    pub fn latest_public_key(&self) -> Option<[u8; 32]> {
+        self.keypairs.read().last().map(|kp| kp.pub_key)
     }
 
     /// Set the auto-attestation observer (for metrics).
@@ -198,7 +214,7 @@ impl Chronomatter {
 
     // ── Stamp ────────────────────────────────────────────────────────────────
 
-    pub fn stamp(&self, content: Vec<u8>, echo: String) -> Result<Fortis, NodeError> {
+    pub fn stamp(&self, content: Vec<u8>, echo: String) -> Result<Foretis, NodeError> {
         if self.is_dormant.load(SeqCst) {
             return Err(NodeError::Internal(
                 "Cannot stamp: Chronomatter is in verify-only mode".into(),
@@ -219,7 +235,7 @@ impl Chronomatter {
         self.create_fortis(tick, content, echo)
     }
 
-    fn create_fortis(&self, tick: u64, content: Vec<u8>, echo: String) -> Result<Fortis, NodeError> {
+    fn create_fortis(&self, tick: u64, content: Vec<u8>, echo: String) -> Result<Foretis, NodeError> {
         let tbid = self.tbid;
         let tbn = self.tbn.clone();
 
@@ -243,7 +259,7 @@ impl Chronomatter {
             .as_nanos() as u64;
         let time_being_reference_time = format!("UE+{}ns", now_ns);
 
-        let fortis = Fortis {
+        let foretis = Foretis {
             tick_number: tick,
             content_hash: content_hash.bytes,
             signature: sig.bytes.to_vec(),
@@ -256,15 +272,15 @@ impl Chronomatter {
         let record = self.build_tick_record(tick, new_pub)?;
         self.notify_observer(tick, &new_pub, &record);
 
-        Ok(fortis)
+        Ok(foretis)
     }
 
     // ── Verify ───────────────────────────────────────────────────────────────
 
-    pub fn verify(&self, fortis: &Fortis, content: &Vec<u8>, calendar: &dyn CalendarLookup) -> Result<bool, NodeError> {
-        crate::fortias::tick::verify(
+    pub fn verify(&self, foretis: &Foretis, content: &Vec<u8>, calendar: &dyn CalendarLookup) -> Result<bool, NodeError> {
+        crate::foretias::tick::verify(
             self.crypto.as_ref(),
-            fortis,
+            foretis,
             content,
             calendar,
         )
@@ -340,7 +356,7 @@ impl Chronomatter {
         start: Option<u64>,
         end: Option<u64>,
     ) -> Result<Vec<bool>, NodeError> {
-        use crate::fortias::tick::verify_pair;
+        use crate::foretias::tick::verify_pair;
 
         let records = calendar.get(start.unwrap_or(0), 10_000)?;
         if records.len() < 2 {
@@ -371,10 +387,10 @@ impl Chronomatter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::fortias::types::{PublicKey, TickNumber};
+    use crate::foretias::types::{PublicKey, TickNumber};
     use std::sync::atomic::AtomicU64 as AtomicU64Std;
     use parking_lot::RwLock;
-    use crate::fortias::Calendar;
+    use crate::foretias::Calendar;
 
     struct DummyObserver {
         last_tick: Arc<AtomicU64Std>,
@@ -401,10 +417,10 @@ mod tests {
     #[test]
     fn stamp_returns_fortis_with_correct_tick() {
         let (cm, _last, calendar) = make_chronomatter();
-        let fortis = cm.stamp(b"hello".to_vec(), "echo".to_string()).unwrap();
-        assert_eq!(fortis.tick_number, 1);
-        assert_eq!(fortis.echo, "echo");
-        assert!(!fortis.signature.is_empty());
+        let foretis = cm.stamp(b"hello".to_vec(), "echo".to_string()).unwrap();
+        assert_eq!(foretis.tick_number, 1);
+        assert_eq!(foretis.echo, "echo");
+        assert!(!foretis.signature.is_empty());
         // Calendar received the tick record via observer
         assert_eq!(calendar.read().ticks.len(), 1);
     }
@@ -423,16 +439,16 @@ mod tests {
     fn verify_succeeds_for_valid_stamp() {
         let (cm, _last, calendar) = make_chronomatter();
         let content = b"verify-me".to_vec();
-        let fortis = cm.stamp(content.clone(), "v".to_string()).unwrap();
-        let valid = cm.verify(&fortis, &content, &*calendar.read()).unwrap();
+        let foretis = cm.stamp(content.clone(), "v".to_string()).unwrap();
+        let valid = cm.verify(&foretis, &content, &*calendar.read()).unwrap();
         assert!(valid);
     }
 
     #[test]
     fn verify_fails_for_wrong_content() {
         let (cm, _last, calendar) = make_chronomatter();
-        let fortis = cm.stamp(b"original".to_vec(), "v".to_string()).unwrap();
-        let valid = cm.verify(&fortis, &b"tampered".to_vec(), &*calendar.read()).unwrap();
+        let foretis = cm.stamp(b"original".to_vec(), "v".to_string()).unwrap();
+        let valid = cm.verify(&foretis, &b"tampered".to_vec(), &*calendar.read()).unwrap();
         assert!(!valid);
     }
 
@@ -461,7 +477,7 @@ mod tests {
         let calendar = Arc::new(RwLock::new(Calendar::new([0u8; 16], "dormant-test")));
         let observer = Arc::new(DummyObserver { last_tick: Arc::clone(&last_tick), calendar: Arc::clone(&calendar) });
         let crypto = Arc::from(crypto_server::new_software(
-            crypto_server::FortiasCurve::Ed25519,
+            crypto_server::ForetiasCurve::Ed25519,
         ).unwrap());
         let tmp = std::env::temp_dir().join(format!("chronomatter_test_{}.json", std::process::id()));
         {

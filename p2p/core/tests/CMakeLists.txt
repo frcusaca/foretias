@@ -12,9 +12,9 @@ set(TEST_SOURCES
     test_nullifier.c
     test_p256_stub.c
     test_blake3_stub.c
-    test_noise_stub.c
+    test_noise.c
     test_frost_stub.c
-    test_legacy_hash_stub.c
+    test_legacy_hash.c
     test_privkey.c
 )
 

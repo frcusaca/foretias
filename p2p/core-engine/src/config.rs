@@ -1,9 +1,9 @@
-//! Node configuration (TOML).
+//! Node configuration (JSON).
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-/// Runtime configuration for a Fortias P2P node, loaded from a TOML file.
+/// Runtime configuration for a Fortias P2P node, loaded from a JSON file.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct NodeConfig {
     /// Address the node listens on for incoming connections (default: `127.0.0.1:4001`).
@@ -73,11 +73,11 @@ fn default_nonce_window() -> usize { 10 }
 fn default_liege_wait_secs() -> u64 { 30 }
 
 impl NodeConfig {
-    /// Loads configuration from a TOML file at the given path; returns defaults on any error.
+    /// Loads configuration from a JSON file at the given path; returns defaults on any error.
     pub fn load(path: &str) -> Self {
         std::fs::read_to_string(path)
             .ok()
-            .and_then(|s| toml::from_str(&s).ok())
+            .and_then(|s| serde_json::from_str(&s).ok())
             .unwrap_or_default()
     }
     /// Returns the default filesystem path where the configuration file is expected.

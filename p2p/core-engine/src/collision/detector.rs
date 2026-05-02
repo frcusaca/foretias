@@ -2,7 +2,7 @@
 
 use std::collections::VecDeque;
 
-use crate::core::bindings::FortiasPubKey32;
+use crate::core::bindings::ForetiasPubKey32;
 use crate::crypto_server::CryptoServer;
 use crate::collision::heartbeat::Heartbeat;
 
@@ -16,13 +16,13 @@ pub enum CollisionEvent {
 /// with a valid signature but an unknown nonce — cryptographic proof of collision.
 pub struct CollisionDetector {
     my_peer_id: String,
-    my_pub_key: FortiasPubKey32,
+    my_pub_key: ForetiasPubKey32,
     my_nonces:  parking_lot::Mutex<VecDeque<[u8; 16]>>,
     nonce_window: usize,
 }
 
 impl CollisionDetector {
-    pub fn new(my_peer_id: String, my_pub_key: FortiasPubKey32, nonce_window: usize) -> Self {
+    pub fn new(my_peer_id: String, my_pub_key: ForetiasPubKey32, nonce_window: usize) -> Self {
         Self {
             my_peer_id,
             my_pub_key,
@@ -54,7 +54,7 @@ impl CollisionDetector {
         }
 
         let sig_bytes: [u8; 64] = hb.signature.get(..64)?.try_into().ok()?;
-        let sig = crate::core::bindings::FortiasSig64 { bytes: sig_bytes };
+        let sig = crate::core::bindings::ForetiasSig64 { bytes: sig_bytes };
         let valid = crypto.verify_ed25519(&self.my_pub_key, &hb.canonical(), &sig).ok()?;
         if !valid {
             return None;
@@ -68,11 +68,11 @@ impl CollisionDetector {
 mod tests {
     use super::*;
     use crate::crypto_server;
-    use crate::crypto_server::FortiasCurve;
+    use crate::crypto_server::ForetiasCurve;
     use crate::core::identity::generate_ed25519_keypair;
 
     fn make_server() -> Box<dyn CryptoServer> {
-        crypto_server::new_software(FortiasCurve::Ed25519).unwrap()
+        crypto_server::new_software(ForetiasCurve::Ed25519).unwrap()
     }
 
     fn build_heartbeat(peer_id: &str, nonce: [u8; 16], server: &dyn CryptoServer) -> Heartbeat {
@@ -96,7 +96,7 @@ mod tests {
     fn detector_ignores_different_peer() {
         let server = make_server();
         let (_, _priv_key) = generate_ed25519_keypair().unwrap();
-        let pub_key = crate::core::bindings::FortiasPubKey32 { bytes: [0xAA; 32] };
+        let pub_key = crate::core::bindings::ForetiasPubKey32 { bytes: [0xAA; 32] };
         let detector = CollisionDetector::new("my-peer".to_string(), pub_key, 10);
 
         let mut nonce = [0u8; 16];
@@ -125,7 +125,7 @@ mod tests {
     #[test]
     fn detector_ignores_invalid_signature() {
         let server = make_server();
-        let pub_key = crate::core::bindings::FortiasPubKey32 { bytes: [0xBB; 32] };
+        let pub_key = crate::core::bindings::ForetiasPubKey32 { bytes: [0xBB; 32] };
         let detector = CollisionDetector::new("my-peer".to_string(), pub_key, 10);
 
         let mut nonce = [0u8; 16];
@@ -153,7 +153,7 @@ mod tests {
         };
         let _sig_bytes: [u8; 32] = priv_key.bytes;
         let sig = crate::core::signing::ed25519_sign(
-            &crate::core::bindings::FortiasPrivKey32 { bytes: priv_key.bytes },
+            &crate::core::bindings::ForetiasPrivKey32 { bytes: priv_key.bytes },
             &hb.canonical(),
         ).unwrap();
         hb.signature = sig.bytes.to_vec();

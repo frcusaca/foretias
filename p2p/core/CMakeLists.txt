@@ -16,6 +16,9 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O2")
 find_library(SODIUM_LIBRARY NAMES sodium REQUIRED)
 find_path(SODIUM_INCLUDE_DIR sodium.h REQUIRED)
 
+# ── Find OpenSSL (for legacy MD5/SHA-1) ─────────────────────────────────
+find_package(OpenSSL REQUIRED COMPONENTS Crypto)
+
 # ── Source files ────────────────────────────────────────────────────────
 set(FORTIAS_CORE_SOURCES
     src/version.c
@@ -44,7 +47,8 @@ target_include_directories(fortias_core
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 target_include_directories(fortias_core SYSTEM PRIVATE ${SODIUM_INCLUDE_DIR})
-target_link_libraries(fortias_core PUBLIC ${SODIUM_LIBRARY})
+target_include_directories(fortias_core SYSTEM PRIVATE ${OPENSSL_INCLUDE_DIR})
+target_link_libraries(fortias_core PUBLIC ${SODIUM_LIBRARY} OpenSSL::Crypto)
 
 # ── Install ──────────────────────────────────────────────────────────────
 install(TARGETS fortias_core

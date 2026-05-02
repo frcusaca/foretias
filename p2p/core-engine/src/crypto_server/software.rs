@@ -8,7 +8,7 @@ use zeroize::Zeroizing;
 use crate::core::bindings::*;
 use crate::core::identity::PrivKeyHandle;
 use crate::error::CryptoError;
-use super::{CryptoServer, CryptoServerCapabilities, FortiasCurve, PublicKeyBytes, SharedSecret, SealedBlob};
+use super::{CryptoServer, CryptoServerCapabilities, ForetiasCurve, PublicKeyBytes, SharedSecret, SealedBlob};
 
 /// Derive seal key via HKDF-SHA256 over the Ed25519 seed.
 /// The seed never leaves C memory; the derivation happens inside C11.
@@ -19,13 +19,13 @@ fn derive_seal_key(handle: &PrivKeyHandle) -> Result<[u8; 32], CryptoError> {
 /// Software-based crypto server backed by libsodium and ChaCha20-Poly1305.
 pub struct SoftwareCryptoServer {
     /// The curve this server operates on.
-    curve: FortiasCurve,
+    curve: ForetiasCurve,
     /// The public key generated at construction time.
     pub_key: PublicKeyBytes,
     /// The opaque private key handle — bytes never leave C memory.
     priv_key: PrivKeyHandle,
     /// The peer ID derived from the public key.
-    peer_id: FortiasPeerID,
+    peer_id: ForetiasPeerID,
     /// Derived seal key for ChaCha20-Poly1305 encryption, zeroized on drop.
     seal_key: Zeroizing<[u8; 32]>,
     /// In-memory store for FROST threshold signing shares.
@@ -34,18 +34,18 @@ pub struct SoftwareCryptoServer {
 
 impl SoftwareCryptoServer {
     /// Generates a new keypair and initializes a software crypto server for the given curve.
-    pub fn generate(curve: FortiasCurve) -> Result<Self, CryptoError> {
+    pub fn generate(curve: ForetiasCurve) -> Result<Self, CryptoError> {
         PrivKeyHandle::init();
         match curve {
-            FortiasCurve::Ed25519 => {
+            ForetiasCurve::Ed25519 => {
                 let handle = PrivKeyHandle::generate()?;
                 let pub_key_bytes: [u8; 32] = handle.public_key()?;
-                let pub_key = FortiasPubKey32 { bytes: pub_key_bytes };
+                let pub_key = ForetiasPubKey32 { bytes: pub_key_bytes };
                 let peer_id = crate::core::identity::derive_ed25519_peer_id(&pub_key)?;
                 let seal_key = derive_seal_key(&handle)?;
 
                 Ok(Self {
-                    curve: FortiasCurve::Ed25519,
+                    curve: ForetiasCurve::Ed25519,
                     pub_key: PublicKeyBytes::Ed25519(pub_key),
                     priv_key: handle,
                     peer_id,
@@ -53,7 +53,7 @@ impl SoftwareCryptoServer {
                     frost_shares: parking_lot::Mutex::new(HashMap::new()),
                 })
             }
-            FortiasCurve::P256 => {
+            ForetiasCurve::P256 => {
                 Err(CryptoError::Unsupported("P-256 not implemented yet"))
             }
         }
@@ -63,12 +63,12 @@ impl SoftwareCryptoServer {
         PrivKeyHandle::init();
         let handle = PrivKeyHandle::from_seed(seed)?;
         let pub_key_bytes: [u8; 32] = handle.public_key()?;
-        let pub_key = FortiasPubKey32 { bytes: pub_key_bytes };
+        let pub_key = ForetiasPubKey32 { bytes: pub_key_bytes };
         let peer_id = crate::core::identity::derive_ed25519_peer_id(&pub_key)?;
         let seal_key = derive_seal_key(&handle)?;
 
         Ok(Self {
-            curve: FortiasCurve::Ed25519,
+            curve: ForetiasCurve::Ed25519,
             pub_key: PublicKeyBytes::Ed25519(pub_key),
             priv_key: handle,
             peer_id,
@@ -86,8 +86,8 @@ impl Drop for SoftwareCryptoServer {
 
 impl CryptoServer for SoftwareCryptoServer {
     fn public_key(&self) -> PublicKeyBytes { self.pub_key }
-    fn peer_id(&self) -> FortiasPeerID { self.peer_id }
-    fn curve(&self) -> FortiasCurve { self.curve }
+    fn peer_id(&self) -> ForetiasPeerID { self.peer_id }
+    fn curve(&self) -> ForetiasCurve { self.curve }
 
     fn capabilities(&self) -> CryptoServerCapabilities {
         CryptoServerCapabilities {
@@ -101,39 +101,39 @@ impl CryptoServer for SoftwareCryptoServer {
         }
     }
 
-    fn sign(&self, msg: &[u8]) -> Result<FortiasSig64, CryptoError> {
+    fn sign(&self, msg: &[u8]) -> Result<ForetiasSig64, CryptoError> {
         crate::core::signing::ed25519_sign_with_handle(&self.priv_key, msg)
     }
 
-    fn verify_ed25519(&self, pub_key: &FortiasPubKey32, msg: &[u8], sig: &FortiasSig64) -> Result<bool, CryptoError> {
+    fn verify_ed25519(&self, pub_key: &ForetiasPubKey32, msg: &[u8], sig: &ForetiasSig64) -> Result<bool, CryptoError> {
         crate::core::signing::ed25519_verify(pub_key, msg, sig)
     }
 
-    fn verify_p256(&self, _pub_key: &FortiasPubKey33, _msg: &[u8], _sig: &FortiasSig64) -> Result<bool, CryptoError> {
+    fn verify_p256(&self, _pub_key: &ForetiasPubKey33, _msg: &[u8], _sig: &ForetiasSig64) -> Result<bool, CryptoError> {
         Err(CryptoError::Unsupported("P-256 verify not implemented"))
     }
 
-    fn ecdh_ed25519(&self, _peer_pub: &FortiasPubKey32) -> Result<SharedSecret, CryptoError> {
+    fn ecdh_ed25519(&self, _peer_pub: &ForetiasPubKey32) -> Result<SharedSecret, CryptoError> {
         Err(CryptoError::Unsupported("ECDH stub"))
     }
 
-    fn ecdh_p256(&self, _peer_pub: &FortiasPubKey33) -> Result<SharedSecret, CryptoError> {
+    fn ecdh_p256(&self, _peer_pub: &ForetiasPubKey33) -> Result<SharedSecret, CryptoError> {
         Err(CryptoError::Unsupported("P-256 ECDH not implemented"))
     }
 
-    fn sha256(&self, data: &[u8]) -> Result<FortiasHash32, CryptoError> {
+    fn sha256(&self, data: &[u8]) -> Result<ForetiasHash32, CryptoError> {
         crate::core::hashing::sha256(data)
     }
 
-    fn blake3(&self, data: &[u8]) -> Result<FortiasHash32, CryptoError> {
+    fn blake3(&self, data: &[u8]) -> Result<ForetiasHash32, CryptoError> {
         crate::core::hashing::blake3(data)
     }
 
-    fn legacy_insecure_md5(&self, data: &[u8]) -> Result<FortiasHash16, CryptoError> {
+    fn legacy_insecure_md5(&self, data: &[u8]) -> Result<ForetiasHash16, CryptoError> {
         crate::core::hashing::legacy_insecure_md5(data)
     }
 
-    fn legacy_insecure_sha1(&self, data: &[u8]) -> Result<FortiasHash20, CryptoError> {
+    fn legacy_insecure_sha1(&self, data: &[u8]) -> Result<ForetiasHash20, CryptoError> {
         crate::core::hashing::legacy_insecure_sha1(data)
     }
 
@@ -186,7 +186,7 @@ mod tests {
 
     #[test]
     fn seal_unseal_roundtrip() {
-        let server = SoftwareCryptoServer::generate(FortiasCurve::Ed25519).unwrap();
+        let server = SoftwareCryptoServer::generate(ForetiasCurve::Ed25519).unwrap();
         let plaintext = b"the quick brown fox jumps over the lazy calendar";
         let blob = server.seal_for_self(plaintext).unwrap();
         assert!(!blob.ciphertext.is_empty());
@@ -197,8 +197,8 @@ mod tests {
 
     #[test]
     fn seal_wrong_key_fails() {
-        let server_a = SoftwareCryptoServer::generate(FortiasCurve::Ed25519).unwrap();
-        let server_b = SoftwareCryptoServer::generate(FortiasCurve::Ed25519).unwrap();
+        let server_a = SoftwareCryptoServer::generate(ForetiasCurve::Ed25519).unwrap();
+        let server_b = SoftwareCryptoServer::generate(ForetiasCurve::Ed25519).unwrap();
         let plaintext = b"secret message for server a only";
         let blob = server_a.seal_for_self(plaintext).unwrap();
         let result = server_b.unseal_for_self(&blob);

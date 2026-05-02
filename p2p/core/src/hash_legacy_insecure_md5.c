@@ -1,4 +1,5 @@
 #include "fortias_core.h"
+#include <openssl/evp.h>
 
 /*
  * WARNING: This function computes MD5 which is CRYPTOGRAPHICALLY BROKEN.
@@ -7,8 +8,16 @@
  */
 
 FortiasResult fortias_hash_legacy_insecure_md5(const uint8_t* data, size_t len, FortiasHash16* out) {
-    (void)data;
-    (void)len;
-    (void)out;
-    return FORTIAS_ERR_UNSUPPORTED;
+    EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+    if (!ctx) return FORTIAS_ERR_INTERNAL;
+
+    if (EVP_DigestInit_ex(ctx, EVP_md5(), NULL) != 1 ||
+        EVP_DigestUpdate(ctx, data, len) != 1 ||
+        EVP_DigestFinal_ex(ctx, out->bytes, NULL) != 1) {
+        EVP_MD_CTX_free(ctx);
+        return FORTIAS_ERR_INTERNAL;
+    }
+
+    EVP_MD_CTX_free(ctx);
+    return FORTIAS_OK;
 }

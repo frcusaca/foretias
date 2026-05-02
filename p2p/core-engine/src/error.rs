@@ -78,7 +78,7 @@ pub enum CryptoError {
     Internal(i32),
 }
 
-/// Convert C11 FortiasResult code to CryptoError.
+/// Convert C11 ForetiasResult code to CryptoError.
 pub fn c_result_to_error(code: i32) -> Result<(), CryptoError> {
     match code {
         0 => Ok(()),
