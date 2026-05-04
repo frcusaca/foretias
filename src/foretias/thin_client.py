@@ -4,9 +4,9 @@ Provides a clean, simple API for stamping and verifying content
 without requiring the full TimeFamilyServer infrastructure.
 
 Usage:
-    from fortias.thin_client import FortiasClient
+    from foretias.thin_client import ForetiasClient
 
-    client = FortiasClient("my-app")
+    client = ForetiasClient("my-app")
     stamp = client.stamp("hello world")
     assert client.verify("hello world", stamp)
 """
@@ -16,10 +16,10 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from fortias_p2p import PyFortis, PyTimeFamily
+from foretias_p2p import PyForetis, PyTimeFamily
 
 
-class FortiasClient:
+class ForetiasClient:
     """Lightweight client for content attestation via Rust PyO3 bindings.
 
     Wraps a single :class:`PyTimeFamily` instance for stamping and
@@ -28,7 +28,7 @@ class FortiasClient:
 
     Example::
 
-        client = FortiasClient("my-service")
+        client = ForetiasClient("my-service")
         record = client.stamp("important data")
         assert client.verify("important data", record)
         assert client.public_key()
@@ -61,27 +61,27 @@ class FortiasClient:
             time_being_reference_time).
         """
         raw = content.encode("utf-8") if isinstance(content, str) else content
-        fortis = self._rust.stamp(raw, echo)
-        return json.loads(fortis.to_json())
+        foretis = self._rust.stamp(raw, echo)
+        return json.loads(foretis.to_json())
 
     # ---- verification ----------------------------------------------------
 
-    def verify(self, content: str | bytes, fortis_dict: dict[str, Any]) -> bool:
+    def verify(self, content: str | bytes, foretis_dict: dict[str, Any]) -> bool:
         """Verify content against a previously-produced attestation.
 
-        Reconstructs a :class:`PyFortis` from the dict, then delegates
+        Reconstructs a :class:`PyForetis` from the dict, then delegates
         to the Rust ``verify()`` binding.
 
         Args:
             content: The payload to verify. Strings are UTF-8 encoded.
-            fortis_dict: The attestation dict (as returned by :meth:`stamp`).
+            foretis_dict: The attestation dict (as returned by :meth:`stamp`).
 
         Returns:
             ``True`` if the signature and content hash match.
         """
         raw = content.encode("utf-8") if isinstance(content, str) else content
-        fortis = PyFortis.from_json(json.dumps(fortis_dict))
-        return self._rust.verify(raw, fortis)
+        foretis = PyForetis.from_json(json.dumps(foretis_dict))
+        return self._rust.verify(raw, foretis)
 
     # ---- tick control ----------------------------------------------------
 
@@ -94,8 +94,8 @@ class FortiasClient:
         Returns:
             The new tick number after advancing.
         """
-        fortis = self._rust.stamp(b"", "")
-        return fortis.tick_number
+        foretis = self._rust.stamp(b"", "")
+        return foretis.tick_number
 
     def current_tick(self) -> int:
         """Return the current tick counter value.
@@ -111,7 +111,7 @@ class FortiasClient:
         """Return all calendar tick records as a list of dicts.
 
         Each dict contains the serialized tick record fields
-        (tick_number, public_key, forward_fortis, backward_fortis).
+        (tick_number, public_key, forward_foretis, backward_foretis).
 
         Returns:
             A list of JSON-serializable dicts, one per tick.

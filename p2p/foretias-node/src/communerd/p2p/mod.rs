@@ -1,6 +1,6 @@
 //! libp2p transport identity module.
 //!
-//! Generates a libp2p Ed25519 keypair **independent** of the Fortias TBID.
+//! Generates a libp2p Ed25519 keypair **independent** of the Foretias TBID.
 //! This keypair is used for:
 //! - Transport-level Noise XX handshake
 //! - DHT routing (v0.4)
@@ -17,10 +17,10 @@ pub mod gossip;
 
 use libp2p::identity::{Keypair, PublicKey};
 
-/// Generate a libp2p keypair independently of Fortias crypto.
+/// Generate a libp2p keypair independently of Foretias crypto.
 ///
 /// This keypair is for transport identity (PeerId) only.
-/// It has NO relationship to the Fortias TBID.
+/// It has NO relationship to the Foretias TBID.
 pub fn generate_transport_keypair() -> Keypair {
     Keypair::generate_ed25519()
 }

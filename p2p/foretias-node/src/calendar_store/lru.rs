@@ -5,7 +5,7 @@
 //! always targets `UNUSED` first and discards randomly to resist
 //! clairvoyant attackers.
 //!
-//! Spec: FORTIAS_2_P2P_SPEC.md §12.2 (Storage Policy) and §12.3 (Bin-Based LRU).
+//! Spec: FORETIAS_2_P2P_SPEC.md §12.2 (Storage Policy) and §12.3 (Bin-Based LRU).
 
 use parking_lot::RwLock;
 use rand::seq::SliceRandom;

@@ -1,5 +1,5 @@
 #include "platform.h"
-#include "fortias_core.h"
+#include "foretias_core.h"
 #include <sodium.h>
 #include <string.h>
 
@@ -109,14 +109,14 @@ static int _nh_dec_hash(uint8_t h[_NH_H], uint8_t k[32],
     return 0;
 }
 
-FortiasResult fortias_noise_init_ed25519(
-    FortiasNoiseState*      state,
-    const FortiasPrivKey32* my_static_priv,
-    const FortiasPubKey32*  their_static_pub,
+ForetiasResult foretias_noise_init_ed25519(
+    ForetiasNoiseState*      state,
+    const ForetiasPrivKey32* my_static_priv,
+    const ForetiasPubKey32*  their_static_pub,
     bool                    is_initiator
 ) {
-    if (!state || !my_static_priv) return FORTIAS_ERR_BAD_INPUT;
-    if (sodium_init() < 0) return FORTIAS_ERR_INTERNAL;
+    if (!state || !my_static_priv) return FORETIAS_ERR_BAD_INPUT;
+    if (sodium_init() < 0) return FORETIAS_ERR_INTERNAL;
 
     memset(state, 0, sizeof(*state));
 
@@ -133,7 +133,7 @@ FortiasResult fortias_noise_init_ed25519(
     if (crypto_scalarmult_base(epub, seed) != 0) {
         sodium_memzero(seed, 32);
         sodium_memzero(prk, 32);
-        return FORTIAS_ERR_BAD_KEY;
+        return FORETIAS_ERR_BAD_KEY;
     }
 
     memcpy(state->local_static_priv, seed, 32);
@@ -160,33 +160,33 @@ FortiasResult fortias_noise_init_ed25519(
     state->step               = 0;
     state->is_initiator       = is_initiator ? 1 : 0;
     state->handshake_complete = 0;
-    state->curve              = FORTIAS_CURVE_ED25519;
+    state->curve              = FORETIAS_CURVE_ED25519;
 
-    return FORTIAS_OK;
+    return FORETIAS_OK;
 }
 
-FortiasResult fortias_noise_init_p256(
-    FortiasNoiseState*      state,
-    const FortiasPrivKey32* my_static_priv,
-    const FortiasPubKey33*  their_static_pub,
+ForetiasResult foretias_noise_init_p256(
+    ForetiasNoiseState*      state,
+    const ForetiasPrivKey32* my_static_priv,
+    const ForetiasPubKey33*  their_static_pub,
     bool                    is_initiator
 ) {
     (void)state;
     (void)my_static_priv;
     (void)their_static_pub;
     (void)is_initiator;
-    return FORTIAS_ERR_UNSUPPORTED;
+    return FORETIAS_ERR_UNSUPPORTED;
 }
 
-FortiasResult fortias_noise_step(
-    FortiasNoiseState* state,
+ForetiasResult foretias_noise_step(
+    ForetiasNoiseState* state,
     const uint8_t*     input,
     size_t             input_len,
     uint8_t*           output,
     size_t*            output_len
 ) {
-    if (!state || !output_len) return FORTIAS_ERR_BAD_INPUT;
-    if (state->handshake_complete) return FORTIAS_ERR_BAD_INPUT;
+    if (!state || !output_len) return FORETIAS_ERR_BAD_INPUT;
+    if (state->handshake_complete) return FORETIAS_ERR_BAD_INPUT;
 
     uint8_t ck[_NH_H], h[_NH_H], k[_NH_H];
     memcpy(ck, state->chaining_key, _NH_H);
@@ -196,13 +196,13 @@ FortiasResult fortias_noise_step(
     if (state->is_initiator) {
         switch (state->step) {
         case 0: {
-            if (!output || *output_len < _NH_D) return FORTIAS_ERR_BAD_INPUT;
+            if (!output || *output_len < _NH_D) return FORETIAS_ERR_BAD_INPUT;
 
             uint8_t epriv[32], epub[32];
             randombytes_buf(epriv, 32);
             if (crypto_scalarmult_base(epub, epriv) != 0) {
                 sodium_memzero(epriv, 32);
-                return FORTIAS_ERR_INTERNAL;
+                return FORETIAS_ERR_INTERNAL;
             }
 
             memcpy(state->local_ephemeral, epub, _NH_D);
@@ -217,19 +217,19 @@ FortiasResult fortias_noise_step(
             memcpy(state->handshake_hash, h, _NH_H);
 
             state->step = 1;
-            return FORTIAS_OK;
+            return FORETIAS_OK;
         }
 
         case 1: {
             if (!input || input_len < _NH_D + _NH_D + _NH_T)
-                return FORTIAS_ERR_BAD_INPUT;
+                return FORETIAS_ERR_BAD_INPUT;
 
             memcpy(state->remote_ephemeral, input, _NH_D);
             _nh_mix_hash(h, state->remote_ephemeral, _NH_D);
 
             uint8_t dh[_NH_D];
             if (_nh_x25519(state->send_key, state->remote_ephemeral, dh) != 0)
-                return FORTIAS_ERR_BAD_KEY;
+                return FORETIAS_ERR_BAD_KEY;
             _nh_mix_key(ck, dh, ck, k);
             sodium_memzero(dh, _NH_D);
 
@@ -240,14 +240,14 @@ FortiasResult fortias_noise_step(
                 size_t s_l  = _NH_D;
                 if (_nh_dec_hash(h, k, &state->recv_nonce,
                                  input + off, ct_l, s, &s_l) != 0)
-                    return FORTIAS_ERR_BAD_SIG;
-                if (s_l != _NH_D) return FORTIAS_ERR_BAD_INPUT;
+                    return FORETIAS_ERR_BAD_SIG;
+                if (s_l != _NH_D) return FORETIAS_ERR_BAD_INPUT;
                 memcpy(state->remote_static, s, _NH_D);
                 sodium_memzero(s, _NH_D);
             }
 
             if (_nh_x25519(state->send_key, state->remote_static, dh) != 0)
-                return FORTIAS_ERR_BAD_KEY;
+                return FORETIAS_ERR_BAD_KEY;
             _nh_mix_key(ck, dh, ck, k);
             sodium_memzero(dh, _NH_D);
 
@@ -255,12 +255,12 @@ FortiasResult fortias_noise_step(
                 size_t off = _NH_D + _NH_D + _NH_T;
                 if (input_len > off) {
                     size_t ct_l = input_len - off;
-                    if (ct_l < _NH_T) return FORTIAS_ERR_BAD_INPUT;
-                    uint8_t p[FORTIAS_NOISE_MAX_MSG];
+                    if (ct_l < _NH_T) return FORETIAS_ERR_BAD_INPUT;
+                    uint8_t p[FORETIAS_NOISE_MAX_MSG];
                     size_t p_l = sizeof(p);
                     if (_nh_dec_hash(h, k, &state->recv_nonce,
                                      input + off, ct_l, p, &p_l) != 0)
-                        return FORTIAS_ERR_BAD_SIG;
+                        return FORETIAS_ERR_BAD_SIG;
                     sodium_memzero(p, sizeof(p));
                 }
             }
@@ -271,12 +271,12 @@ FortiasResult fortias_noise_step(
             memcpy(state->handshake_hash, h, _NH_H);
 
             state->step = 2;
-            return FORTIAS_OK;
+            return FORETIAS_OK;
         }
 
         case 2: {
             if (!output || *output_len < _NH_D + _NH_T)
-                return FORTIAS_ERR_BAD_INPUT;
+                return FORETIAS_ERR_BAD_INPUT;
 
             memcpy(k, state->send_key, _NH_H);
 
@@ -284,12 +284,12 @@ FortiasResult fortias_noise_step(
             if (_nh_eh(h, k, &state->send_nonce,
                        state->local_static_pub, _NH_D,
                        output, &ct_l) != 0)
-                return FORTIAS_ERR_INTERNAL;
+                return FORETIAS_ERR_INTERNAL;
 
             uint8_t dh[_NH_D];
             if (_nh_x25519(state->local_static_priv,
                            state->remote_ephemeral, dh) != 0)
-                return FORTIAS_ERR_BAD_KEY;
+                return FORETIAS_ERR_BAD_KEY;
             _nh_mix_key(ck, dh, ck, k);
             sodium_memzero(dh, _NH_D);
 
@@ -306,34 +306,34 @@ FortiasResult fortias_noise_step(
             *output_len = ct_l;
             state->step               = 3;
             state->handshake_complete = 1;
-            return FORTIAS_OK;
+            return FORETIAS_OK;
         }
 
         default:
-            return FORTIAS_ERR_BAD_INPUT;
+            return FORETIAS_ERR_BAD_INPUT;
         }
     } else {
         switch (state->step) {
         case 0: {
-            if (!input || input_len < _NH_D) return FORTIAS_ERR_BAD_INPUT;
+            if (!input || input_len < _NH_D) return FORETIAS_ERR_BAD_INPUT;
 
             memcpy(state->remote_ephemeral, input, _NH_D);
             _nh_mix_hash(h, state->remote_ephemeral, _NH_D);
             memcpy(state->handshake_hash, h, _NH_H);
 
             state->step = 1;
-            return FORTIAS_OK;
+            return FORETIAS_OK;
         }
 
         case 1: {
             if (!output || *output_len < _NH_D + _NH_D + _NH_T)
-                return FORTIAS_ERR_BAD_INPUT;
+                return FORETIAS_ERR_BAD_INPUT;
 
             uint8_t epriv[32], epub[32];
             randombytes_buf(epriv, 32);
             if (crypto_scalarmult_base(epub, epriv) != 0) {
                 sodium_memzero(epriv, 32);
-                return FORTIAS_ERR_INTERNAL;
+                return FORETIAS_ERR_INTERNAL;
             }
 
             memcpy(state->local_ephemeral, epub, _NH_D);
@@ -347,7 +347,7 @@ FortiasResult fortias_noise_step(
             uint8_t dh[_NH_D];
             if (_nh_x25519(state->recv_key, state->remote_ephemeral, dh) != 0) {
                 sodium_memzero(state->recv_key, _NH_D);
-                return FORTIAS_ERR_BAD_KEY;
+                return FORETIAS_ERR_BAD_KEY;
             }
             _nh_mix_key(ck, dh, ck, k);
             sodium_memzero(dh, _NH_D);
@@ -358,7 +358,7 @@ FortiasResult fortias_noise_step(
                            state->local_static_pub, _NH_D,
                            output + _NH_D, &ct_l) != 0) {
                     sodium_memzero(state->recv_key, _NH_D);
-                    return FORTIAS_ERR_INTERNAL;
+                    return FORETIAS_ERR_INTERNAL;
                 }
                 *output_len = _NH_D + ct_l;
             }
@@ -366,7 +366,7 @@ FortiasResult fortias_noise_step(
             if (_nh_x25519(state->local_static_priv,
                            state->remote_ephemeral, dh) != 0) {
                 sodium_memzero(state->recv_key, _NH_D);
-                return FORTIAS_ERR_BAD_KEY;
+                return FORETIAS_ERR_BAD_KEY;
             }
             _nh_mix_key(ck, dh, ck, k);
             sodium_memzero(dh, _NH_D);
@@ -376,12 +376,12 @@ FortiasResult fortias_noise_step(
             memcpy(state->handshake_hash, h, _NH_H);
 
             state->step = 2;
-            return FORTIAS_OK;
+            return FORETIAS_OK;
         }
 
         case 2: {
             if (!input || input_len < _NH_D + _NH_T)
-                return FORTIAS_ERR_BAD_INPUT;
+                return FORETIAS_ERR_BAD_INPUT;
 
             memcpy(k, state->send_key, _NH_H);
 
@@ -391,8 +391,8 @@ FortiasResult fortias_noise_step(
                 size_t s_l  = _NH_D;
                 if (_nh_dec_hash(h, k, &state->recv_nonce,
                                  input, ct_l, s, &s_l) != 0)
-                    return FORTIAS_ERR_BAD_SIG;
-                if (s_l != _NH_D) return FORTIAS_ERR_BAD_INPUT;
+                    return FORETIAS_ERR_BAD_SIG;
+                if (s_l != _NH_D) return FORETIAS_ERR_BAD_INPUT;
                 memcpy(state->remote_static, s, _NH_D);
                 sodium_memzero(s, _NH_D);
             }
@@ -400,7 +400,7 @@ FortiasResult fortias_noise_step(
             uint8_t dh[_NH_D];
             if (_nh_x25519(state->recv_key, state->remote_static, dh) != 0) {
                 sodium_memzero(state->recv_key, _NH_D);
-                return FORTIAS_ERR_BAD_KEY;
+                return FORETIAS_ERR_BAD_KEY;
             }
             _nh_mix_key(ck, dh, ck, k);
             sodium_memzero(dh, _NH_D);
@@ -411,12 +411,12 @@ FortiasResult fortias_noise_step(
                 size_t off = _NH_D + _NH_T;
                 if (input_len > off) {
                     size_t ct_l = input_len - off;
-                    if (ct_l < _NH_T) return FORTIAS_ERR_BAD_INPUT;
-                    uint8_t p[FORTIAS_NOISE_MAX_MSG];
+                    if (ct_l < _NH_T) return FORETIAS_ERR_BAD_INPUT;
+                    uint8_t p[FORETIAS_NOISE_MAX_MSG];
                     size_t p_l = sizeof(p);
                     if (_nh_dec_hash(h, k, &state->recv_nonce,
                                      input + off, ct_l, p, &p_l) != 0)
-                        return FORTIAS_ERR_BAD_SIG;
+                        return FORETIAS_ERR_BAD_SIG;
                     sodium_memzero(p, sizeof(p));
                 }
             }
@@ -433,57 +433,57 @@ FortiasResult fortias_noise_step(
 
             state->step               = 3;
             state->handshake_complete = 1;
-            return FORTIAS_OK;
+            return FORETIAS_OK;
         }
 
         default:
-            return FORTIAS_ERR_BAD_INPUT;
+            return FORETIAS_ERR_BAD_INPUT;
         }
     }
 }
 
-FortiasResult fortias_noise_send(
-    FortiasNoiseState* state,
+ForetiasResult foretias_noise_send(
+    ForetiasNoiseState* state,
     const uint8_t*     plaintext,
     size_t             pt_len,
     uint8_t*           ciphertext,
     size_t*            ct_len
 ) {
-    if (!state || !state->handshake_complete) return FORTIAS_ERR_BAD_INPUT;
-    if (!plaintext || !ciphertext || !ct_len) return FORTIAS_ERR_BAD_INPUT;
+    if (!state || !state->handshake_complete) return FORETIAS_ERR_BAD_INPUT;
+    if (!plaintext || !ciphertext || !ct_len) return FORETIAS_ERR_BAD_INPUT;
 
     size_t out = pt_len + _NH_T;
-    if (*ct_len < out) return FORTIAS_ERR_BAD_INPUT;
+    if (*ct_len < out) return FORETIAS_ERR_BAD_INPUT;
 
     int r = _nh_ae_enc(state->send_key, &state->send_nonce,
                         NULL, 0, plaintext, pt_len,
                         ciphertext, ct_len);
-    if (r != 0) return FORTIAS_ERR_INTERNAL;
+    if (r != 0) return FORETIAS_ERR_INTERNAL;
 
-    return FORTIAS_OK;
+    return FORETIAS_OK;
 }
 
-FortiasResult fortias_noise_recv(
-    FortiasNoiseState* state,
+ForetiasResult foretias_noise_recv(
+    ForetiasNoiseState* state,
     const uint8_t*     ciphertext,
     size_t             ct_len,
     uint8_t*           plaintext,
     size_t*            pt_len
 ) {
-    if (!state || !state->handshake_complete) return FORTIAS_ERR_BAD_INPUT;
-    if (!ciphertext || !plaintext || !pt_len) return FORTIAS_ERR_BAD_INPUT;
-    if (ct_len < _NH_T) return FORTIAS_ERR_BAD_INPUT;
+    if (!state || !state->handshake_complete) return FORETIAS_ERR_BAD_INPUT;
+    if (!ciphertext || !plaintext || !pt_len) return FORETIAS_ERR_BAD_INPUT;
+    if (ct_len < _NH_T) return FORETIAS_ERR_BAD_INPUT;
 
     size_t max_pt = ct_len;
     int r = _nh_ae_dec(state->recv_key, &state->recv_nonce,
                         NULL, 0, ciphertext, ct_len,
                         plaintext, &max_pt);
-    if (r != 0) return FORTIAS_ERR_BAD_SIG;
+    if (r != 0) return FORETIAS_ERR_BAD_SIG;
 
     *pt_len = max_pt;
-    return FORTIAS_OK;
+    return FORETIAS_OK;
 }
 
-void fortias_noise_destroy(FortiasNoiseState *state) {
-    if (state) fortias_memzero(state, sizeof(FortiasNoiseState));
+void foretias_noise_destroy(ForetiasNoiseState *state) {
+    if (state) foretias_memzero(state, sizeof(ForetiasNoiseState));
 }

@@ -26,8 +26,8 @@ mod tests {
         TickRecord {
             tick_number: 42,
             public_key: vec![0u8; 32],
-            forward_fortis: vec![],
-            backward_fortis: vec![],
+            forward_foretis: vec![],
+            backward_foretis: vec![],
             aa_nonce: [0u8; 16],
             stamps_per_tick: 0,
             external_attestations: Vec::new(),

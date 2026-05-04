@@ -217,8 +217,8 @@ mod tests {
         TickRecord {
             tick_number,
             public_key: vec![0u8; 32],
-            forward_fortis: vec![],
-            backward_fortis: vec![],
+            forward_foretis: vec![],
+            backward_foretis: vec![],
             aa_nonce: [0u8; 16],
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
@@ -227,7 +227,7 @@ mod tests {
 
     #[test]
     fn encrypted_jsonl_append_read() {
-        let tmp_dir = std::env::temp_dir().join(format!("fortias-ejl-test-{}", std::process::id()));
+        let tmp_dir = std::env::temp_dir().join(format!("foretias-ejl-test-{}", std::process::id()));
         let path = tmp_dir.join("calendar.jsonl");
         let server = make_server();
         let store = EncryptedJsonlCalendarStore::new(path.clone(), server.clone());
@@ -257,7 +257,7 @@ mod tests {
 
     #[test]
     fn plaintext_migration() {
-        let tmp_dir = std::env::temp_dir().join(format!("fortias-migration-test-{}", std::process::id()));
+        let tmp_dir = std::env::temp_dir().join(format!("foretias-migration-test-{}", std::process::id()));
         std::fs::create_dir_all(&tmp_dir).unwrap();
 
         let plaintext_path = tmp_dir.join("calendar.json");
@@ -274,16 +274,16 @@ mod tests {
                 {
                     "tick_number": 1,
                     "public_key": pk.clone(),
-                    "forward_fortis": [],
-                    "backward_fortis": [],
+                    "forward_foretis": [],
+                    "backward_foretis": [],
                     "aa_nonce": nonce.clone(),
                     "external_attestations": []
                 },
                 {
                     "tick_number": 2,
                     "public_key": pk,
-                    "forward_fortis": [],
-                    "backward_fortis": [],
+                    "forward_foretis": [],
+                    "backward_foretis": [],
                     "aa_nonce": nonce,
                     "external_attestations": []
                 }
@@ -315,7 +315,7 @@ mod tests {
 
     #[test]
     fn read_all_empty_file_returns_empty() {
-        let tmp_dir = std::env::temp_dir().join(format!("fortias-empty-test-{}", std::process::id()));
+        let tmp_dir = std::env::temp_dir().join(format!("foretias-empty-test-{}", std::process::id()));
         let path = tmp_dir.join("calendar.jsonl");
         let server = make_server();
         let store = EncryptedJsonlCalendarStore::new(path.clone(), server);
@@ -326,7 +326,7 @@ mod tests {
 
     #[test]
     fn looks_like_plaintext_json_detects_json() {
-        let tmp_dir = std::env::temp_dir().join(format!("fortias-detect-test-{}", std::process::id()));
+        let tmp_dir = std::env::temp_dir().join(format!("foretias-detect-test-{}", std::process::id()));
         std::fs::create_dir_all(&tmp_dir).unwrap();
 
         let json_path = tmp_dir.join("data.json");

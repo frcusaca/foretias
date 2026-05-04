@@ -1,4 +1,4 @@
-//! PyO3 Python bindings for Fortias v0.1.
+//! PyO3 Python bindings for Foretias v0.1.
 //!
 //! Exposes: CryptoServer, Foretis, TickRecord, Calendar, TimeFamily.
 
@@ -126,9 +126,9 @@ pub struct PyTickRecord {
     #[pyo3(get)]
     pub public_key: Vec<u8>,
     #[pyo3(get)]
-    pub forward_fortis: Vec<u8>,
+    pub forward_foretis: Vec<u8>,
     #[pyo3(get)]
-    pub backward_fortis: Vec<u8>,
+    pub backward_foretis: Vec<u8>,
     #[pyo3(get)]
     pub aa_nonce: Vec<u8>,
     #[pyo3(get)]
@@ -140,8 +140,8 @@ impl From<&TickRecordInner> for PyTickRecord {
         Self {
             tick_number: t.tick_number,
             public_key: t.public_key.clone(),
-            forward_fortis: t.forward_fortis.clone(),
-            backward_fortis: t.backward_fortis.clone(),
+            forward_foretis: t.forward_foretis.clone(),
+            backward_foretis: t.backward_foretis.clone(),
             aa_nonce: t.aa_nonce.to_vec(),
             external_attestations: t.external_attestations.iter().map(PyExternalAttestation::from).collect(),
         }
@@ -348,8 +348,8 @@ impl PyTimeFamily {
         let record = TickRecordInner {
             tick_number,
             public_key: pub_key_bytes,
-            forward_fortis: vec![],
-            backward_fortis: vec![],
+            forward_foretis: vec![],
+            backward_foretis: vec![],
             aa_nonce: [0u8; 16],
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
@@ -369,7 +369,7 @@ impl PyTimeFamily {
         let tbid: [u8; 16] = foretis.tbid[..].try_into()
             .map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("tbid must be 16 bytes"))?;
 
-        let inner_fortis = ForetisInner {
+        let inner_foretis = ForetisInner {
             tick_number: foretis.tick_number,
             content_hash,
             signature: foretis.signature.clone(),
@@ -380,7 +380,7 @@ impl PyTimeFamily {
         };
 
         let cal = self.calendar.read();
-        foretias::tick::verify(self.server.as_ref(), &inner_fortis, content, &*cal)
+        foretias::tick::verify(self.server.as_ref(), &inner_foretis, content, &*cal)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))
     }
 
@@ -513,7 +513,7 @@ impl PyTimeFamilyServer {
         let tbid: [u8; 16] = foretis.tbid[..].try_into()
             .map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("tbid must be 16 bytes"))?;
 
-        let inner_fortis = ForetisInner {
+        let inner_foretis = ForetisInner {
             tick_number: foretis.tick_number,
             content_hash,
             signature: foretis.signature.clone(),
@@ -524,7 +524,7 @@ impl PyTimeFamilyServer {
         };
 
         let result = self.server.chronomatter().verify(
-            &inner_fortis,
+            &inner_foretis,
             &content.to_vec(),
             &*self.server.calendar().inner().read(),
         ).map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
@@ -535,12 +535,12 @@ impl PyTimeFamilyServer {
     ///
     /// Args:
     ///     content: Raw bytes to verify.
-    ///     fortis_json: JSON string of the Foretis attestation.
+    ///     foretis_json: JSON string of the Foretis attestation.
     ///
     /// Returns:
     ///     True if the attestation is valid.
-    fn verify_json(&self, content: &[u8], fortis_json: &str) -> PyResult<bool> {
-        let foretis: ForetisInner = serde_json::from_str(fortis_json)
+    fn verify_json(&self, content: &[u8], foretis_json: &str) -> PyResult<bool> {
+        let foretis: ForetisInner = serde_json::from_str(foretis_json)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
 
         let result = self.server.chronomatter().verify(
@@ -922,7 +922,7 @@ impl PyNodeConfig {
         Self {
             listen_addr: "127.0.0.1:4001".to_string(),
             version: String::new(),
-            calendar_path: ".fortias/calendars".to_string(),
+            calendar_path: ".foretias/calendars".to_string(),
             chronon_ns: 60_000_000_000,
             serialized: false,
             peers: Vec::new(),
@@ -1165,9 +1165,9 @@ impl PyCalendarBlock {
     }
 }
 
-/// Fortias P2P Python module.
+/// Foretias P2P Python module.
 #[pymodule]
-fn fortias_p2p(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn foretias_p2p(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyCryptoServer>()?;
     m.add_class::<PyForetis>()?;
     m.add_class::<PyExternalAttestation>()?;

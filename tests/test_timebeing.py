@@ -11,12 +11,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from fortias import Fortis
-from fortias.chronomatter import Inquirer, ChronomatterV1, ChronomatterV1Serial
-from fortias.calendar import Calendar
-from fortias.timebeing import Timebeing
-from fortias.crypto import generate_keypair
-from fortias.models import TickRecord
+from foretias import Foretis
+from foretias.chronomatter import Inquirer, ChronomatterV1, ChronomatterV1Serial
+from foretias.calendar import Calendar
+from foretias.timebeing import Timebeing
+from foretias.crypto import generate_keypair
+from foretias.models import TickRecord
 
 
 class TestTimebeing:
@@ -129,19 +129,19 @@ class TestChronomatterV1:
         assert cm.current_tick == 0
         cm.shutdown()
 
-    def test_stamp_returns_fortis(self):
+    def test_stamp_returns_foretis(self):
         cm, _ = self._make_cm()
-        fortis = cm.stamp(b"hello")
-        assert isinstance(fortis, Fortis)
-        assert fortis.tick_number == 0
-        assert len(fortis.my_content_hash) == 32
-        assert len(fortis.signature) == 64
+        foretis = cm.stamp(b"hello")
+        assert isinstance(foretis, Foretis)
+        assert foretis.tick_number == 0
+        assert len(foretis.my_content_hash) == 32
+        assert len(foretis.signature) == 64
         cm.shutdown()
 
     def test_stamp_string(self):
         cm, _ = self._make_cm()
-        fortis = cm.stamp("hello world")
-        assert isinstance(fortis, Fortis)
+        foretis = cm.stamp("hello world")
+        assert isinstance(foretis, Foretis)
         cm.shutdown()
 
     def test_stamp_does_not_trigger_tick(self):
@@ -202,20 +202,20 @@ class TestChronomatterV1Serial:
 
 class TestInquirer:
     def test_verify_valid_through_family(self):
-        from fortias import TimeFamily
+        from foretias import TimeFamily
         tbf = TimeFamily(serialized=True)
-        fortis = tbf.stamp(b"hello")
-        assert tbf.inquirer().verify(b"hello", fortis) is True
+        foretis = tbf.stamp(b"hello")
+        assert tbf.inquirer().verify(b"hello", foretis) is True
 
     def test_verify_invalid_content(self):
-        from fortias import TimeFamily
+        from foretias import TimeFamily
         tbf = TimeFamily(serialized=True)
-        fortis = tbf.stamp(b"hello")
-        assert tbf.inquirer().verify(b"wrong", fortis) is False
+        foretis = tbf.stamp(b"hello")
+        assert tbf.inquirer().verify(b"wrong", foretis) is False
 
     def test_verify_without_family_fails(self):
         iq = Inquirer()
-        assert iq.verify(b"hello", Fortis(0, b"\x00" * 32, b"\x00" * 64, b"\x00" * 32, "", "")) is False
+        assert iq.verify(b"hello", Foretis(0, b"\x00" * 32, b"\x00" * 64, b"\x00" * 32, "", "")) is False
 
     def test_extends_timebeing(self):
         iq = Inquirer()

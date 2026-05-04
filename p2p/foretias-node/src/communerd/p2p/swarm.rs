@@ -1,6 +1,6 @@
 //! libp2p swarm construction and event loop.
 
-use super::behaviour::{FortiasBehaviour, FortiasBehaviourEvent};
+use super::behaviour::{ForetiasBehaviour, ForetiasBehaviourEvent};
 use super::events::NetworkEvent;
 use super::gossip::{probity_topic, heartbeat_topic};
 use crate::probity::ProbityReport;
@@ -52,7 +52,7 @@ pub async fn build_and_spawn_swarm(
             yamux::Config::default,
         )
         .map_err(|e| NodeError::Internal(format!("{e}")))?
-        .with_behaviour(|key| FortiasBehaviour::new(key, namespace, json_rpc_addr))
+        .with_behaviour(|key| ForetiasBehaviour::new(key, namespace, json_rpc_addr))
         .map_err(|e| NodeError::Internal(format!("{e}")))?
         .with_swarm_config(|c: libp2p::swarm::Config| {
             c.with_idle_connection_timeout(Duration::from_secs(60))
@@ -89,7 +89,7 @@ pub async fn build_and_spawn_swarm(
 }
 
 async fn swarm_loop(
-    mut swarm: libp2p::Swarm<FortiasBehaviour>,
+    mut swarm: libp2p::Swarm<ForetiasBehaviour>,
     tx: mpsc::UnboundedSender<NetworkEvent>,
     mut cmd_rx: mpsc::UnboundedReceiver<SwarmCommand>,
     _namespace: String,
@@ -168,7 +168,7 @@ async fn swarm_loop(
                         let _ = tx.send(NetworkEvent::Disconnected { peer_id });
                         tracing::info!(peer = %peer_id, "libp2p connection closed");
                     }
-                    SwarmEvent::Behaviour(FortiasBehaviourEvent::Identify(event)) => {
+                    SwarmEvent::Behaviour(ForetiasBehaviourEvent::Identify(event)) => {
                         match event {
                             identify::Event::Sent { peer_id, .. } => {
                                 tracing::debug!(peer = %peer_id, "libp2p identify sent");
@@ -190,7 +190,7 @@ async fn swarm_loop(
                             _ => {}
                         }
                     }
-                    SwarmEvent::Behaviour(FortiasBehaviourEvent::Ping(event)) => {
+                    SwarmEvent::Behaviour(ForetiasBehaviourEvent::Ping(event)) => {
                         if let Ok(rtt) = event.result {
                             let _ = tx.send(NetworkEvent::PingSuccess {
                                 peer_id: event.peer,
@@ -199,7 +199,7 @@ async fn swarm_loop(
                             tracing::debug!(peer = %event.peer, rtt = ?rtt, "libp2p ping");
                         }
                     }
-                    SwarmEvent::Behaviour(FortiasBehaviourEvent::Kad(event)) => {
+                    SwarmEvent::Behaviour(ForetiasBehaviourEvent::Kad(event)) => {
                         match event {
                             kad::Event::OutboundQueryProgressed { result, .. } => {
                                 match result {
@@ -223,7 +223,7 @@ async fn swarm_loop(
                             _ => {}
                         }
                     }
-                    SwarmEvent::Behaviour(FortiasBehaviourEvent::Gossip(event)) => {
+                    SwarmEvent::Behaviour(ForetiasBehaviourEvent::Gossip(event)) => {
                         match event {
                             gossipsub::Event::Message { propagation_source, message, .. } => {
                                 tracing::debug!(
@@ -231,7 +231,7 @@ async fn swarm_loop(
                                     "received gossipsub message"
                                 );
                                 let topic_str = message.topic.to_string();
-                                if topic_str.starts_with("/fortias/") && topic_str.ends_with("/heartbeat/v1") {
+                                if topic_str.starts_with("/foretias/") && topic_str.ends_with("/heartbeat/v1") {
                                     let _ = tx.send(NetworkEvent::HeartbeatMessage {
                                         data: message.data.clone(),
                                         source: propagation_source,

@@ -1,4 +1,4 @@
-"""Unit tests for fortias.models."""
+"""Unit tests for foretias.models."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from fortias.models import Fortis, TickRecord
+from foretias.models import Foretis, TickRecord
 
 
 class TestTickRecordFrozen:
@@ -27,41 +27,41 @@ class TestTickRecordFrozen:
         b = TickRecord(1, b"pk", b"ff", b"bf")
         assert hash(a) == hash(b)
 
-    def test_backward_fortis_none_raises(self):
+    def test_backward_foretis_none_raises(self):
         with pytest.raises(TypeError):
             TickRecord(0, b"pk", b"ff", None)
 
-    def test_forward_fortis_none_raises(self):
+    def test_forward_foretis_none_raises(self):
         with pytest.raises(TypeError):
             TickRecord(0, b"pk", None, b"bf")
 
-    def test_regular_record_with_backward_fortis(self):
+    def test_regular_record_with_backward_foretis(self):
         r = TickRecord(1, b"pk", b"ff", b"bf")
-        assert r.backward_fortis == b"bf"
+        assert r.backward_foretis == b"bf"
 
 
-class TestFortisFrozen:
+class TestForetisFrozen:
     def test_immutable(self):
-        f = Fortis(0, b"hash", b"sig", b"tbid", "echo", "tbn")
+        f = Foretis(0, b"hash", b"sig", b"tbid", "echo", "tbn")
         with pytest.raises(FrozenInstanceError):
             f.tick_number = 1  # type: ignore[misc]
 
     def test_equality(self):
-        a = Fortis(0, b"hash", b"sig", b"tbid", "echo", "tbn")
-        b = Fortis(0, b"hash", b"sig", b"tbid", "echo", "tbn")
+        a = Foretis(0, b"hash", b"sig", b"tbid", "echo", "tbn")
+        b = Foretis(0, b"hash", b"sig", b"tbid", "echo", "tbn")
         assert a == b
 
     def test_hashable(self):
-        a = Fortis(0, b"hash", b"sig", b"tbid", "echo", "tbn")
-        b = Fortis(0, b"hash", b"sig", b"tbid", "echo", "tbn")
+        a = Foretis(0, b"hash", b"sig", b"tbid", "echo", "tbn")
+        b = Foretis(0, b"hash", b"sig", b"tbid", "echo", "tbn")
         assert hash(a) == hash(b)
 
     def test_default_echo(self):
-        f = Fortis(0, b"hash", b"sig", b"tbid", "", "tbn")
+        f = Foretis(0, b"hash", b"sig", b"tbid", "", "tbn")
         assert f.echo == ""
 
     def test_fields_populated(self):
-        f = Fortis(42, b"abc", b"def", b"tbid123", "hello", "Time Being abc")
+        f = Foretis(42, b"abc", b"def", b"tbid123", "hello", "Time Being abc")
         assert f.tick_number == 42
         assert f.my_content_hash == b"abc"
         assert f.signature == b"def"

@@ -74,8 +74,8 @@ mod tests {
         TickRecord {
             tick_number,
             public_key: vec![0u8; 32],
-            forward_fortis: vec![],
-            backward_fortis: vec![],
+            forward_foretis: vec![],
+            backward_foretis: vec![],
             aa_nonce: [0u8; 16],
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
@@ -157,7 +157,7 @@ mod tests {
         cal.on_tick_advance(1, &[0u8; 32], &make_tick(1));
         cal.on_tick_advance(2, &[0u8; 32], &make_tick(2));
 
-        let path = "/tmp/fortias-test-calendar.json";
+        let path = "/tmp/foretias-test-calendar.json";
         cal.save(path).unwrap();
 
         let loaded = Calendar::from_persisted(path).unwrap();

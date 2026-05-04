@@ -1,9 +1,9 @@
-# FORTIAS v0.2 P2P Mutual Attestation — Implementation Plan
+# FORETIAS v0.2 P2P Mutual Attestation — Implementation Plan
 
 **Status:** FINAL — architecture confirmed by user
-**Based on:** `FORTIAS_2_P2P_2_direct_p2p_mutual_attestation.md`
+**Based on:** `FORETIAS_2_P2P_2_direct_p2p_mutual_attestation.md`
 **Current code:** v0.2.0, commit d7af751, branch mvp
-**Workspace:** 3 crates — `fortias-core`, `fortias-node`, `fortias-python`
+**Workspace:** 3 crates — `foretias-core`, `foretias-node`, `foretias-python`
 
 ---
 
@@ -28,7 +28,7 @@ Members of the same Time Family communicate via **locally specified interfaces**
 
 ```rust
 // Calendar → Chronomatter: direct method call
-let fortis = chronomatter.stamp(content, echo).await;
+let foretis = chronomatter.stamp(content, echo).await;
 
 // Chronomatter → Calendar: callback on tick advance
 calendar.on_tick_advance(tick_record);
@@ -50,7 +50,7 @@ let response = communerd.send_to_peer(peer_addr, rpc_call).await;
 2. **Calendar persists to disk** — calls CryptoServer for encryption (v0.5+), currently plaintext
 3. **Chronomatter owns stamping AND verification** — Calendar calls `verify()` directly
 4. **Mutual attestation is owned by Calendar** — Calendar schedules, formats, calls Communerd for transport, calls Chronomatter for verification, stores result
-5. **Communerd knows nothing about Fortias semantics** — it's a transparent RPC relay
+5. **Communerd knows nothing about Foretias semantics** — it's a transparent RPC relay
 6. **Intra-family calls are direct** — no channels, no message passing, no broadcast
 
 ### Data Flow: Mutual Attestation
@@ -63,9 +63,9 @@ let response = communerd.send_to_peer(peer_addr, rpc_call).await;
 [Calendar] serializes TickRecord → content_hex
     ↓ forms echo = "ma:{tbid}:{tick}"
 [Calendar] calls communerd.send_to_peer(peer, "/stamp", content_hex, echo)
-    ↓ Communerd opens TCP → remote /stamp → returns Fortis JSON
+    ↓ Communerd opens TCP → remote /stamp → returns Foretis JSON
     ↓ Communerd opens TCP → remote /get_calendar_slice → returns attester TickRecord
-[Calendar] calls chronomatter.verify(fortis, content) → bool
+[Calendar] calls chronomatter.verify(foretis, content) → bool
     ↓ verifies: content hash, ed25519 signature, echo match
 [Calendar] stores ExternalAttestation in calendar
     ↓ marks dirty, triggers flush
@@ -75,7 +75,7 @@ let response = communerd.send_to_peer(peer_addr, rpc_call).await;
 
 ```
 [External client] → JSON-RPC /stamp → [TimeFamily]
-    → [TimeFamily] → [Chronomatter.stamp(content, echo)] → Fortis
+    → [TimeFamily] → [Chronomatter.stamp(content, echo)] → Foretis
     → [TimeFamily] → [Calendar.append(new_tick)] (if tick advanced)
     → [TimeFamily] → response to client
 ```
@@ -114,10 +114,10 @@ let response = communerd.send_to_peer(peer_addr, rpc_call).await;
 **Goal:** Define type aliases for core data types. Improves readability, self-documenting code, prevents mixing up byte arrays.
 
 **Files modified:**
-- `p2p/core-engine/src/fortias/types.rs` — new file with all type aliases
+- `p2p/core-engine/src/foretias/types.rs` — new file with all type aliases
 
 **Files modified:**
-- `p2p/core-engine/src/fortias/mod.rs` — re-export `types` module
+- `p2p/core-engine/src/foretias/mod.rs` — re-export `types` module
 
 **Type aliases:**
 
@@ -161,13 +161,13 @@ These are `type` aliases (zero-cost, no runtime difference). They make signature
 **Goal:** Define all new types, error variants, and the callback-based interfaces between components.
 
 **Files created:**
-- `p2p/core-engine/src/fortias/external_attestation.rs` — `ExternalAttestation` type
-- `p2p/core-engine/src/fortias/callbacks.rs` — trait definitions for intra-family interfaces
+- `p2p/core-engine/src/foretias/external_attestation.rs` — `ExternalAttestation` type
+- `p2p/core-engine/src/foretias/callbacks.rs` — trait definitions for intra-family interfaces
 
 **Files modified:**
-- `p2p/core-engine/src/fortias/tick.rs` — add `#[serde(default)] pub external_attestations: Vec<ExternalAttestation>` to `TickRecord`
-- `p2p/core-engine/src/fortias/calendar.rs` — add `add_external_attestation(local_tick, att)` method
-- `p2p/core-engine/src/fortias/mod.rs` — re-export new types
+- `p2p/core-engine/src/foretias/tick.rs` — add `#[serde(default)] pub external_attestations: Vec<ExternalAttestation>` to `TickRecord`
+- `p2p/core-engine/src/foretias/calendar.rs` — add `add_external_attestation(local_tick, att)` method
+- `p2p/core-engine/src/foretias/mod.rs` — re-export new types
 - `p2p/core-engine/src/error.rs` — add `TransportConnect`, `TransportTimeout`, `TransportDecode`, `AttestationVerificationFailed` variants
 - `p2p/core-engine/src/config.rs` — add to `NodeConfig`:
   - `peers: Vec<String>` — `"host:port"` list
@@ -192,8 +192,8 @@ pub trait TickObserver: Send + Sync {
 #[async_trait::async_trait]
 pub trait Stamper: Send + Sync {
     async fn stamp(&self, content: Message, echo: String)
-        -> Result<Fortis, NodeError>;
-    async fn verify(&self, fortis: &Fortis, content: &Message)
+        -> Result<Foretis, NodeError>;
+    async fn verify(&self, foretis: &Foretis, content: &Message)
         -> Result<bool, NodeError>;
 }
 
@@ -215,7 +215,7 @@ pub trait PeerMessenger: Send + Sync {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExternalAttestation {
     pub attester_tbid:        String,      // hex-encoded TBID of attesting peer
-    pub fortis:               Fortis,      // B's stamp of A's tick record
+    pub foretis:               Foretis,      // B's stamp of A's tick record
     pub attester_tick_record: TickRecord,  // B's tick at attestation time (for offline re-verify)
     pub received_at_ns:       u64,         // wall-clock receive time
 }
@@ -234,18 +234,18 @@ pub external_attestations: Vec<ExternalAttestation>,
 
 ---
 
-## PHASE 2: Communerd — Transport Layer (fortias-node)
+## PHASE 2: Communerd — Transport Layer (foretias-node)
 
 **Goal:** Build the communication layer — all P2P traffic flows through Communerd.
 
 **Files created:**
-- `p2p/fortias-node/src/communerd/mod.rs` — Communerd struct, re-exports
-- `p2p/fortias-node/src/communerd/transport.rs` — `PeerTransport` trait, `PeerAddr`, `TransportError`
-- `p2p/fortias-node/src/communerd/json_rpc_transport.rs` — `JsonRpcTransport` impl (extracted from `main.rs`)
-- `p2p/fortias-node/src/communerd/peer_pool.rs` — peer pool, liveness ping
+- `p2p/foretias-node/src/communerd/mod.rs` — Communerd struct, re-exports
+- `p2p/foretias-node/src/communerd/transport.rs` — `PeerTransport` trait, `PeerAddr`, `TransportError`
+- `p2p/foretias-node/src/communerd/json_rpc_transport.rs` — `JsonRpcTransport` impl (extracted from `main.rs`)
+- `p2p/foretias-node/src/communerd/peer_pool.rs` — peer pool, liveness ping
 
 **Files modified:**
-- `p2p/fortias-node/src/lib.rs` — add `pub mod communerd;`
+- `p2p/foretias-node/src/lib.rs` — add `pub mod communerd;`
 
 **Trait definition:**
 
@@ -319,7 +319,7 @@ pub enum CommunerdRequest {
 
 ---
 
-## PHASE 3: Chronomatter Extraction (core-engine + fortias-node)
+## PHASE 3: Chronomatter Extraction (core-engine + foretias-node)
 
 **Goal:** Extract Chronomatter from TimeFamilyServer. Chronomatter owns ticking, stamping, verification. Exposes `Stamper` trait for direct method calls.
 
@@ -328,7 +328,7 @@ pub enum CommunerdRequest {
 
 **Files modified:**
 - `p2p/core-engine/src/lib.rs` — add `pub mod chronomatter;`
-- `p2p/fortias-node/src/server/mod.rs` — remove ticking/stamping logic, delegate to Chronomatter
+- `p2p/foretias-node/src/server/mod.rs` — remove ticking/stamping logic, delegate to Chronomatter
 
 **Chronomatter struct:**
 
@@ -374,10 +374,10 @@ async fn run(mut self, chronon_ns: u64) {
 ```rust
 #[async_trait::async_trait]
 impl Stamper for Chronomatter {
-    async fn stamp(&self, content: Message, echo: String) -> Result<Fortis, NodeError> {
+    async fn stamp(&self, content: Message, echo: String) -> Result<Foretis, NodeError> {
         // delegates to existing stamp() in tick.rs
     }
-    async fn verify(&self, fortis: &Fortis, content: &Message) -> Result<bool, NodeError> {
+    async fn verify(&self, foretis: &Foretis, content: &Message) -> Result<bool, NodeError> {
         // delegates to existing verify() in tick.rs
     }
 }
@@ -393,23 +393,23 @@ impl Stamper for Chronomatter {
 
 **Phase 3 tests:**
 - `chronomatter_ticks_on_interval` — two stamps within one chronon share the same tick_number
-- `chronomatter_stamp_direct_call` — direct method call returns Fortis
+- `chronomatter_stamp_direct_call` — direct method call returns Foretis
 - `chronomatter_verify_direct_call` — direct method call returns bool
 - `chronomatter_key_rotation` — keypair changes on each tick advance
 - `chronomatter_tick_callback` — TickObserver receives notification on each advance
 
 ---
 
-## PHASE 4: Calendar Component + Mutual Attestation (core-engine + fortias-node)
+## PHASE 4: Calendar Component + Mutual Attestation (core-engine + foretias-node)
 
 **Goal:** Calendar owns data, persistence, and mutual attestation scheduling. Calls Communerd directly for remote RPC, calls Chronomatter directly for verify.
 
 **Files created:**
-- `p2p/fortias-node/src/calendar/mod.rs` — Calendar component (RwLock-wrapped calendar + persistence task + mutual attestation)
+- `p2p/foretias-node/src/calendar/mod.rs` — Calendar component (RwLock-wrapped calendar + persistence task + mutual attestation)
 
 **Files modified:**
-- `p2p/core-engine/src/fortias/calendar.rs` — add `add_external_attestation(local_tick, att)` method (pure data method)
-- `p2p/fortias-node/src/server/mod.rs` — remove calendar mutation logic, delegate to Calendar component
+- `p2p/core-engine/src/foretias/calendar.rs` — add `add_external_attestation(local_tick, att)` method (pure data method)
+- `p2p/foretias-node/src/server/mod.rs` — remove calendar mutation logic, delegate to Calendar component
 
 **Calendar struct:**
 
@@ -488,18 +488,18 @@ async fn execute_mutual_attest(&self, tick_number: TickNumber) {
     let echo = format!("ma:{}:{}", hex::encode(&self.tbid), tick_record.tick_number);
 
     // 2. Call Communerd directly (method call, no channel)
-    let fortis_val = self.communerd.send_to_peer(
+    let foretis_val = self.communerd.send_to_peer(
         &PeerAddr { json_rpc: peer.clone() },
         "stamp",
         serde_json::json!({"content": content_hex, "echo": echo.clone()}),
     ).await;
-    let fortis_val = match fortis_val {
+    let foretis_val = match foretis_val {
         Ok(v) => v,
         Err(e) => { log_warn!("mutual attest: stamp RPC failed: {}", e); return; }
     };
 
-    // 3. Parse fortis_val into Fortis
-    let fortis: Fortis = serde_json::from_value(fortis_val).unwrap_or_else(|e| {
+    // 3. Parse foretis_val into Foretis
+    let foretis: Foretis = serde_json::from_value(foretis_val).unwrap_or_else(|e| {
         log_warn!("mutual attest: parse failed: {}", e);
         return;
     });
@@ -508,19 +508,19 @@ async fn execute_mutual_attest(&self, tick_number: TickNumber) {
     let slice_val = self.communerd.send_to_peer(
         &PeerAddr { json_rpc: peer.clone() },
         "get_calendar_slice",
-        serde_json::json!({"tick_start": fortis.tick_number, "count": 1}),
+        serde_json::json!({"tick_start": foretis.tick_number, "count": 1}),
     ).await.unwrap_or_default();
     let attester_tr: TickRecord = /* parse from slice_val */;
 
     // 5. Verify via Chronomatter (direct method call)
-    let verified = self.chronomatter.verify(&fortis, &content).await.unwrap_or(false);
+    let verified = self.chronomatter.verify(&foretis, &content).await.unwrap_or(false);
     if !verified {
         log_warn!("mutual attest: verification failed");
         return;
     }
 
     // 6. Echo check
-    if fortis.echo != echo {
+    if foretis.echo != echo {
         log_warn!("mutual attest: echo mismatch");
         return;
     }
@@ -528,7 +528,7 @@ async fn execute_mutual_attest(&self, tick_number: TickNumber) {
     // 7. Store!
     let att = ExternalAttestation {
         attester_tbid: hex::encode(&attester_tr.tbid),
-        fortis,
+        foretis,
         attester_tick_record: attester_tr,
         received_at_ns: now_ns(),
     };
@@ -551,7 +551,7 @@ async fn execute_mutual_attest(&self, tick_number: TickNumber) {
 **Goal:** Calendar persists atomically. No partial writes on disk.
 
 **Files modified:**
-- `p2p/core-engine/src/fortias/calendar.rs` — rewrite `save()` to use `.tmp` + `rename`
+- `p2p/core-engine/src/foretias/calendar.rs` — rewrite `save()` to use `.tmp` + `rename`
 
 **Atomic flush:**
 ```rust
@@ -576,13 +576,13 @@ pub fn save(&self, path: &str) -> Result<(), NodeError> {
 
 ---
 
-## PHASE 6: TimeFamily Orchestrator (fortias-node)
+## PHASE 6: TimeFamily Orchestrator (foretias-node)
 
 **Goal:** Wire Chronomatter + Calendar + Communerd into a single orchestrator. Replace `TimeFamilyServer`.
 
 **Files modified:**
-- `p2p/fortias-node/src/server/mod.rs` — become thin orchestrator; wire all three components
-- `p2p/fortias-node/src/server/handlers.rs` — delegate to Chronomatter for stamp/verify
+- `p2p/foretias-node/src/server/mod.rs` — become thin orchestrator; wire all three components
+- `p2p/foretias-node/src/server/handlers.rs` — delegate to Chronomatter for stamp/verify
 
 **TimeFamily struct:**
 
@@ -612,7 +612,7 @@ pub struct TimeFamily {
 
 **JSON-RPC handler changes:**
 - `handle_stamp()` → direct call `chronomatter.stamp(content, echo)`
-- `handle_verify()` → direct call `chronomatter.verify(fortis, content)`
+- `handle_verify()` → direct call `chronomatter.verify(foretis, content)`
 - `handle_get_calendar_slice()` → read from Calendar directly (RwLock)
 
 **Phase 6 tests:**
@@ -623,15 +623,15 @@ pub struct TimeFamily {
 
 ---
 
-## PHASE 7: CLI + Config Wiring (fortias-node)
+## PHASE 7: CLI + Config Wiring (foretias-node)
 
 **Files modified:**
-- `p2p/fortias-node/src/main.rs` — add `--peer`, `--mutual-attest-every-chronons`, `--request-timeout-secs` flags
-- `p2p/fortias-node/src/main.rs` — add `inspect-attestations` subcommand
+- `p2p/foretias-node/src/main.rs` — add `--peer`, `--mutual-attest-every-chronons`, `--request-timeout-secs` flags
+- `p2p/foretias-node/src/main.rs` — add `inspect-attestations` subcommand
 
 **New subcommand:**
 ```
-fortias inspect-attestations --calendar <path>
+foretias inspect-attestations --calendar <path>
 ```
 
 **Implementation:**
@@ -648,10 +648,10 @@ fortias inspect-attestations --calendar <path>
 
 ---
 
-## PHASE 8: PyO3 Bindings (fortias-python)
+## PHASE 8: PyO3 Bindings (foretias-python)
 
 **Files modified:**
-- `p2p/fortias-python/src/lib.rs` — add `PyExternalAttestation`, expose `external_attestations` on `PyTickRecord`
+- `p2p/foretias-python/src/lib.rs` — add `PyExternalAttestation`, expose `external_attestations` on `PyTickRecord`
 
 **New Python type:**
 ```rust
@@ -660,7 +660,7 @@ pub struct PyExternalAttestation {
     #[pyo3(get)]
     pub attester_tbid:        String,
     #[pyo3(get)]
-    pub fortis:               PyFortis,
+    pub foretis:               PyForetis,
     #[pyo3(get)]
     pub attester_tick_record: PyTickRecord,
     #[pyo3(get)]
@@ -683,7 +683,7 @@ pub external_attestations: Vec<PyExternalAttestation>,
 ## PHASE 9: Integration Tests
 
 **Files created:**
-- `p2p/fortias-node/tests/integration/mutual_attest.rs`
+- `p2p/foretias-node/tests/integration/mutual_attest.rs`
 
 **Tests:**
 1. `two_nodes_mutual_attest` — two in-process TimeFamily instances, 5 chronons, each calendar has ≥1 valid external attestation from the other
@@ -696,10 +696,10 @@ pub external_attestations: Vec<PyExternalAttestation>,
 ## PHASE 10: Spec & Documentation
 
 **Files modified:**
-- `wdocs/specs/FORTIAS_2_P2P_2_direct_p2p_mutual_attestation.md` — update component names (PeerConnectivity → Communerd, CalendarComponent → Calendar, Chronomatter clarified)
-- `fortias/specs/FORTIAS_2_P2P_2_direct_p2p_mutual_attestation.md` — same (copy)
+- `wdocs/specs/FORETIAS_2_P2P_2_direct_p2p_mutual_attestation.md` — update component names (PeerConnectivity → Communerd, CalendarComponent → Calendar, Chronomatter clarified)
+- `foretias/specs/FORETIAS_2_P2P_2_direct_p2p_mutual_attestation.md` — same (copy)
 - `README.md` — document new CLI flags, new concepts
-- `wdocs/specs/fortias-v1.md` — document mutual attestation semantics
+- `wdocs/specs/foretias-v1.md` — document mutual attestation semantics
 
 ---
 
@@ -769,7 +769,7 @@ Phase 10 (spec & docs)
 | `TimeFamily` orchestrator struct | Kept as `TimeFamilyServer` with `communerd: Option<Arc<Communerd>>` added | Less disruption; existing `TimeFamilyServer` already orchestrates Chronomatter + Calendar |
 | `Calendar::execute_mutual_attest` flow | Deferred — `Communerd::stamp_peer()` handles stamp-on-peer directly; full mutual attest cycle with verify + store coming in v0.3 | Separation of concerns: Communerd handles transport, Calendar handles storage |
 | `PeerMessenger` trait | Simplified to `PeerMessenger` on `Communerd` struct with `stamp_peer` and `request_ticks` | Two methods sufficient for v0.2; plan's `send_to_peer` / `query_community` were too generic |
-| Phase 9 integration test file | Added to existing `fortias-node/tests/integration.rs` | No need for separate file; keeps tests co-located |
+| Phase 9 integration test file | Added to existing `foretias-node/tests/integration.rs` | No need for separate file; keeps tests co-located |
 
 ---
 

@@ -30,7 +30,7 @@ use libp2p::kad;
 /// Communerd — all P2P traffic flows through this component.
 ///
 /// Calendar calls Communerd for all extra-family communication.
-/// Communerd knows nothing about Fortias semantics — it's a transparent RPC relay.
+/// Communerd knows nothing about Foretias semantics — it's a transparent RPC relay.
 pub struct Communerd {
     transport: Arc<dyn PeerTransport>,
     peer_pool: PeerPool,
@@ -330,7 +330,7 @@ impl Communerd {
 
     pub async fn publish_attest_willing(&self, namespace: &str) {
         if let Some(cmd_tx) = self.p2p_cmd_tx.get() {
-            let key = kad::RecordKey::new(&format!("{}/fortias/attest-willing/v1", namespace));
+            let key = kad::RecordKey::new(&format!("{}/foretias/attest-willing/v1", namespace));
             let _ = cmd_tx.send(SwarmCommand::Provide { key });
         }
     }

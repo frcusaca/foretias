@@ -4,7 +4,7 @@ import sys
 import json
 import socket
 import threading
-from fortias_p2p import PyTimeFamily, PyFortis
+from foretias_p2p import PyTimeFamily, PyForetis
 
 
 def run_server(port: int) -> None:
@@ -14,7 +14,7 @@ def run_server(port: int) -> None:
     server.bind(("127.0.0.1", port))
     server.listen(5)
 
-    print(f"Fortias Python TimeFamilyServer starting...")
+    print(f"Foretias Python TimeFamilyServer starting...")
     print(f"  Listen : 127.0.0.1:{port}")
     print(f"  TBN    : {tf.get_tbn()}")
     print(f"  TBID   : {tf.get_tbid()}")
@@ -39,13 +39,13 @@ def run_server(port: int) -> None:
                 if method == "stamp":
                     content = bytes.fromhex(params.get("content", ""))
                     echo = params.get("echo", "")
-                    fortis = tf.stamp(content, echo)
-                    result = json.loads(fortis.to_json())
+                    foretis = tf.stamp(content, echo)
+                    result = json.loads(foretis.to_json())
                     resp = {"jsonrpc": "2.0", "result": result, "id": req_id}
                 elif method == "verify":
                     content = bytes.fromhex(params.get("content", ""))
-                    fortis_json = params.get("fortis", {})
-                    pf = PyFortis.from_json(json.dumps(fortis_json))
+                    foretis_json = params.get("foretis", {})
+                    pf = PyForetis.from_json(json.dumps(foretis_json))
                     valid = tf.verify(content, pf)
                     resp = {"jsonrpc": "2.0", "result": {"valid": valid}, "id": req_id}
                 elif method == "get_calendar_slice":
@@ -60,8 +60,8 @@ def run_server(port: int) -> None:
                             records.append({
                                 "tick_number": t.tick_number,
                                 "public_key": list(t.public_key),
-                                "forward_fortis": list(t.forward_fortis),
-                                "backward_fortis": list(t.backward_fortis),
+                                "forward_foretis": list(t.forward_foretis),
+                                "backward_foretis": list(t.backward_foretis),
                             })
                             if len(records) >= count:
                                 break

@@ -1,7 +1,7 @@
 //! TBID proof handshake protocol.
 //!
 //! After the Noise handshake establishes encryption, each side proves its
-//! Fortias TBID by signing a challenge with the C11 enclave's `sign()` method.
+//! Foretias TBID by signing a challenge with the C11 enclave's `sign()` method.
 
 use foretias_core::crypto_server::CryptoServer;
 use foretias_core::error::NodeError;

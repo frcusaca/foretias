@@ -14,11 +14,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from fortias import TimeFamily, Fortis
-from fortias.chronomatter import Inquirer, ChronomatterV1, ChronomatterV1Serial
-from fortias.calendar import Calendar
-from fortias.crypto import generate_keypair
-from fortias.models import TickRecord
+from foretias import TimeFamily, Foretis
+from foretias.chronomatter import Inquirer, ChronomatterV1, ChronomatterV1Serial
+from foretias.calendar import Calendar
+from foretias.crypto import generate_keypair
+from foretias.models import TickRecord
 
 
 class TestCalendarDefensive:
@@ -27,7 +27,7 @@ class TestCalendarDefensive:
             f.write(json.dumps({
                 "tbid": "not_valid_hex!!",
                 "tbn": "test",
-                "ticks": [{"tick_number": 0, "public_key": "aa", "forward_fortis": "bb", "backward_fortis": "cc"}],
+                "ticks": [{"tick_number": 0, "public_key": "aa", "forward_foretis": "bb", "backward_foretis": "cc"}],
             }).encode())
             f.flush()
             with pytest.raises(ValueError, match="valid hex"):
@@ -39,8 +39,8 @@ class TestCalendarDefensive:
                 "tbid": "61626364",
                 "tbn": "test",
                 "ticks": [
-                    {"tick_number": 200, "public_key": "aa" * 32, "forward_fortis": "bb" * 64, "backward_fortis": "cc" * 64},
-                    {"tick_number": 100, "public_key": "cc" * 32, "forward_fortis": "dd" * 64, "backward_fortis": "ee" * 64},
+                    {"tick_number": 200, "public_key": "aa" * 32, "forward_foretis": "bb" * 64, "backward_foretis": "cc" * 64},
+                    {"tick_number": 100, "public_key": "cc" * 32, "forward_foretis": "dd" * 64, "backward_foretis": "ee" * 64},
                 ],
             }).encode())
             f.flush()
@@ -52,14 +52,14 @@ class TestCalendarDefensive:
             f.write(json.dumps({
                 "tbid": "61626364",
                 "tbn": "test",
-                "ticks": [{"tick_number": -1, "public_key": "aa" * 32, "forward_fortis": "bb" * 64, "backward_fortis": "cc" * 64}],
+                "ticks": [{"tick_number": -1, "public_key": "aa" * 32, "forward_foretis": "bb" * 64, "backward_foretis": "cc" * 64}],
             }).encode())
             f.flush()
             with pytest.raises(ValueError, match="non-negative"):
                 Calendar.load(f.name)
 
     def test_load_tampered_chain_raises(self):
-        from fortias._timebeing import _genesis_ma, _timebeing
+        from foretias._timebeing import _genesis_ma, _timebeing
         tbid = b"test-tbid-123456789012345678901234"
         cal = Calendar(tbid, "test")
         sk0, pk0 = generate_keypair()
@@ -73,7 +73,7 @@ class TestCalendarDefensive:
         with tempfile.NamedTemporaryFile(suffix=".json") as f:
             cal.save(f.name)
             data = json.loads(f.read())
-            data["ticks"][1]["backward_fortis"] = "ff" * 64
+            data["ticks"][1]["backward_foretis"] = "ff" * 64
             f.seek(0)
             f.write(json.dumps(data).encode())
             f.truncate()
@@ -166,8 +166,8 @@ class TestInquirerAggressive:
         tbf = TimeFamily(serialized=True)
         tbf.stamp(b"msg1")
         tbf.tick()
-        fortis = tbf.stamp(b"msg2")
-        assert tbf.inquirer().verify(b"msg2", fortis) is True
+        foretis = tbf.stamp(b"msg2")
+        assert tbf.inquirer().verify(b"msg2", foretis) is True
 
     def test_lookup_surrounding_ticks_boundary(self):
         tbf = TimeFamily(serialized=True)

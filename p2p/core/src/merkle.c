@@ -1,5 +1,5 @@
 #include "platform.h"
-#include "fortias_core.h"
+#include "foretias_core.h"
 #include <sodium.h>
 
 /*@ requires \valid(a + (0 .. 31));
@@ -18,61 +18,61 @@ static void sha256_two_32byte(const uint8_t* a, const uint8_t* b, uint8_t* out) 
 /*@ requires data == NULL || \valid_read(data + (0 .. len-1));
   @ requires \valid(leaf_out);
   @ assigns leaf_out->bytes[0 .. 31];
-  @ ensures \result == FORTIAS_OK ==> \valid_read(leaf_out->bytes + (0 .. 31));
+  @ ensures \result == FORETIAS_OK ==> \valid_read(leaf_out->bytes + (0 .. 31));
   @*/
-FortiasResult fortias_merkle_leaf(const uint8_t* data, size_t len, FortiasHash32* leaf_out) {
+ForetiasResult foretias_merkle_leaf(const uint8_t* data, size_t len, ForetiasHash32* leaf_out) {
     if (data == NULL || leaf_out == NULL) {
-        return FORTIAS_ERR_BAD_INPUT;
+        return FORETIAS_ERR_BAD_INPUT;
     }
 
     crypto_hash_sha256_state state;
     if (crypto_hash_sha256_init(&state) != 0) {
-        return FORTIAS_ERR_INTERNAL;
+        return FORETIAS_ERR_INTERNAL;
     }
 
     uint8_t prefix = 0x00;
     if (crypto_hash_sha256_update(&state, &prefix, 1) != 0) {
-        return FORTIAS_ERR_INTERNAL;
+        return FORETIAS_ERR_INTERNAL;
     }
 
     if (crypto_hash_sha256_update(&state, data, (unsigned long long)len) != 0) {
-        return FORTIAS_ERR_INTERNAL;
+        return FORETIAS_ERR_INTERNAL;
     }
 
     if (crypto_hash_sha256_final(&state, leaf_out->bytes) != 0) {
-        return FORTIAS_ERR_INTERNAL;
+        return FORETIAS_ERR_INTERNAL;
     }
 
-    return FORTIAS_OK;
+    return FORETIAS_OK;
 }
 
 /*@ requires \valid(root);
   @ requires \valid(leaf);
   @ requires \valid(proof);
-  @ requires proof->depth > 0 && proof->depth <= FORTIAS_MERKLE_MAX_DEPTH;
+  @ requires proof->depth > 0 && proof->depth <= FORETIAS_MERKLE_MAX_DEPTH;
   @ requires \valid(proof->siblings + (0 .. proof->depth-1));
   @ requires \valid(proof->directions + (0 .. proof->depth-1));
-  @ ensures \result == FORTIAS_OK || \result == FORTIAS_ERR_BAD_PROOF;
+  @ ensures \result == FORETIAS_OK || \result == FORETIAS_ERR_BAD_PROOF;
   @ behavior pure:
   @   reads root->bytes[0 .. 31];
   @   reads leaf->bytes[0 .. 31];
   @   reads proof->siblings[0 .. proof->depth-1]->bytes[0 .. 31];
   @   reads proof->directions[0 .. proof->depth-1];
   @*/
-FortiasResult fortias_merkle_verify(
-    const FortiasHash32*      root,
-    const FortiasHash32*      leaf,
-    const FortiasMerkleProof* proof
+ForetiasResult foretias_merkle_verify(
+    const ForetiasHash32*      root,
+    const ForetiasHash32*      leaf,
+    const ForetiasMerkleProof* proof
 ) {
     if (root == NULL || leaf == NULL || proof == NULL) {
-        return FORTIAS_ERR_BAD_INPUT;
+        return FORETIAS_ERR_BAD_INPUT;
     }
 
-    if (proof->depth <= 0 || proof->depth > FORTIAS_MERKLE_MAX_DEPTH) {
-        return FORTIAS_ERR_BAD_INPUT;
+    if (proof->depth <= 0 || proof->depth > FORETIAS_MERKLE_MAX_DEPTH) {
+        return FORETIAS_ERR_BAD_INPUT;
     }
 
-    FortiasHash32 current = *leaf;
+    ForetiasHash32 current = *leaf;
 
     for (int32_t i = 0; i < proof->depth; i++) {
         uint8_t direction = proof->directions[i];
@@ -83,15 +83,15 @@ FortiasResult fortias_merkle_verify(
         } else if (direction == 1) {
             sha256_two_32byte(current.bytes, proof->siblings[i].bytes, hash);
         } else {
-            return FORTIAS_ERR_BAD_PROOF;
+            return FORETIAS_ERR_BAD_PROOF;
         }
 
         memcpy(current.bytes, hash, 32);
     }
 
     if (memcmp(current.bytes, root->bytes, 32) == 0) {
-        return FORTIAS_OK;
+        return FORETIAS_OK;
     }
 
-    return FORTIAS_ERR_BAD_PROOF;
+    return FORETIAS_ERR_BAD_PROOF;
 }

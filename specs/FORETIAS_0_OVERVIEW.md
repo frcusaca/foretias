@@ -1,12 +1,12 @@
-# Fortias — Overview, Invariants, and Roadmap
+# Foretias — Overview, Invariants, and Roadmap
 
-**Project:** Fortias (Free and Open-source Resilient Time Integrity Attestation Service)
+**Project:** Foretias (Free and Open-source Resilient Time Integrity Attestation Service)
 **Primary Latin names:** Time Being = *Chronos fidelis* · Time Family = *Chronos adunatrix* · Chronomatter = *Chronos authenticus* · Calendar = *Chronos graphus*
 **This document:** Cross-cutting design invariants, project structure, milestone roadmap, configuration, build, and development protocol.
 **Companion documents:**
-- `FORTIAS_MVP_SPEC.md` — v0.1 local-server stack (C11 verified core, Rust node layer, crypto-server abstraction with software backend, Fortias domain types in Rust, Python bindings).
-- `FORTIAS_P2P_SPEC.md` — v0.2–v0.8 network layers (libp2p, probity, identity collision, epoch consensus, encrypted calendar persistence).
-- `FORTIAS_ENCLAVE_SPEC.md` — v0.9+ custom-plugin backends. (Restricted distribution; do not reference its details outside that file.)
+- `FORETIAS_MVP_SPEC.md` — v0.1 local-server stack (C11 verified core, Rust node layer, crypto-server abstraction with software backend, Foretias domain types in Rust, Python bindings).
+- `FORETIAS_P2P_SPEC.md` — v0.2–v0.8 network layers (libp2p, probity, identity collision, epoch consensus, encrypted calendar persistence).
+- `FORETIAS_ENCLAVE_SPEC.md` — v0.9+ custom-plugin backends. (Restricted distribution; do not reference its details outside that file.)
 
 **Target:** AI Coding Specialist for execution. Comments to human reader in parenthesis `(@human ...)`.
 
@@ -16,16 +16,16 @@
 
 **Before writing any code, AI Coding Specialist MUST:**
 
-1. **Read `fortias-v1.md`** in the project root (the Fortias v1 Product and Technical Specification). This defines Time Being, Tick, Calendar, Chronomatter, Fortis, and TimeFamily.
+1. **Read `foretias-v1.md`** in the project root (the Foretias v1 Product and Technical Specification). This defines Time Being, Tick, Calendar, Chronomatter, Foretis, and TimeFamily.
 
 2. **Read this document completely.** It defines the cross-cutting invariants and the milestone roadmap.
 
-3. **Read `FORTIAS_MVP_SPEC.md` completely.** It defines the v0.1 local-server target.
+3. **Read `FORETIAS_MVP_SPEC.md` completely.** It defines the v0.1 local-server target.
 
-4. **Read `FORTIAS_P2P_SPEC.md` completely.** It defines the gossip, DHT, probity, collision, epoch, and persistence layers (v0.2–v0.8).
+4. **Read `FORETIAS_P2P_SPEC.md` completely.** It defines the gossip, DHT, probity, collision, epoch, and persistence layers (v0.2–v0.8).
 
-5. **Scan the existing Python prototype** under `fortias/` for the current shape of:
-   - Source code in `src/fortias/*.py`
+5. **Scan the existing Python prototype** under `foretias/` for the current shape of:
+   - Source code in `src/foretias/*.py`
    - All tests under `tests/`
 
 6. **Confirm to the user** what you found and propose an execution plan before starting v0.1. The plan must respect the milestone ordering below.
@@ -54,7 +54,7 @@ If two running entities ever hold the same `tbid`/PeerID (near-impossible under 
 
 **"Terminate" means:** Becomes dormant--answers requests but do not stamp or create new ticks. The dormant agent always will flag in it's response that the responding time agent is dormant.
 
-Detection uses signed heartbeats (see `FORTIAS_P2P_SPEC.md` Part 10). Escalation to the liege is stubbed as `mail_liege("help")` — liege infrastructure comes from FOSITAS application logic (stable-marriage matching between peers).
+Detection uses signed heartbeats (see `FORETIAS_P2P_SPEC.md` Part 10). Escalation to the liege is stubbed as `mail_liege("help")` — liege infrastructure comes from FOSITAS application logic (stable-marriage matching between peers).
 
 ### 0.3 What Persists, What Does Not
 
@@ -65,7 +65,7 @@ PERSISTED (disk):
     New C11/Rust/PyO3 implementation, target format (v0.7+):
       single encrypted JSONL file, each line = calendar block,
       encrypted under own public key.
-  - Fortis records produced by this instance (same file or sibling)
+  - Foretis records produced by this instance (same file or sibling)
   - Relics: Non-authoritative DHT routing tables for next time being to leverage.
 
 NEVER PERSISTED (memory only, destroyed with process):
@@ -77,7 +77,7 @@ NEVER PERSISTED (memory only, destroyed with process):
   - Epoch snapshots (re-fetched from peers on restart)
 ```
 
-The existing Python prototype currently stores the calendar in plaintext JSON, and the new C11/Rust/PyO3 v0.1 MVP keeps that same plaintext format unchanged (it is the source of truth for Fortias semantics — see §0.7). The encrypted JSONL format is a target of the new implementation only, scheduled for v0.7 (see `FORTIAS_P2P_SPEC.md` Part 12 and Part 14 below).
+The existing Python prototype currently stores the calendar in plaintext JSON, and the new C11/Rust/PyO3 v0.1 MVP keeps that same plaintext format unchanged (it is the source of truth for Foretias semantics — see §0.7). The encrypted JSONL format is a target of the new implementation only, scheduled for v0.7 (see `FORETIAS_P2P_SPEC.md` Part 12 and Part 14 below).
 
 ### 0.4 Enforcement Is Social, Not Cryptographic
 
@@ -101,7 +101,7 @@ No central enforcement. The hierarchy of honor self-organizes.
 
 Every peer computes a **single probity score** (f32, range `[-100.0, +100.0]`) for every other peer it knows about. This score is the U-shape time-weighted aggregate of signed probity reports from the network.
 
-Reports carry opaque attribute names. The P2P layer does not know what `"correctness"` or `"propriety"` or `"answers_hard_questions"` means. The Fortias application layer defines attribute semantics.
+Reports carry opaque attribute names. The P2P layer does not know what `"correctness"` or `"propriety"` or `"answers_hard_questions"` means. The Foretias application layer defines attribute semantics.
 
 Report tuple the P2P layer carries:
 
@@ -131,32 +131,32 @@ score(subject) = Σ over all measurements:
 
 ### 0.6 Curve Support — Ed25519 and P-256
 
-Every Fortias node ships software implementations of both Ed25519 and P-256. Software is always the fallback. Custom plugins may use either curve depending on what the plugin supports.
+Every Foretias node ships software implementations of both Ed25519 and P-256. Software is always the fallback. Custom plugins may use either curve depending on what the plugin supports.
 
 Peers can disable and enable cryptographic protocols a part of future software upgrade. By default both are supported so arbitrary peers can always handshake.
 
 Existing Python prototype uses Ed25519 throughout. This is preserved. P-256 support is added to the crypto-server backend but does not affect the Python application API until a later tag.
 
-### 0.7 Existing Python Code Is the Source of Truth for Fortias Semantics
+### 0.7 Existing Python Code Is the Source of Truth for Foretias Semantics
 
 The existing Python prototype defines:
 
-- **Tick semantics** (forward_fortis, backward_fortis, auto-attestation)
-- **Fortis format** (tick_number, content_hash, signature, tbid, echo, tbn)
+- **Tick semantics** (forward_foretis, backward_foretis, auto-attestation)
+- **Foretis format** (tick_number, content_hash, signature, tbid, echo, tbn)
 - **Calendar structure** (append-only, integrity check via `_verify_pair`)
 - **TimeFamily orchestration** (Chronomatter + Calendar)
 - **Verification flow**
 
-**AI Coding Specialist must preserve all of these semantics exactly.** Do not redesign them. The Rust/C11 work in `FORTIAS_MVP_SPEC.md` is infrastructure — it replaces the crypto primitive layer and adds the networking/P2P layers, but the Fortias tick/fortis/calendar semantics are unchanged.
+**AI Coding Specialist must preserve all of these semantics exactly.** Do not redesign them. The Rust/C11 work in `FORETIAS_MVP_SPEC.md` is infrastructure — it replaces the crypto primitive layer and adds the networking/P2P layers, but the Foretias tick/foretis/calendar semantics are unchanged.
 
 ---
 
 ## PART 1 — PROJECT STRUCTURE
 
-Integrate the new code into the existing `fortias/` directory. Final structure:
+Integrate the new code into the existing `foretias/` directory. Final structure:
 
 ```
-fortias/                                  EXISTING — Python package root
+foretias/                                  EXISTING — Python package root
 ├── __init__.py                           existing, modify to export new API
 ├── chronomatter.py                       existing
 ├── calendar.py                           existing
@@ -170,7 +170,7 @@ fortias/                                  EXISTING — Python package root
 ├── p2p/                                  NEW — Rust/C11 library imported via PyO3
 │   ├── core/                             C11 verified cryptographic primitives
 │   │   ├── include/
-│   │   │   └── fortias_core.h            single public header
+│   │   │   └── foretias_core.h            single public header
 │   │   ├── src/
 │   │   │   ├── platform.h                internal C11 baseline + static asserts
 │   │   │   ├── identity_ed25519.c        Ed25519 keypair, peer ID
@@ -216,13 +216,13 @@ fortias/                                  EXISTING — Python package root
 │   │       │   ├── mod.rs                CryptoServer trait
 │   │       │   ├── software.rs           pure-software backend (C11 + OS RNG)
 │   │       │   ├── custom_plugin/        custom-plugin backends (v0.9+)
-│   │       │   │                          — see FORTIAS_ENCLAVE_SPEC.md
+│   │       │   │                          — see FORETIAS_ENCLAVE_SPEC.md
 │   │       │   └── capabilities.rs
 │   │       │
-│   │       ├── fortias/                  Fortias domain types — bridge to Python
+│   │       ├── foretias/                  Foretias domain types — bridge to Python
 │   │       │   ├── mod.rs
 │   │       │   ├── tick.rs               TickRecord, stamp, tick, verify
-│   │       │   ├── fortis.rs             Fortis type
+│   │       │   ├── foretis.rs             Foretis type
 │   │       │   ├── calendar.rs           Calendar (plaintext v0.1; encrypted v0.7+)
 │   │       │   └── timefamily.rs         TimeFamily orchestrator (Rust side)
 │   │       │
@@ -277,11 +277,11 @@ fortias/                                  EXISTING — Python package root
 │   └── bindings/
 │       ├── python/
 │       │   ├── pyproject.toml
-│       │   └── fortias_p2p/
-│       │       └── __init__.py           re-exports from _fortias_p2p native
+│       │   └── foretias_p2p/
+│       │       └── __init__.py           re-exports from _foretias_p2p native
 │       └── go/
 │           ├── go.mod
-│           └── fortias.go
+│           └── foretias.go
 │
 ├── tools/                                admin/dev tooling
 │   ├── keygen.py
@@ -301,10 +301,10 @@ fortias/                                  EXISTING — Python package root
 │   └── test_mvp_remote.py                NEW — MVP end-to-end test
 │
 ├── Makefile
-├── fortias-v1.md                         existing — Fortias v1 spec
-├── FORTIAS_OVERVIEW.md                   THIS DOCUMENT
-├── FORTIAS_MVP_SPEC.md                   v0.1 local-server stack
-├── FORTIAS_P2P_SPEC.md                   v0.2–v0.8 network layers
+├── foretias-v1.md                         existing — Foretias v1 spec
+├── FORETIAS_OVERVIEW.md                   THIS DOCUMENT
+├── FORETIAS_MVP_SPEC.md                   v0.1 local-server stack
+├── FORETIAS_P2P_SPEC.md                   v0.2–v0.8 network layers
 └── README.md
 ```
 
@@ -314,22 +314,22 @@ fortias/                                  EXISTING — Python package root
 
 **Before any of the heavy P2P machinery, you must hit this MVP:**
 
-> A user on machine A can reach out to a running Fortias Time Family on machine B
-> (or same machine, different process) and ask for a stamp, receive a Fortis,
-> send content + Fortis to a third process C and have C verify it — all three
-> using the Fortias library.
+> A user on machine A can reach out to a running Foretias Time Family on machine B
+> (or same machine, different process) and ask for a stamp, receive a Foretis,
+> send content + Foretis to a third process C and have C verify it — all three
+> using the Foretias library.
 
 ### MVP Acceptance Criteria
 
-1. **Time Family Server Process.** Runs a Fortias `TimeFamily` in a standalone process, listens on a local TCP ports, answering to JSON-RPC 2.0 requests:
+1. **Time Family Server Process.** Runs a Foretias `TimeFamily` in a standalone process, listens on a local TCP ports, answering to JSON-RPC 2.0 requests:
    - `stamp(content_bytes) -> StampResponse`
-   - `verify(content_bytes, Fortis) -> VerifyResponse`
+   - `verify(content_bytes, Foretis) -> VerifyResponse`
    - `get_calendar_slice(cal_tbid, cal_tick_start, count) -> [TickRecord,TickRecord]` # Recall this can return 1 or two tick records depending on whether cal_tick_start's chronon duration has elapsed or not.
 
 2. ** Rust UI ** 
-   - CLI server: `fortias serve` reading configurations from a configurable path such as `/.config/fortias/fortias.settings.json` port, version, various default configurations will be written to this configuration file.
-   - CLI stamp for sending content or a file, and writing fortis to screen or disk.
-   - CLI verify for sending content or a file, along with a fortis file, print out verification result.
+   - CLI server: `foretias serve` reading configurations from a configurable path such as `/.config/foretias/foretias.settings.json` port, version, various default configurations will be written to this configuration file.
+   - CLI stamp for sending content or a file, and writing foretis to screen or disk.
+   - CLI verify for sending content or a file, along with a foretis file, print out verification result.
    - This instance of time being is alive for only one query.
    - This instance of time being has to be given the time family server contact information, this is pre-p2p-dht discovery.
 
@@ -338,7 +338,7 @@ fortias/                                  EXISTING — Python package root
    - More extensive tests in the unit tests can be replicated here as well with all 3 programs running and talking on the same test machine. These can be called "Integration sanity tests."
 
 4. ** Python UI ** 
-   - Replicate the Rust UI behavior using a python server calling rust fortias library through PyO3
+   - Replicate the Rust UI behavior using a python server calling rust foretias library through PyO3
 
 6. ** Python UI tests **
    - Replicate step 3 testing to run and pass on python application as well,
@@ -368,7 +368,7 @@ v0.1.8 — TAG: v0.1-local-server-mvp
 
 (@human — this gives you a working demo at v0.1. Once you can stamp remotely and verify across processes, we have a baseline to preserve through every subsequent refactoring. Every later tag must continue to pass the v0.1 integration test.)
 
-Detailed implementation guidance for the v0.1 stack lives in `FORTIAS_MVP_SPEC.md`.
+Detailed implementation guidance for the v0.1 stack lives in `FORETIAS_MVP_SPEC.md`.
 
 ---
 
@@ -378,17 +378,17 @@ The existing Python prototype conflates several concerns that we need to separat
 
 | Existing concept           | New home                                      | Notes                                        |
 |----------------------------|-----------------------------------------------|----------------------------------------------|
-| `TimeFamily`               | Stays in `fortias/timefamily.py` (orchestrator) | API-compatible; delegates to crypto-server    |
+| `TimeFamily`               | Stays in `foretias/timefamily.py` (orchestrator) | API-compatible; delegates to crypto-server    |
 | `Chronomatter`             | Stays — becomes a CryptoServer consumer        | Key lifecycle becomes CryptoServer ops        |
 | `Calendar`                 | Stays — gains encrypted-JSONL persistence option | Old plaintext JSON supported for back-compat |
 | `_timebeing.py` pure functions | Stays — but calls crypto-server for ops    | Pure functional signatures preserved          |
-| `crypto.py`                | Becomes a thin wrapper over `fortias_p2p`      | Directly imports the Rust crypto-server       |
-| `models.py` (TickRecord, Fortis) | Stays                                     | Binary layout matches Rust-side types         |
+| `crypto.py`                | Becomes a thin wrapper over `foretias_p2p`      | Directly imports the Rust crypto-server       |
+| `models.py` (TickRecord, Foretis) | Stays                                     | Binary layout matches Rust-side types         |
 | Persistence                | Encrypted JSONL in `calendar_store/` (v0.7+)    | Old path kept as a compat shim                |
 | Identity (`tbid`)          | Generated by CryptoServer on startup           | No longer accepts user-supplied tbid in prod  |
 
 (@human — the existing Python API stays the same from the user's perspective:
-`tbf = TimeFamily(); fortis = tbf.stamp("hello"); tbf.verify("hello", fortis)`
+`tbf = TimeFamily(); foretis = tbf.stamp("hello"); tbf.verify("hello", foretis)`
 continues to work throughout every tag.)
 
 ---
@@ -412,17 +412,17 @@ This milestone hits the MVP target defined in Part 2: three processes
 Implementation work spans all three languages — C11 verified core, Rust
 crate, Python CLI through PyO3 — folded into one milestone so the v0.1
 demo exercises the whole software-only stack end-to-end. Old standalone
-tags for the C11 core (v0.2), CryptoServer (v0.3), Rust Fortias types
+tags for the C11 core (v0.2), CryptoServer (v0.3), Rust Foretias types
 (v0.4), and PyO3 bindings (v0.11) are absorbed here.
 
-Sub-milestones (see Part 2 for detailed acceptance criteria; full implementation guidance in `FORTIAS_MVP_SPEC.md`):
+Sub-milestones (see Part 2 for detailed acceptance criteria; full implementation guidance in `FORETIAS_MVP_SPEC.md`):
 
 - **v0.1.1** — Review existing Python code; confirm all existing Python tests pass as-is. No new code.
-- **v0.1.2** — Extract core functional behavior into C11 under `fortias/p2p/core/`. Skeleton with CMakeLists.txt, then Ed25519 + P-256 identity/signing, SHA-256 + BLAKE3 hashing, Noise_XX (both curves), Merkle, FROST, nullifier, RNG, memzero, legacy MD5/SHA-1 with warning banners. Every test in `ctest` passes.
-- **v0.1.3** — Implement time-being and time-family persistence and mutable logic in Rust under `fortias/p2p/node/src/`: `Cargo.toml` + `build.rs` compile the C11 core; safe Rust wrappers with `Drop` impls; `SoftwareCryptoServer` implementing the `CryptoServer` trait; Rust `TickRecord` / `Fortis` / `Calendar` / `TimeFamily` mirroring Python semantics. Cross-verification test: Python stamp → Rust verify and Rust stamp → Python verify.
-- **v0.1.4** — Implement `TimeFamilyServer` application with Rust CLI: `fortias serve` (reads `~/.config/fortias/fortias.settings.json`), `fortias stamp`, `fortias verify`. JSON-RPC 2.0 surface: `stamp(content) -> StampResponse`, `verify(content, Fortis) -> VerifyResponse`, `get_calendar_slice(cal_tbid, cal_tick_start, count) -> [TickRecord, TickRecord]`. Each client invocation is a fresh, single-query time being; client receives time-family contact info up front (pre-DHT). Responses include a `dormant` flag per Part 0.2.
+- **v0.1.2** — Extract core functional behavior into C11 under `foretias/p2p/core/`. Skeleton with CMakeLists.txt, then Ed25519 + P-256 identity/signing, SHA-256 + BLAKE3 hashing, Noise_XX (both curves), Merkle, FROST, nullifier, RNG, memzero, legacy MD5/SHA-1 with warning banners. Every test in `ctest` passes.
+- **v0.1.3** — Implement time-being and time-family persistence and mutable logic in Rust under `foretias/p2p/node/src/`: `Cargo.toml` + `build.rs` compile the C11 core; safe Rust wrappers with `Drop` impls; `SoftwareCryptoServer` implementing the `CryptoServer` trait; Rust `TickRecord` / `Foretis` / `Calendar` / `TimeFamily` mirroring Python semantics. Cross-verification test: Python stamp → Rust verify and Rust stamp → Python verify.
+- **v0.1.4** — Implement `TimeFamilyServer` application with Rust CLI: `foretias serve` (reads `~/.config/foretias/foretias.settings.json`), `foretias stamp`, `foretias verify`. JSON-RPC 2.0 surface: `stamp(content) -> StampResponse`, `verify(content, Foretis) -> VerifyResponse`, `get_calendar_slice(cal_tbid, cal_tick_start, count) -> [TickRecord, TickRecord]`. Each client invocation is a fresh, single-query time being; client receives time-family contact info up front (pre-DHT). Responses include a `dormant` flag per Part 0.2.
 - **v0.1.5** — Test the Rust CLI: 3-process integration test (server + stamp client + verify client). Replicate the unit-test surface as integration sanity tests on the same machine.
-- **v0.1.6** — Implement the Python CLI mirroring the Rust one, calling the Rust `fortias_p2p` crate through PyO3 (via maturin). `FORTIAS_USE_NATIVE=1` switches the existing `fortias.TimeFamily` Python API to delegate to the native crate.
+- **v0.1.6** — Implement the Python CLI mirroring the Rust one, calling the Rust `foretias_p2p` crate through PyO3 (via maturin). `FORETIAS_USE_NATIVE=1` switches the existing `foretias.TimeFamily` Python API to delegate to the native crate.
 - **v0.1.7** — Test the Python CLI: replicate v0.1.5's 3-process integration test through the Python CLI; run the existing Python unit-test suite under both pure-Python and native modes.
 - **v0.1.8** — Tag `v0.1-local-server-mvp`. User can demo: stamp content from process A through a server on process B, then verify the artifact in process C — using either the Rust or Python CLI.
 
@@ -497,7 +497,7 @@ milestones replace the software CryptoServer with custom plugin backends
 that protect private key material through alternative means.
 
 **Milestone schedule, decision points, and implementation details for v0.9 and
-beyond live in `FORTIAS_ENCLAVE_SPEC.md`.** That document is intentionally
+beyond live in `FORETIAS_ENCLAVE_SPEC.md`.** That document is intentionally
 maintained separately and should be consulted only when work on v0.9+ begins.
 
 ---
@@ -510,10 +510,10 @@ maintained separately and should be consulted only when work on v0.9+ begins.
 [identity]
 # Per-run identity — fresh key generated each process start.
 # This path stores ONLY the encrypted calendar, not the key.
-calendar_path = "~/.fortias/calendars/"
+calendar_path = "~/.foretias/calendars/"
 
 [curve]
-# "ed25519" or "p256". Defaults to ed25519 for historical Fortias compat.
+# "ed25519" or "p256". Defaults to ed25519 for historical Foretias compat.
 preferred = "ed25519"
 # Whether to advertise both curves or just preferred.
 advertise_both = true
@@ -528,7 +528,7 @@ max_connections = 50
 
 [dht]
 mode              = "client"          # "client" | "server"
-app_namespace     = "/fortias/v1"
+app_namespace     = "/foretias/v1"
 namespace_secret  = "CHANGE_ME_BEFORE_DEPLOY"
 
 [gossip]
@@ -589,35 +589,35 @@ mvp: c11-core rust python-native
 
 # ── C11 core ───────────────────────────────────────────
 c11-core:
-	cd fortias/p2p/core && cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build
-	cd fortias/p2p/core/build && ctest --output-on-failure
+	cd foretias/p2p/core && cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build
+	cd foretias/p2p/core/build && ctest --output-on-failure
 
 # ── Rust node ──────────────────────────────────────────
 rust: c11-core
-	cd fortias/p2p/node && cargo build --release
+	cd foretias/p2p/node && cargo build --release
 
 rust-test: c11-core
-	cd fortias/p2p/node && cargo test --release
+	cd foretias/p2p/node && cargo test --release
 
 # ── Python native bindings ─────────────────────────────
 python-native:
-	cd fortias/p2p/bindings/python && maturin develop --release
+	cd foretias/p2p/bindings/python && maturin develop --release
 
 # ── Full integration test ──────────────────────────────
 test: c11-core rust-test
-	cd fortias && python -m pytest tests/ -v
-	cd fortias && FORTIAS_USE_NATIVE=1 python -m pytest tests/ -v
+	cd foretias && python -m pytest tests/ -v
+	cd foretias && FORETIAS_USE_NATIVE=1 python -m pytest tests/ -v
 
 # ── Clean ──────────────────────────────────────────────
 clean:
-	rm -rf fortias/p2p/core/build fortias/p2p/node/target
+	rm -rf foretias/p2p/core/build foretias/p2p/node/target
 ```
 
 ---
 
 ## PART 17 — DEVELOPMENT PROTOCOL FOR CLAUDE CODE
 
-1. **Read first.** Before touching any file, read `fortias-v1.md` and the four spec files (`FORTIAS_OVERVIEW.md`, `FORTIAS_MVP_SPEC.md`, `FORTIAS_P2P_SPEC.md`, and — only when v0.9+ work is authorized — `FORTIAS_ENCLAVE_SPEC.md`) end to end. Scan the existing `fortias/` directory to understand current code.
+1. **Read first.** Before touching any file, read `foretias-v1.md` and the four spec files (`FORETIAS_OVERVIEW.md`, `FORETIAS_MVP_SPEC.md`, `FORETIAS_P2P_SPEC.md`, and — only when v0.9+ work is authorized — `FORETIAS_ENCLAVE_SPEC.md`) end to end. Scan the existing `foretias/` directory to understand current code.
 
 2. **Propose before acting.** Produce a short plan that identifies:
    - Current state of the repo
@@ -635,17 +635,17 @@ clean:
 
 6. **Ask about human decision points.** The `@human` comments in this doc flag decisions that need user input. Do not guess at those; ask.
 
-7. **Use the existing Fortias terminology.** TimeBeing, TimeFamily, Chronomatter, Calendar, Fortis, tick. Do not invent new vocabulary.
+7. **Use the existing Foretias terminology.** TimeBeing, TimeFamily, Chronomatter, Calendar, Foretis, tick. Do not invent new vocabulary.
 
 8. **Feature flags for custom plugins.** All custom-plugin code must be behind cargo features and compile-gated. The software backend always compiles.
 
 9. **Security hygiene.**
    - Every `unsafe` block has a justifying comment.
    - Every key-material `Drop` zeroes memory.
-   - Every C11 function that touches keys calls `fortias_memzero` before error return.
+   - Every C11 function that touches keys calls `foretias_memzero` before error return.
    - Legacy hashes only exposed via `legacy_insecure_*` names.
 
-10. **No premature P2P.** Do not implement `FORTIAS_P2P_SPEC.md` content before the MVP milestones (v0.1) are stable. The MVP is the priority.
+10. **No premature P2P.** Do not implement `FORETIAS_P2P_SPEC.md` content before the MVP milestones (v0.1) are stable. The MVP is the priority.
 
 ---
 
@@ -657,9 +657,9 @@ Things intentionally not designed yet, to be revisited in later spec versions:
 - **Challenge protocols (Type A, Type B).** Formal protocol design for probity challenges.
 - **Retribution mechanics.** How bad reports consume prover resources.
 - **Stable-marriage liege matching.** Full liege/vassal bonding protocol.
-- **Cross-calendar verification.** Peer-to-peer verification of Fortises issued by third parties.
+- **Cross-calendar verification.** Peer-to-peer verification of Foretises issued by third parties.
 - **Succession protocols.** Orderly identity handoff when a peer wants to retire gracefully instead of just terminating.
-- **Application-specific probity attributes.** The Fortias application layer defines these; the P2P layer is ready whenever the application wants to publish them.
+- **Application-specific probity attributes.** The Foretias application layer defines these; the P2P layer is ready whenever the application wants to publish them.
 
 ---
 
@@ -688,4 +688,4 @@ rustup targets for future cross-compile:
 
 # END OF OVERVIEW
 
-(@human — hand this plus `fortias-v1.md`, `FORTIAS_MVP_SPEC.md`, and `FORTIAS_P2P_SPEC.md` to AI Coding Specialist and watch it execute. It will stop at each tag for review; the first real demo milestone is v0.1 where you can reach out to a running time family over the network and stamp content. Everything below that tag is invisible infrastructure work that the user-facing Python API keeps abstract. `FORTIAS_ENCLAVE_SPEC.md` is held back until v0.8 lands.)
+(@human — hand this plus `foretias-v1.md`, `FORETIAS_MVP_SPEC.md`, and `FORETIAS_P2P_SPEC.md` to AI Coding Specialist and watch it execute. It will stop at each tag for review; the first real demo milestone is v0.1 where you can reach out to a running time family over the network and stamp content. Everything below that tag is invisible infrastructure work that the user-facing Python API keeps abstract. `FORETIAS_ENCLAVE_SPEC.md` is held back until v0.8 lands.)

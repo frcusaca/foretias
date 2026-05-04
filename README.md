@@ -1,32 +1,32 @@
-# Fortias
+# Foretias
 
 **Free, Open-source and Resilient Time Integrity Attestation Service**
 
-Fortias makes digital timestamping backdate-proof by cryptographic construction. Each tick of a time being's calendar has its own Ed25519 keypair, and when a tick advances, the previous private key is destroyed. A Fortis stamped at tick *n* cannot be forged from the past.
+Foretias makes digital timestamping backdate-proof by cryptographic construction. Each tick of a time being's calendar has its own Ed25519 keypair, and when a tick advances, the previous private key is destroyed. A Foretis stamped at tick *n* cannot be forged from the past.
 
 ## Installation
 
 ```bash
-pip install fortias
+pip install foretias
 ```
 
 ## Quick Start
 
 ```python
-from fortias import TimeFamily
+from foretias import TimeFamily
 
 # Create a time being with 1-minute ticks
 tbf = TimeFamily(name="alpha", chronon_ns=60_000_000_000.0)
 
 # Stamp your first message
-fortis = tbf.stamp("hello world")
+foretis = tbf.stamp("hello world")
 
 # Verify it
-is_valid = tbf.verify("hello world", fortis)
+is_valid = tbf.verify("hello world", foretis)
 print(is_valid)  # True
 
 # Verify with window check (requires next tick to exist)
-is_valid, window_closed = tbf.verify("hello world", fortis, next_tick_number=1)
+is_valid, window_closed = tbf.verify("hello world", foretis, next_tick_number=1)
 print(is_valid, window_closed)  # True, True
 ```
 
@@ -35,7 +35,7 @@ print(is_valid, window_closed)  # True, True
 ### Verify (v0.1)
 
 ```bash
-fortis verify --calendar calendar.json --file message.txt --fortis fortis.json
+foretis verify --calendar calendar.json --file message.txt --foretis foretis.json
 ```
 
 Add `--chain` to run a full chain integrity check on the calendar.
@@ -46,23 +46,23 @@ Start a time family server with optional P2P peers:
 
 ```bash
 # Basic server
-fortias serve --addr 127.0.0.1:4001 --chronon 60000000000
+foretias serve --addr 127.0.0.1:4001 --chronon 60000000000
 
 # With P2P peers
-fortias serve --addr 127.0.0.1:4001 --peer 127.0.0.1:4002 --mutual-attest-every-chronons 10
+foretias serve --addr 127.0.0.1:4001 --peer 127.0.0.1:4002 --mutual-attest-every-chronons 10
 
 # Custom request timeout (default: 5 seconds)
-fortias serve --addr 127.0.0.1:4001 --peer 127.0.0.1:4002 --request-timeout-secs 10
+foretias serve --addr 127.0.0.1:4001 --peer 127.0.0.1:4002 --request-timeout-secs 10
 ```
 
 ### Stamp & Verify via CLI (v0.2)
 
 ```bash
 # Stamp a message against a running server
-fortias stamp --message "hello world" --server 127.0.0.1:4001
+foretias stamp --message "hello world" --server 127.0.0.1:4001
 
 # Verify a stamp
-fortias verify --message "hello world" --fortis '{"tick_number":...}' --server 127.0.0.1:4001
+foretias verify --message "hello world" --foretis '{"tick_number":...}' --server 127.0.0.1:4001
 ```
 
 ### Inspect Attestations (v0.2)
@@ -70,7 +70,7 @@ fortias verify --message "hello world" --fortis '{"tick_number":...}' --server 1
 Offline verification of external attestations stored in a calendar:
 
 ```bash
-fortias inspect-attestations --calendar calendar.json
+foretias inspect-attestations --calendar calendar.json
 ```
 
 Re-runs signature, hash, and echo verification on every `ExternalAttestation`. Exits 0 if all valid, 1 if any invalid.
@@ -82,15 +82,15 @@ Re-runs signature, hash, and echo verification on every `ExternalAttestation`. E
 Time family (`TimeFamily`, *Chronos fidelius adunatrix*) orchestrates between chronomatters (`Chronomatter`, *Chronos fidelius authenticus*, the Time Authority) and calendars (`Calendar` ,*Chronos fidelius grapha*, storage).
 
 ```python
-from fortias import TimeFamily, Chronomatter, Fortis, TickRecord, Config
+from foretias import TimeFamily, Chronomatter, Foretis, TickRecord, Config
 
 tbf = TimeFamily(name="alpha", chronon_ns=60_000_000_000.0)
 ```
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `stamp(content)` | `Fortis` | Sign content under the current tick's key |
-| `verify(content, fortis)` | `bool` or `(bool, bool)` | Verify a Fortis artifact |
+| `stamp(content)` | `Foretis` | Sign content under the current tick's key |
+| `verify(content, foretis)` | `bool` or `(bool, bool)` | Verify a Foretis artifact |
 | `current_tick()` | `int` | Current tick number |
 | `tick()` | `None` | Advance to the next tick |
 | `save()` | `None` | Persist calendar to disk |
@@ -103,8 +103,8 @@ tbf = TimeFamily(name="alpha", chronon_ns=60_000_000_000.0)
 class TickRecord:
     tick_number: int     # Nanoseconds since Unix epoch
     public_key: bytes    # Ed25519 public key
-    forward_fortis: bytes   # auto-attestation signed by prev_sk
-    backward_fortis: bytes  # auto-attestation signed by self_sk
+    forward_foretis: bytes   # auto-attestation signed by prev_sk
+    backward_foretis: bytes  # auto-attestation signed by self_sk
     aa_nonce: bytes        # RNG nonce (16 bytes) for replay protection
 ```
 
@@ -114,14 +114,14 @@ class TickRecord:
 When a tick advances from tick *n* to tick *n+1*, the old private key is destroyed and
 a new keypair is generated. The new tick record contains two signatures over the same
 auto-attestation blob (both tick numbers, both public keys, and a 16-byte RNG nonce):
-`forward_fortis` (signed by the old key) and `backward_fortis` (signed by the new key).
+`forward_foretis` (signed by the old key) and `backward_foretis` (signed by the new key).
 
 Auto-attestation only applies when the TBID is the **same** — i.e., the time being is
 continuing its own clock. When TBID is different, the signatures are no longer called
 "auto-attestation" (they represent a different relationship between entities).
 
 @dataclass(frozen=True)
-class Fortis:
+class Foretis:
     tick_number: int
     my_content_hash: bytes  # SHA-256 of the content
     signature: bytes        # 64-byte Ed25519 signature
@@ -133,7 +133,7 @@ class Fortis:
 ### Cryptography
 
 ```python
-from fortias.crypto import generate_keypair, sha256, sign, verify
+from foretias.crypto import generate_keypair, sha256, sign, verify
 
 private_key, public_key = generate_keypair()  # 32 bytes each
 signature = sign(payload, private_key)          # 64 bytes
@@ -144,9 +144,9 @@ content_hash = sha256(data)                     # 32 bytes
 ### Config
 
 ```python
-from fortias.config import Config
+from foretias.config import Config
 
-cfg = Config.resolve(persist_path="/custom/path")  # arg > $FORTIAS_HOME > ~/.fortias/
+cfg = Config.resolve(persist_path="/custom/path")  # arg > $FORETIAS_HOME > ~/.foretias/
 ```
 
 ## Development
@@ -167,12 +167,12 @@ python -m pytest tests/ -v
 
 ```bash
 pip install pytest-cov
-python -m pytest tests/ --cov=fortias --cov-report=term-missing
+python -m pytest tests/ --cov=foretias --cov-report=term-missing
 ```
 
 ## Build & Package
 
-Fortias has two implementations: a pure Python prototype (`src/fortias/`) and a production Rust implementation via PyO3 (`p2p/fortias-python/`), wrapped by the `fortias_p2p` package.
+Foretias has two implementations: a pure Python prototype (`src/foretias/`) and a production Rust implementation via PyO3 (`p2p/foretias-python/`), wrapped by the `foretias_p2p` package.
 
 ### Python (pure prototype)
 
@@ -188,29 +188,29 @@ pip install build
 python -m build
 
 # The package is built via hatchling
-# Entry point: fortis → fortias.cli:main
+# Entry point: foretis → foretias.cli:main
 ```
 
-### pyfortias (Rust-backed, production)
+### pyforetias (Rust-backed, production)
 
 ```bash
 # Install maturin (needed for PyO3 builds)
 pip install maturin
 
 # Build the Rust library with Python bindings
-cd p2p/fortias-python && maturin build --release
+cd p2p/foretias-python && maturin build --release
 
 # This produces a .whl file in target/wheels/
-# Install: pip install target/wheels/pyfortias-*.whl
+# Install: pip install target/wheels/pyforetias-*.whl
 
-# The pyfortias package wraps the Rust fortias_p2p library
-# Usage: import pyfortias; pyfortias.stamp(...), pyfortias.verify(...)
+# The pyforetias package wraps the Rust foretias_p2p library
+# Usage: import pyforetias; pyforetias.stamp(...), pyforetias.verify(...)
 ```
 
 ### Native Dependencies
 
 - **libsodium** (`libsodium-dev` on Debian/Ubuntu) — required for the Rust library
-- **Rust toolchain** — required to build pyfortias
+- **Rust toolchain** — required to build pyforetias
 - **libclang** (`clang-dev`) — needed during build for bindgen
 
 ## Testing
@@ -222,8 +222,8 @@ python -m pytest tests/ -v
 # Rust unit tests
 cd p2p && cargo test --workspace
 
-# Cross-language integration tests (Rust vs pyfortias)
-python -m pytest p2p/fortias-python/tests/python/test_cross_language.py -v
+# Cross-language integration tests (Rust vs pyforetias)
+python -m pytest p2p/foretias-python/tests/python/test_cross_language.py -v
 
 # All tests
 python -m pytest tests/ -v && cd p2p && cargo test --workspace
@@ -251,9 +251,9 @@ The test suite is organized into two tiers — **functional** (fast, determinist
 | `test_timefamily.py` | Integration | TimeFamily orchestration: stamp, verify, tick, persistence, interface accessors |
 | `test_timefamily_aggressively.py` | Defensive | TimeFamily persistence roundtrips, stress (100+ ticks), shutdown safety, concurrent stamps |
 | `test_crypto.py` | Unit | SHA-256, keypair generation, sign/verify |
-| `test_models.py` | Unit | Frozen dataclass invariants — TickRecord, Fortis |
+| `test_models.py` | Unit | Frozen dataclass invariants — TickRecord, Foretis |
 | `test_config.py` | Unit | Config resolution (arg > env > default), frozen dataclass |
-| `test_cli.py` | Functional | CLI `fortis verify` — valid, tampered, no-command |
+| `test_cli.py` | Functional | CLI `foretis verify` — valid, tampered, no-command |
 
 The `_timebeing` module (prefixed with `_`) is the project's internal backbone. Its static methods are deliberately accessible to all other modules — this is an intentional exception to the single-underscore convention.
 

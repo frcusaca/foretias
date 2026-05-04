@@ -1,4 +1,4 @@
-//! Integration tests for the Fortias CLI and server.
+//! Integration tests for the Foretias CLI and server.
 //!
 //! Spawns `foretias serve` as a background process, then exercises
 //! `stamp` and `verify` subcommands end-to-end.
@@ -97,24 +97,24 @@ fn test_stamp_and_verify_e2e() {
     );
 
     let stamp_output = String::from_utf8_lossy(&stamp_result.stdout);
-    let fortis: Value = serde_json::from_str(stamp_output.trim())
-        .expect("Failed to parse Fortis JSON from stamp output");
+    let foretis: Value = serde_json::from_str(stamp_output.trim())
+        .expect("Failed to parse Foretis JSON from stamp output");
 
-    assert!(fortis.get("tick_number").is_some(), "Fortis missing tick_number");
-    assert!(fortis.get("content_hash").is_some(), "Fortis missing content_hash");
-    assert!(fortis.get("signature").is_some(), "Fortis missing signature");
-    assert!(fortis.get("tbid").is_some(), "Fortis missing tbid");
-    assert!(fortis.get("echo").is_some(), "Fortis missing echo");
-    assert!(fortis.get("tbn").is_some(), "Fortis missing tbn");
-    assert!(fortis.get("time_being_reference_time").is_some(), "Fortis missing time_being_reference_time");
+    assert!(foretis.get("tick_number").is_some(), "Foretis missing tick_number");
+    assert!(foretis.get("content_hash").is_some(), "Foretis missing content_hash");
+    assert!(foretis.get("signature").is_some(), "Foretis missing signature");
+    assert!(foretis.get("tbid").is_some(), "Foretis missing tbid");
+    assert!(foretis.get("echo").is_some(), "Foretis missing echo");
+    assert!(foretis.get("tbn").is_some(), "Foretis missing tbn");
+    assert!(foretis.get("time_being_reference_time").is_some(), "Foretis missing time_being_reference_time");
 
-    let fortis_json = serde_json::to_string(&fortis).unwrap();
+    let foretis_json = serde_json::to_string(&foretis).unwrap();
     let verify_result = Command::new(&bin)
         .arg("verify")
         .arg("--message")
         .arg("hello world")
         .arg("--foretis")
-        .arg(&fortis_json)
+        .arg(&foretis_json)
         .arg("--server")
         .arg(&addr)
         .output()
@@ -140,7 +140,7 @@ fn test_stamp_and_verify_e2e() {
         .arg("--message")
         .arg("wrong content")
         .arg("--foretis")
-        .arg(&fortis_json)
+        .arg(&foretis_json)
         .arg("--server")
         .arg(&addr)
         .output()
@@ -167,10 +167,10 @@ fn test_stamp_and_verify_e2e() {
     assert!(stamp2_result.status.success(), "Second stamp failed");
 
     let stamp2_output = String::from_utf8_lossy(&stamp2_result.stdout);
-    let fortis2: Value = serde_json::from_str(stamp2_output.trim()).unwrap();
+    let foretis2: Value = serde_json::from_str(stamp2_output.trim()).unwrap();
 
-    let tick1 = fortis.get("tick_number").unwrap().as_u64().unwrap();
-    let tick2 = fortis2.get("tick_number").unwrap().as_u64().unwrap();
+    let tick1 = foretis.get("tick_number").unwrap().as_u64().unwrap();
+    let tick2 = foretis2.get("tick_number").unwrap().as_u64().unwrap();
     assert_eq!(tick2, tick1 + 1, "Second tick should be tick1 + 1");
 
     let _ = server.kill();
@@ -287,9 +287,9 @@ async fn test_peer_unreachable_does_not_crash() {
         assert!(result.is_err(), "Expected error for unreachable peer");
     }
 
-    let fortis = server.chronomatter().stamp(b"still works".to_vec(), "ok".to_string())
+    let foretis = server.chronomatter().stamp(b"still works".to_vec(), "ok".to_string())
         .expect("Local stamp should work despite unreachable peer");
-    assert!(fortis.tick_number > 0);
+    assert!(foretis.tick_number > 0);
 
     let _ = handle.abort();
     server.stop_daemon_arc();
@@ -299,7 +299,7 @@ async fn test_peer_unreachable_does_not_crash() {
 fn test_crash_recovery_calendar() {
     use foretias_core::foretias::calendar::Calendar as CoreCalendar;
 
-    let tmp_dir = std::env::temp_dir().join(format!("fortias_crash_recovery_{}", std::process::id()));
+    let tmp_dir = std::env::temp_dir().join(format!("foretias_crash_recovery_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp_dir);
     std::fs::create_dir_all(&tmp_dir).expect("Failed to create temp dir");
 
@@ -312,8 +312,8 @@ fn test_crash_recovery_calendar() {
         let record = foretias_core::foretias::tick::TickRecord {
             tick_number: i,
             public_key: vec![0u8; 32],
-            forward_fortis: vec![],
-            backward_fortis: vec![],
+            forward_foretis: vec![],
+            backward_foretis: vec![],
             aa_nonce: [0u8; 16],
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
@@ -330,8 +330,8 @@ fn test_crash_recovery_calendar() {
         let record = foretias_core::foretias::tick::TickRecord {
             tick_number: i,
             public_key: vec![0u8; 32],
-            forward_fortis: vec![],
-            backward_fortis: vec![],
+            forward_foretis: vec![],
+            backward_foretis: vec![],
             aa_nonce: [0u8; 16],
             stamps_per_tick: 0,
             external_attestations: Vec::new(),

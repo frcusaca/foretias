@@ -1,4 +1,4 @@
-//! Error types for the Fortias P2P node.
+//! Error types for the Foretias P2P node.
 
 use thiserror::Error;
 

@@ -1,4 +1,4 @@
-# Fortias MVP — Accumulated Questions
+# Foretias MVP — Accumulated Questions
 
 Questions for human review during v0.1 implementation.
 
@@ -6,19 +6,19 @@ Questions for human review during v0.1 implementation.
 
 ## C11 Core (v0.1.2)
 
-1. **FROST stub approach** — The spec says stub behind compile flag. I'm using `#if 0` to provide function bodies that return `FORTIAS_ERR_UNSUPPORTED`. Is this acceptable, or would you prefer a separate stub file compiled when `FORTIAS_CORE_FROST=0`?
+1. **FROST stub approach** — The spec says stub behind compile flag. I'm using `#if 0` to provide function bodies that return `FORETIAS_ERR_UNSUPPORTED`. Is this acceptable, or would you prefer a separate stub file compiled when `FORETIAS_CORE_FROST=0`?
 
 [ ] NOT IMPLEMENTED — FROST remains stubbed via `run_frost_round_stub()` in `frost_bridge.rs` (comments: "stubbed for v0.8"). No answer was given to this question; the stub approach was never confirmed.
 
-2. **P-256 stub approach** — User said "stub with not implemented exception." I'm making all `fortias_p256_*` functions return `FORTIAS_ERR_UNSUPPORTED`. The C API won't abort, but the Rust wrapper will translate this to `CryptoError::Unsupported`. Is this the right behavior?
+2. **P-256 stub approach** — User said "stub with not implemented exception." I'm making all `foretias_p256_*` functions return `FORETIAS_ERR_UNSUPPORTED`. The C API won't abort, but the Rust wrapper will translate this to `CryptoError::Unsupported`. Is this the right behavior?
 
 [DONE] ✅ Implemented — `software.rs` returns `CryptoError::Unsupported("P-256 not implemented yet")` for all P-256 operations.
 
-3. **Noise_XX stub** — User said stub for later. I'm providing the full state struct but all functions return `FORTIAS_ERR_UNSUPPORTED`. The `fortias_noise_destroy` does a memzero. Is this sufficient?
+3. **Noise_XX stub** — User said stub for later. I'm providing the full state struct but all functions return `FORETIAS_ERR_UNSUPPORTED`. The `foretias_noise_destroy` does a memzero. Is this sufficient?
 
 A: Sounds like Noise_XX is actually used for point-to-point communication and cannot be a stub.
 
-[ ] ❌ NOT IMPLEMENTED — `noise_xx.c` still returns `FORTIAS_ERR_UNSUPPORTED` for all 6 functions. The answer says it "cannot be a stub," but no implementation exists yet. This is a pending action item.
+[ ] ❌ NOT IMPLEMENTED — `noise_xx.c` still returns `FORETIAS_ERR_UNSUPPORTED` for all 6 functions. The answer says it "cannot be a stub," but no implementation exists yet. This is a pending action item.
 
 4. **BLAKE3 implementation** — Should I vendor the BLAKE3 reference C implementation into `hash_blake3.c`, or is stubbing it for v0.1 acceptable (the Python layer uses `hashlib.blake2b` as fallback)?
 
@@ -28,29 +28,29 @@ A: Sounds like Noise_XX is actually used for point-to-point communication and ca
 
 A: Should use a library for these, not raw implementation.
 
-[ ] ❌ NOT IMPLEMENTED — `hash_legacy_insecure_md5.c` and `hash_legacy_insecure_sha1.c` still return `FORTIAS_ERR_UNSUPPORTED`. The answer says "use a library," but no library has been integrated. Pending action: link OpenSSL or libsodium for MD5/SHA-1, or add a Rust crate dependency.
+[ ] ❌ NOT IMPLEMENTED — `hash_legacy_insecure_md5.c` and `hash_legacy_insecure_sha1.c` still return `FORETIAS_ERR_UNSUPPORTED`. The answer says "use a library," but no library has been integrated. Pending action: link OpenSSL or libsodium for MD5/SHA-1, or add a Rust crate dependency.
 
 ---
 
 ## Rust Node (v0.1.3)
 
-6. **Calendar tick_number lookup** — The Python Inquirer uses `fortis.tick_number` as a counter index into the ticks array (e.g., `ticks[tick_number]`). The spec says `tick_number` is "nanoseconds since Unix epoch." There's a mismatch: the Python code treats `tick_number` as both a wall-clock timestamp AND an array index. The Inquirer's `_lookup_surrounding_ticks` uses it as an index. Should the Rust implementation follow the Python pattern exactly (dual semantics), or should we separate "tick counter (u32)" from "tick timestamp (u64)"?
+6. **Calendar tick_number lookup** — The Python Inquirer uses `foretis.tick_number` as a counter index into the ticks array (e.g., `ticks[tick_number]`). The spec says `tick_number` is "nanoseconds since Unix epoch." There's a mismatch: the Python code treats `tick_number` as both a wall-clock timestamp AND an array index. The Inquirer's `_lookup_surrounding_ticks` uses it as an index. Should the Rust implementation follow the Python pattern exactly (dual semantics), or should we separate "tick counter (u32)" from "tick timestamp (u64)"?
 
-A: We have addressed this issue. The main purpose of time beings is to keep their own tick. This is why chornon can be different between different beings. So in the new implementation we have leaned towrds the tick_number starting at 0, and continuing tick by tick. To give real world reference, we have put a new field on Fortis called `time_being_reference_time`, which is a free-form field for the timebeing to express what the time is. This is quite open becase we don't plan to rely on it. the only thing we maintain to be reliable is the attestable ticks and what they are relative to each other (mutual- and auto- attestations). So the decision here, to be documented is that the ticks generated by a chronomatter must increase strictly monotonical fashion. Since they're unique, they may be used to lookup the tick. (Chronomatter TBID, tick number) is a unique time tick.
+A: We have addressed this issue. The main purpose of time beings is to keep their own tick. This is why chornon can be different between different beings. So in the new implementation we have leaned towrds the tick_number starting at 0, and continuing tick by tick. To give real world reference, we have put a new field on Foretis called `time_being_reference_time`, which is a free-form field for the timebeing to express what the time is. This is quite open becase we don't plan to rely on it. the only thing we maintain to be reliable is the attestable ticks and what they are relative to each other (mutual- and auto- attestations). So the decision here, to be documented is that the ticks generated by a chronomatter must increase strictly monotonical fashion. Since they're unique, they may be used to lookup the tick. (Chronomatter TBID, tick number) is a unique time tick.
 
-[DONE] ✅ `Fortis` struct has `time_being_reference_time: String` field. tick_number is a sequential counter starting at 0, strictly monotonic. See `core-engine/src/fortias/tick.rs`.
+[DONE] ✅ `Foretis` struct has `time_being_reference_time: String` field. tick_number is a sequential counter starting at 0, strictly monotonic. See `core-engine/src/foretias/tick.rs`.
 
-7. **Chronomatter tick_number vs tick_counter** — In the Python code, `ChronomatterV1.current_tick` returns `_tick_counter` (sequential 0, 1, 2...), but `TickRecord.tick_number` stores nanoseconds. The `Fortis.tick_number` stores the counter value (0, 1, 2...). The verification code looks up by counter index. This is confusing. Should I preserve this exact behavior in Rust?
+7. **Chronomatter tick_number vs tick_counter** — In the Python code, `ChronomatterV1.current_tick` returns `_tick_counter` (sequential 0, 1, 2...), but `TickRecord.tick_number` stores nanoseconds. The `Foretis.tick_number` stores the counter value (0, 1, 2...). The verification code looks up by counter index. This is confusing. Should I preserve this exact behavior in Rust?
 
 A: see #6, tick_number is unique counting and tick-identifing number. the tick_counter is to be renamed `_tick_count()` meaning how many ticks has there been for the tbid. (available on chronomatter (_tick_count(tick_number) now many counts from 0 to tick_number inclusive) because it is counting ticks, and on Calendar(`_tick_count(TBID)` because it can look it up or is tracking it live).
 
 [ ] ⚠️ PARTIAL — tick_number is correctly a sequential counter in Rust. However, the `_tick_count()` method rename was a Python-side change. The Rust side uses `current_tick()` (Chronomatter) and `tick_count()` (Calendar), which serve the same purpose but don't match the exact Python naming. The Python `_tick_count(tick_number)` semantics (count from 0 to tick_number) are not explicitly exposed as a distinct method on Chronomatter or Calendar.
 
-8. **Dormant loading** — The Python `load()` returns a dormant TimeFamily that can verify but not stamp. The spec says "per-run identity lifecycle: process start = brand new identity." For the Rust server, should `fortias serve` start fresh each time (no load), or should it optionally resume from a saved calendar?
+8. **Dormant loading** — The Python `load()` returns a dormant TimeFamily that can verify but not stamp. The spec says "per-run identity lifecycle: process start = brand new identity." For the Rust server, should `foretias serve` start fresh each time (no load), or should it optionally resume from a saved calendar?
 
 A: When a timebeing process termiates, the TBID ends, it never speaks, ticks or stamps again. So dormant calendars have new tbids. (Btw, this dormant calendar is actually descriptive, Calendars that are not dormant actually engages in mutual-attestation service). A time being family may connect a new non-dormant calendar with it's chronomatter as the new family calendar.
 
-[ ] ❌ NOT IMPLEMENTED — `from_calendar()` at `fortias-node/src/server/mod.rs:79` preserves the loaded TBID (`tbid: loaded_tbid`). The answer says dormant calendars should have NEW TBIDs, but the code reuses the original. Also, no distinction exists between dormant and non-dormant regarding mutual attestation participation.
+[ ] ❌ NOT IMPLEMENTED — `from_calendar()` at `foretias-node/src/server/mod.rs:79` preserves the loaded TBID (`tbid: loaded_tbid`). The answer says dormant calendars should have NEW TBIDs, but the code reuses the original. Also, no distinction exists between dormant and non-dormant regarding mutual attestation participation.
 
 ---
 
@@ -62,11 +62,11 @@ A: BOTH. TCP and HTTP
 
 [DONE] ✅ Both transports implemented. `server/mod.rs` has `start_tcp()` (line 172, `TcpListener` with JSON-RPC) and `start_http()` (line 209, axum-based).
 
-10. **Server config file** — Spec says `~/.config/fortias/fortias.settings.json`. Should I support TOML as well (the overview doc has a TOML config example)?
+10. **Server config file** — Spec says `~/.config/foretias/foretias.settings.json`. Should I support TOML as well (the overview doc has a TOML config example)?
 
 A: NO JSON is fine.
 
-[ ] ⚠️ CONFLICT — Code uses **TOML** serialization (`toml::from_str()`), but the file path is `.config/fortias/fortias.settings.json`. The filename says `.json` but the format is TOML. Either rename the path to `.toml` or change serialization to `serde_json`. The `default_path()` returns `fortias.settings.json` but `NodeConfig::load()` parses TOML.
+[ ] ⚠️ CONFLICT — Code uses **TOML** serialization (`toml::from_str()`), but the file path is `.config/foretias/foretias.settings.json`. The filename says `.json` but the format is TOML. Either rename the path to `.toml` or change serialization to `serde_json`. The `default_path()` returns `foretias.settings.json` but `NodeConfig::load()` parses TOML.
 
 11. **Client stamp/verify** — The spec says "This instance of time being is alive for only one query." Does this mean the CLI stamp/verify command creates a fresh TimeBeing identity for each invocation (just like the server does), or does it just mean it's a short-lived process?
 
@@ -78,23 +78,23 @@ A: yes, CLI will perform query as a time being, like the library or a daemon wou
 
 A: This api is using `tick_number`
 
-[DONE] ✅ `handle_get_calendar_slice` uses `cal_tick_start` as a tick_number index. See `fortias-node/src/server/handlers.rs:109`.
+[DONE] ✅ `handle_get_calendar_slice` uses `cal_tick_start` as a tick_number index. See `foretias-node/src/server/handlers.rs:109`.
 
 ---
 
 ## Architecture
 
-13. **Git worktree vs single repo** — The spec shows a large directory structure under `fortias/p2p/`. Should I keep everything in the single `fortias/` git repo (adding `p2p/core/`, `p2p/node/`, `p2p/bindings/`), or use separate git worktrees for the Rust/C11 subprojects?
+13. **Git worktree vs single repo** — The spec shows a large directory structure under `foretias/p2p/`. Should I keep everything in the single `foretias/` git repo (adding `p2p/core/`, `p2p/node/`, `p2p/bindings/`), or use separate git worktrees for the Rust/C11 subprojects?
 
 A: Implement in separate worktree branches and merge.
 
-[DONE] ✅ Project structure follows this pattern — `fortias/p2p/core/` (C11), `fortias/p2p/core-engine/` (Rust), `fortias/p2p/fortias-node/` (server), `fortias/p2p/fortias-python/` (bindings) all exist as organized sub-projects.
+[DONE] ✅ Project structure follows this pattern — `foretias/p2p/core/` (C11), `foretias/p2p/core-engine/` (Rust), `foretias/p2p/foretias-node/` (server), `foretias/p2p/foretias-python/` (bindings) all exist as organized sub-projects.
 
 14. **Makefile** — Should I create the Makefile from Part 16 now (v0.1) or defer until all components exist?
 
-**Clarification**: The Rust crate `fortias-core` already builds C11 sources via `build.rs` (cc crate compiles `fortias_core.c`, `hash_blake3.c`, `hash_md5_sha1.c`, `noise_xx.c`, `merkle.c`, `frost.c` directly — no separate Makefile needed for the Rust/C11 bridge). The Makefile from Part 16 is intended for standalone C11 consumers (e.g., a pure-C application that wants to `#include "fortias.h"` and link against `libfortias_core.a` without going through Rust/cargo). This Makefile would produce a standalone static/shared library for non-Rust languages. Should this standalone C11 build target be created now or deferred?
+**Clarification**: The Rust crate `foretias-core` already builds C11 sources via `build.rs` (cc crate compiles `foretias_core.c`, `hash_blake3.c`, `hash_md5_sha1.c`, `noise_xx.c`, `merkle.c`, `frost.c` directly — no separate Makefile needed for the Rust/C11 bridge). The Makefile from Part 16 is intended for standalone C11 consumers (e.g., a pure-C application that wants to `#include "foretias.h"` and link against `libforetias_core.a` without going through Rust/cargo). This Makefile would produce a standalone static/shared library for non-Rust languages. Should this standalone C11 build target be created now or deferred?
 
-[DONE] ✅ Standalone Makefile exists at `p2p/core/Makefile` (CMake-based, produces `libfortias_core.a`, includes test and install targets, plus Frama-C formal verification target).
+[DONE] ✅ Standalone Makefile exists at `p2p/core/Makefile` (CMake-based, produces `libforetias_core.a`, includes test and install targets, plus Frama-C formal verification target).
 
 ---
 

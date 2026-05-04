@@ -1,4 +1,4 @@
-# Fortias v0.5 Threat Model
+# Foretias v0.5 Threat Model
 
 **Version:** v0.5-hardening
 **Scope:** v0.2 through v0.4 implementation (auto-attestation, libp2p transport, DHT discovery)
@@ -22,12 +22,12 @@ The following assets are worth protecting. Each has a trust boundary, current pr
 | Asset | Where it lives | Protection | Responsible component |
 |---|---|---|---|
 | **Tick private keys** | In-memory only, `Vec<TickKeyPair>` inside `Chronomatter` (`p2p/core-engine/src/chronomatter/mod.rs`) | Never written to disk. `PrivKeyHandle` from the C11 core (`p2p/core/src/`) provides `zeroize` on drop. Key rotated every tick. | `CryptoServer` trait (`p2p/core-engine/src/crypto_server/mod.rs`), `SoftwareCryptoServer` (`p2p/core-engine/src/crypto_server/software.rs`) |
-| **Calendar integrity** | `Calendar` struct backed by `Chronomatter` tick records. Persisted to `NodeConfig::calendar_path` | Forward/backward `Fortis` signatures in each `TickRecord` form a chained attestation. `integrity_check()` in `Chronomatter` verifies the chain. | `Chronomatter` (`p2p/core-engine/src/chronomatter/mod.rs`), `fortias::tick::verify_pair()` |
-| **External attestation authenticity** | `TickRecord.external_attestations` vector | Verified before storage per the mutual-attestation flow (v0.2). Unverified attestations are never appended to the calendar. | `Chronomatter::verify()`, stamp handler in `p2p/fortias-node/src/server/handlers.rs` |
-| **Peer identity binding** | Two-layer identity: libp2p `PeerId` (transport layer, Noise protocol) + application TBID (Fortias identity) | libp2p's Noise handshake authenticates the transport `PeerId`. The application layer verifies Fortias signatures against the peer's TBID public key chain. | `Communerd` (`p2p/fortias-node/src/communerd/mod.rs`), `JsonRpcTransport` (`p2p/fortias-node/src/communerd/json_rpc_transport.rs`) |
-| **Liveness of mutual-attest loop** | `PeerPool` liveness pings (`start_liveness_pings()`) + daemon tick loop in `Chronomatter` | Periodic RPC pings detect dead peers. Daemon tick advances on a timer, not on peer responses, so a slow peer cannot stall the clock. | `PeerPool` (`p2p/fortias-node/src/communerd/peer_pool.rs`), `Chronomatter::start_daemon()` |
-| **DHT peer table** | `DhtPeerSource` (`p2p/fortias-node/src/communerd/dht_peer_source.rs`), an `Arc<RwLock<HashMap<PeerId, PeerAddr>>>` | Currently unprotected against exhaustion. No cap on table size (see §6, recommendation E1). | `DhtPeerSource::upsert()` |
-| **Calendar on disk** | Plaintext JSON file at `calendar_path` (v0.1-v0.4 format) | Plaintext. Migration to encrypted JSONL with per-block AEAD authentication tag is part of v0.5 (§5 of FORTIAS_2_P2P_5_hardening.md). | `EncryptedJsonlCalendarStore` (new in v0.5) |
+| **Calendar integrity** | `Calendar` struct backed by `Chronomatter` tick records. Persisted to `NodeConfig::calendar_path` | Forward/backward `Foretis` signatures in each `TickRecord` form a chained attestation. `integrity_check()` in `Chronomatter` verifies the chain. | `Chronomatter` (`p2p/core-engine/src/chronomatter/mod.rs`), `foretias::tick::verify_pair()` |
+| **External attestation authenticity** | `TickRecord.external_attestations` vector | Verified before storage per the mutual-attestation flow (v0.2). Unverified attestations are never appended to the calendar. | `Chronomatter::verify()`, stamp handler in `p2p/foretias-node/src/server/handlers.rs` |
+| **Peer identity binding** | Two-layer identity: libp2p `PeerId` (transport layer, Noise protocol) + application TBID (Foretias identity) | libp2p's Noise handshake authenticates the transport `PeerId`. The application layer verifies Foretias signatures against the peer's TBID public key chain. | `Communerd` (`p2p/foretias-node/src/communerd/mod.rs`), `JsonRpcTransport` (`p2p/foretias-node/src/communerd/json_rpc_transport.rs`) |
+| **Liveness of mutual-attest loop** | `PeerPool` liveness pings (`start_liveness_pings()`) + daemon tick loop in `Chronomatter` | Periodic RPC pings detect dead peers. Daemon tick advances on a timer, not on peer responses, so a slow peer cannot stall the clock. | `PeerPool` (`p2p/foretias-node/src/communerd/peer_pool.rs`), `Chronomatter::start_daemon()` |
+| **DHT peer table** | `DhtPeerSource` (`p2p/foretias-node/src/communerd/dht_peer_source.rs`), an `Arc<RwLock<HashMap<PeerId, PeerAddr>>>` | Currently unprotected against exhaustion. No cap on table size (see §6, recommendation E1). | `DhtPeerSource::upsert()` |
+| **Calendar on disk** | Plaintext JSON file at `calendar_path` (v0.1-v0.4 format) | Plaintext. Migration to encrypted JSONL with per-block AEAD authentication tag is part of v0.5 (§5 of FORETIAS_2_P2P_5_hardening.md). | `EncryptedJsonlCalendarStore` (new in v0.5) |
 
 ---
 
@@ -73,16 +73,16 @@ Three attacker levels are considered, each with increasing capability.
 
 | # | Threat | Description | Affected component | Impact | Mitigation |
 |---|---|---|---|---|---|
-| 1 | Content replay | An attacker captures a `/stamp` JSON-RPC response and replays it with different content, claiming a timestamp they did not earn. | `/stamp` JSON-RPC handler (`p2p/fortias-node/src/server/handlers.rs`) | High — undermines trust model | **Implemented.** Echo field encodes requester identity + tick number. A replayed response fails the echo check (v0.2 §6.2, step 14). The `handle_stamp` function returns the echo in the `Fortis` response for client-side verification. |
+| 1 | Content replay | An attacker captures a `/stamp` JSON-RPC response and replays it with different content, claiming a timestamp they did not earn. | `/stamp` JSON-RPC handler (`p2p/foretias-node/src/server/handlers.rs`) | High — undermines trust model | **Implemented.** Echo field encodes requester identity + tick number. A replayed response fails the echo check (v0.2 §6.2, step 14). The `handle_stamp` function returns the echo in the `Foretis` response for client-side verification. |
 | 2 | Stamp flood (DoS) | Attacker sends a high volume of stamp requests to exhaust the node's CPU or job queue. | `Chronomatter` job queue (`p2p/core-engine/src/chronomatter/mod.rs`) | Medium — availability | **Partially implemented.** Two-layer rate limit from v0.2 §4.1. Queue depth cap added in v0.5 (§7, `MAX_JOB_QUEUE_DEPTH = 64`). Further hardening in v0.6 with GossipSub mesh caps. |
-| 3 | Oversized request | A single request carries gigabytes of data, exhausting memory in the JSON-RPC handler. | All JSON-RPC handlers (`p2p/fortias-node/src/server/handlers.rs`) | Medium — availability | **Implemented.** `MAX_CONTENT_BYTES` (1 GB) in `handlers.rs` line 9. `MAX_CALENDAR_SLICE_COUNT` (10,000) limits calendar queries. `MAX_REQUEST_BYTES` in the cross-attest path (v0.2). |
-| 4 | DHT eclipse attack | Attacker controls the majority of a node's Kademlia peer table, isolating it from honest peers. | Kademlia peer table (`p2p/fortias-node/src/communerd/dht_peer_source.rs`) | High — isolation | **Partially implemented.** Private namespace key (`dht_namespace` in `NodeConfig`, `p2p/core-engine/src/config.rs`) limits cross-network pollution. Bootstrap list in config prevents relying solely on DHT for initial discovery. Kademlia's own bucket diversity provides additional protection. `MAX_PEERS` cap added in v0.5 (§7). |
+| 3 | Oversized request | A single request carries gigabytes of data, exhausting memory in the JSON-RPC handler. | All JSON-RPC handlers (`p2p/foretias-node/src/server/handlers.rs`) | Medium — availability | **Implemented.** `MAX_CONTENT_BYTES` (1 GB) in `handlers.rs` line 9. `MAX_CALENDAR_SLICE_COUNT` (10,000) limits calendar queries. `MAX_REQUEST_BYTES` in the cross-attest path (v0.2). |
+| 4 | DHT eclipse attack | Attacker controls the majority of a node's Kademlia peer table, isolating it from honest peers. | Kademlia peer table (`p2p/foretias-node/src/communerd/dht_peer_source.rs`) | High — isolation | **Partially implemented.** Private namespace key (`dht_namespace` in `NodeConfig`, `p2p/core-engine/src/config.rs`) limits cross-network pollution. Bootstrap list in config prevents relying solely on DHT for initial discovery. Kademlia's own bucket diversity provides additional protection. `MAX_PEERS` cap added in v0.5 (§7). |
 | 5 | Sybil via RNG failure | Weak or predictable RNG produces colliding TBIDs, allowing an attacker to impersonate another node. | Identity generation in `Chronomatter::new()` (`p2p/core-engine/src/chronomatter/mod.rs`, line 45-46) | High — identity compromise | **Implemented.** `rng_mix.c` in the C11 core (`p2p/core/src/`) mixes multiple entropy sources. v0.7 adds explicit collision detection as a backstop. |
 | 6 | Forged external attestation | A compromised peer submits an attestation with valid structure but incorrect content (wrong tick, wrong key, wrong signature). | Calendar verification (`p2p/core-engine/src/chronomatter/mod.rs`) | High — integrity | **Implemented.** Full verification in v0.2 §6.2 steps 12-14: signature check against the peer's public key, tick number validation, TBID consistency. Unverified attestations are never stored. |
 | 7 | Calendar file tampering | An attacker with disk access modifies the plaintext calendar file to insert or remove tick records. | Disk storage (calendar JSON file at `calendar_path`) | High — integrity | **Implemented in v0.5.** Encrypted JSONL format (`EncryptedJsonlCalendarStore`, new in v0.5) with per-block AEAD authentication tag (ChaCha20-Poly1305) detects any tampering. Migration path renames old file to `.bak`. |
 | 8 | Private-key exfiltration via disk | An attacker reads the disk to recover tick private keys, allowing them to forge signatures. | `CryptoServer` key storage (`p2p/core-engine/src/crypto_server/software.rs`) | Critical — total compromise | **Implemented.** Keys are never written to disk (§0.3 invariant). `PrivKeyHandle` from C11 core uses `zeroize` on drop. Tick keypairs are regenerated every tick, so old keys are discarded immediately. |
 | 9 | Tick-rate exhaustion | A peer forces the victim to advance its tick counter rapidly by sending many stamp requests, causing excessive key rotation and resource consumption. | `Chronomatter` (`p2p/core-engine/src/chronomatter/mod.rs`) | Medium — resource exhaustion | **Implemented.** Tick advance is timer-driven via `start_daemon()` (the daemon loop on line 239-267), not stamp-driven. Inbound stamp requests are rate-limited. A stamp call does advance the tick but the daemon interval provides a floor. |
-| 10 | JSON-RPC address spoofing via identify | An attacker uses libp2p's identify protocol to advertise a false JSON-RPC address, redirecting RPC traffic. | `Communerd` + libp2p identify (`p2p/fortias-node/src/communerd/mod.rs`) | Low — misdirection | **Implemented.** The address from identify is advisory only. The actual RPC call still requires a verified Fortias response with correct Ed25519 signatures. A forged address results in a connection failure, not a security breach. |
+| 10 | JSON-RPC address spoofing via identify | An attacker uses libp2p's identify protocol to advertise a false JSON-RPC address, redirecting RPC traffic. | `Communerd` + libp2p identify (`p2p/foretias-node/src/communerd/mod.rs`) | Low — misdirection | **Implemented.** The address from identify is advisory only. The actual RPC call still requires a verified Foretias response with correct Ed25519 signatures. A forged address results in a connection failure, not a security breach. |
 
 ---
 
@@ -108,7 +108,7 @@ The threat analysis motivates three immediate code hardening items, all scoped t
 
 ### 6.1 Enforce `MAX_PEERS` cap in `DhtPeerSource`
 
-**File:** `p2p/fortias-node/src/communerd/dht_peer_source.rs`
+**File:** `p2p/foretias-node/src/communerd/dht_peer_source.rs`
 
 **Problem:** `DhtPeerSource::upsert()` currently inserts any discovered peer without limit. A DHT eclipse attacker could fill the table with thousands of bogus peers, increasing memory and CPU.
 
@@ -171,7 +171,7 @@ This ensures the namespace is present and bounded, preventing accidental cross-n
 
 ## 7. Component-Specific Threat Summary
 
-### 7.1 Communerd (`p2p/fortias-node/src/communerd/mod.rs`)
+### 7.1 Communerd (`p2p/foretias-node/src/communerd/mod.rs`)
 
 The P2P orchestrator. All external communication flows through this component. Key threats: address spoofing via identify (mitigated by signature verification), DHT table exhaustion (mitigated by `MAX_PEERS` cap in v0.5).
 
@@ -183,11 +183,11 @@ The tick engine. Owns keypair generation, signing, and verification. Key threats
 
 The cryptographic abstraction layer. Key threats: key exfiltration (mitigated by `zeroize` on drop and no disk writes), RNG weakness (mitigated by `rng_mix.c` multi-source entropy).
 
-### 7.4 JSON-RPC Handlers (`p2p/fortias-node/src/server/handlers.rs`)
+### 7.4 JSON-RPC Handlers (`p2p/foretias-node/src/server/handlers.rs`)
 
 The inbound request handlers. Key threats: oversized requests (mitigated by `MAX_CONTENT_BYTES`), content replay (mitigated by echo field), stamp flood (mitigated by rate limiting and queue cap).
 
-### 7.5 DhtPeerSource (`p2p/fortias-node/src/communerd/dht_peer_source.rs`)
+### 7.5 DhtPeerSource (`p2p/foretias-node/src/communerd/dht_peer_source.rs`)
 
 The DHT-backed peer discovery. Key threats: eclipse attack (mitigated by namespace key and bootstrap list), table exhaustion (mitigated by `MAX_PEERS` cap in v0.5).
 
@@ -201,7 +201,7 @@ Node configuration loading. Key threats: malformed namespace (mitigated by valid
 
 ```
 +------------------+     +------------------+     +------------------+
-|  JSON-RPC Client |---->|   Fortias Node   |---->|  Peer Node      |
+|  JSON-RPC Client |---->|   Foretias Node   |---->|  Peer Node      |
 |  (untrusted)     |     |  (this process)  |     |  (untrusted)    |
 +------------------+     +------------------+     +------------------+
                            |       |       |

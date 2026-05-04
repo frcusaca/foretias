@@ -1,10 +1,10 @@
 #include "test_runner.h"
 
 static void test_blake3_unsupported(void) {
-    FortiasHash32 h;
+    ForetiasHash32 h;
     const uint8_t data[] = "test";
-    FortiasResult r = fortias_hash_blake3(data, 4, &h);
-    ASSERT_EQ(r, FORTIAS_ERR_UNSUPPORTED, "blake3 returns UNSUPPORTED");
+    ForetiasResult r = foretias_hash_blake3(data, 4, &h);
+    ASSERT_EQ(r, FORETIAS_ERR_UNSUPPORTED, "blake3 returns UNSUPPORTED");
 }
 
 int test_blake3_stub_main(void) {

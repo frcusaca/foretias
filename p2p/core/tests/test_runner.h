@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "../include/fortias_core.h"
+#include "../include/foretias_core.h"
 
 static int g_pass = 0, g_fail = 0;
 

@@ -1,20 +1,20 @@
 #include "platform.h"
-#include "fortias_core.h"
+#include "foretias_core.h"
 
-FortiasResult fortias_p256_generate_keypair(
-    FortiasPubKey33*  pub_out,
-    FortiasPrivKey32* priv_out
+ForetiasResult foretias_p256_generate_keypair(
+    ForetiasPubKey33*  pub_out,
+    ForetiasPrivKey32* priv_out
 ) {
     (void)pub_out;
     (void)priv_out;
-    return FORTIAS_ERR_UNSUPPORTED;
+    return FORETIAS_ERR_UNSUPPORTED;
 }
 
-FortiasResult fortias_p256_derive_peer_id(
-    const FortiasPubKey33* pub,
-    FortiasPeerID*         id_out
+ForetiasResult foretias_p256_derive_peer_id(
+    const ForetiasPubKey33* pub,
+    ForetiasPeerID*         id_out
 ) {
     (void)pub;
     (void)id_out;
-    return FORTIAS_ERR_UNSUPPORTED;
+    return FORETIAS_ERR_UNSUPPORTED;
 }

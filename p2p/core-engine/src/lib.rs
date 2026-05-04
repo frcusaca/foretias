@@ -1,4 +1,4 @@
-//! Fortias Core — Rust library wrapping C11 verified core.
+//! Foretias Core — Rust library wrapping C11 verified core.
 #![cfg_attr(debug_assertions, allow(rustdoc::all))]
 
 #![allow(missing_docs)]

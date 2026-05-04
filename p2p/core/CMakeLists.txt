@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(fortias_core C)
+project(foretias_core C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -20,7 +20,7 @@ find_path(SODIUM_INCLUDE_DIR sodium.h REQUIRED)
 find_package(OpenSSL REQUIRED COMPONENTS Crypto)
 
 # ── Source files ────────────────────────────────────────────────────────
-set(FORTIAS_CORE_SOURCES
+set(FORETIAS_CORE_SOURCES
     src/version.c
     src/memzero.c
     src/rng_mix.c
@@ -40,18 +40,18 @@ set(FORTIAS_CORE_SOURCES
 )
 
 # ── Static library ──────────────────────────────────────────────────────
-add_library(fortias_core STATIC ${FORTIAS_CORE_SOURCES})
+add_library(foretias_core STATIC ${FORETIAS_CORE_SOURCES})
 
-target_include_directories(fortias_core
+target_include_directories(foretias_core
     PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/include
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
-target_include_directories(fortias_core SYSTEM PRIVATE ${SODIUM_INCLUDE_DIR})
-target_include_directories(fortias_core SYSTEM PRIVATE ${OPENSSL_INCLUDE_DIR})
-target_link_libraries(fortias_core PUBLIC ${SODIUM_LIBRARY} OpenSSL::Crypto)
+target_include_directories(foretias_core SYSTEM PRIVATE ${SODIUM_INCLUDE_DIR})
+target_include_directories(foretias_core SYSTEM PRIVATE ${OPENSSL_INCLUDE_DIR})
+target_link_libraries(foretias_core PUBLIC ${SODIUM_LIBRARY} OpenSSL::Crypto)
 
 # ── Install ──────────────────────────────────────────────────────────────
-install(TARGETS fortias_core
+install(TARGETS foretias_core
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib
 )

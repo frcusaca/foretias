@@ -1,10 +1,10 @@
-"""Fortias v1 — TimeFamily (Chrona nuntia): the Orchestrator.
+"""Foretias v1 — TimeFamily (Chrona nuntia): the Orchestrator.
 
 Coordinates between Chronomatter (the Time Authority) and Calendar (passive tick storage),
 providing a user-facing API that delegates to the Chronomatter for stamping/ticking and
 to Calendar for storage.
 
-.. deprecated:: Use ``fortias_p2p.PyTimeFamilyServer`` (Rust) instead.
+.. deprecated:: Use ``foretias_p2p.PyTimeFamilyServer`` (Rust) instead.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from __future__ import annotations
 import warnings
 
 warnings.warn(
-    "fortias.time_family is deprecated. Use fortias (Rust-backed) instead.",
+    "foretias.time_family is deprecated. Use foretias (Rust-backed) instead.",
     DeprecationWarning,
     stacklevel=2,
 )
@@ -40,7 +40,7 @@ from .chronomatter import (
     ChronomatterV1Serial,
 )
 from .config import Config
-from .models import Fortis, TickRecord
+from .models import Foretis, TickRecord
 
 
 class TimeFamily:
@@ -133,7 +133,7 @@ class TimeFamily:
 
     # -- Core operations --
 
-    def stamp(self, content: bytes | str) -> Fortis:
+    def stamp(self, content: bytes | str) -> Foretis:
         """Sign *content* under the current tick's private key.
 
         For serialized timebeings, the first stamp ticks immediately
@@ -148,16 +148,16 @@ class TimeFamily:
     def verify(
         self,
         content: bytes | str,
-        fortis: Fortis,
+        foretis: Foretis,
         next_tick_number: int | None = None,
     ) -> bool | tuple[bool, bool | None]:
-        """Verify a Fortis against content and calendar.
+        """Verify a Foretis against content and calendar.
 
         Returns bool if *next_tick_number* is None.
         Returns (sig_valid, window_closed) tuple otherwise.
         """
         with self._chronomatter.hold_read_lock():
-            result = self._inquirer.verify(content, fortis)
+            result = self._inquirer.verify(content, foretis)
         if next_tick_number is None:
             return result
         calendar_ticks = list(self._calendar.ticks)

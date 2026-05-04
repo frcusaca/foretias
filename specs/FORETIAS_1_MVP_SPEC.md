@@ -1,11 +1,11 @@
-# Fortias — MVP Specification (v0.1 Local-Server Stack)
+# Foretias — MVP Specification (v0.1 Local-Server Stack)
 
-**Project:** Fortias (Free and Open-source Resilient Time Integrity Attestation Service)
-**This document:** Implementation guidance for the v0.1 local-server MVP — C11 verified core, Rust node layer, crypto-server abstraction (software backend), Fortias domain types in Rust, and Python bindings via PyO3.
+**Project:** Foretias (Free and Open-source Resilient Time Integrity Attestation Service)
+**This document:** Implementation guidance for the v0.1 local-server MVP — C11 verified core, Rust node layer, crypto-server abstraction (software backend), Foretias domain types in Rust, and Python bindings via PyO3.
 **Companion documents:**
-- `FORTIAS_OVERVIEW.md` — design invariants, project structure, milestone roadmap, configuration, build, dev protocol. **Read this first.**
-- `FORTIAS_P2P_SPEC.md` — v0.2–v0.8 network layers (libp2p, probity, collision, epoch, encrypted persistence). Do not start that work until v0.1 is stable.
-- `FORTIAS_ENCLAVE_SPEC.md` — v0.9+ custom-plugin backends. Restricted; do not consult until v0.8 lands.
+- `FORETIAS_OVERVIEW.md` — design invariants, project structure, milestone roadmap, configuration, build, dev protocol. **Read this first.**
+- `FORETIAS_P2P_SPEC.md` — v0.2–v0.8 network layers (libp2p, probity, collision, epoch, encrypted persistence). Do not start that work until v0.1 is stable.
+- `FORETIAS_ENCLAVE_SPEC.md` — v0.9+ custom-plugin backends. Restricted; do not consult until v0.8 lands.
 
 **Target:** AI Coding Specialist for execution. Comments to human reader in parenthesis `(@human ...)`.
 
@@ -15,10 +15,10 @@
 
 Before touching any file in this document:
 
-1. Read `fortias-v1.md` — defines TimeBeing, Tick, Calendar, Chronomatter, Fortis, TimeFamily.
-2. Read `FORTIAS_OVERVIEW.md` end to end — Parts 0 (invariants), 1 (project structure), 2 (MVP target), 3 (mapping), 14 (milestones).
+1. Read `foretias-v1.md` — defines TimeBeing, Tick, Calendar, Chronomatter, Foretis, TimeFamily.
+2. Read `FORETIAS_OVERVIEW.md` end to end — Parts 0 (invariants), 1 (project structure), 2 (MVP target), 3 (mapping), 14 (milestones).
 3. Read this document end to end.
-4. Scan the existing Python prototype under `fortias/` for current code shape.
+4. Scan the existing Python prototype under `foretias/` for current code shape.
 
 ---
 
@@ -36,7 +36,7 @@ Before touching any file in this document:
 - Primary compiler: `clang`. Secondary in CI: `gcc`
 - Depends on: libsodium (Ed25519, hash, mem utilities). For P-256, use mbedTLS or BoringSSL-style C primitives.
 
-### 4.2 Public Header — `fortias/p2p/core/include/fortias_core.h`
+### 4.2 Public Header — `foretias/p2p/core/include/foretias_core.h`
 
 ```c
 #pragma once
@@ -56,121 +56,121 @@ extern "C" {
 #endif
 
 /* ── Version ────────────────────────────────────── */
-#define FORTIAS_CORE_VERSION_MAJOR 0
-#define FORTIAS_CORE_VERSION_MINOR 1
+#define FORETIAS_CORE_VERSION_MAJOR 0
+#define FORETIAS_CORE_VERSION_MINOR 1
 
 typedef struct {
     int         major;
     int         minor;
     const char* build_hash;    /* populated by build.rs / CMake */
-} FortiasCoreVersion;
+} ForetiasCoreVersion;
 
-FortiasCoreVersion fortias_core_version(void);
+ForetiasCoreVersion foretias_core_version(void);
 
 /* ── Result codes ───────────────────────────────── */
 typedef enum {
-    FORTIAS_OK                 =  0,
-    FORTIAS_ERR_BAD_SIG        = -1,
-    FORTIAS_ERR_BAD_PROOF      = -2,
-    FORTIAS_ERR_BAD_KEY        = -3,
-    FORTIAS_ERR_STALE          = -4,
-    FORTIAS_ERR_REPLAY         = -5,
-    FORTIAS_ERR_BAD_INPUT      = -6,
-    FORTIAS_ERR_OVERFLOW       = -7,
-    FORTIAS_ERR_UNSUPPORTED    = -8,
-    FORTIAS_ERR_INTERNAL       = -99,
-} FortiasResult;
+    FORETIAS_OK                 =  0,
+    FORETIAS_ERR_BAD_SIG        = -1,
+    FORETIAS_ERR_BAD_PROOF      = -2,
+    FORETIAS_ERR_BAD_KEY        = -3,
+    FORETIAS_ERR_STALE          = -4,
+    FORETIAS_ERR_REPLAY         = -5,
+    FORETIAS_ERR_BAD_INPUT      = -6,
+    FORETIAS_ERR_OVERFLOW       = -7,
+    FORETIAS_ERR_UNSUPPORTED    = -8,
+    FORETIAS_ERR_INTERNAL       = -99,
+} ForetiasResult;
 
 /* ── Curve selector ─────────────────────────────── */
 typedef enum {
-    FORTIAS_CURVE_ED25519 = 1,
-    FORTIAS_CURVE_P256    = 2,
-} FortiasCurve;
+    FORETIAS_CURVE_ED25519 = 1,
+    FORETIAS_CURVE_P256    = 2,
+} ForetiasCurve;
 
 /* ── Key / signature types ──────────────────────── */
-typedef struct { uint8_t bytes[32]; } FortiasPubKey32;   /* Ed25519 pub, P-256 X */
-typedef struct { uint8_t bytes[33]; } FortiasPubKey33;   /* P-256 compressed    */
-typedef struct { uint8_t bytes[32]; } FortiasPrivKey32;  /* Ed25519 seed / P256 scalar */
-typedef struct { uint8_t bytes[32]; } FortiasPeerID;
-typedef struct { uint8_t bytes[64]; } FortiasSig64;      /* Ed25519 / P-256 ECDSA */
-typedef struct { uint8_t bytes[32]; } FortiasHash32;
-typedef struct { uint8_t bytes[16]; } FortiasHash16;     /* MD5 legacy          */
-typedef struct { uint8_t bytes[20]; } FortiasHash20;     /* SHA-1 legacy        */
-typedef struct { uint8_t bytes[32]; } FortiasNullifier;
-typedef struct { uint8_t bytes[32]; } FortiasFrostShare;
+typedef struct { uint8_t bytes[32]; } ForetiasPubKey32;   /* Ed25519 pub, P-256 X */
+typedef struct { uint8_t bytes[33]; } ForetiasPubKey33;   /* P-256 compressed    */
+typedef struct { uint8_t bytes[32]; } ForetiasPrivKey32;  /* Ed25519 seed / P256 scalar */
+typedef struct { uint8_t bytes[32]; } ForetiasPeerID;
+typedef struct { uint8_t bytes[64]; } ForetiasSig64;      /* Ed25519 / P-256 ECDSA */
+typedef struct { uint8_t bytes[32]; } ForetiasHash32;
+typedef struct { uint8_t bytes[16]; } ForetiasHash16;     /* MD5 legacy          */
+typedef struct { uint8_t bytes[20]; } ForetiasHash20;     /* SHA-1 legacy        */
+typedef struct { uint8_t bytes[32]; } ForetiasNullifier;
+typedef struct { uint8_t bytes[32]; } ForetiasFrostShare;
 
-_Static_assert(sizeof(FortiasPubKey32)  == 32, "FortiasPubKey32");
-_Static_assert(sizeof(FortiasPrivKey32) == 32, "FortiasPrivKey32");
-_Static_assert(sizeof(FortiasSig64)     == 64, "FortiasSig64");
-_Static_assert(sizeof(FortiasHash32)    == 32, "FortiasHash32");
+_Static_assert(sizeof(ForetiasPubKey32)  == 32, "ForetiasPubKey32");
+_Static_assert(sizeof(ForetiasPrivKey32) == 32, "ForetiasPrivKey32");
+_Static_assert(sizeof(ForetiasSig64)     == 64, "ForetiasSig64");
+_Static_assert(sizeof(ForetiasHash32)    == 32, "ForetiasHash32");
 
 /* ── Identity (Ed25519) ─────────────────────────── */
-FortiasResult fortias_ed25519_generate_keypair(
-    FortiasPubKey32*  pub_out,
-    FortiasPrivKey32* priv_out
+ForetiasResult foretias_ed25519_generate_keypair(
+    ForetiasPubKey32*  pub_out,
+    ForetiasPrivKey32* priv_out
 );
 
-FortiasResult fortias_ed25519_derive_peer_id(
-    const FortiasPubKey32* pub,
-    FortiasPeerID*         id_out
+ForetiasResult foretias_ed25519_derive_peer_id(
+    const ForetiasPubKey32* pub,
+    ForetiasPeerID*         id_out
 );
 
-FortiasResult fortias_ed25519_sign(
-    const FortiasPrivKey32* priv,
+ForetiasResult foretias_ed25519_sign(
+    const ForetiasPrivKey32* priv,
     const uint8_t*          msg,
     size_t                  msg_len,
-    FortiasSig64*           sig_out
+    ForetiasSig64*           sig_out
 );
 
-FortiasResult fortias_ed25519_verify(
-    const FortiasPubKey32*  pub,
+ForetiasResult foretias_ed25519_verify(
+    const ForetiasPubKey32*  pub,
     const uint8_t*          msg,
     size_t                  msg_len,
-    const FortiasSig64*     sig
+    const ForetiasSig64*     sig
 );
 
 /* ── Identity (P-256) ───────────────────────────── */
-FortiasResult fortias_p256_generate_keypair(
-    FortiasPubKey33*  pub_out,
-    FortiasPrivKey32* priv_out
+ForetiasResult foretias_p256_generate_keypair(
+    ForetiasPubKey33*  pub_out,
+    ForetiasPrivKey32* priv_out
 );
 
-FortiasResult fortias_p256_derive_peer_id(
-    const FortiasPubKey33* pub,
-    FortiasPeerID*         id_out
+ForetiasResult foretias_p256_derive_peer_id(
+    const ForetiasPubKey33* pub,
+    ForetiasPeerID*         id_out
 );
 
-FortiasResult fortias_p256_sign(
-    const FortiasPrivKey32* priv,
+ForetiasResult foretias_p256_sign(
+    const ForetiasPrivKey32* priv,
     const uint8_t*          msg,
     size_t                  msg_len,
-    FortiasSig64*           sig_out
+    ForetiasSig64*           sig_out
 );
 
-FortiasResult fortias_p256_verify(
-    const FortiasPubKey33*  pub,
+ForetiasResult foretias_p256_verify(
+    const ForetiasPubKey33*  pub,
     const uint8_t*          msg,
     size_t                  msg_len,
-    const FortiasSig64*     sig
+    const ForetiasSig64*     sig
 );
 
 /* ── Hashing — secure ───────────────────────────── */
-FortiasResult fortias_hash_sha256(
+ForetiasResult foretias_hash_sha256(
     const uint8_t* data,
     size_t         len,
-    FortiasHash32* out
+    ForetiasHash32* out
 );
 
-FortiasResult fortias_hash_sha256_concat(
+ForetiasResult foretias_hash_sha256_concat(
     const uint8_t* a, size_t a_len,
     const uint8_t* b, size_t b_len,
-    FortiasHash32* out
+    ForetiasHash32* out
 );
 
-FortiasResult fortias_hash_blake3(
+ForetiasResult foretias_hash_blake3(
     const uint8_t* data,
     size_t         len,
-    FortiasHash32* out
+    ForetiasHash32* out
 );
 
 /* ── Hashing — legacy / insecure (NONCRYPTO USE ONLY) ─ */
@@ -178,20 +178,20 @@ FortiasResult fortias_hash_blake3(
    security use. Callers that see these names must have a
    non-security reason (file checksums, protocol interop). */
 
-FortiasResult fortias_hash_legacy_insecure_md5(
+ForetiasResult foretias_hash_legacy_insecure_md5(
     const uint8_t* data,
     size_t         len,
-    FortiasHash16* out
+    ForetiasHash16* out
 );
 
-FortiasResult fortias_hash_legacy_insecure_sha1(
+ForetiasResult foretias_hash_legacy_insecure_sha1(
     const uint8_t* data,
     size_t         len,
-    FortiasHash20* out
+    ForetiasHash20* out
 );
 
 /* ── Noise_XX handshake ─────────────────────────── */
-#define FORTIAS_NOISE_MAX_MSG 65535
+#define FORETIAS_NOISE_MAX_MSG 65535
 
 typedef struct {
     uint8_t  chaining_key[32];
@@ -208,69 +208,69 @@ typedef struct {
     int32_t  step;
     int32_t  is_initiator;
     int32_t  handshake_complete;
-    int32_t  curve;                /* FortiasCurve */
+    int32_t  curve;                /* ForetiasCurve */
     uint8_t  _pad[4];
-} FortiasNoiseState;
+} ForetiasNoiseState;
 
-FortiasResult fortias_noise_init_ed25519(
-    FortiasNoiseState*      state,
-    const FortiasPrivKey32* my_static_priv,
-    const FortiasPubKey32*  their_static_pub,  /* NULL for responder */
+ForetiasResult foretias_noise_init_ed25519(
+    ForetiasNoiseState*      state,
+    const ForetiasPrivKey32* my_static_priv,
+    const ForetiasPubKey32*  their_static_pub,  /* NULL for responder */
     bool                    is_initiator
 );
 
-FortiasResult fortias_noise_init_p256(
-    FortiasNoiseState*      state,
-    const FortiasPrivKey32* my_static_priv,
-    const FortiasPubKey33*  their_static_pub,  /* NULL for responder */
+ForetiasResult foretias_noise_init_p256(
+    ForetiasNoiseState*      state,
+    const ForetiasPrivKey32* my_static_priv,
+    const ForetiasPubKey33*  their_static_pub,  /* NULL for responder */
     bool                    is_initiator
 );
 
-FortiasResult fortias_noise_step(
-    FortiasNoiseState* state,
+ForetiasResult foretias_noise_step(
+    ForetiasNoiseState* state,
     const uint8_t*     input,
     size_t             input_len,
     uint8_t*           output,
     size_t*            output_len
 );
 
-FortiasResult fortias_noise_send(
-    FortiasNoiseState* state,
+ForetiasResult foretias_noise_send(
+    ForetiasNoiseState* state,
     const uint8_t*     plaintext,
     size_t             pt_len,
     uint8_t*           ciphertext,       /* caller: pt_len + 16 */
     size_t*            ct_len
 );
 
-FortiasResult fortias_noise_recv(
-    FortiasNoiseState* state,
+ForetiasResult foretias_noise_recv(
+    ForetiasNoiseState* state,
     const uint8_t*     ciphertext,
     size_t             ct_len,
     uint8_t*           plaintext,        /* caller: ct_len */
     size_t*            pt_len
 );
 
-void fortias_noise_destroy(FortiasNoiseState* state);
+void foretias_noise_destroy(ForetiasNoiseState* state);
 
 /* ── Sparse Merkle ──────────────────────────────── */
-#define FORTIAS_MERKLE_MAX_DEPTH 32
+#define FORETIAS_MERKLE_MAX_DEPTH 32
 
 typedef struct {
-    FortiasHash32 siblings[FORTIAS_MERKLE_MAX_DEPTH];
-    uint8_t       directions[FORTIAS_MERKLE_MAX_DEPTH];
+    ForetiasHash32 siblings[FORETIAS_MERKLE_MAX_DEPTH];
+    uint8_t       directions[FORETIAS_MERKLE_MAX_DEPTH];
     int32_t       depth;
-} FortiasMerkleProof;
+} ForetiasMerkleProof;
 
-FortiasResult fortias_merkle_leaf(
+ForetiasResult foretias_merkle_leaf(
     const uint8_t* data,
     size_t         len,
-    FortiasHash32* leaf_out
+    ForetiasHash32* leaf_out
 );
 
-FortiasResult fortias_merkle_verify(
-    const FortiasHash32*      root,
-    const FortiasHash32*      leaf,
-    const FortiasMerkleProof* proof
+ForetiasResult foretias_merkle_verify(
+    const ForetiasHash32*      root,
+    const ForetiasHash32*      leaf,
+    const ForetiasMerkleProof* proof
 );
 
 /* ── FROST (Ed25519 base) ───────────────────────── */
@@ -279,48 +279,48 @@ typedef struct {
     uint8_t nonce_e[32];     /* SECRET */
     uint8_t commit_D[32];
     uint8_t commit_E[32];
-} FortiasFrostRound1;
+} ForetiasFrostRound1;
 
-FortiasResult fortias_frost_round1(FortiasFrostRound1* out);
+ForetiasResult foretias_frost_round1(ForetiasFrostRound1* out);
 
-FortiasResult fortias_frost_sign_share(
-    const FortiasFrostRound1* my_state,
-    const FortiasFrostShare*  my_key_share,
+ForetiasResult foretias_frost_sign_share(
+    const ForetiasFrostRound1* my_state,
+    const ForetiasFrostShare*  my_key_share,
     const uint8_t*            msg,
     size_t                    msg_len,
     const uint8_t*            all_commits,     /* n * 64 */
     size_t                    n_signers,
     int32_t                   my_index,
-    FortiasFrostShare*        sig_share_out
+    ForetiasFrostShare*        sig_share_out
 );
 
-FortiasResult fortias_frost_aggregate(
-    const FortiasFrostShare* shares,
+ForetiasResult foretias_frost_aggregate(
+    const ForetiasFrostShare* shares,
     const int32_t*           indices,
     size_t                   k,
     const uint8_t*           all_commits,
     const uint8_t*           msg,
     size_t                   msg_len,
-    FortiasSig64*            sig_out
+    ForetiasSig64*            sig_out
 );
 
-void fortias_frost_destroy_round1(FortiasFrostRound1* state);
+void foretias_frost_destroy_round1(ForetiasFrostRound1* state);
 
 /* ── Nullifier ──────────────────────────────────── */
-FortiasResult fortias_nullifier_derive(
-    const FortiasPrivKey32* priv,
+ForetiasResult foretias_nullifier_derive(
+    const ForetiasPrivKey32* priv,
     const uint8_t*          context,
     size_t                  context_len,
-    FortiasNullifier*       out
+    ForetiasNullifier*       out
 );
 
 /* ── RNG ────────────────────────────────────────── */
 /* Core RNG interface. Software backend mixes OS randomness only.
    Custom-plugin backends mix OS + plugin-supplied entropy. See rng_mix.c. */
-FortiasResult fortias_rng_bytes(uint8_t* buf, size_t len);
+ForetiasResult foretias_rng_bytes(uint8_t* buf, size_t len);
 
 /* ── Secure zero ────────────────────────────────── */
-void fortias_memzero(void* ptr, size_t len);
+void foretias_memzero(void* ptr, size_t len);
 
 #ifdef __cplusplus
 }
@@ -329,22 +329,22 @@ void fortias_memzero(void* ptr, size_t len);
 
 ### 4.3 Implementation Notes
 
-- `fortias_ed25519_*`: use libsodium `crypto_sign_*` functions. Private key is stored as 32-byte seed; libsodium's 64-byte secret key is derived internally per call.
-- `fortias_p256_*`: use mbedTLS ECDSA. Keep the API signature-compatible with Ed25519 where possible.
-- `fortias_hash_sha256`: use libsodium `crypto_hash_sha256`.
-- `fortias_hash_blake3`: vendor BLAKE3 reference C implementation.
-- `fortias_hash_legacy_insecure_md5`: simple public-domain MD5. Must include a compile-time warning banner in a comment block. Do NOT link against OpenSSL for this — vendor a small pure-C implementation.
-- `fortias_hash_legacy_insecure_sha1`: same treatment as MD5.
-- `fortias_noise_*`: implement Noise_XX manually using libsodium `crypto_kx_*` and `crypto_aead_chacha20poly1305_ietf_*`. Both Ed25519 and P-256 variants share the state machine; only the ECDH step differs.
-- `fortias_merkle_*`: sparse merkle over SHA-256 via `fortias_hash_sha256`.
-- `fortias_frost_*`: implement Schnorr math over Ed25519 using libsodium `crypto_core_ed25519_*` scalar and point operations. Alternatively, gate this behind a compile flag `FORTIAS_CORE_FROST=1` and stub out when disabled — the Rust layer uses the `frost-ed25519` crate for protocol flow so the C11 primitives are only needed if a future target needs FROST fully inside a custom plugin.
-- `fortias_nullifier_derive`: `HMAC-SHA256(priv, context)`.
-- `fortias_rng_bytes`: software backend reads from `/dev/urandom` on Unix, `BCryptGenRandom` on Windows. A custom plugin may replace this symbol via link-time substitution.
-- `fortias_memzero`: volatile pointer loop. Do not rely on libsodium's `sodium_memzero` to avoid circular dependency.
+- `foretias_ed25519_*`: use libsodium `crypto_sign_*` functions. Private key is stored as 32-byte seed; libsodium's 64-byte secret key is derived internally per call.
+- `foretias_p256_*`: use mbedTLS ECDSA. Keep the API signature-compatible with Ed25519 where possible.
+- `foretias_hash_sha256`: use libsodium `crypto_hash_sha256`.
+- `foretias_hash_blake3`: vendor BLAKE3 reference C implementation.
+- `foretias_hash_legacy_insecure_md5`: simple public-domain MD5. Must include a compile-time warning banner in a comment block. Do NOT link against OpenSSL for this — vendor a small pure-C implementation.
+- `foretias_hash_legacy_insecure_sha1`: same treatment as MD5.
+- `foretias_noise_*`: implement Noise_XX manually using libsodium `crypto_kx_*` and `crypto_aead_chacha20poly1305_ietf_*`. Both Ed25519 and P-256 variants share the state machine; only the ECDH step differs.
+- `foretias_merkle_*`: sparse merkle over SHA-256 via `foretias_hash_sha256`.
+- `foretias_frost_*`: implement Schnorr math over Ed25519 using libsodium `crypto_core_ed25519_*` scalar and point operations. Alternatively, gate this behind a compile flag `FORETIAS_CORE_FROST=1` and stub out when disabled — the Rust layer uses the `frost-ed25519` crate for protocol flow so the C11 primitives are only needed if a future target needs FROST fully inside a custom plugin.
+- `foretias_nullifier_derive`: `HMAC-SHA256(priv, context)`.
+- `foretias_rng_bytes`: software backend reads from `/dev/urandom` on Unix, `BCryptGenRandom` on Windows. A custom plugin may replace this symbol via link-time substitution.
+- `foretias_memzero`: volatile pointer loop. Do not rely on libsodium's `sodium_memzero` to avoid circular dependency.
 
 ### 4.4 C11 Tests
 
-`fortias/p2p/core/tests/test_*.c` — one per source file. Each must:
+`foretias/p2p/core/tests/test_*.c` — one per source file. Each must:
 
 - Test happy path with known test vectors
 - Test every error code is reachable
@@ -358,16 +358,16 @@ Use `ctest` via `CMakeLists.txt`.
 
 ## PART 5 — RUST NODE LAYER
 
-### 5.1 `fortias/p2p/node/Cargo.toml`
+### 5.1 `foretias/p2p/node/Cargo.toml`
 
 ```toml
 [package]
-name    = "fortias_p2p"
+name    = "foretias_p2p"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name        = "fortias_p2p"
+name        = "foretias_p2p"
 crate-type  = ["cdylib", "rlib", "staticlib"]
 
 [features]
@@ -376,7 +376,7 @@ python      = ["dep:pyo3"]
 go          = []
 software-crypto = []
 # Feature flags for custom-plugin backends are documented in
-# FORTIAS_ENCLAVE_SPEC.md and added in the v0.9+ milestones.
+# FORETIAS_ENCLAVE_SPEC.md and added in the v0.9+ milestones.
 
 [dependencies]
 libp2p = { version = "0.54", features = [
@@ -425,7 +425,7 @@ lto       = true
 strip     = true
 ```
 
-### 5.2 `fortias/p2p/node/build.rs`
+### 5.2 `foretias/p2p/node/build.rs`
 
 Compile the C11 core, link libsodium, run bindgen over the public header. Follow this pattern:
 
@@ -456,7 +456,7 @@ fn main() {
     for s in &sources {
         println!("cargo:rerun-if-changed={}", core_dir.join(s).display());
     }
-    println!("cargo:rerun-if-changed={}/include/fortias_core.h", core_dir.display());
+    println!("cargo:rerun-if-changed={}/include/foretias_core.h", core_dir.display());
 
     let mut build = cc::Build::new();
     build
@@ -472,7 +472,7 @@ fn main() {
     for s in &sources {
         build.file(core_dir.join(s));
     }
-    build.compile("fortias_core");
+    build.compile("foretias_core");
 
     println!("cargo:rustc-link-lib=sodium");
     println!("cargo:rustc-link-lib=mbedtls");
@@ -480,16 +480,16 @@ fn main() {
     println!("cargo:rustc-link-lib=mbedx509");
 
     let bindings = bindgen::Builder::default()
-        .header(core_dir.join("include/fortias_core.h").to_str().unwrap())
+        .header(core_dir.join("include/foretias_core.h").to_str().unwrap())
         .clang_arg(format!("-I{}", core_dir.join("include").display()))
-        .allowlist_type("Fortias.*")
-        .allowlist_function("fortias_.*")
-        .allowlist_var("FORTIAS_.*")
+        .allowlist_type("Foretias.*")
+        .allowlist_function("foretias_.*")
+        .allowlist_var("FORETIAS_.*")
         .derive_debug(true)
         .derive_copy(true)
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .generate()
-        .expect("bindgen failed on fortias_core.h");
+        .expect("bindgen failed on foretias_core.h");
 
     let out = PathBuf::from(env::var("OUT_DIR").unwrap());
     bindings.write_to_file(out.join("core_bindings.rs")).unwrap();
@@ -506,26 +506,26 @@ use super::bindings::*;
 use crate::error::CryptoError;
 
 pub struct NoiseSession {
-    state: Box<FortiasNoiseState>,
+    state: Box<ForetiasNoiseState>,
 }
 
 impl NoiseSession {
     pub fn new_initiator_ed25519(
-        my_priv:   &FortiasPrivKey32,
-        their_pub: &FortiasPubKey32,
+        my_priv:   &ForetiasPrivKey32,
+        their_pub: &ForetiasPubKey32,
     ) -> Result<Self, CryptoError> {
         let mut state = Box::new(unsafe { std::mem::zeroed() });
         let rc = unsafe {
-            fortias_noise_init_ed25519(&mut *state, my_priv, their_pub, true)
+            foretias_noise_init_ed25519(&mut *state, my_priv, their_pub, true)
         };
         check(rc)?;
         Ok(Self { state })
     }
 
-    pub fn new_responder_ed25519(my_priv: &FortiasPrivKey32) -> Result<Self, CryptoError> {
+    pub fn new_responder_ed25519(my_priv: &ForetiasPrivKey32) -> Result<Self, CryptoError> {
         let mut state = Box::new(unsafe { std::mem::zeroed() });
         let rc = unsafe {
-            fortias_noise_init_ed25519(&mut *state, my_priv, std::ptr::null(), false)
+            foretias_noise_init_ed25519(&mut *state, my_priv, std::ptr::null(), false)
         };
         check(rc)?;
         Ok(Self { state })
@@ -536,7 +536,7 @@ impl NoiseSession {
 
 impl Drop for NoiseSession {
     fn drop(&mut self) {
-        unsafe { fortias_noise_destroy(&mut *self.state); }
+        unsafe { foretias_noise_destroy(&mut *self.state); }
     }
 }
 ```
@@ -547,7 +547,7 @@ All safe wrappers follow this pattern: Box the state, implement Drop to call the
 
 ## PART 6 — CRYPTO-SERVER ABSTRACTION
 
-This is the layer that makes the cryptographic backend pluggable. It is the single point through which all key operations flow. The MVP ships with a single backend (software). A custom plugin may be slotted in later under the same trait — implementation details of any such plugin live in `FORTIAS_ENCLAVE_SPEC.md`.
+This is the layer that makes the cryptographic backend pluggable. It is the single point through which all key operations flow. The MVP ships with a single backend (software). A custom plugin may be slotted in later under the same trait — implementation details of any such plugin live in `FORETIAS_ENCLAVE_SPEC.md`.
 
 ### 6.1 Design Principles
 
@@ -561,15 +561,15 @@ This is the layer that makes the cryptographic backend pluggable. It is the sing
 
 ```rust
 use crate::core::bindings::{
-    FortiasPubKey32, FortiasPubKey33, FortiasPeerID, FortiasSig64,
-    FortiasHash32, FortiasHash16, FortiasHash20, FortiasCurve,
+    ForetiasPubKey32, ForetiasPubKey33, ForetiasPeerID, ForetiasSig64,
+    ForetiasHash32, ForetiasHash16, ForetiasHash20, ForetiasCurve,
 };
 use crate::error::CryptoError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PublicKeyBytes {
-    Ed25519(FortiasPubKey32),
-    P256Compressed(FortiasPubKey33),
+    Ed25519(ForetiasPubKey32),
+    P256Compressed(ForetiasPubKey33),
 }
 
 #[derive(Debug, Clone)]
@@ -589,7 +589,7 @@ pub struct SealedBlob {
 #[derive(Debug, Clone, Copy)]
 pub struct CryptoServerCapabilities {
     pub backend_name:        &'static str,   // "software" | "custom"
-    pub curve:               FortiasCurve,   // identity curve
+    pub curve:               ForetiasCurve,   // identity curve
     pub supports_proof:      bool,           // see backend_self_proof()
     pub supports_sealing:    bool,
     pub max_sealed_bytes:    usize,
@@ -607,39 +607,39 @@ pub struct CryptoServerCapabilities {
 pub trait CryptoServer: Send + Sync {
     // ── Identity ────────────────────────────────────────
     fn public_key(&self) -> PublicKeyBytes;
-    fn peer_id(&self)    -> FortiasPeerID;
-    fn curve(&self)      -> FortiasCurve;
+    fn peer_id(&self)    -> ForetiasPeerID;
+    fn curve(&self)      -> ForetiasCurve;
     fn capabilities(&self) -> CryptoServerCapabilities;
 
     // ── Signing ─────────────────────────────────────────
-    fn sign(&self, msg: &[u8]) -> Result<FortiasSig64, CryptoError>;
+    fn sign(&self, msg: &[u8]) -> Result<ForetiasSig64, CryptoError>;
 
     // ── Verification (any pub key, not just mine) ───────
     fn verify_ed25519(
         &self,
-        pub_key: &FortiasPubKey32,
+        pub_key: &ForetiasPubKey32,
         msg:     &[u8],
-        sig:     &FortiasSig64,
+        sig:     &ForetiasSig64,
     ) -> Result<bool, CryptoError>;
 
     fn verify_p256(
         &self,
-        pub_key: &FortiasPubKey33,
+        pub_key: &ForetiasPubKey33,
         msg:     &[u8],
-        sig:     &FortiasSig64,
+        sig:     &ForetiasSig64,
     ) -> Result<bool, CryptoError>;
 
     // ── ECDH for Noise ──────────────────────────────────
-    fn ecdh_ed25519(&self, peer_pub: &FortiasPubKey32) -> Result<SharedSecret, CryptoError>;
-    fn ecdh_p256(&self,    peer_pub: &FortiasPubKey33) -> Result<SharedSecret, CryptoError>;
+    fn ecdh_ed25519(&self, peer_pub: &ForetiasPubKey32) -> Result<SharedSecret, CryptoError>;
+    fn ecdh_p256(&self,    peer_pub: &ForetiasPubKey33) -> Result<SharedSecret, CryptoError>;
 
     // ── Hashing (secure) ────────────────────────────────
-    fn sha256(&self, data: &[u8]) -> Result<FortiasHash32, CryptoError>;
-    fn blake3(&self, data: &[u8]) -> Result<FortiasHash32, CryptoError>;
+    fn sha256(&self, data: &[u8]) -> Result<ForetiasHash32, CryptoError>;
+    fn blake3(&self, data: &[u8]) -> Result<ForetiasHash32, CryptoError>;
 
     // ── Hashing (legacy, noncrypto use only) ────────────
-    fn legacy_insecure_md5(&self,  data: &[u8]) -> Result<FortiasHash16, CryptoError>;
-    fn legacy_insecure_sha1(&self, data: &[u8]) -> Result<FortiasHash20, CryptoError>;
+    fn legacy_insecure_md5(&self,  data: &[u8]) -> Result<ForetiasHash16, CryptoError>;
+    fn legacy_insecure_sha1(&self, data: &[u8]) -> Result<ForetiasHash20, CryptoError>;
 
     // ── Sealing ─────────────────────────────────────────
     /// Encrypt data under own public key. Only this instance can unseal.
@@ -657,7 +657,7 @@ pub trait CryptoServer: Send + Sync {
     /// Returns optional backend-specific proof bytes.
     /// The software backend always returns `None`.
     /// A custom plugin may return non-`None`; interpretation is plugin-specific
-    /// and documented in `FORTIAS_ENCLAVE_SPEC.md`.
+    /// and documented in `FORETIAS_ENCLAVE_SPEC.md`.
     fn backend_self_proof(&self, challenge: &[u8]) -> Result<Option<Vec<u8>>, CryptoError>;
 }
 ```
@@ -666,34 +666,34 @@ pub trait CryptoServer: Send + Sync {
 
 ```rust
 pub struct SoftwareCryptoServer {
-    curve:    FortiasCurve,
+    curve:    ForetiasCurve,
     pub_key:  PublicKeyBytes,
     priv_key: Zeroizing<[u8; 32]>,  // zeroizing wraps and drops cleanly
-    peer_id:  FortiasPeerID,
+    peer_id:  ForetiasPeerID,
     // Sealing key — derived from pub+priv via HKDF, kept in memory
     seal_key: Zeroizing<[u8; 32]>,
     frost_shares: parking_lot::Mutex<std::collections::HashMap<String, Zeroizing<Vec<u8>>>>,
 }
 
 impl SoftwareCryptoServer {
-    pub fn generate(curve: FortiasCurve) -> Result<Self, CryptoError> {
+    pub fn generate(curve: ForetiasCurve) -> Result<Self, CryptoError> {
         match curve {
-            FortiasCurve::Ed25519 => {
+            ForetiasCurve::Ed25519 => {
                 let mut pub_bytes  = [0u8; 32];
                 let mut priv_bytes = [0u8; 32];
                 let rc = unsafe {
-                    fortias_ed25519_generate_keypair(
+                    foretias_ed25519_generate_keypair(
                         pub_bytes.as_mut_ptr() as _,
                         priv_bytes.as_mut_ptr() as _,
                     )
                 };
                 check(rc)?;
-                let pub_key = FortiasPubKey32 { bytes: pub_bytes };
-                let mut pid = FortiasPeerID { bytes: [0; 32] };
-                let rc = unsafe { fortias_ed25519_derive_peer_id(&pub_key, &mut pid) };
+                let pub_key = ForetiasPubKey32 { bytes: pub_bytes };
+                let mut pid = ForetiasPeerID { bytes: [0; 32] };
+                let rc = unsafe { foretias_ed25519_derive_peer_id(&pub_key, &mut pid) };
                 check(rc)?;
 
-                // Derive a sealing key via HKDF-SHA256(priv_bytes, "fortias-seal-v1")
+                // Derive a sealing key via HKDF-SHA256(priv_bytes, "foretias-seal-v1")
                 let seal_key = derive_seal_key(&priv_bytes);
 
                 Ok(Self {
@@ -705,7 +705,7 @@ impl SoftwareCryptoServer {
                     frost_shares: Default::default(),
                 })
             }
-            FortiasCurve::P256 => { /* analogous */ todo!() }
+            ForetiasCurve::P256 => { /* analogous */ todo!() }
         }
     }
 }
@@ -727,32 +727,32 @@ typical_ecdh_us (software, P-256):     ~500 μs
 
 ### 6.4 Custom Plugin Backends
 
-Stub these initially so the trait is satisfied for any later backend. Implementation work for v0.9+ — including the plugin module layout, build system, and runtime selection — is documented in `FORTIAS_ENCLAVE_SPEC.md` and is intentionally not part of the v0.1 MVP.
+Stub these initially so the trait is satisfied for any later backend. Implementation work for v0.9+ — including the plugin module layout, build system, and runtime selection — is documented in `FORETIAS_ENCLAVE_SPEC.md` and is intentionally not part of the v0.1 MVP.
 
 ### 6.5 CryptoServer Factory
 
 ```rust
 // src/crypto_server/mod.rs (bottom)
 
-pub fn new_best_available(curve: FortiasCurve) -> Result<Box<dyn CryptoServer>, CryptoError> {
+pub fn new_best_available(curve: ForetiasCurve) -> Result<Box<dyn CryptoServer>, CryptoError> {
     // v0.9+: try custom plugin backends first if their cargo features are enabled.
-    // See FORTIAS_ENCLAVE_SPEC.md for the gating logic.
+    // See FORETIAS_ENCLAVE_SPEC.md for the gating logic.
     let software = SoftwareCryptoServer::generate(curve)?;
     Ok(Box::new(software))
 }
 
-pub fn new_software(curve: FortiasCurve) -> Result<Box<dyn CryptoServer>, CryptoError> {
+pub fn new_software(curve: ForetiasCurve) -> Result<Box<dyn CryptoServer>, CryptoError> {
     Ok(Box::new(SoftwareCryptoServer::generate(curve)?))
 }
 ```
 
 ---
 
-## PART 7 — FORTIAS DOMAIN TYPES IN RUST
+## PART 7 — FORETIAS DOMAIN TYPES IN RUST
 
-These mirror the existing Python types. They exist to let the Rust side carry TickRecord / Fortis / Calendar values natively and to let the Python side either use the Rust types (via PyO3) or keep using the existing pure-Python implementation.
+These mirror the existing Python types. They exist to let the Rust side carry TickRecord / Foretis / Calendar values natively and to let the Python side either use the Rust types (via PyO3) or keep using the existing pure-Python implementation.
 
-### 7.1 `src/fortias/tick.rs`
+### 7.1 `src/foretias/tick.rs`
 
 ```rust
 use serde::{Deserialize, Serialize};
@@ -762,12 +762,12 @@ use crate::core::bindings::*;
 pub struct TickRecord {
     pub tick_number:     u64,       // nanoseconds since Unix epoch
     pub public_key:      Vec<u8>,   // hex-decoded
-    pub forward_fortis:  Vec<u8>,
-    pub backward_fortis: Vec<u8>,
+    pub forward_foretis:  Vec<u8>,
+    pub backward_foretis: Vec<u8>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Fortis {
+pub struct Foretis {
     pub tick_number:     u64,
     pub content_hash:    [u8; 32], // SHA-256
     pub signature:       [u8; 64], // Ed25519 or P-256
@@ -783,8 +783,8 @@ pub fn stamp(
     content: &[u8],
     echo:    &str,
     tbn:     &str,
-) -> Result<Fortis, NodeError> {
-    // Mirrors the existing _stamp() in fortias/_timebeing.py
+) -> Result<Foretis, NodeError> {
+    // Mirrors the existing _stamp() in foretias/_timebeing.py
     let mut sig_input = Vec::with_capacity(16 + 8 + content.len());
     sig_input.extend_from_slice(tbid);
     sig_input.extend_from_slice(&tick_number.to_be_bytes());
@@ -793,7 +793,7 @@ pub fn stamp(
     let sig = server.sign(&sig_input)?;
     let content_hash = server.sha256(content)?;
 
-    Ok(Fortis {
+    Ok(Foretis {
         tick_number,
         content_hash: content_hash.bytes,
         signature:    sig.bytes,
@@ -805,34 +805,34 @@ pub fn stamp(
 
 pub fn verify(
     server:  &dyn CryptoServer,
-    fortis:  &Fortis,
+    foretis:  &Foretis,
     content: &[u8],
     calendar: &dyn CalendarLookup,
 ) -> Result<bool, NodeError> {
-    // Mirrors the existing _verify() in fortias/_timebeing.py
+    // Mirrors the existing _verify() in foretias/_timebeing.py
 
     // 1. Content hash check
     let recomputed = server.sha256(content)?;
-    if recomputed.bytes != fortis.content_hash {
+    if recomputed.bytes != foretis.content_hash {
         return Ok(false);
     }
 
     // 2. Look up the public key at this tick
-    let records = calendar.get(fortis.tick_number, 1)?;
+    let records = calendar.get(foretis.tick_number, 1)?;
     let rec = records.first().ok_or(NodeError::NotFound("tick".into()))?;
 
     // 3. Reconstruct signature input
     let mut sig_input = Vec::new();
-    sig_input.extend_from_slice(&fortis.tbid);
-    sig_input.extend_from_slice(&fortis.tick_number.to_be_bytes());
+    sig_input.extend_from_slice(&foretis.tbid);
+    sig_input.extend_from_slice(&foretis.tick_number.to_be_bytes());
     sig_input.extend_from_slice(content);
 
     // 4. Verify — assume Ed25519 for now; P-256 path when curve stored in calendar
-    let pub_key = FortiasPubKey32 {
+    let pub_key = ForetiasPubKey32 {
         bytes: rec.public_key[..32].try_into()
             .map_err(|_| NodeError::BadFormat("public_key length".into()))?,
     };
-    let sig = FortiasSig64 { bytes: fortis.signature };
+    let sig = ForetiasSig64 { bytes: foretis.signature };
     let ok = server.verify_ed25519(&pub_key, &sig_input, &sig)?;
     Ok(ok)
 }
@@ -843,7 +843,7 @@ pub trait CalendarLookup: Send + Sync {
 }
 ```
 
-### 7.2 `src/fortias/calendar.rs`
+### 7.2 `src/foretias/calendar.rs`
 
 ```rust
 use super::tick::{TickRecord, CalendarLookup};
@@ -893,10 +893,10 @@ impl CalendarLookup for Calendar {
 
 For v0.1 the calendar is held in memory and persisted with the existing
 plaintext JSON format inherited from the Python prototype. The encrypted
-JSONL upgrade is a v0.7 milestone documented in `FORTIAS_P2P_SPEC.md`
+JSONL upgrade is a v0.7 milestone documented in `FORETIAS_P2P_SPEC.md`
 Part 12.
 
-### 7.3 `src/fortias/timefamily.rs`
+### 7.3 `src/foretias/timefamily.rs`
 
 ```rust
 /// Rust-side TimeFamily. Mirrors the Python TimeFamily orchestrator.
@@ -931,18 +931,18 @@ impl TimeFamily {
         // ... spawn ticker thread if !serialized ...
     }
 
-    pub fn stamp(&self, content: &[u8], echo: &str) -> Result<Fortis, NodeError> {
+    pub fn stamp(&self, content: &[u8], echo: &str) -> Result<Foretis, NodeError> {
         let tick_number = *self.current_tick.lock();
-        crate::fortias::tick::stamp(
+        crate::foretias::tick::stamp(
             self.server.as_ref(), &self.tbid, tick_number,
             content, echo, &self.tbn,
         )
     }
 
-    pub fn verify(&self, fortis: &Fortis, content: &[u8]) -> Result<bool, NodeError> {
+    pub fn verify(&self, foretis: &Foretis, content: &[u8]) -> Result<bool, NodeError> {
         let cal = self.calendar.read();
-        crate::fortias::tick::verify(
-            self.server.as_ref(), fortis, content, &*cal,
+        crate::foretias::tick::verify(
+            self.server.as_ref(), foretis, content, &*cal,
         )
     }
 
@@ -958,25 +958,25 @@ impl TimeFamily {
 
 The existing Python code must keep working. The new Rust code is added alongside and called via PyO3.
 
-**Mode A (default, unchanged):** `fortias/` package runs in pure Python using
+**Mode A (default, unchanged):** `foretias/` package runs in pure Python using
 the existing Chronomatter / Calendar / TimeFamily implementations and
 the Python `cryptography` library.
 
-**Mode B (opt-in):** `fortias/` package internally delegates to
-`fortias_p2p` Rust crate for all crypto, networking, DHT, gossip, epoch,
+**Mode B (opt-in):** `foretias/` package internally delegates to
+`foretias_p2p` Rust crate for all crypto, networking, DHT, gossip, epoch,
 and P2P work. The Python user-facing API does not change.
 
-Selection is via `Config.use_native = True` or environment variable `FORTIAS_USE_NATIVE=1`.
+Selection is via `Config.use_native = True` or environment variable `FORETIAS_USE_NATIVE=1`.
 
-### 13.2 `fortias/p2p/bindings/python/fortias_p2p/__init__.py`
+### 13.2 `foretias/p2p/bindings/python/foretias_p2p/__init__.py`
 
 ```python
-"""Fortias P2P native bindings. Loads the Rust-built .so and re-exports the API."""
+"""Foretias P2P native bindings. Loads the Rust-built .so and re-exports the API."""
 
-from ._fortias_p2p import (
+from ._foretias_p2p import (
     Node,
     CryptoServer,
-    Fortis,
+    Foretis,
     TickRecord,
     Calendar,
     TimeFamily,
@@ -986,36 +986,36 @@ from ._fortias_p2p import (
 )
 
 __all__ = [
-    "Node", "CryptoServer", "Fortis", "TickRecord", "Calendar",
+    "Node", "CryptoServer", "Foretis", "TickRecord", "Calendar",
     "TimeFamily", "NodeEvent", "ProbityReport", "EpochSnapshot",
 ]
 ```
 
-### 13.3 PyO3 Bindings — `fortias/p2p/node/src/api/python.rs`
+### 13.3 PyO3 Bindings — `foretias/p2p/node/src/api/python.rs`
 
 Expose:
 
 - `CryptoServer` — construct via `CryptoServer(curve="ed25519")` or `CryptoServer.new_best_available()`
 - `TimeFamily` — Rust-side orchestrator
 - `Node` — the full P2P node
-- `Fortis`, `TickRecord` — data types
+- `Foretis`, `TickRecord` — data types
 - `NodeEvent` polling API
 
 Method names match the existing Python API where relevant:
 
 ```python
-from fortias_p2p import TimeFamily, CryptoServer
+from foretias_p2p import TimeFamily, CryptoServer
 
 cs = CryptoServer.new_best_available(curve="ed25519")
 tbf = TimeFamily(server=cs, chronon_ns=60_000_000_000, serialized=False)
 
-fortis = tbf.stamp("hello world")
-assert tbf.verify("hello world", fortis)
+foretis = tbf.stamp("hello world")
+assert tbf.verify("hello world", foretis)
 ```
 
 ### 13.4 Existing Python Integration
 
-Modify `fortias/timefamily.py`:
+Modify `foretias/timefamily.py`:
 
 ```python
 import os
@@ -1024,7 +1024,7 @@ from .config import Config
 def _should_use_native(config: Config) -> bool:
     if getattr(config, "use_native", False):
         return True
-    return os.environ.get("FORTIAS_USE_NATIVE", "0") == "1"
+    return os.environ.get("FORETIAS_USE_NATIVE", "0") == "1"
 
 
 class TimeFamily:
@@ -1032,7 +1032,7 @@ class TimeFamily:
         config = kwargs.get("config") or Config.resolve(kwargs.get("persist_path"))
         if _should_use_native(config):
             try:
-                from fortias_p2p import TimeFamily as NativeTimeFamily
+                from foretias_p2p import TimeFamily as NativeTimeFamily
                 # Construct the native one and wrap it in a compat shim so the
                 # rest of the Python code can use either without branching.
                 return NativeTimeFamilyShim(NativeTimeFamily(*args, **kwargs))
@@ -1053,4 +1053,4 @@ present, and lets advanced users opt into the native path.
 
 # END OF MVP SPECIFICATION
 
-(@human — when v0.1 lands, the C11 core, Rust crate, and Python CLI are all wired together end-to-end. The next document to consult is `FORTIAS_P2P_SPEC.md` for v0.2–v0.8.)
+(@human — when v0.1 lands, the C11 core, Rust crate, and Python CLI are all wired together end-to-end. The next document to consult is `FORETIAS_P2P_SPEC.md` for v0.2–v0.8.)

@@ -195,13 +195,13 @@ impl Chronomatter {
                 Err(_) => obs.on_auto_attest_failed(),
             }
         }
-        let (forward_fortis, backward_fortis, aa_nonce, stamps) = result?;
+        let (forward_foretis, backward_foretis, aa_nonce, stamps) = result?;
 
         Ok(TickRecord {
             tick_number: tick,
             public_key: new_pub.to_vec(),
-            forward_fortis,
-            backward_fortis,
+            forward_foretis,
+            backward_foretis,
             aa_nonce,
             stamps_per_tick: stamps,
             external_attestations: Vec::new(),
@@ -232,10 +232,10 @@ impl Chronomatter {
         // Increment stamp counter — this count is included in the auto-attestation blob
         self.stamps_per_tick.fetch_add(1, SeqCst);
 
-        self.create_fortis(tick, content, echo)
+        self.create_foretis(tick, content, echo)
     }
 
-    fn create_fortis(&self, tick: u64, content: Vec<u8>, echo: String) -> Result<Foretis, NodeError> {
+    fn create_foretis(&self, tick: u64, content: Vec<u8>, echo: String) -> Result<Foretis, NodeError> {
         let tbid = self.tbid;
         let tbn = self.tbn.clone();
 
@@ -415,7 +415,7 @@ mod tests {
     }
 
     #[test]
-    fn stamp_returns_fortis_with_correct_tick() {
+    fn stamp_returns_foretis_with_correct_tick() {
         let (cm, _last, calendar) = make_chronomatter();
         let foretis = cm.stamp(b"hello".to_vec(), "echo".to_string()).unwrap();
         assert_eq!(foretis.tick_number, 1);

@@ -18,7 +18,7 @@ fn main() {
     for s in &sources {
         println!("cargo:rerun-if-changed={}", core_dir.join(s).display());
     }
-    println!("cargo:rerun-if-changed={}/include/fortias_core.h", core_dir.display());
+    println!("cargo:rerun-if-changed={}/include/foretias_core.h", core_dir.display());
 
     let mut build = cc::Build::new();
     build.std("c11")
@@ -30,16 +30,16 @@ fn main() {
     for s in &sources {
         build.file(core_dir.join(s));
     }
-    build.compile("fortias_core");
+    build.compile("foretias_core");
     println!("cargo:rustc-link-lib=sodium");
     println!("cargo:rustc-link-lib=crypto");
 
     let bindings = bindgen::Builder::default()
-        .header(core_dir.join("include/fortias_core.h").to_str().unwrap())
+        .header(core_dir.join("include/foretias_core.h").to_str().unwrap())
         .clang_arg(format!("-I{}", core_dir.join("include").display()))
-        .allowlist_type("Fortias.*")
-        .allowlist_function("fortias_.*")
-        .allowlist_var("FORTIAS_.*")
+        .allowlist_type("Foretias.*")
+        .allowlist_function("foretias_.*")
+        .allowlist_var("FORETIAS_.*")
         .derive_debug(true).derive_copy(true)
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .generate()
@@ -51,54 +51,54 @@ fn main() {
     // Post-process: rename C-generated identifiers to foretias/Foretias naming
     let raw = std::fs::read_to_string(out.join("core_bindings.rs")).unwrap();
     let mut src = raw
-        .replace("FortiasResult_FORTIAS_OK", "ForetiasResult_FORETIAS_OK")
-        .replace("FortiasResult_FORTIAS_ERR_", "ForetiasResult_FORETIAS_ERR_")
-        .replace("FortiasCurve_FORTIAS_CURVE_", "ForetiasCurve_FORETIAS_CURVE_")
-        .replace("FORTIAS_CORE_VERSION_MAJOR", "FORETIAS_CORE_VERSION_MAJOR")
-        .replace("FORTIAS_CORE_VERSION_MINOR", "FORETIAS_CORE_VERSION_MINOR")
-        .replace("FORTIAS_NOISE_MAX_MSG", "FORETIAS_NOISE_MAX_MSG")
-        .replace("FORTIAS_MERKLE_MAX_DEPTH", "FORETIAS_MERKLE_MAX_DEPTH");
+        .replace("ForetiasResult_FORETIAS_OK", "ForetiasResult_FORETIAS_OK")
+        .replace("ForetiasResult_FORETIAS_ERR_", "ForetiasResult_FORETIAS_ERR_")
+        .replace("ForetiasCurve_FORETIAS_CURVE_", "ForetiasCurve_FORETIAS_CURVE_")
+        .replace("FORETIAS_CORE_VERSION_MAJOR", "FORETIAS_CORE_VERSION_MAJOR")
+        .replace("FORETIAS_CORE_VERSION_MINOR", "FORETIAS_CORE_VERSION_MINOR")
+        .replace("FORETIAS_NOISE_MAX_MSG", "FORETIAS_NOISE_MAX_MSG")
+        .replace("FORETIAS_MERKLE_MAX_DEPTH", "FORETIAS_MERKLE_MAX_DEPTH");
 
-    // Rename Fortias* types to Foretias* (but not Fortis which is a domain struct)
+    // Rename Foretias* types to Foretias* (but not Foretis which is a domain struct)
     let type_renames = [
-        ("FortiasCoreVersion", "ForetiasCoreVersion"),
-        ("FortiasResult", "ForetiasResult"),
-        ("FortiasCurve", "ForetiasCurve"),
-        ("FortiasPubKey32", "ForetiasPubKey32"),
-        ("FortiasPubKey33", "ForetiasPubKey33"),
-        ("FortiasPrivKey32", "ForetiasPrivKey32"),
-        ("FortiasPeerID", "ForetiasPeerID"),
-        ("FortiasSig64", "ForetiasSig64"),
-        ("FortiasHash32", "ForetiasHash32"),
-        ("FortiasHash16", "ForetiasHash16"),
-        ("FortiasHash20", "ForetiasHash20"),
-        ("FortiasNullifier", "ForetiasNullifier"),
-        ("FortiasFrostShare", "ForetiasFrostShare"),
-        ("FortiasMerkleProof", "ForetiasMerkleProof"),
-        ("FortiasFrostRound1", "ForetiasFrostRound1"),
-        ("FortiasPrivKey", "ForetiasPrivKey"),
-        ("FortiasNoiseState", "ForetiasNoiseState"),
+        ("ForetiasCoreVersion", "ForetiasCoreVersion"),
+        ("ForetiasResult", "ForetiasResult"),
+        ("ForetiasCurve", "ForetiasCurve"),
+        ("ForetiasPubKey32", "ForetiasPubKey32"),
+        ("ForetiasPubKey33", "ForetiasPubKey33"),
+        ("ForetiasPrivKey32", "ForetiasPrivKey32"),
+        ("ForetiasPeerID", "ForetiasPeerID"),
+        ("ForetiasSig64", "ForetiasSig64"),
+        ("ForetiasHash32", "ForetiasHash32"),
+        ("ForetiasHash16", "ForetiasHash16"),
+        ("ForetiasHash20", "ForetiasHash20"),
+        ("ForetiasNullifier", "ForetiasNullifier"),
+        ("ForetiasFrostShare", "ForetiasFrostShare"),
+        ("ForetiasMerkleProof", "ForetiasMerkleProof"),
+        ("ForetiasFrostRound1", "ForetiasFrostRound1"),
+        ("ForetiasPrivKey", "ForetiasPrivKey"),
+        ("ForetiasNoiseState", "ForetiasNoiseState"),
     ];
     for (from, to) in type_renames {
         src = src.replace(from, to);
     }
 
-    // Add #[link_name] attributes and rename fortias_* → foretias_* function names
+    // Add #[link_name] attributes and rename foretias_* → foretias_* function names
     let mut out_lines: Vec<String> = src.lines().map(|s| s.to_string()).collect();
     let mut final_lines = Vec::new();
     let mut i = 0;
     while i < out_lines.len() {
         let line = &out_lines[i];
-        if line.contains("pub fn fortias_") {
+        if line.contains("pub fn foretias_") {
             let indent = line.chars().take_while(|c| c.is_whitespace()).collect::<String>();
-            let fn_part = &line[line.find("pub fn fortias_").unwrap()..];
+            let fn_part = &line[line.find("pub fn foretias_").unwrap()..];
 
             let fn_name = fn_part.trim_start()
                 .strip_prefix("pub fn ").unwrap()
                 .split('(').next().unwrap()
                 .trim().to_string();
-            let c_name = fn_name.replace("foretias_", "fortias_");
-            let rust_name = format!("foretias_{}", fn_name.strip_prefix("fortias_").unwrap());
+            let c_name = fn_name.replace("foretias_", "foretias_");
+            let rust_name = format!("foretias_{}", fn_name.strip_prefix("foretias_").unwrap());
 
             let mut fn_lines = vec![line.clone()];
             if !line.contains(';') {

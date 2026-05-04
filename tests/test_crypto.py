@@ -1,4 +1,4 @@
-"""Unit tests for fortias.crypto."""
+"""Unit tests for foretias.crypto."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import hashlib
 
 import pytest
 
-from fortias.crypto import (
+from foretias.crypto import (
     generate_keypair,
     sha256,
     sha256_hex,

@@ -191,8 +191,8 @@ mod tests {
         TickRecord {
             tick_number,
             public_key: vec![0u8; 32],
-            forward_fortis: vec![],
-            backward_fortis: vec![],
+            forward_foretis: vec![],
+            backward_foretis: vec![],
             aa_nonce: [0u8; 16],
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
@@ -307,7 +307,7 @@ mod tests {
         }
 
         for i in 0..5u64 {
-            let (forward_fortis, backward_fortis, nonce) = if i == 0 {
+            let (forward_foretis, backward_foretis, nonce) = if i == 0 {
                 let (ma_blob, nonce) = auto_attestation_blob(&tbid_str, i, &keypairs[0].0, i, &keypairs[0].0).unwrap();
                 let sig = ed25519_sign(&ForetiasPrivKey32 { bytes: *keypairs[0].1 }, &ma_blob).unwrap();
                 (sig.bytes.to_vec(), sig.bytes.to_vec(), nonce)
@@ -321,8 +321,8 @@ mod tests {
             cal.append(TickRecord {
                 tick_number: i,
                 public_key: keypairs[i as usize].0.to_vec(),
-                forward_fortis,
-                backward_fortis,
+                forward_foretis,
+                backward_foretis,
                 aa_nonce: nonce,
                 stamps_per_tick: 0,
                 external_attestations: Vec::new(),
@@ -354,7 +354,7 @@ mod tests {
         }
 
         for i in 0..5u64 {
-            let (forward_fortis, backward_fortis, nonce) = if i == 0 {
+            let (forward_foretis, backward_foretis, nonce) = if i == 0 {
                 let (ma_blob, nonce) = auto_attestation_blob(&tbid_str, i, &keypairs[0].0, i, &keypairs[0].0).unwrap();
                 let sig = ed25519_sign(&ForetiasPrivKey32 { bytes: *keypairs[0].1 }, &ma_blob).unwrap();
                 (sig.bytes.to_vec(), sig.bytes.to_vec(), nonce)
@@ -368,8 +368,8 @@ mod tests {
             cal.append(TickRecord {
                 tick_number: i,
                 public_key: keypairs[i as usize].0.to_vec(),
-                forward_fortis,
-                backward_fortis,
+                forward_foretis,
+                backward_foretis,
                 aa_nonce: nonce,
                 stamps_per_tick: 0,
                 external_attestations: Vec::new(),
@@ -391,7 +391,7 @@ mod tests {
     #[test]
     fn calendar_save_is_atomic() {
         use std::path::Path;
-        let path = "/tmp/fortias-test-atomic-save.json";
+        let path = "/tmp/foretias-test-atomic-save.json";
         let tmp_path = format!("{}.tmp", path);
 
         let mut cal = Calendar::new([0xAA; 16], "atomic-test");
@@ -410,7 +410,7 @@ mod tests {
 
     #[test]
     fn calendar_crash_recovery_from_tmp() {
-        let path = "/tmp/fortias-test-crash-recovery.json";
+        let path = "/tmp/foretias-test-crash-recovery.json";
         let tmp_path = format!("{}.tmp", path);
 
         // Simulate crash: main file has 1 tick, .tmp has 2 ticks (write completed, rename didn't)
@@ -435,7 +435,7 @@ mod tests {
 
     #[test]
     fn calendar_crash_recovery_ignores_stale_tmp() {
-        let path = "/tmp/fortias-test-stale-tmp.json";
+        let path = "/tmp/foretias-test-stale-tmp.json";
         let tmp_path = format!("{}.tmp", path);
 
         // Main file has 3 ticks, .tmp has only 1 (stale/corrupt .tmp)
@@ -460,7 +460,7 @@ mod tests {
 
     #[test]
     fn calendar_crash_recovery_corrupt_tmp() {
-        let path = "/tmp/fortias-test-corrupt-tmp.json";
+        let path = "/tmp/foretias-test-corrupt-tmp.json";
         let tmp_path = format!("{}.tmp", path);
 
         // Main file is valid, .tmp contains garbage

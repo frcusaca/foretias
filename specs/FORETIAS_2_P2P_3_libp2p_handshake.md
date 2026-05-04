@@ -1,8 +1,8 @@
-# Fortias — P2P Sub-Spec 2: libp2p Handshake (v0.3)
+# Foretias — P2P Sub-Spec 2: libp2p Handshake (v0.3)
 
 **Milestone tag:** `v0.3-libp2p-handshake`
 **Prereq:** `v0.2-direct-p2p-mutual-attestation` must be tagged.
-**Next:** `FORTIAS_2_P2P_4_dht_discovery.md` (v0.4 — adds Kademlia and hybrid transport selection).
+**Next:** `FORETIAS_2_P2P_4_dht_discovery.md` (v0.4 — adds Kademlia and hybrid transport selection).
 
 **Target:** AI Coding Specialist. `(@human ...)` blocks are for human readers.
 
@@ -11,7 +11,7 @@
 ## READING ORDER
 
 1. Confirm `v0.2-direct-p2p-mutual-attestation` is tagged.
-2. Read `FORTIAS_2_P2P_2_direct_p2p_mutual_attestation.md` end to end — the `PeerTransport` trait (§5) and `Communerd` component are the seam this sub-spec extends.
+2. Read `FORETIAS_2_P2P_2_direct_p2p_mutual_attestation.md` end to end — the `PeerTransport` trait (§5) and `Communerd` component are the seam this sub-spec extends.
 3. Read this document end to end.
 4. Confirm the identity-bridge approach (§4.4) is understood before touching `CryptoServer`.
 
@@ -38,16 +38,16 @@ design decision made during brainstorming.)
 # Both servers already running with v0.2 mutual attestation
 # Add p2p flags to each:
 
-$ fortias serve --addr 127.0.0.1:4001 --peer 127.0.0.1:4002 \
+$ foretias serve --addr 127.0.0.1:4001 --peer 127.0.0.1:4002 \
     --p2p-listen /ip4/127.0.0.1/tcp/9901 \
 
-$ fortias serve --addr 127.0.0.1:9902 --peer 127.0.0.1:9901 \
+$ foretias serve --addr 127.0.0.1:9902 --peer 127.0.0.1:9901 \
     --p2p-listen /ip4/127.0.0.1/tcp/9902 \
     --p2p-dial /ip4/127.0.0.1/tcp/9901/p2p/<PeerID-A>
 
 # Expected logs on B within 10 s:
 INFO swarm: connection established peer=<PeerID-A>
-INFO identify: agent="fortias/0.3.0" peer=<PeerID-A>
+INFO identify: agent="foretias/0.3.0" peer=<PeerID-A>
 INFO ping: rtt=312µs peer=<PeerID-A>
 ```
 
@@ -71,11 +71,11 @@ v0.2 mutual-attestation logs must still appear alongside the libp2p logs — bot
 ### 4.1 New files
 
 ```
-fortias-node/src/
+foretias-node/src/
 └── network/
     ├── mod.rs               re-exports; pub mod network; added to lib.rs
     ├── swarm.rs             build_and_spawn_swarm(), swarm event loop
-    ├── behaviour.rs         FortiasBehaviour derive
+    ├── behaviour.rs         ForetiasBehaviour derive
     ├── identity_bridge.rs   CryptoServer → libp2p::Keypair
     └── events.rs            NetworkEvent enum
 ```
@@ -89,24 +89,24 @@ libp2p = { version = "0.55", default-features = false, features = [
 multiaddr = "0.18"
 ```
 
-### 4.3 `FortiasBehaviour`
+### 4.3 `ForetiasBehaviour`
 
 ```rust
 // src/network/behaviour.rs
 use libp2p::{identify, ping, swarm::NetworkBehaviour};
 
 #[derive(NetworkBehaviour)]
-pub struct FortiasBehaviour {
+pub struct ForetiasBehaviour {
     pub identify: identify::Behaviour,
     pub ping:     ping::Behaviour,
 }
 
-impl FortiasBehaviour {
+impl ForetiasBehaviour {
     pub fn new(local_pub: libp2p::identity::PublicKey) -> Self {
         Self {
             identify: identify::Behaviour::new(
-                identify::Config::new("fortias/0.3.0".into(), local_pub.clone())
-                    .with_agent_version(format!("fortias/{}", env!("CARGO_PKG_VERSION")))
+                identify::Config::new("foretias/0.3.0".into(), local_pub.clone())
+                    .with_agent_version(format!("foretias/{}", env!("CARGO_PKG_VERSION")))
             ),
             ping: ping::Behaviour::new(ping::Config::new()),
         }
@@ -114,7 +114,7 @@ impl FortiasBehaviour {
 }
 ```
 
-(@human — protocol string `"fortias/0.3.0"` identifies the libp2p
+(@human — protocol string `"foretias/0.3.0"` identifies the libp2p
 protocol version, distinct from the cargo package version. Bump it only
 on wire-incompatible changes, not on every patch.)
 
@@ -164,7 +164,7 @@ pub async fn build_and_spawn_swarm(
         .with_tokio()
         .with_tcp(tcp::Config::default().nodelay(true), noise::Config::new, yamux::Config::default)
         .map_err(|e| NodeError::Internal(format!("{e}")))?
-        .with_behaviour(|key| FortiasBehaviour::new(key.public()))
+        .with_behaviour(|key| ForetiasBehaviour::new(key.public()))
         .map_err(|e| NodeError::Internal(format!("{e}")))?
         .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
         .build();
@@ -270,7 +270,7 @@ Demo script `scripts/demo_v0_3_libp2p.sh` adds `--p2p-listen`/`--p2p-dial` to th
 ```
 [ ] v0.3.1  Add libp2p to Cargo.toml; cargo build succeeds.
 [ ] v0.3.2  identity_bridge.rs + CryptoServer::as_any + export_ed25519_seed.
-[ ] v0.3.3  FortiasBehaviour, swarm.rs, events.rs.
+[ ] v0.3.3  ForetiasBehaviour, swarm.rs, events.rs.
 [ ] v0.3.4  Wire enable_p2p into TimeFamily; CLI flags parse.
 [ ] v0.3.5  Integration test two_swarms_connect_and_identify passes.
 [ ] v0.3.6  Demo script passes.

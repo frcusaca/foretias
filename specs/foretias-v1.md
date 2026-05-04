@@ -1,4 +1,4 @@
-# Fortias v1 — Product and Technical Specification
+# Foretias v1 — Product and Technical Specification
 
 **Free and Open-source Resilient Time Integrity Attestation Service**
 
@@ -12,17 +12,17 @@
 
 Any party with access to a system clock can set the time backward. Any party holding a private key can sign data at any time, claiming any moment. This means **digital timestamps are inherently forgeable**: there is no cryptographic guarantee that a timestamp was produced at the moment it claims, only that someone with the right keys signed it.
 
-### 1.2 The Fortias Guarantee
+### 1.2 The Foretias Guarantee
 
-Fortias makes backdating impossible not by policy, but by cryptographic construction. A Fortias timestamp (a **Fortis**) binds content to a tick number in a time being's calendar. Each tick has its own Ed25519 keypair. When a time being advances from tick n to tick n+1, it **destroys the private key for tick n**. After destruction, no valid signature for tick n can ever be produced again.
+Foretias makes backdating impossible not by policy, but by cryptographic construction. A Foretias timestamp (a **Foretis**) binds content to a tick number in a time being's calendar. Each tick has its own Ed25519 keypair. When a time being advances from tick n to tick n+1, it **destroys the private key for tick n**. After destruction, no valid signature for tick n can ever be produced again.
 
 The guarantee is simple:
 
-> `Fortis(content)` always returns a tick number >= any previously issued tick. It is structurally impossible to produce a Fortis that appears to be from the past.
+> `Foretis(content)` always returns a tick number >= any previously issued tick. It is structurally impossible to produce a Foretis that appears to be from the past.
 
-### 1.3 What Fortias v1 Is
+### 1.3 What Foretias v1 Is
 
-Fortias v1 is a **Python library** that provides the core time being: a self-sovereign entity that stamps content and verifies stamps through its own local tick chain. This time being can be instantiated within your own system to record when things happened.
+Foretias v1 is a **Python library** that provides the core time being: a self-sovereign entity that stamps content and verifies stamps through its own local tick chain. This time being can be instantiated within your own system to record when things happened.
 
 ---
 
@@ -32,7 +32,7 @@ Fortias v1 is a **Python library** that provides the core time being: a self-sov
 
 A **time family** is the conceptual entity that manages temporal integrity. In the v1 implementation, this role is split across three collaborating classes: `Chronomatter`, `Calendar`, and `TimeFamily`. See Section 2.7 for the architecture.
 
-A **time being** is a computational entity devoted to maintaining temporal integrity. It has a persistent identity, an internal clock, and a way of proving Fortises that it issued for a piece of data was signed at the time of the fortis.
+A **time being** is a computational entity devoted to maintaining temporal integrity. It has a persistent identity, an internal clock, and a way of proving Foretises that it issued for a piece of data was signed at the time of the foretis.
 
 **Attributes:**
 
@@ -49,7 +49,7 @@ A **time being** is a computational entity devoted to maintaining temporal integ
 
 **Lifecycle:**
 
-1. **Created** with `tbid`, `tbn`, `chronon`, and `serialized`. Generates its first keypair for tick 0. The calendar is initialized with one record: `tick_number` = 0, `public_key` = the new public key, `forward_fortis` and `backward_fortis` are computed from a self-transition auto-attestation (auto-attestation(genesis, genesis)).
+1. **Created** with `tbid`, `tbn`, `chronon`, and `serialized`. Generates its first keypair for tick 0. The calendar is initialized with one record: `tick_number` = 0, `public_key` = the new public key, `forward_foretis` and `backward_foretis` are computed from a self-transition auto-attestation (auto-attestation(genesis, genesis)).
 2. **Advances ticks**:
    - If `serialized = False`: a background daemon thread calls `tick()` every `chronon_ns` nanoseconds. `stamp()` simply signs under the current tick.
    - If `serialized = True`: no background thread. `tick()` advances only when `stamp()` is called, and only one caller is permitted at a time (mutex-protected).
@@ -64,44 +64,44 @@ A **time being** is a computational entity devoted to maintaining temporal integ
 **Invariants:**
 
 - A time being never produces two different signatures for the same `(tick, content_hash)` pair.
-- No entry in the calendar has `forward_fortis = None` or `backward_fortis = None`. Genesis records a self-transition; every other record records a transition from its predecessor.
-- All consecutive pairs in the calendar are auto-attesting via `backward_fortis` and `forward_fortis`, verifiable using their respective public keys.
-- Public keys can only attest to Fortises signed after their own start boundary. The existence of a subsequent tick defines the end of the period during which a Fortis could have taken place.
+- No entry in the calendar has `forward_foretis = None` or `backward_foretis = None`. Genesis records a self-transition; every other record records a transition from its predecessor.
+- All consecutive pairs in the calendar are auto-attesting via `backward_foretis` and `forward_foretis`, verifiable using their respective public keys.
+- Public keys can only attest to Foretises signed after their own start boundary. The existence of a subsequent tick defines the end of the period during which a Foretis could have taken place.
 
-### 2.2 Tick: the Fortias Self-Attestation Methodology
+### 2.2 Tick: the Foretias Self-Attestation Methodology
 
-A **tick** is a discrete duration of time in the Fortias protocol. Each tick has its own Ed25519 keypair. Ticks form a numbered chain: tick 0, tick 1, tick 2, ...
+A **tick** is a discrete duration of time in the Foretias protocol. Each tick has its own Ed25519 keypair. Ticks form a numbered chain: tick 0, tick 1, tick 2, ...
 
 Ticks are numbered from genesis; each `tick_number` represents nanoseconds past the Unix epoch. The `chronon_ns` is adhered to for non-serialized time beings at best effort — system load and clock synchronization may cause slight drift.  Nanoseconds are a practical convenience for v1 (fits in a float with sub-nanosecond jitter); not a fundamental limit of the protocol.
 
-**The tick: Fortias Auto-Attestation:**
+**The tick: Foretias Auto-Attestation:**
 
 A tick occurs between two chronon. For clarity sake, Let's call the chronon `OLD`, and `NEW`. `OLD` has duration preceeds NEW entirely.
 For the old chronon, we have it's begining `OLD.tick_number`, we also have `OLD.private_key`, `OLD.secrete_key`:
 
 1. Determine and store `NEW.tick_number`, roughly the current unix epoch nanoseconds.
 2. Generate keypair `(NEW.public_key, NEW.secret_key)`
-3. Generate 16-byte RNG nonce (via `fortias_rng_bytes` in C11).
+3. Generate 16-byte RNG nonce (via `foretias_rng_bytes` in C11).
 4. Compute the `auto_attestation_blob=concat(TBID, OLD.tick_number, OLD.public_key, NEW.tick_number, NEW.public_key, nonce)`.
 5. Compute **forward auto-attestation** by signing the `auto_attestation_blob` from the old chronon:
-   `forward_fortis = _stamp(content=auto_attestation_blob, tbid=TBID, tick_number=OLD.tick_number, private_key=OLD.private_key)`
+   `forward_foretis = _stamp(content=auto_attestation_blob, tbid=TBID, tick_number=OLD.tick_number, private_key=OLD.private_key)`
    This proves the old time being acknowledges that NEW follows it.
 6. Compute **backward auto-attestation** by signing `auto_attestation_blob` with the new private key:
-   `backward_fortis = _stamp(content=auto_attestation_blob, tbid=TBID, tick_number=NEW.tick_number, private_key=NEW.private_key)`
+   `backward_foretis = _stamp(content=auto_attestation_blob, tbid=TBID, tick_number=NEW.tick_number, private_key=NEW.private_key)`
     This proves the new key acknowledges that it follows the old chronon.
-7. Append the new tick record to the calendar: `TickRecord(NEW.tick_number, NEW.public_key, forward_fortis, backward_fortis, nonce)`.
+7. Append the new tick record to the calendar: `TickRecord(NEW.tick_number, NEW.public_key, forward_foretis, backward_foretis, nonce)`.
 8. Destroy `old_sk` — it is never held in memory again.
 9. The new keypair becomes the active signing key.
 
 **Why this matters:**
 
-- Forward auto-attestation (`forward_fortis`) answers: "Can the new key sign for itself?" — proving the key was actively created at this tick.
-- Backward auto-attestation (`backward_fortis`) answers: "Does the new key acknowledge the old key?" — establishing the chain from the new end.
+- Forward auto-attestation (`forward_foretis`) answers: "Can the new key sign for itself?" — proving the key was actively created at this tick.
+- Backward auto-attestation (`backward_foretis`) answers: "Does the new key acknowledge the old key?" — establishing the chain from the new end.
 - Neither signature requires the old private key. This is critical: after `cur_sk` is destroyed, a successor can independently verify the entire transition.
 
 **Auto-Attestation Semantics:**
 
-**Auto-attestation** is the mechanism a time being uses to continue its own clock. When a tick advances, the old private key is destroyed and a new keypair generated. The new tick record contains `forward_fortis` (signed by the old key) and `backward_fortis` (signed by the new key) — both over the same auto-attestation blob. This proves both keys acknowledge the transition.
+**Auto-attestation** is the mechanism a time being uses to continue its own clock. When a tick advances, the old private key is destroyed and a new keypair generated. The new tick record contains `forward_foretis` (signed by the old key) and `backward_foretis` (signed by the new key) — both over the same auto-attestation blob. This proves both keys acknowledge the transition.
 
 Auto-attestation only applies when the TBID is the **same** — i.e., the time being is continuing its own clock. When TBID is different, the signatures represent a different relationship between entities and are **not** called "auto-attestation".
 
@@ -112,8 +112,8 @@ Auto-attestation only applies when the TBID is the **same** — i.e., the time b
 class TickRecord:
     tick_number: uint64      # Nanoseconds since Unix epoch; the tick's time boundary.
     public_key: bytes        # Ed25519 public key for this tick.
-    forward_fortis: bytes    # Auto-attestation signed by prev_sk; genesis signs itself.
-    backward_fortis: bytes   # Auto-attestation signed by self_sk. Never None.
+    forward_foretis: bytes    # Auto-attestation signed by prev_sk; genesis signs itself.
+    backward_foretis: bytes   # Auto-attestation signed by self_sk. Never None.
     aa_nonce: bytes          # RNG nonce (16 bytes) for replay protection.
 ```
 
@@ -123,7 +123,7 @@ A **calendar** is the append-only log of a time being's tick chain. It stores ev
 
 **Operations:**
 
-- `append(tick_number, public_key, forward_fortis, backward_fortis)` — add a new tick record.
+- `append(tick_number, public_key, forward_foretis, backward_foretis)` — add a new tick record.
 - `get(tick_number, count)` — retrieve the earliest `count` ticks at or after `tick_number`. Returns list[TickRecord].
 - `latest()` → `int` — the highest tick number.
 - `integrity_check()` → `(bool, list[int] | None)` — checks all consecutive pairs via `_verify_pair()`. If `return_failures` is False (default), returns just `bool`. If True, returns `(bool, list_of_failed_indexes)`.
@@ -139,14 +139,14 @@ A **calendar** is the append-only log of a time being's tick chain. It stores ev
     {
       "tick_number": 0,
       "public_key": "hex-encoded Ed25519 public key",
-      "forward_fortis": "hex-encoded signature",
-      "backward_fortis": "hex-encoded signature"
+      "forward_foretis": "hex-encoded signature",
+      "backward_foretis": "hex-encoded signature"
     },
     {
       "tick_number": 1697000000000000000,
       "public_key": "hex-encoded Ed25519 public key",
-      "forward_fortis": "hex-encoded signature",
-      "backward_fortis": "hex-encoded signature"
+      "forward_foretis": "hex-encoded signature",
+      "backward_foretis": "hex-encoded signature"
     }
   ]
 }
@@ -182,23 +182,23 @@ The Chronomatter creates its own genesis tick record for internal tracking, then
 1. Hash the content: `content_hash = SHA-256(content)`.
 2. Concatenate the signature input: `signature_input = concat(tbid, tick_number, content)`.
 3. Sign: `signature = Ed25519_sign(signature_input, private_key)`.
-4. Return a `Fortis` containing `(tick_number, content_hash, signature, tbid, echo, tbn)`.
+4. Return a `Foretis` containing `(tick_number, content_hash, signature, tbid, echo, tbn)`.
 
 **Functional implementation:**
 
 ```python
-def _stamp(content, tbid, tick_number, public_key, private_key) -> Fortis:
-    """Pure function. No side effects. Returns Fortis: `signature = Ed25519_sign(concat(tbid, tick_number, content), private_key)`."""
+def _stamp(content, tbid, tick_number, public_key, private_key) -> Foretis:
+    """Pure function. No side effects. Returns Foretis: `signature = Ed25519_sign(concat(tbid, tick_number, content), private_key)`."""
     ...
 ```
 
-### 2.5 Fortis
+### 2.5 Foretis
 
-A **Fortis** (Fortias TimeStamp) is the stamped artifact — the cryptographically signed proof that content existed at a specific tick.
+A **Foretis** (Foretias TimeStamp) is the stamped artifact — the cryptographically signed proof that content existed at a specific tick.
 
 ```python
 @dataclass
-class Fortis:
+class Foretis:
     tick_number: uint64
     my_content_hash: bytes
     signature: bytes
@@ -213,7 +213,7 @@ class Fortis:
 - `tbn` (str): the human-readable external name of the time being, formatted as `"Time Being {tbid.hex()}"`.
 - `echo` (str): a pass-through of the original content string sent to `stamp()`. It is echoed back from the requester and is **not** part of the cryptographic signature input.
 
-A Fortis is self-contained. To verify it, a verifier needs the Fortis plus access to the time being's calendar (to look up the public key for the claimed tick).
+A Foretis is self-contained. To verify it, a verifier needs the Foretis plus access to the time being's calendar (to look up the public key for the claimed tick).
 
 ### 2.6 Time Family (Latin: *Chronos adunatrix*)
 
@@ -228,14 +228,14 @@ The **Time Family** (*Chronos adunatrix*, the messenger) is the orchestrator tha
 | **Time Family** | *Chronos adunatrix* | Orchestrator, settings, coordinates Chronomatter + Calendar(s) |
 
 **Data flows:**
-- `stamp(content)` → Chronomatter signs, returns Fortis (NOT stored in Calendar)
+- `stamp(content)` → Chronomatter signs, returns Foretis (NOT stored in Calendar)
 - `tick()` → Chronomatter advances, publishes TickRecord to all attached Calendars
-- `verify(content, fortis, calendar)` → Chronomatter uses Calendar's ticks for key lookup
+- `verify(content, foretis, calendar)` → Chronomatter uses Calendar's ticks for key lookup
 - Calendar creates its own genesis via Chronomatter's adapted genesis (Calendar.tbid + Chronomatter's key)
 
 **Verification process:**
 
-1. Extract `tick_number`, `content_hash`, and `signature` from the Fortis.
+1. Extract `tick_number`, `content_hash`, and `signature` from the Foretis.
 2. Look up the public key for `tick_number` in the calendar using `calendar.get(tick_number, 1)`.
 3. Verify `SHA-256(content) == content_hash`.
 4. Verify the Ed25519 signature against the public key.
@@ -247,7 +247,7 @@ In v1, the same TimeFamily instance can act as both chronomatter and inquirer.
 **Return type:**
 
 ```python
-def verify(content, fortis, next_tick_number: uint64 | None = None) -> bool | tuple[bool, bool | None]:
+def verify(content, foretis, next_tick_number: uint64 | None = None) -> bool | tuple[bool, bool | None]:
     """
     If next_tick_number is None:
         Returns bool: True if signature and content hash are valid.
@@ -273,24 +273,24 @@ def verify(content, fortis, next_tick_number: uint64 | None = None) -> bool | tu
 
 ### 3.2 Chronomatter Verification
 
-To verify a Fortis:
+To verify a Foretis:
 
-1. **Signature check**: The Ed25519 signature in the Fortis must verify against the public key published for the claimed tick in the calendar.
-2. **Content check**: `SHA-256(provided_content)` must equal the `content_hash` in the Fortis.
-3. **Window check** (optional): If a `next_tick_number` is provided, verify that the tick's `forward_fortis` is valid — proving a subsequent tick exists and the current key has been destroyed.
+1. **Signature check**: The Ed25519 signature in the Foretis must verify against the public key published for the claimed tick in the calendar.
+2. **Content check**: `SHA-256(provided_content)` must equal the `content_hash` in the Foretis.
+3. **Window check** (optional): If a `next_tick_number` is provided, verify that the tick's `forward_foretis` is valid — proving a subsequent tick exists and the current key has been destroyed.
 
-If the signature and content checks pass, the Fortis is valid. The window check additionally proves the key is gone, making backdating cryptographically impossible.
+If the signature and content checks pass, the Foretis is valid. The window check additionally proves the key is gone, making backdating cryptographically impossible.
 
 ### 3.3 Chain Verification
 
 The tick chain provides temporal ordering and continuity guarantees:
 
 - **Pair verification** (`_verify_pair(A, B)`): Given two consecutive tick records A and B, verify both cross-stamp signatures:
-  - `forward_fortis` of B verifies against A's public key.
-  - `backward_fortis` of B verifies against B's public key.
+  - `forward_foretis` of B verifies against A's public key.
+  - `backward_foretis` of B verifies against B's public key.
 - **Chain verification** (`_verify_chain(ticks, return_failures=False)`): Iterates `_verify_pair()` across the entire chain. Returns `(bool, list[int] | None)`. If `return_failures=True`, returns the indexes of failed pairs.
 
-The calendar loader runs full chain verification on load. The CLI `fortis verify` command also runs chain verification.
+The calendar loader runs full chain verification on load. The CLI `foretis verify` command also runs chain verification.
 
 ---
 
@@ -299,39 +299,39 @@ The calendar loader runs full chain verification on load. The CLI `fortis verify
 ### 4.1 Module Structure
 
 ```
-fortias/
-  __init__.py        # Package init, exports TimeFamily, Chronomatter, Fortis, Config
+foretias/
+  __init__.py        # Package init, exports TimeFamily, Chronomatter, Foretis, Config
   chronomatter.py    # Chronomatter class (Chronos authenticus): key lifecycle, stamping, ticking
   calendar.py        # Calendar class (Chronos grapha): load, save, lookup, chain verify
   timefamily.py      # TimeFamily class (Chronos adunatrix): orchestrator
   _time.py           # Pure functional: _tick(), _stamp(), _verify(), _genesis_ma()
   crypto.py          # Ed25519 primitives + SHA-256
-  models.py          # TickRecord, Fortis dataclasses
+  models.py          # TickRecord, Foretis dataclasses
   config.py          # Config dataclass for persistence path resolution
-  cli.py             # `fortis verify --calendar --file --fortis` CLI tool
+  cli.py             # `foretis verify --calendar --file --foretis` CLI tool
 ```
 
 ### 4.2 Public API
 
 ```python
-from fortias import TimeFamily, Chronomatter, Fortis, Config
+from foretias import TimeFamily, Chronomatter, Foretis, Config
 
 # Create a time being
 tbf = TimeFamily(name="alpha", chronon_ns=60_000_000_000.0)
 
 # Stamp content
-fortis = tbf.stamp("my message")
+foretis = tbf.stamp("my message")
 
 # Verify content against stamp (no chain check)
-valid = tbf.verify("my message", fortis)  # True
+valid = tbf.verify("my message", foretis)  # True
 
 # Verify with chain check
-valid, window_closed = tbf.verify("my message", fortis, next_tick_number=1)
+valid, window_closed = tbf.verify("my message", foretis, next_tick_number=1)
 # valid=True, window_closed=True (tick 0's key is destroyed)
 
 # Load from disk (dormant mode — verify only)
-tbf2 = TimeFamily.load(persist_path="/path/to/fortias/")
-valid = tbf2.verify("my message", fortis)  # True, but cannot stamp
+tbf2 = TimeFamily.load(persist_path="/path/to/foretias/")
+valid = tbf2.verify("my message", foretis)  # True, but cannot stamp
 ```
 
 ### 4.3 Config
@@ -347,8 +347,8 @@ class Config:
         """
         Resolution order:
         1. persist_path argument (highest priority)
-        2. $FORTIAS_HOME environment variable
-        3. Default: ~/.fortias/
+        2. $FORETIAS_HOME environment variable
+        3. Default: ~/.foretias/
         """
         ...
 ```
@@ -377,8 +377,8 @@ TimeFamily(
 
 | Method | Signature | Returns | Description |
 |--------|-----------|---------|-------------|
-| `stamp` | `(content: str \| bytes) -> Fortis` | Fortis | Sign content under current tick key. For serialized timebeings, advances tick before signing. |
-| `verify` | `(content, fortis, next_tick_number=None) -> bool \| (bool, bool \| None)` | bool or tuple | Verify signature, content hash, and optionally window closed. |
+| `stamp` | `(content: str \| bytes) -> Foretis` | Foretis | Sign content under current tick key. For serialized timebeings, advances tick before signing. |
+| `verify` | `(content, foretis, next_tick_number=None) -> bool \| (bool, bool \| None)` | bool or tuple | Verify signature, content hash, and optionally window closed. |
 | `current_tick` | `() -> int` | int | Current tick number. |
 | `tick` | `() -> None` | None | Advance the calendar to next tick. For non-serialized: background thread calls this. |
 | `get` | `(tick_number: int, count: int) -> list[TickRecord]` | list[TickRecord] | Return earliest `count` ticks at or after `tick_number`. |
@@ -415,8 +415,8 @@ Chronomatter(
 
 | Method | Signature | Returns | Description |
 |--------|-----------|---------|-------------|
-| `stamp` | `(content: str \| bytes) -> Fortis` | Fortis | Sign content under current tick key. Returns Fortis to caller (not stored). |
-| `verify` | `(content, fortis, calendar) -> bool` | bool | Verify signature and content hash using calendar for key lookup. |
+| `stamp` | `(content: str \| bytes) -> Foretis` | Foretis | Sign content under current tick key. Returns Foretis to caller (not stored). |
+| `verify` | `(content, foretis, calendar) -> bool` | bool | Verify signature and content hash using calendar for key lookup. |
 | `tick` | `() -> None` | None | Advance to next tick, publish to all attached Calendars. |
 | `get` | `(tick_number: int, count: int) -> list[TickRecord]` | list[TickRecord] | Return ticks by Chronomatter's internal counter. |
 | `attach_calendar` | `(calendar: Calendar) -> None` | None | Attach a Calendar, publish adapted genesis. |
@@ -476,7 +476,7 @@ class Calendar:
 Direct unit tests of the pure functions:
 
 - `_tick()` returns correct cross-stamp signatures.
-- `_stamp()` produces verifiable Fortis.
+- `_stamp()` produces verifiable Foretis.
 - `_verify_pair()` accepts valid pairs, rejects mismatched pairs.
 - `_verify_chain()` accepts full chains, rejects chains with broken links. `return_failures=True` returns correct indexes.
 - `_verify()` with and without `next_tick_number`.
@@ -520,15 +520,15 @@ Direct unit tests of the pure functions:
 ### 6.1 Command
 
 ```bash
-fortis verify --calendar calendar.json --file message.txt --fortis fortis.json
+foretis verify --calendar calendar.json --file message.txt --foretis foretis.json
 ```
 
 ### 6.2 Behavior
 
 1. Load calendar from `calendar.json` using the same JSON parser as the library.
 2. Read message content from `message.txt`.
-3. Load Fortis from `fortis.json` (same format as `calendar.json`, hex-encoded fields).
-4. Run `verify(message, fortis)`.
+3. Load Foretis from `foretis.json` (same format as `calendar.json`, hex-encoded fields).
+4. Run `verify(message, foretis)`.
 5. Print result: `valid` or `invalid` with reason.
 
 ---
@@ -536,7 +536,7 @@ fortis verify --calendar calendar.json --file message.txt --fortis fortis.json
 ## 7. Installation
 
 ```bash
-pip install fortias
+pip install foretias
 ```
 
 **Dependencies:** `cryptography>=42`
@@ -546,20 +546,20 @@ pip install fortias
 ## 8. Quick Start
 
 ```python
-from fortias import TimeFamily
+from foretias import TimeFamily
 
 # Create a time being with 1-minute ticks
 tbf = TimeFamily(name="alpha", chronon_ns=60_000_000_000.0)
 
 # Stamp your first message
-fortis = tbf.stamp("hello world")
+foretis = tbf.stamp("hello world")
 
 # Verify it
-is_valid = tbf.verify("hello world", fortis)
+is_valid = tbf.verify("hello world", foretis)
 print(is_valid)  # True
 
 # Verify with window check (requires next tick to exist)
-is_valid, window_closed = tbf.verify("hello world", fortis, next_tick_number=1)
+is_valid, window_closed = tbf.verify("hello world", foretis, next_tick_number=1)
 print(is_valid, window_closed)  # True, True
 ```
 
@@ -569,8 +569,8 @@ print(is_valid, window_closed)  # True, True
 
 ```python
 tbf = TimeFamily()
-fortis = tbf.stamp("my message")
-assert tbf.verify("my message", fortis)  # True
+foretis = tbf.stamp("my message")
+assert tbf.verify("my message", foretis)  # True
 ```
 
-This is the core loop. Stamp content, keep the fortis alongside the content, verify whenever needed.
+This is the core loop. Stamp content, keep the foretis alongside the content, verify whenever needed.

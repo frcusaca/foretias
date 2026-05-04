@@ -1,6 +1,6 @@
-"""Fortias v1 — Configuration.
+"""Foretias v1 — Configuration.
 
-.. deprecated:: Use ``fortias_p2p.PyTimeFamilyServer`` (Rust) instead.
+.. deprecated:: Use ``foretias_p2p.PyTimeFamilyServer`` (Rust) instead.
 """
 
 from __future__ import annotations
@@ -8,7 +8,7 @@ from __future__ import annotations
 import warnings
 
 warnings.warn(
-    "fortias.config is deprecated. Use fortias (Rust-backed) instead.",
+    "foretias.config is deprecated. Use foretias (Rust-backed) instead.",
     DeprecationWarning,
     stacklevel=2,
 )
@@ -29,17 +29,17 @@ class Config:
 
     @classmethod
     def resolve(cls, persist_path: str | None = None) -> Config:
-        """Resolve persist_path: argument overrides $FORTIAS_HOME overrides default.
+        """Resolve persist_path: argument overrides $FORETIAS_HOME overrides default.
 
         Resolution order:
             1. ``persist_path`` argument (highest priority)
-            2. ``$FORTIAS_HOME`` environment variable
-            3. Default: ``~/.fortias/``
+            2. ``$FORETIAS_HOME`` environment variable
+            3. Default: ``~/.foretias/``
         """
         if persist_path is not None:
             return cls(persist_path=persist_path)
 
-        env = os.environ.get("FORTIAS_HOME")
+        env = os.environ.get("FORETIAS_HOME")
         if env is not None:
             return cls(persist_path=env)
 
@@ -47,7 +47,7 @@ class Config:
 
 
 def _default_path() -> str:
-    """Return the default persistence path ~/.fortias/."""
+    """Return the default persistence path ~/.foretias/."""
     import pathlib
 
-    return str(pathlib.Path.home() / ".fortias")
+    return str(pathlib.Path.home() / ".foretias")

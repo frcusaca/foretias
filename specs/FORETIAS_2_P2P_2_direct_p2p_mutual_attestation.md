@@ -1,8 +1,8 @@
-# Fortias — P2P Sub-Spec 1: Direct P2P, Mutual Attestation & Threading Model (v0.2)
+# Foretias — P2P Sub-Spec 1: Direct P2P, Mutual Attestation & Threading Model (v0.2)
 
 **Milestone tag:** `v0.2-direct-p2p-mutual-attestation`
 **Prereq:** `v0.1-local-server-mvp` must be tagged.
-**Next:** `FORTIAS_2_P2P_3_libp2p_handshake.md` (v0.3 — adds libp2p as a second transport alongside this one).
+**Next:** `FORETIAS_2_P2P_3_libp2p_handshake.md` (v0.3 — adds libp2p as a second transport alongside this one).
 
 **Target:** AI Coding Specialist. `(@human ...)` blocks are for human readers.
 
@@ -11,8 +11,8 @@
 ## READING ORDER
 
 1. Confirm `v0.1-local-server-mvp` is tagged.
-2. Read `FORTIAS_0_OVERVIEW.md` Part 0 (invariants) — especially §0.7 (Python prototype is the semantic source of truth).
-3. Read `FORTIAS_1_MVP_SPEC.md` end to end.
+2. Read `FORETIAS_0_OVERVIEW.md` Part 0 (invariants) — especially §0.7 (Python prototype is the semantic source of truth).
+3. Read `FORETIAS_1_MVP_SPEC.md` end to end.
 4. Read this document end to end.
 5. Confirm the threading model (§4) and mutual-attestation flow (§6) are understood before writing any code.
 
@@ -20,7 +20,7 @@
 
 ## 1. GOAL
 
-Restructure `TimeFamilyServer` into three time beings — **Chronomatter** (*Chronos fidelis authenticus*), **Calendar** (*Chronos fidelis grapha*), **Communerd** (*Chronos fidelis Locutus*)— each with its own TBID, coordinated by a **TimeFamily** (*Chronos fidelis adunatrix*, the orchestrator). Intra-family communication uses direct method calls and callbacks. Only Communerd communicates with extra-family peers. Then, using only the existing v0.1 JSON-RPC primitives (`/stamp`, `/verify`, `/get_calendar_slice`), implement **mutual attestation**: two statically-configured Fortias nodes periodically call each other's `/stamp` with their current `TickRecord` as content, verify the returned `Fortis`, and store it as an `ExternalAttestation` in their local calendar.
+Restructure `TimeFamilyServer` into three time beings — **Chronomatter** (*Chronos fidelis authenticus*), **Calendar** (*Chronos fidelis grapha*), **Communerd** (*Chronos fidelis Locutus*)— each with its own TBID, coordinated by a **TimeFamily** (*Chronos fidelis adunatrix*, the orchestrator). Intra-family communication uses direct method calls and callbacks. Only Communerd communicates with extra-family peers. Then, using only the existing v0.1 JSON-RPC primitives (`/stamp`, `/verify`, `/get_calendar_slice`), implement **mutual attestation**: two statically-configured Foretias nodes periodically call each other's `/stamp` with their current `TickRecord` as content, verify the returned `Foretis`, and store it as an `ExternalAttestation` in their local calendar.
 
 **Terminology note:** "auto-attestation" (v0.1/v0.2.0) refers to **intra-node** tick chaining (same TBID, consecutive ticks linked by `aa_nonce`). "Mutual attestation" (this sub-spec) refers to **cross-node** stamping (different TBID). When TBID is different, it is no longer called "auto-attestation."
 
@@ -38,9 +38,9 @@ that produces the "two servers stamp each other's ticks" demo.)
 | Symbol | Where | Role |
 |---|---|---|
 | `CryptoServer` trait | `src/crypto_server/mod.rs` | Signs and hashes; `stamp()` uses it |
-| `stamp()` / `verify()` free fns | `src/fortias/tick.rs` | Core primitive — unchanged |
-| `Calendar` struct + `CalendarLookup` | `src/fortias/calendar.rs` | Extended here |
-| `TickRecord`, `Fortis` | `src/fortias/tick.rs` | Extended here (`TickRecord` gains `external_attestations`) |
+| `stamp()` / `verify()` free fns | `src/foretias/tick.rs` | Core primitive — unchanged |
+| `Calendar` struct + `CalendarLookup` | `src/foretias/calendar.rs` | Extended here |
+| `TickRecord`, `Foretis` | `src/foretias/tick.rs` | Extended here (`TickRecord` gains `external_attestations`) |
 | `TimeFamilyServer` | `src/server/mod.rs` | **Replaced** by the new `TimeFamily` architecture |
 | JSON-RPC handlers (`stamp`, `verify`, `get_calendar_slice`) | `src/server/handlers.rs` | Preserved; wired to new architecture |
 
@@ -52,7 +52,7 @@ v0.1 tests must keep passing. The JSON-RPC surface is identical.
 
 ```bash
 # Terminal A — chronon 20 s, so ticks are fast for the demo
-$ fortias serve \
+$ foretias serve \
     --addr 127.0.0.1:4001 \
     --calendar-path /tmp/a/calendar.json \
     --chronon-ns 20000000000 \
@@ -60,7 +60,7 @@ $ fortias serve \
     --mutual-attest-every-chronons 1
 
 # Terminal B
-$ fortias serve \
+$ foretias serve \
     --addr 127.0.0.1:4002 \
     --calendar-path /tmp/b/calendar.json \
     --chronon-ns 20000000000 \
@@ -71,7 +71,7 @@ $ fortias serve \
 After ~2 minutes (≥5 ticks each):
 
 ```bash
-$ fortias inspect-attestations --calendar /tmp/a/calendar.json
+$ foretias inspect-attestations --calendar /tmp/a/calendar.json
 tick=1  attester=<B tbid>  attester_tick=2   sig=VALID
 tick=2  attester=<B tbid>  attester_tick=4   sig=VALID
 ...
@@ -121,7 +121,7 @@ TimeFamily — orchestrator, creates and wires all three time beings
       Executes RPC calls on behalf of Calendar's mutual-attest scheduler.
       Transport is behind a PeerTransport trait (§5.1) — direct JSON-RPC
       TCP for v0.2; libp2p stream / gRPC pluggable later.
-      Knows NOTHING about Fortias semantics — transparent RPC relay.
+      Knows NOTHING about Foretias semantics — transparent RPC relay.
       Handles community state queries (peer liveness, known families).
 ```
 
@@ -144,7 +144,7 @@ TimeFamily — orchestrator, creates and wires all three time beings
 ### 4.2 Type aliases
 
 ```rust
-// src/fortias/types.rs
+// src/foretias/types.rs
 
 /// Time Being ID — 16-byte unique identifier for a time being.
 pub type Tbid = [u8; 16];
@@ -181,8 +181,8 @@ pub trait TickObserver: Send + Sync {
 #[async_trait::async_trait]
 pub trait Stamper: Send + Sync {
     async fn stamp(&self, content: Message, echo: String)
-        -> Result<Fortis, NodeError>;
-    async fn verify(&self, fortis: &Fortis, content: &Message)
+        -> Result<Foretis, NodeError>;
+    async fn verify(&self, foretis: &Foretis, content: &Message)
         -> Result<bool, NodeError>;
 }
 
@@ -226,7 +226,7 @@ The existing `TimeFamilyServer` struct in `src/server/mod.rs` is replaced with `
 
 #[async_trait::async_trait]
 pub trait PeerTransport: Send + Sync {
-    /// Call /stamp on the remote peer. Returns the raw Fortis JSON value.
+    /// Call /stamp on the remote peer. Returns the raw Foretis JSON value.
     async fn stamp(&self, peer: &PeerAddr, content_hex: &str, echo: &str)
         -> Result<serde_json::Value, TransportError>;
 
@@ -301,15 +301,15 @@ v0.2 is one extra file and zero runtime overhead.)
 ### 6.1 ExternalAttestation type
 
 ```rust
-// src/fortias/external_attestation.rs
+// src/foretias/external_attestation.rs
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExternalAttestation {
     /// The attesting peer's tbid (hex-encoded).
     pub attester_tbid:        String,
-    /// The Fortis B issued for A's TickRecord content.
-    pub fortis:               Fortis,
-    /// B's TickRecord at fortis.tick_number, captured at attestation time.
+    /// The Foretis B issued for A's TickRecord content.
+    pub foretis:               Foretis,
+    /// B's TickRecord at foretis.tick_number, captured at attestation time.
     /// Stored so we can re-verify offline without contacting B.
     pub attester_tick_record: TickRecord,
     /// Wall-clock receive time, ns since UNIX epoch.
@@ -323,8 +323,8 @@ pub struct ExternalAttestation {
 pub struct TickRecord {
     pub tick_number:          u64,
     pub public_key:           Vec<u8>,
-    pub forward_fortis:       Vec<u8>,
-    pub backward_fortis:      Vec<u8>,
+    pub forward_foretis:       Vec<u8>,
+    pub backward_foretis:      Vec<u8>,
     #[serde(default)]
     pub external_attestations: Vec<ExternalAttestation>,  // NEW; empty on old records
 }
@@ -347,22 +347,22 @@ Every N chronons (default N=1), for each configured peer:
 7. Hand (peer_addr, content_hex, echo, local_tick_number) to Communerd.
 
 Communerd executes two calls in sequence:
-8.  fortis_val = transport.stamp(peer, content_hex, echo).await?
-9.  Parse fortis_val into Fortis struct.
-10. tr_vec = transport.get_calendar_slice(peer, fortis.tick_number, 1).await?
+8.  foretis_val = transport.stamp(peer, content_hex, echo).await?
+9.  Parse foretis_val into Foretis struct.
+10. tr_vec = transport.get_calendar_slice(peer, foretis.tick_number, 1).await?
 11. attester_tr = tr_vec.into_iter().next()?
 
 Verification (local, no network):
 12. recomputed_hash = sha256(content)
-    → must equal fortis.content_hash
-13. sig_input = fortis.tbid || fortis.tick_number.to_be_bytes() || content
-    → verify ed25519(attester_tr.public_key, sig_input, fortis.signature)
-14. fortis.echo must equal the echo we sent in step 6.
+    → must equal foretis.content_hash
+13. sig_input = foretis.tbid || foretis.tick_number.to_be_bytes() || content
+    → verify ed25519(attester_tr.public_key, sig_input, foretis.signature)
+14. foretis.echo must equal the echo we sent in step 6.
 15. If any check fails: log WARN, record failure counter. Do NOT store.
     (v0.6 will attach a ProbityReport here.)
 
 On success:
-16. attestation = ExternalAttestation { attester_tbid, fortis, attester_tick_record, received_at_ns }
+16. attestation = ExternalAttestation { attester_tbid, foretis, attester_tick_record, received_at_ns }
 17. Calendar::add_external_attestation(local_tick_number, attestation)
 ```
 
@@ -404,12 +404,12 @@ pub struct Chronomatter {
 pub struct StampRequest {
     pub content:  Vec<u8>,
     pub echo:     String,
-    pub reply_tx: oneshot::Sender<Result<Fortis, NodeError>>,
+    pub reply_tx: oneshot::Sender<Result<Foretis, NodeError>>,
 }
 
 #[derive(Debug)]
 pub struct VerifyRequest {
-    pub fortis:   Fortis,
+    pub foretis:   Foretis,
     pub content:  Vec<u8>,
     pub reply_tx: oneshot::Sender<Result<bool, NodeError>>,
 }
@@ -445,7 +445,7 @@ async fn run(mut self, chronon_ns: u64) {
                 let _ = req.reply_tx.send(result);
             }
             Some(req) = self.verify_rx.recv() => {
-                let result = self.verify(&req.fortis, &req.content).await;
+                let result = self.verify(&req.foretis, &req.content).await;
                 let _ = req.reply_tx.send(result);
             }
         }
@@ -469,7 +469,7 @@ background timer; this is the correct behavior per the design intent.)
 ## 8. CALENDAR — AUTONOMOUS PERSISTENCE
 
 ```rust
-// src/fortias-node/src/calendar/mod.rs
+// src/foretias-node/src/calendar/mod.rs
 
 /// Calendar is a time being with its own TBID.
 pub struct Calendar {
@@ -545,7 +545,7 @@ async fn run(self: Arc<Self>) {
 ```json
 {
   "listen_addr":   "127.0.0.1:4001",
-  "calendar_path": "/var/lib/fortias/calendar.json",
+  "calendar_path": "/var/lib/foretias/calendar.json",
   "chronon_ns":    60000000000,
   "version":       1,
   "calendar": {
@@ -577,8 +577,8 @@ CLI flags: `--peer <host:port>` (repeatable), `--mutual-attest-every-chronons N`
 ## 11. NEW CLI COMMANDS
 
 ```
-fortias serve        -- as before, extended with cross-attest flags
-fortias inspect-attestations --calendar <path>
+foretias serve        -- as before, extended with cross-attest flags
+foretias inspect-attestations --calendar <path>
     Loads calendar JSON, re-runs verification on every ExternalAttestation,
     prints one line per attestation, exits 0 if all valid.
 ```
@@ -641,7 +641,7 @@ All v0.1 integration tests pass unchanged (JSON-RPC surface is identical).
 
 (@human — at the end of v0.2 you have the stated demo: two servers start,
 find each other via static config, cross-stamp each other's ticks on every
-chronon, and persist the fortises. Every attestation is locally verifiable.
+chronon, and persist the foretises. Every attestation is locally verifiable.
 No libp2p, no Noise, no DHT. The networking is transparent TCP JSON-RPC.)
 
 ---

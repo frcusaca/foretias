@@ -1,8 +1,8 @@
-# Fortias — P2P Sub-Spec 3: DHT Peer Discovery & Hybrid Transport (v0.4)
+# Foretias — P2P Sub-Spec 3: DHT Peer Discovery & Hybrid Transport (v0.4)
 
 **Milestone tag:** `v0.4-dht-discovery`
 **Prereq:** `v0.3-libp2p-handshake` must be tagged.
-**Next:** `FORTIAS_2_P2P_5_hardening.md` (v0.5 — threat model, observability,
+**Next:** `FORETIAS_2_P2P_5_hardening.md` (v0.5 — threat model, observability,
 encrypted persistence, formal-verification PoC).
 
 **Target:** AI Coding Specialist. `(@human ...)` blocks are for human readers.
@@ -12,13 +12,13 @@ encrypted persistence, formal-verification PoC).
 ## READING ORDER
 
 1. Confirm `v0.3-libp2p-handshake` is tagged.
-2. Re-read `FORTIAS_2_P2P_2_direct_p2p_mutual_attestation.md` §5
+2. Re-read `FORETIAS_2_P2P_2_direct_p2p_mutual_attestation.md` §5
    (`PeerMessenger` trait, `PeerAddr`, `Communerd`) — this sub-spec
    adds a `DhtPeerSource` that slots into the existing scheduler without
    modifying it.
-3. Re-read `FORTIAS_2_P2P_3_libp2p_handshake.md` §4.5–§4.7
+3. Re-read `FORETIAS_2_P2P_3_libp2p_handshake.md` §4.5–§4.7
    (`SwarmHandle`, `NetworkEvent`, swarm wiring) — this sub-spec extends
-   `FortiasBehaviour` with Kademlia.
+   `ForetiasBehaviour` with Kademlia.
 4. Read this document end to end before touching any code.
 
 ---
@@ -53,11 +53,11 @@ mutual-attests — all without A knowing C's address at startup.
 
 | Symbol | Extension |
 |---|---|
-| `FortiasBehaviour` | Gains `kad: kad::Behaviour<kad::store::MemoryStore>` |
+| `ForetiasBehaviour` | Gains `kad: kad::Behaviour<kad::store::MemoryStore>` |
 | `NetworkEvent` | Gains `DhtPeerDiscovered { peer_id, addresses }` |
 | `PeerSource` trait (v0.2) | v0.4 ships `DhtPeerSource` impl |
 | `PeerAddr` struct (v0.2) | Gains `json_rpc: Option<String>` (was `String`; now optional since not all libp2p peers expose JSON-RPC) |
-| `identify::Info` (v0.3) | Parsed for a custom `fortias-jsonrpc-addr` user agent field (see §4.3) |
+| `identify::Info` (v0.3) | Parsed for a custom `foretias-jsonrpc-addr` user agent field (see §4.3) |
 
 ---
 
@@ -65,18 +65,18 @@ mutual-attests — all without A knowing C's address at startup.
 
 ```bash
 # Node B — bootstrap only (no cross-attest peers configured)
-$ fortias serve --addr 127.0.0.1:4002 \
+$ foretias serve --addr 127.0.0.1:4002 \
     --p2p-listen /ip4/127.0.0.1/tcp/4102 \
     --chronon-ns 20000000000
 
 # Node A — knows only B
-$ fortias serve --addr 127.0.0.1:4001 \
+$ foretias serve --addr 127.0.0.1:4001 \
     --p2p-listen /ip4/127.0.0.1/tcp/4101 \
     --dht-bootstrap /ip4/127.0.0.1/tcp/4102/p2p/<PeerID-B> \
     --chronon-ns 20000000000
 
 # Node C — knows only B
-$ fortias serve --addr 127.0.0.1:4003 \
+$ foretias serve --addr 127.0.0.1:4003 \
     --p2p-listen /ip4/127.0.0.1/tcp/4103 \
     --dht-bootstrap /ip4/127.0.0.1/tcp/4102/p2p/<PeerID-B> \
     --chronon-ns 20000000000
@@ -96,7 +96,7 @@ completes in under 5 s. In CI use a tighter timeout of 15 s.)
 
 ## 4. ARCHITECTURE
 
-### 4.1 Kademlia in `FortiasBehaviour`
+### 4.1 Kademlia in `ForetiasBehaviour`
 
 ```rust
 // src/network/behaviour.rs  (extended from v0.3)
@@ -104,13 +104,13 @@ use libp2p::{identify, ping, kad};
 use libp2p::swarm::NetworkBehaviour;
 
 #[derive(NetworkBehaviour)]
-pub struct FortiasBehaviour {
+pub struct ForetiasBehaviour {
     pub identify: identify::Behaviour,
     pub ping:     ping::Behaviour,
     pub kad:      kad::Behaviour<kad::store::MemoryStore>,  // NEW
 }
 
-impl FortiasBehaviour {
+impl ForetiasBehaviour {
     pub fn new(local_pub: libp2p::identity::PublicKey, namespace: &str) -> Self {
         let local_peer_id = local_pub.to_peer_id();
         let kad_config = kad::Config::new(
@@ -119,7 +119,7 @@ impl FortiasBehaviour {
         // Private namespace: derive a protocol name from a shared namespace secret.
         // For v0.4 this is a hardcoded string; v0.5 hardening moves it to config.
         let protocol = libp2p::StreamProtocol::try_from_owned(
-            format!("/fortias/kad/{}/1.0.0", namespace)
+            format!("/foretias/kad/{}/1.0.0", namespace)
         ).expect("valid protocol string");
         let mut kad_cfg = kad::Config::new(protocol);
         kad_cfg.set_query_timeout(std::time::Duration::from_secs(30));
@@ -127,8 +127,8 @@ impl FortiasBehaviour {
         let store = kad::store::MemoryStore::new(local_peer_id);
         Self {
             identify: identify::Behaviour::new(
-                identify::Config::new("fortias/0.4.0".into(), local_pub.clone())
-                    .with_agent_version(format!("fortias/{}", env!("CARGO_PKG_VERSION")))
+                identify::Config::new("foretias/0.4.0".into(), local_pub.clone())
+                    .with_agent_version(format!("foretias/{}", env!("CARGO_PKG_VERSION")))
             ),
             ping: ping::Behaviour::new(ping::Config::new()),
             kad:  kad::Behaviour::with_config(local_peer_id, store, kad_cfg),
@@ -159,7 +159,7 @@ Cross-attest-willing nodes publish a Kademlia provider record under a
 deterministic key derived from the shared namespace:
 
 ```rust
-const CROSS_ATTEST_KEY_SUFFIX: &str = "/fortias/cross-attest-willing/v1";
+const CROSS_ATTEST_KEY_SUFFIX: &str = "/foretias/cross-attest-willing/v1";
 
 fn cross_attest_provider_key(namespace: &str) -> kad::RecordKey {
     kad::RecordKey::new(&format!("{}{}", namespace, CROSS_ATTEST_KEY_SUFFIX))
@@ -188,9 +188,9 @@ To enable "close friend" direct TCP connections, each node announces its
 JSON-RPC address in the `identify` agent version string:
 
 ```rust
-// Format: "fortias/<version> rpc=<host:port>"
-// Example: "fortias/0.4.0 rpc=198.51.100.7:4001"
-let agent = format!("fortias/{} rpc={}", env!("CARGO_PKG_VERSION"), json_rpc_addr);
+// Format: "foretias/<version> rpc=<host:port>"
+// Example: "foretias/0.4.0 rpc=198.51.100.7:4001"
+let agent = format!("foretias/{} rpc={}", env!("CARGO_PKG_VERSION"), json_rpc_addr);
 identify::Config::new(...).with_agent_version(agent)
 ```
 
@@ -285,7 +285,7 @@ the future diff contained to a single file.)
   "network": {
     "p2p_listen":            "/ip4/0.0.0.0/tcp/4101",
     "dht_namespace":         "mainnet",
-    "dht_bootstrap":         ["/ip4/bootstrap.fortias.example/tcp/4101/p2p/12D3KooW..."],
+    "dht_bootstrap":         ["/ip4/bootstrap.foretias.example/tcp/4101/p2p/12D3KooW..."],
     "dht_reprovide_interval_secs": 1200
   }
 }
@@ -323,7 +323,7 @@ The `--peer` flag from v0.2 continues to work as a static override. If both
 ## 8. MILESTONE CHECKLIST
 
 ```
-[ ] v0.4.1  Add kad feature to libp2p dependency; FortiasBehaviour gains kad field.
+[ ] v0.4.1  Add kad feature to libp2p dependency; ForetiasBehaviour gains kad field.
 [ ] v0.4.2  Bootstrap flow; provider record publish + query; NetworkEvent additions.
 [ ] v0.4.3  DhtPeerSource implements PeerSource; Communerd handles DHT events.
 [ ] v0.4.4  JSON-RPC address announcement in identify agent string; parser.

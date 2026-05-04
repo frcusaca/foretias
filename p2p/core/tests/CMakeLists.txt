@@ -1,4 +1,4 @@
-# ── Fortias Core Tests ──────────────────────────────────────────────────
+# ── Foretias Core Tests ──────────────────────────────────────────────────
 
 # Test sources (all compiled into one executable)
 set(TEST_SOURCES
@@ -20,8 +20,8 @@ set(TEST_SOURCES
 
 # Build test executable
 add_executable(test_all ${TEST_SOURCES})
-target_link_libraries(test_all PRIVATE fortias_core)
+target_link_libraries(test_all PRIVATE foretias_core)
 target_include_directories(test_all PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Register with CTest
-add_test(NAME fortias_core_tests COMMAND test_all)
+add_test(NAME foretias_core_tests COMMAND test_all)

@@ -1,4 +1,4 @@
-"""Unit tests for fortias.calendar."""
+"""Unit tests for foretias.calendar."""
 
 from __future__ import annotations
 
@@ -7,10 +7,10 @@ import tempfile
 
 import pytest
 
-from fortias._timebeing import _genesis_ma, _timebeing
-from fortias.calendar import Calendar
-from fortias.crypto import generate_keypair, sign
-from fortias.models import TickRecord
+from foretias._timebeing import _genesis_ma, _timebeing
+from foretias.calendar import Calendar
+from foretias.crypto import generate_keypair, sign
+from foretias.models import TickRecord
 
 
 def _make_valid_genesis(tbid, pk, sk):
@@ -18,7 +18,7 @@ def _make_valid_genesis(tbid, pk, sk):
     genesis_ma = _genesis_ma(tbid, pk)
     forward = sign(genesis_ma, sk)
     backward = sign(genesis_ma, sk)
-    return TickRecord(tick_number=0, public_key=pk, forward_fortis=forward, backward_fortis=backward)
+    return TickRecord(tick_number=0, public_key=pk, forward_foretis=forward, backward_foretis=backward)
 
 class TestAppend:
     def test_append_to_empty(self):
@@ -120,8 +120,8 @@ class TestPersistence:
         assert len(loaded.ticks) == 2
         assert loaded.ticks[0].tick_number == 0
         assert loaded.ticks[0].public_key == pk0
-        assert loaded.ticks[0].forward_fortis is not None
-        assert loaded.ticks[0].backward_fortis is not None
+        assert loaded.ticks[0].forward_foretis is not None
+        assert loaded.ticks[0].backward_foretis is not None
         assert loaded.ticks[1].public_key == r1.public_key
 
     def test_save_load_hex_encoding(self):
@@ -134,7 +134,7 @@ class TestPersistence:
             raw = json.loads(f.read())
 
         assert raw["ticks"][0]["public_key"] == pk.hex()
-        assert raw["ticks"][0]["forward_fortis"] == b"sig".hex()
+        assert raw["ticks"][0]["forward_foretis"] == b"sig".hex()
 
     def test_load_invalid_hex_raises(self):
         with tempfile.NamedTemporaryFile(suffix=".json") as f:
@@ -143,7 +143,7 @@ class TestPersistence:
                 "tbn": "test",
                 "serialized": False,
                 "chronon_ns": 60_000_000_000.0,
-                "ticks": [{"tick_number": 0, "public_key": "abc", "forward_fortis": "def", "backward_fortis": "ef"}],
+                "ticks": [{"tick_number": 0, "public_key": "abc", "forward_foretis": "def", "backward_foretis": "ef"}],
             }).encode())
             f.flush()
             with pytest.raises(ValueError, match="valid hex strings"):
@@ -157,8 +157,8 @@ class TestPersistence:
                 "serialized": False,
                 "chronon_ns": 60_000_000_000.0,
                 "ticks": [
-                    {"tick_number": 200, "public_key": "aa" * 32, "forward_fortis": "bb" * 64, "backward_fortis": "cc" * 64},
-                    {"tick_number": 100, "public_key": "cc" * 32, "forward_fortis": "dd" * 64, "backward_fortis": "ee" * 64},
+                    {"tick_number": 200, "public_key": "aa" * 32, "forward_foretis": "bb" * 64, "backward_foretis": "cc" * 64},
+                    {"tick_number": 100, "public_key": "cc" * 32, "forward_foretis": "dd" * 64, "backward_foretis": "ee" * 64},
                 ],
             }).encode())
             f.flush()
@@ -172,7 +172,7 @@ class TestPersistence:
                 "tbn": "test",
                 "serialized": False,
                 "chronon_ns": 60_000_000_000.0,
-                "ticks": [{"tick_number": -1, "public_key": "aa" * 32, "forward_fortis": "bb" * 64, "backward_fortis": "cc" * 64}],
+                "ticks": [{"tick_number": -1, "public_key": "aa" * 32, "forward_foretis": "bb" * 64, "backward_foretis": "cc" * 64}],
             }).encode())
             f.flush()
             with pytest.raises(ValueError, match="non-negative"):
@@ -192,9 +192,9 @@ class TestPersistence:
 
         with tempfile.NamedTemporaryFile(suffix=".json") as f:
             cal.save(f.name)
-            # Tamper with the backward_fortis of tick 1
+            # Tamper with the backward_foretis of tick 1
             data = json.loads(f.read())
-            data["ticks"][1]["backward_fortis"] = "ff" * 64
+            data["ticks"][1]["backward_foretis"] = "ff" * 64
             f.seek(0)
             f.write(json.dumps(data).encode())
             f.truncate()

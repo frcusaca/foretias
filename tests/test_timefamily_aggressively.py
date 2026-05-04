@@ -11,21 +11,21 @@ import threading
 
 import pytest
 
-from fortias import TimeFamily
+from foretias import TimeFamily
 
 
 class TestTimeFamilyPersistence:
     def test_create_stamp_save_load_verify(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             tbf = TimeFamily(serialized=True, persist_path=tmpdir)
-            fortis = tbf.stamp(b"hello world")
-            assert tbf.verify(b"hello world", fortis) is True
+            foretis = tbf.stamp(b"hello world")
+            assert tbf.verify(b"hello world", foretis) is True
             tbf.save()
             tbf.shutdown()
 
             tbf2 = TimeFamily.load(persist_path=tmpdir)
             assert tbf2.active is False
-            assert tbf2.verify(b"hello world", fortis) is True
+            assert tbf2.verify(b"hello world", foretis) is True
 
     def test_dormant_cannot_stamp(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -60,8 +60,8 @@ class TestTimeFamilyStress:
             stamps.append((f"message {i}", f))
             tbf.tick()
 
-        for content, fortis in stamps:
-            assert tbf.verify(content, fortis) is True
+        for content, foretis in stamps:
+            assert tbf.verify(content, foretis) is True
         assert tbf.calendar().integrity_check() is True
 
     def test_save_load_reverify(self):
@@ -76,8 +76,8 @@ class TestTimeFamilyStress:
             tbf.shutdown()
 
             tbf2 = TimeFamily.load(persist_path=tmpdir)
-            for content, fortis in stamps:
-                assert tbf2.verify(content, fortis) is True
+            for content, foretis in stamps:
+                assert tbf2.verify(content, foretis) is True
 
 
 class TestTimeFamilyShutdown:

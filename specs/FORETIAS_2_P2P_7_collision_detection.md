@@ -1,8 +1,8 @@
-# Fortias — P2P Sub-Spec 6: Heartbeats & Identity Collision Detection (v0.7)
+# Foretias — P2P Sub-Spec 6: Heartbeats & Identity Collision Detection (v0.7)
 
 **Milestone tag:** `v0.7-collision-detection`
 **Prereq:** `v0.6-probity-gossip` must be tagged.
-**Next:** `FORTIAS_2_P2P_8_epoch_consensus.md` (v0.8 — FROST epoch snapshots).
+**Next:** `FORETIAS_2_P2P_8_epoch_consensus.md` (v0.8 — FROST epoch snapshots).
 
 **Target:** AI Coding Specialist. `(@human ...)` blocks are for human readers.
 
@@ -11,10 +11,10 @@
 ## READING ORDER
 
 1. Confirm `v0.6-probity-gossip` is tagged.
-2. Re-read `FORTIAS_0_OVERVIEW.md` §0.1 (per-run entity lifecycle) and §0.2
+2. Re-read `FORETIAS_0_OVERVIEW.md` §0.1 (per-run entity lifecycle) and §0.2
    (identity collision = dual termination → dormancy). These invariants are
    the specification for §5 of this document.
-3. Re-read `FORTIAS_2_P2P_2_direct_p2p_mutual_attestation.md` §4.1
+3. Re-read `FORETIAS_2_P2P_2_direct_p2p_mutual_attestation.md` §4.1
    (`TimeFamilyInner.dormant: AtomicBool`) — that field is set here.
 4. Read this document end to end before writing any code.
 
@@ -53,8 +53,8 @@ references either of them. Fail-safe dormancy is the correct response.)
 ```bash
 # Launch two processes with intentionally shared identity
 # (test helper: --force-tbid copies A's key material into B at startup)
-$ fortias serve --addr 127.0.0.1:4001 --p2p-listen /ip4/127.0.0.1/tcp/4101
-$ fortias serve --addr 127.0.0.1:4002 --p2p-listen /ip4/127.0.0.1/tcp/4102 \
+$ foretias serve --addr 127.0.0.1:4001 --p2p-listen /ip4/127.0.0.1/tcp/4101
+$ foretias serve --addr 127.0.0.1:4002 --p2p-listen /ip4/127.0.0.1/tcp/4102 \
     --p2p-dial /ip4/127.0.0.1/tcp/4101/p2p/<PeerID-A> \
     --force-tbid <tbid-of-A>          # test-only flag; not in production builds
 ```
@@ -65,11 +65,11 @@ A logs: WARN collision: confirmed peer=<PeerID-A> — entering dormancy
 B logs: WARN collision: confirmed peer=<PeerID-A> — entering dormancy
 
 # A's JSON-RPC now returns dormant flag on every response:
-$ fortias rpc --method stamp --params '{"content":"68656c6c6f","echo":"test"}'
+$ foretias rpc --method stamp --params '{"content":"68656c6c6f","echo":"test"}'
 {"error":{"code":-32001,"message":"node is dormant"}}
 
 # Verify still works on dormant nodes:
-$ fortias rpc --method verify ...
+$ foretias rpc --method verify ...
 {"result":{"valid":true},"dormant":true}
 ```
 
@@ -119,7 +119,7 @@ impl Heartbeat {
 ```rust
 // src/network/gossip.rs  (addition)
 pub fn heartbeat_topic(namespace: &str) -> IdentTopic {
-    IdentTopic::new(format!("/fortias/{}/heartbeat/v1", namespace))
+    IdentTopic::new(format!("/foretias/{}/heartbeat/v1", namespace))
 }
 ```
 
@@ -171,7 +171,7 @@ reserved for future FOSITAS logic), the loop resumes automatically.
 ```rust
 pub struct CollisionDetector {
     my_peer_id:       String,
-    my_pub_key:       FortiasPubKey32,       // our own Ed25519 public key
+    my_pub_key:       ForetiasPubKey32,       // our own Ed25519 public key
     my_nonces:        parking_lot::Mutex<std::collections::VecDeque<[u8; 16]>>,
     // Nonces we have issued in the last heartbeat_window; a heartbeat
     // with our peer_id but an unknown nonce is a collision signal.
@@ -202,7 +202,7 @@ impl CollisionDetector {
         // Unknown nonce claiming our peer_id: verify the signature under our key.
         // If it verifies, this is cryptographic proof of collision.
         let sig_bytes: [u8; 64] = hb.signature.get(..64)?.try_into().ok()?;
-        let sig = FortiasSig64 { bytes: sig_bytes };
+        let sig = ForetiasSig64 { bytes: sig_bytes };
         let valid = crypto.verify_ed25519(&self.my_pub_key, &hb.canonical(), &sig).ok()?;
         if !valid { return None; } // bogus claim; ignore
 
@@ -270,7 +270,7 @@ pub async fn handle_confirmed_collision(
 - Stop accepting new connections (stop the TCP listener).
 
 (@human — "remain a local process that can still serve verify/calendar
-requests" is the design invariant from §0.2. A Fortias node with an ongoing
+requests" is the design invariant from §0.2. A Foretias node with an ongoing
 obligation to a local client — e.g., a user who stamped documents this
 hour — must be able to answer "is this stamp valid?" even after a collision
 terminates its network participation. The dormant flag in every response

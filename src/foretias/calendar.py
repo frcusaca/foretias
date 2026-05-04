@@ -1,6 +1,6 @@
-"""Fortias v1 — Calendar: append-only log of tick records.
+"""Foretias v1 — Calendar: append-only log of tick records.
 
-.. deprecated:: Use ``fortias_p2p.PyCalendar`` (Rust) instead.
+.. deprecated:: Use ``foretias_p2p.PyCalendar`` (Rust) instead.
 """
 
 from __future__ import annotations
@@ -8,7 +8,7 @@ from __future__ import annotations
 import warnings
 
 warnings.warn(
-    "fortias.calendar is deprecated. Use fortias (Rust-backed) instead.",
+    "foretias.calendar is deprecated. Use foretias (Rust-backed) instead.",
     DeprecationWarning,
     stacklevel=2,
 )
@@ -120,8 +120,8 @@ class Calendar(Timebeing):
                 {
                     "tick_number": t.tick_number,
                     "public_key": _bytes_to_hex(t.public_key),
-                    "forward_fortis": _bytes_to_hex(t.forward_fortis) if t.forward_fortis is not None else None,
-                    "backward_fortis": _bytes_to_hex(t.backward_fortis) if t.backward_fortis is not None else None,
+                    "forward_foretis": _bytes_to_hex(t.forward_foretis) if t.forward_foretis is not None else None,
+                    "backward_foretis": _bytes_to_hex(t.backward_foretis) if t.backward_foretis is not None else None,
                 }
                 for t in self._ticks
             ],
@@ -156,10 +156,10 @@ class Calendar(Timebeing):
             prev_tick_number = tick_number
 
             public_key = _hex_to_bytes(td["public_key"])
-            forward_fortis = _hex_to_bytes(td["forward_fortis"]) if td["forward_fortis"] is not None else None
-            backward_fortis = _hex_to_bytes(td["backward_fortis"]) if td["backward_fortis"] is not None else None
+            forward_foretis = _hex_to_bytes(td["forward_foretis"]) if td["forward_foretis"] is not None else None
+            backward_foretis = _hex_to_bytes(td["backward_foretis"]) if td["backward_foretis"] is not None else None
 
-            ticks.append(TickRecord(tick_number, public_key, forward_fortis, backward_fortis))
+            ticks.append(TickRecord(tick_number, public_key, forward_foretis, backward_foretis))
 
         cal = cls(tbid, tbn, ticks, stamp_tbid)
 

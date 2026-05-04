@@ -263,7 +263,7 @@ mod tests {
     }
 
     #[test]
-    fn handle_stamp_valid_content_returns_fortis() {
+    fn handle_stamp_valid_content_returns_foretis() {
         let server = make_server();
         let params = serde_json::json!({
             "content": hex::encode(b"hello"),
@@ -297,7 +297,7 @@ mod tests {
     }
 
     #[test]
-    fn handle_verify_missing_fortis_returns_error() {
+    fn handle_verify_missing_foretis_returns_error() {
         let server = make_server();
         let params = serde_json::json!({"content": hex::encode(b"test")});
         let resp = handle_verify(&server, params);
@@ -305,18 +305,18 @@ mod tests {
     }
 
     #[test]
-    fn handle_verify_valid_fortis_returns_valid_true() {
+    fn handle_verify_valid_foretis_returns_valid_true() {
         let server = make_server();
         let stamp_params = serde_json::json!({
             "content": hex::encode(b"verify-me"),
             "echo": "verify-test"
         });
         let stamp_resp = handle_stamp(&server, stamp_params);
-        let fortis_json = stamp_resp.result.unwrap();
+        let foretis_json = stamp_resp.result.unwrap();
 
         let verify_params = serde_json::json!({
             "content": hex::encode(b"verify-me"),
-            "foretis": fortis_json,
+            "foretis": foretis_json,
         });
         let verify_resp = handle_verify(&server, verify_params);
         assert!(verify_resp.error.is_none());
@@ -332,11 +332,11 @@ mod tests {
             "echo": "verify-test"
         });
         let stamp_resp = handle_stamp(&server, stamp_params);
-        let fortis_json = stamp_resp.result.unwrap();
+        let foretis_json = stamp_resp.result.unwrap();
 
         let verify_params = serde_json::json!({
             "content": hex::encode(b"tampered"),
-            "foretis": fortis_json,
+            "foretis": foretis_json,
         });
         let verify_resp = handle_verify(&server, verify_params);
         assert!(verify_resp.error.is_none());

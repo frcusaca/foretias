@@ -1,10 +1,10 @@
-"""Fortias v1 — Chronomatter, Inquirer, and interfaces.
+"""Foretias v1 — Chronomatter, Inquirer, and interfaces.
 
 Manages Ed25519 key lifecycle, stamping, ticking, and publishes ticks
 to the family's Calendar.  Pure functional operations are delegated
-to :class:`~fortias._timebeing._timebeing`.
+to :class:`~foretias._timebeing._timebeing`.
 
-.. deprecated:: Use ``fortias_p2p.PyTimeFamilyServer`` (Rust) instead.
+.. deprecated:: Use ``foretias_p2p.PyTimeFamilyServer`` (Rust) instead.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from __future__ import annotations
 import warnings
 
 warnings.warn(
-    "fortias.chronomatter is deprecated. Use fortias (Rust-backed) instead.",
+    "foretias.chronomatter is deprecated. Use foretias (Rust-backed) instead.",
     DeprecationWarning,
     stacklevel=2,
 )
@@ -26,7 +26,7 @@ from ._timebeing import _timebeing, _genesis_ma
 from .calendar import Calendar
 from .config import Config
 from .crypto import generate_keypair, sign, sha256, verify
-from .models import Fortis, TickRecord
+from .models import Foretis, TickRecord
 from .timebeing import Timebeing
 
 
@@ -82,7 +82,7 @@ class ChronomatterInterface(Protocol):
     @property
     def current_pk(self) -> bytes: ...
 
-    def stamp(self, content: bytes | str) -> Fortis: ...
+    def stamp(self, content: bytes | str) -> Foretis: ...
 
     def tick(self) -> None: ...
 
@@ -92,18 +92,18 @@ class ChronomatterInterface(Protocol):
 
 
 class InquirerInterface(Protocol):
-    """Interface for verifying Fortis artifacts."""
+    """Interface for verifying Foretis artifacts."""
 
-    def verify(self, content: bytes | str, fortis: Fortis) -> bool: ...
+    def verify(self, content: bytes | str, foretis: Foretis) -> bool: ...
 
 
 # ---------------------------------------------------------------------------
-# Inquirer — standalone Timebeing that verifies Fortis artifacts
+# Inquirer — standalone Timebeing that verifies Foretis artifacts
 # ---------------------------------------------------------------------------
 
 
 class Inquirer(Timebeing):
-    """Verifies Fortis artifacts by looking up keys from the family's calendar.
+    """Verifies Foretis artifacts by looking up keys from the family's calendar.
 
     Fetches the Calendar via ``self.family._get_calendar()`` at verification time.
     """
@@ -126,30 +126,30 @@ class Inquirer(Timebeing):
             return cal
         return None
 
-    def verify(self, content: bytes | str, fortis: Fortis) -> bool:
-        """Verify a Fortis against content.
+    def verify(self, content: bytes | str, foretis: Foretis) -> bool:
+        """Verify a Foretis against content.
 
-        Looks up the tick at fortis.tick_number (Chronomatter counter index)
+        Looks up the tick at foretis.tick_number (Chronomatter counter index)
         in the calendar, optionally verifies the chain integrity with the
         previous tick, then verifies the signature.
         """
-        target_calendar = self._find_calendar_for_tbid(fortis.tbid)
+        target_calendar = self._find_calendar_for_tbid(foretis.tbid)
         if target_calendar is None:
             return False
 
         prev_tick, curr_tick = self._lookup_surrounding_ticks(
-            fortis.tick_number, target_calendar
+            foretis.tick_number, target_calendar
         )
 
         content_bytes = (
             content if isinstance(content, bytes) else content.encode("utf-8")
         )
         content_hash = sha256(content_bytes)
-        if content_hash != fortis.my_content_hash:
+        if content_hash != foretis.my_content_hash:
             return False
 
         if prev_tick is not None and curr_tick is not None:
-            if not _timebeing._verify_pair(curr_tick, prev_tick, fortis.tbid):
+            if not _timebeing._verify_pair(curr_tick, prev_tick, foretis.tbid):
                 return False
             pk = curr_tick.public_key
         elif curr_tick is not None:
@@ -158,9 +158,9 @@ class Inquirer(Timebeing):
             return False
 
         signature_input = _concat(
-            fortis.tbid, fortis.tick_number, content_bytes
+            foretis.tbid, foretis.tick_number, content_bytes
         )
-        return verify(signature_input, fortis.signature, pk)
+        return verify(signature_input, foretis.signature, pk)
 
     def _lookup_surrounding_ticks(
         self, tick_number: int, calendar: Calendar
@@ -219,8 +219,8 @@ class ChronomatterV1(Calendar):
         self._genesis = TickRecord(
             tick_number=0,
             public_key=pk,
-            forward_fortis=genesis_forward,
-            backward_fortis=genesis_backward,
+            forward_foretis=genesis_forward,
+            backward_foretis=genesis_backward,
         )
         self._current_sk = sk
         self._current_pk = pk
@@ -266,7 +266,7 @@ class ChronomatterV1(Calendar):
 
     # -- Public operations --------------------------------------------------
 
-    def stamp(self, content: bytes | str) -> Fortis:
+    def stamp(self, content: bytes | str) -> Foretis:
         """Sign *content* under the current tick's private key."""
         if not self._active:
             raise RuntimeError("Cannot stamp: chronomatter is dormant.")
@@ -281,7 +281,7 @@ class ChronomatterV1(Calendar):
         signature_input = _concat(self.tbid, tick_number, content_bytes)
         signature = sign(signature_input, private_key)
 
-        return Fortis(
+        return Foretis(
             tick_number=tick_number,
             my_content_hash=content_hash,
             signature=signature,
@@ -320,8 +320,8 @@ class ChronomatterV1(Calendar):
         return TickRecord(
             tick_number=0,
             public_key=self._current_pk,
-            forward_fortis=forward,
-            backward_fortis=backward,
+            forward_foretis=forward,
+            backward_foretis=backward,
         )
 
     def save(self) -> None:
@@ -400,8 +400,8 @@ class ChronomatterV1Serial(Calendar):
         self._genesis = TickRecord(
             tick_number=0,
             public_key=pk,
-            forward_fortis=genesis_forward,
-            backward_fortis=genesis_backward,
+            forward_foretis=genesis_forward,
+            backward_foretis=genesis_backward,
         )
         self._current_sk = sk
         self._current_pk = pk
@@ -447,7 +447,7 @@ class ChronomatterV1Serial(Calendar):
 
     # -- Public operations --------------------------------------------------
 
-    def stamp(self, content: bytes | str) -> Fortis:
+    def stamp(self, content: bytes | str) -> Foretis:
         """Sign *content* under the current tick's private key."""
         if not self._active:
             raise RuntimeError("Cannot stamp: chronomatter is dormant.")
@@ -463,7 +463,7 @@ class ChronomatterV1Serial(Calendar):
         signature_input = _concat(self.tbid, tick_number, content_bytes)
         signature = sign(signature_input, private_key)
 
-        return Fortis(
+        return Foretis(
             tick_number=tick_number,
             my_content_hash=content_hash,
             signature=signature,
@@ -502,8 +502,8 @@ class ChronomatterV1Serial(Calendar):
         return TickRecord(
             tick_number=0,
             public_key=self._current_pk,
-            forward_fortis=forward,
-            backward_fortis=backward,
+            forward_foretis=forward,
+            backward_foretis=backward,
         )
 
     def save(self) -> None:

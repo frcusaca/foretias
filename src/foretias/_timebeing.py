@@ -1,11 +1,11 @@
-"""Fortias v1 - Pure functional time being operations.
+"""Foretias v1 - Pure functional time being operations.
 
 All methods are static, pure, and side-effect-free. They take state as
 arguments and return new state or booleans. The mutable
-:class:`~fortias.time_family.TimeFamily` class calls these
+:class:`~foretias.time_family.TimeFamily` class calls these
 functions behind a mutex.
 
-.. deprecated:: Use ``fortias_p2p.PyTimeFamilyServer`` (Rust) instead.
+.. deprecated:: Use ``foretias_p2p.PyTimeFamilyServer`` (Rust) instead.
 """
 
 from __future__ import annotations
@@ -13,13 +13,13 @@ from __future__ import annotations
 import warnings
 
 warnings.warn(
-    "fortias._timebeing is deprecated. Use fortias (Rust-backed) instead.",
+    "foretias._timebeing is deprecated. Use foretias (Rust-backed) instead.",
     DeprecationWarning,
     stacklevel=2,
 )
 
 from .crypto import generate_keypair, sha256, sign, verify
-from .models import Fortis, TickRecord
+from .models import Foretis, TickRecord
 
 
 def _uint64_be(value: int) -> bytes:
@@ -52,7 +52,7 @@ def _concat(tbid: bytes, tick_number: int, content: bytes | str) -> bytes:
 
 
 class _timebeing:
-    """Pure functional operations for the Fortias protocol.
+    """Pure functional operations for the Foretias protocol.
 
     Every method is a pure function with no side effects.
     """
@@ -65,7 +65,7 @@ class _timebeing:
         private_key: bytes,
         echo: str = "",
         tbn: str = "",
-    ) -> Fortis:
+    ) -> Foretis:
         """Stamp *content* with Ed25519 under the given tick key.
 
         Ed25519 has internal hashing, so the raw concatenation is signed
@@ -75,7 +75,7 @@ class _timebeing:
         content_hash = sha256(content_bytes)
         signature_input = _concat(tbid, tick_number, content_bytes)
         signature = sign(signature_input, private_key)
-        return Fortis(
+        return Foretis(
             tick_number=tick_number,
             my_content_hash=content_hash,
             signature=signature,
@@ -119,17 +119,17 @@ class _timebeing:
             + new_public_key
         )
 
-        # forward_fortis: OLD signs auto-attestation_blob with OLD private key
-        forward_fortis = sign(auto_attestation_blob, current_private_key)
+        # forward_foretis: OLD signs auto-attestation_blob with OLD private key
+        forward_foretis = sign(auto_attestation_blob, current_private_key)
 
-        # backward_fortis: NEW signs auto-attestation_blob with NEW private key
-        backward_fortis = sign(auto_attestation_blob, new_secret_key)
+        # backward_foretis: NEW signs auto-attestation_blob with NEW private key
+        backward_foretis = sign(auto_attestation_blob, new_secret_key)
 
         new_record = TickRecord(
             tick_number=new_tick_number,
             public_key=new_public_key,
-            forward_fortis=forward_fortis,
-            backward_fortis=backward_fortis,
+            forward_foretis=forward_foretis,
+            backward_foretis=backward_foretis,
         )
 
         return new_record, new_secret_key
@@ -142,12 +142,12 @@ class _timebeing:
 
         During _tick(B), two signatures are created over the same
         auto_attestation_blob = concat(tbid, A.tick, A.pk, B.tick, B.pk):
-        - forward_fortis: signed by A.sk (current private key at tick time)
-        - backward_fortis: signed by B.sk (new private key)
+        - forward_foretis: signed by A.sk (current private key at tick time)
+        - backward_foretis: signed by B.sk (new private key)
 
         Verification:
-        - B.forward_fortis: verify against A.pk. Catches tampering with B.
-        - B.backward_fortis: verify against B.pk. Cuts tampering with B.
+        - B.forward_foretis: verify against A.pk. Catches tampering with B.
+        - B.backward_foretis: verify against B.pk. Cuts tampering with B.
         """
         auto_attestation_blob = (
             tbid
@@ -157,18 +157,18 @@ class _timebeing:
             + B.public_key
         )
 
-        # B.forward_fortis: signed by A.sk, verified against A.pk.
+        # B.forward_foretis: signed by A.sk, verified against A.pk.
         # Always present for non-genesis ticks.
-        if B.forward_fortis is None:
+        if B.forward_foretis is None:
             return False
-        if not verify(auto_attestation_blob, B.forward_fortis, A.public_key):
+        if not verify(auto_attestation_blob, B.forward_foretis, A.public_key):
             return False
 
-        # B.backward_fortis: signed by B.sk, verified against B.pk.
+        # B.backward_foretis: signed by B.sk, verified against B.pk.
         # Always present for non-genesis ticks.
-        if B.backward_fortis is None:
+        if B.backward_foretis is None:
             return False
-        if not verify(auto_attestation_blob, B.backward_fortis, B.public_key):
+        if not verify(auto_attestation_blob, B.backward_foretis, B.public_key):
             return False
 
         return True
@@ -207,15 +207,15 @@ class _timebeing:
     @staticmethod
     def _verify(
         content: bytes | str,
-        fortis: Fortis,
+        foretis: Foretis,
         calendar_ticks: list[TickRecord],
         next_tick_number: int | None = None,
     ) -> bool | tuple[bool, bool | None]:
-        """Verify a Fortis against content and calendar.
+        """Verify a Foretis against content and calendar.
 
         Args:
             content: The original content to verify.
-            fortis: The Fortis artifact to verify.
+            foretis: The Foretis artifact to verify.
             calendar_ticks: The calendar tick records (for key lookup).
             next_tick_number: If provided, also check window closed.
 
@@ -232,7 +232,7 @@ class _timebeing:
         # 1. Look up the public key for the claimed tick
         pk = None
         for t in calendar_ticks:
-            if t.tick_number == fortis.tick_number:
+            if t.tick_number == foretis.tick_number:
                 pk = t.public_key
                 break
         if pk is None:
@@ -243,14 +243,14 @@ class _timebeing:
         # 2. Verify content hash
         content_bytes = content if isinstance(content, bytes) else content.encode("utf-8")
         content_hash = sha256(content_bytes)
-        if content_hash != fortis.my_content_hash:
+        if content_hash != foretis.my_content_hash:
             if next_tick_number is not None:
                 return (False, None)
             return False
 
         # 3. Verify signature
-        signature_input = _concat(fortis.tbid, fortis.tick_number, content_bytes)
-        sig_valid = verify(signature_input, fortis.signature, pk)
+        signature_input = _concat(foretis.tbid, foretis.tick_number, content_bytes)
+        sig_valid = verify(signature_input, foretis.signature, pk)
 
         if next_tick_number is None:
             return sig_valid

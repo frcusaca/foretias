@@ -1,11 +1,11 @@
-# Fortias — P2P Specification (v0.2–v0.8 Network Layers)
+# Foretias — P2P Specification (v0.2–v0.8 Network Layers)
 
-**Project:** Fortias (Free and Open-source Resilient Time Integrity Attestation Service)
+**Project:** Foretias (Free and Open-source Resilient Time Integrity Attestation Service)
 **This document:** Implementation guidance for the P2P network layers — libp2p swarm, probity gossip and aggregation, identity collision detection, epoch consensus framework, and the encrypted calendar persistence upgrade.
 **Companion documents:**
-- `FORTIAS_OVERVIEW.md` — design invariants, project structure, milestone roadmap. **Read this first.**
-- `FORTIAS_MVP_SPEC.md` — v0.1 local-server stack (C11 core, Rust crate, software CryptoServer, Python bindings). The work in this document assumes that stack is in place.
-- `FORTIAS_ENCLAVE_SPEC.md` — v0.9+ custom-plugin backends. Restricted; only consulted once v0.8 lands.
+- `FORETIAS_OVERVIEW.md` — design invariants, project structure, milestone roadmap. **Read this first.**
+- `FORETIAS_MVP_SPEC.md` — v0.1 local-server stack (C11 core, Rust crate, software CryptoServer, Python bindings). The work in this document assumes that stack is in place.
+- `FORETIAS_ENCLAVE_SPEC.md` — v0.9+ custom-plugin backends. Restricted; only consulted once v0.8 lands.
 
 **Target:** AI Coding Specialist for execution. Comments to human reader in parenthesis `(@human ...)`.
 
@@ -17,9 +17,9 @@
 
 Before touching any file in this document:
 
-1. Read `fortias-v1.md`.
-2. Read `FORTIAS_OVERVIEW.md` end to end.
-3. Read `FORTIAS_MVP_SPEC.md` end to end.
+1. Read `foretias-v1.md`.
+2. Read `FORETIAS_OVERVIEW.md` end to end.
+3. Read `FORETIAS_MVP_SPEC.md` end to end.
 4. Read this document end to end.
 5. Confirm to the user which milestone you intend to attempt first (must be v0.2 or later, and the previous milestone must be tagged).
 
@@ -40,7 +40,7 @@ use std::sync::Arc;
 use crate::crypto_server::CryptoServer;
 
 #[derive(NetworkBehaviour)]
-pub struct FortiasBehaviour {
+pub struct ForetiasBehaviour {
     pub kad:      kad::Behaviour<kad::store::MemoryStore>,
     pub gossip:   gossipsub::Behaviour,
     pub identify: identify::Behaviour,
@@ -52,7 +52,7 @@ pub struct FortiasBehaviour {
 pub async fn build_swarm(
     server: Arc<dyn CryptoServer>,
     config: &crate::config::NodeConfig,
-) -> Result<libp2p::Swarm<FortiasBehaviour>, crate::error::NodeError> {
+) -> Result<libp2p::Swarm<ForetiasBehaviour>, crate::error::NodeError> {
     // Derive a libp2p::identity::Keypair from our CryptoServer.
     //
     // Important: libp2p needs to be able to sign handshake messages. For the
@@ -63,7 +63,7 @@ pub async fn build_swarm(
     // trip is acceptable. Per-message traffic uses the Noise session keys
     // derived during handshake, so the bulk path is unaffected.
     //
-    // (See FORTIAS_ENCLAVE_SPEC.md §E.4 for the bridge details when a
+    // (See FORETIAS_ENCLAVE_SPEC.md §E.4 for the bridge details when a
     // custom plugin is in use.)
     let keypair = libp2p_keypair_from_crypto_server(server.clone())?;
 
@@ -73,11 +73,11 @@ pub async fn build_swarm(
 
 ### 8.2 Everything else (DHT, GossipSub, presence, discovery)
 
-Standard libp2p configuration. Ported into the `fortias_p2p` crate under
+Standard libp2p configuration. Ported into the `foretias_p2p` crate under
 `src/network/`. Notable settings:
 
 - DHT: Kademlia in private namespace mode, namespace key from
-  `[dht].namespace_secret` (see `FORTIAS_OVERVIEW.md` Part 15).
+  `[dht].namespace_secret` (see `FORETIAS_OVERVIEW.md` Part 15).
 - GossipSub: private topic IDs derived from the namespace, mesh sized per
   config.
 - Identify and Ping behaviours are stock.
@@ -274,7 +274,7 @@ impl ProbityStore {
 
 ### 9.4 Gossip Handler — `src/probity/gossip_handler.rs`
 
-- Subscribe to gossipsub topic `/fortias/probity/v1`
+- Subscribe to gossipsub topic `/foretias/probity/v1`
 - Every published message is a serialized `ProbityReport`
 - On receive:
   - Verify reporter signature
@@ -308,20 +308,20 @@ impl Node {
             timestamp_ns: now,
             signature:    Vec::new(),
             curve:        match self.server.curve() {
-                FortiasCurve::Ed25519 => 1,
-                FortiasCurve::P256    => 2,
+                ForetiasCurve::Ed25519 => 1,
+                ForetiasCurve::P256    => 2,
             },
         };
         let sig = self.server.sign(&report.canonical())?;
         report.signature = sig.bytes.to_vec();
         // publish to gossipsub
-        self.network.publish("/fortias/probity/v1", bincode::encode_to_vec(&report, bincode::config::standard())?)?;
+        self.network.publish("/foretias/probity/v1", bincode::encode_to_vec(&report, bincode::config::standard())?)?;
         Ok(())
     }
 }
 ```
 
-(@human — this is the application-side interface. The Fortias application logic decides what attribute names to use — `"liveness"`, `"correctness"`, `"answers_hard_questions"`, etc. — and what values to send. The P2P layer signs them, gossips them, and aggregates them. The application never touches signatures directly.)
+(@human — this is the application-side interface. The Foretias application logic decides what attribute names to use — `"liveness"`, `"correctness"`, `"answers_hard_questions"`, etc. — and what values to send. The P2P layer signs them, gossips them, and aggregates them. The application never touches signatures directly.)
 
 ---
 
@@ -329,7 +329,7 @@ impl Node {
 
 ### 10.1 Signed Heartbeats
 
-Every node broadcasts a signed heartbeat every `heartbeat_secs` (default 30) on gossipsub topic `/fortias/heartbeat/v1`.
+Every node broadcasts a signed heartbeat every `heartbeat_secs` (default 30) on gossipsub topic `/foretias/heartbeat/v1`.
 
 ```rust
 #[derive(Serialize, Deserialize)]
@@ -428,7 +428,7 @@ On `CollisionEvent::Confirmed`:
    - Remain a local process that can still serve `stamp()` / `verify()` requests to local clients, but never rejoins the network.
 4. Emit `NodeEvent::Terminated { reason: CollisionDetected }` so the application knows.
 
-(@human — the local-operation-continues bit matters for ongoing obligations the application has. A Fortias time family that has been locally stamping things for a user shouldn't suddenly stop stamping just because someone collided with it on the network — it just stops *publishing* those stamps via P2P.)
+(@human — the local-operation-continues bit matters for ongoing obligations the application has. A Foretias time family that has been locally stamping things for a user shouldn't suddenly stop stamping just because someone collided with it on the network — it just stops *publishing* those stamps via P2P.)
 
 ---
 
@@ -542,7 +542,7 @@ special_election_triggers = ["collision", "high_malfeasance"]
 
 (@AI Coding Specialist — note: the v0.1 MVP keeps the existing plaintext
 JSON calendar format inherited from the Python prototype. The encrypted
-JSONL format below is the v0.7 target; see `FORTIAS_OVERVIEW.md` Part 14
+JSONL format below is the v0.7 target; see `FORETIAS_OVERVIEW.md` Part 14
 for the milestone schedule.)
 
 ```
@@ -560,7 +560,7 @@ pub struct CalendarBlock {
     pub block_id:       u64,           // monotonically increasing
     pub written_at_ns:  u64,
     pub tick_records:   Vec<TickRecord>,
-    pub fortises:       Vec<Fortis>,   // Fortises issued in this block
+    pub foretises:       Vec<Foretis>,   // Foretises issued in this block
 }
 ```
 
@@ -698,4 +698,4 @@ impl BinBasedLru {
 
 # END OF P2P SPECIFICATION
 
-(@human — together with `FORTIAS_OVERVIEW.md` and `FORTIAS_MVP_SPEC.md`, this document covers everything from `v0.0-baseline` through `v0.8-p2p-demo`. The v0.9+ work is in `FORTIAS_ENCLAVE_SPEC.md`, intentionally held back until the network stack is operational.)
+(@human — together with `FORETIAS_OVERVIEW.md` and `FORETIAS_MVP_SPEC.md`, this document covers everything from `v0.0-baseline` through `v0.8-p2p-demo`. The v0.9+ work is in `FORETIAS_ENCLAVE_SPEC.md`, intentionally held back until the network stack is operational.)

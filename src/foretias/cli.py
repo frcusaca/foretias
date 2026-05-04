@@ -1,31 +1,31 @@
-"""Fortias CLI — ``fortis`` command-line tool (Rust-backed)."""
+"""Foretias CLI — ``foretis`` command-line tool (Rust-backed)."""
 from __future__ import annotations
 
 import argparse
 import json
 import sys
 
-from fortias_p2p import PyTimeFamilyServer, PyFortis
+from foretias_p2p import PyTimeFamilyServer, PyForetis
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="fortis", description="Fortias CLI (Rust-backed)")
+    parser = argparse.ArgumentParser(prog="foretis", description="Foretias CLI (Rust-backed)")
     sub = parser.add_subparsers(dest="command")
 
     # stamp
     stamp_p = sub.add_parser("stamp", help="Stamp content")
     stamp_p.add_argument("-m", "--message", help="Message text")
     stamp_p.add_argument("-M", "--message-file", help="Read message from file")
-    stamp_p.add_argument("-o", "--output", help="Write Fortis JSON to file")
+    stamp_p.add_argument("-o", "--output", help="Write Foretis JSON to file")
     stamp_p.add_argument("--persist-path", help="Calendar persistence directory")
     stamp_p.add_argument("--echo", default="", help="Echo field")
 
     # verify
-    verify_p = sub.add_parser("verify", help="Verify a Fortis")
+    verify_p = sub.add_parser("verify", help="Verify a Foretis")
     verify_p.add_argument("-m", "--message", help="Message text")
     verify_p.add_argument("-M", "--message-file", help="Read message from file")
-    verify_p.add_argument("-f", "--fortis", required=True, help="Fortis JSON")
-    verify_p.add_argument("-F", "--fortis-file", help="Load Fortis from file")
+    verify_p.add_argument("-f", "--foretis", required=True, help="Foretis JSON")
+    verify_p.add_argument("-F", "--foretis-file", help="Load Foretis from file")
     verify_p.add_argument("--persist-path", help="Calendar persistence directory (dormant mode)")
 
     # integrity
@@ -35,7 +35,7 @@ def main(argv: list[str] | None = None) -> int:
     integrity_p.add_argument("--persist-path", required=True, help="Calendar directory (dormant mode)")
 
     # serve (stub - requires async)
-    sub.add_parser("serve", help="Start server (use Rust binary: fortias serve)")
+    sub.add_parser("serve", help="Start server (use Rust binary: foretias serve)")
 
     args = parser.parse_args(argv)
     if args.command is None:
@@ -71,8 +71,8 @@ def cmd_stamp(args) -> int:
     server = PyTimeFamilyServer(
         persist_path=getattr(args, "persist_path", None),
     )
-    fortis = server.stamp(content, args.echo)
-    j = json.loads(fortis.to_json())
+    foretis = server.stamp(content, args.echo)
+    j = json.loads(foretis.to_json())
 
     if args.output:
         with open(args.output, "w") as f:
@@ -93,13 +93,13 @@ def cmd_verify(args) -> int:
         print("Error: provide -m or -M", file=sys.stderr)
         return 1
 
-    # Load Fortis
-    if getattr(args, "fortis_file", None):
-        fortis_json = json.loads(open(args.fortis_file).read())
+    # Load Foretis
+    if getattr(args, "foretis_file", None):
+        foretis_json = json.loads(open(args.foretis_file).read())
     else:
-        fortis_json = json.loads(args.fortis)
+        foretis_json = json.loads(args.foretis)
 
-    pf = PyFortis.from_json(json.dumps(fortis_json))
+    pf = PyForetis.from_json(json.dumps(foretis_json))
 
     # Create server in dormant mode (verify only)
     persist_path = getattr(args, "persist_path", None)

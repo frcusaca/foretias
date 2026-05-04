@@ -3,9 +3,9 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "fortias-p2p"
+name = "foretias-p2p"
 version = "0.2.0"
-description = "Python bindings for Fortias P2P attestation engine"
+description = "Python bindings for Foretias P2P attestation engine"
 readme = "README.md"
 requires-python = ">=3.7"
 license = { text = "MIT" }
@@ -15,7 +15,7 @@ dev = ["pytest>=7"]
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
-module-name = "fortias_p2p"
+module-name = "foretias_p2p"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

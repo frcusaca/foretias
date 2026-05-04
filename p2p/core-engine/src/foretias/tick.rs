@@ -1,4 +1,4 @@
-//! Fortias domain types: TickRecord, Foretis, and stamp/verify operations.
+//! Foretias domain types: TickRecord, Foretis, and stamp/verify operations.
 
 use serde::{Deserialize, Serialize};
 
@@ -15,9 +15,9 @@ pub struct TickRecord {
     /// The public key active at this tick.
     pub public_key: Vec<u8>,
     /// Serialized Foretis attesting forward to the next tick.
-    pub forward_fortis: Vec<u8>,
+    pub forward_foretis: Vec<u8>,
     /// Serialized Foretis attesting backward to the previous tick.
-    pub backward_fortis: Vec<u8>,
+    pub backward_foretis: Vec<u8>,
     /// Cryptographic nonce (16 bytes) used in the auto-attestation blob for this tick pair.
     /// This prevents replay attacks by ensuring each blob is unique even if the tick data repeats.
     pub aa_nonce: [u8; 16],
@@ -198,16 +198,16 @@ pub fn verify_pair(
     ma_blob.extend_from_slice(&stamps.to_be_bytes());
     ma_blob.extend_from_slice(&nonce);
 
-    let forward_sig: [u8; 64] = curr.forward_fortis[..64].try_into()
-        .map_err(|_| NodeError::BadFormat("forward_fortis".to_string()))?;
+    let forward_sig: [u8; 64] = curr.forward_foretis[..64].try_into()
+        .map_err(|_| NodeError::BadFormat("forward_foretis".to_string()))?;
     let forward_valid = crypto.verify_ed25519(
         &ForetiasPubKey32 { bytes: prev_pk },
         &ma_blob,
         &ForetiasSig64 { bytes: forward_sig },
     )?;
 
-    let backward_sig: [u8; 64] = curr.backward_fortis[..64].try_into()
-        .map_err(|_| NodeError::BadFormat("backward_fortis".to_string()))?;
+    let backward_sig: [u8; 64] = curr.backward_foretis[..64].try_into()
+        .map_err(|_| NodeError::BadFormat("backward_foretis".to_string()))?;
     let backward_valid = crypto.verify_ed25519(
         &ForetiasPubKey32 { bytes: curr_pk },
         &ma_blob,
@@ -242,8 +242,8 @@ mod tests {
         cal.append(TickRecord {
             tick_number,
             public_key,
-            forward_fortis: serde_json::to_vec(&foretis).unwrap(),
-            backward_fortis: vec![],
+            forward_foretis: serde_json::to_vec(&foretis).unwrap(),
+            backward_foretis: vec![],
             aa_nonce: [0u8; 16],
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
@@ -252,7 +252,7 @@ mod tests {
     }
 
     #[test]
-    fn stamp_creates_valid_fortis() {
+    fn stamp_creates_valid_foretis() {
         let server = make_server();
         let tbid: [u8; 16] = [1u8; 16];
         let foretis = stamp(server.as_ref(), &tbid, 42, b"hello", "echo-42", "tbn")
@@ -317,8 +317,8 @@ mod tests {
         cal.append(TickRecord {
             tick_number: 1,
             public_key: vec![0u8; 32],
-            forward_fortis: vec![],
-            backward_fortis: vec![],
+            forward_foretis: vec![],
+            backward_foretis: vec![],
             aa_nonce: [0u8; 16],
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
@@ -349,8 +349,8 @@ mod tests {
         let prev = TickRecord {
             tick_number: 1,
             public_key: pub_key.to_vec(),
-            forward_fortis: vec![],
-            backward_fortis: vec![],
+            forward_foretis: vec![],
+            backward_foretis: vec![],
             aa_nonce: [0u8; 16],
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
@@ -358,8 +358,8 @@ mod tests {
         let curr = TickRecord {
             tick_number: 2,
             public_key: pub_key.to_vec(),
-            forward_fortis: sig_bytes.clone(),
-            backward_fortis: sig_bytes,
+            forward_foretis: sig_bytes.clone(),
+            backward_foretis: sig_bytes,
             aa_nonce: nonce,
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
@@ -386,8 +386,8 @@ mod tests {
         let prev = TickRecord {
             tick_number: 1,
             public_key: pub_key.to_vec(),
-            forward_fortis: vec![],
-            backward_fortis: vec![],
+            forward_foretis: vec![],
+            backward_foretis: vec![],
             aa_nonce: [0u8; 16],
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
@@ -395,8 +395,8 @@ mod tests {
         let curr = TickRecord {
             tick_number: 2,
             public_key: pub_key.to_vec(),
-            forward_fortis: sig_bytes.clone(),
-            backward_fortis: sig_bytes.clone(),
+            forward_foretis: sig_bytes.clone(),
+            backward_foretis: sig_bytes.clone(),
             aa_nonce: nonce,
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
@@ -408,8 +408,8 @@ mod tests {
         let curr_tampered = TickRecord {
             tick_number: 2,
             public_key: pub_key.to_vec(),
-            forward_fortis: sig_bytes,
-            backward_fortis: vec![0u8; 64],
+            forward_foretis: sig_bytes,
+            backward_foretis: vec![0u8; 64],
             aa_nonce: nonce,
             stamps_per_tick: 0,
             external_attestations: Vec::new(),

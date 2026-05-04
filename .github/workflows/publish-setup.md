@@ -2,10 +2,10 @@
 
 After merging to the default branch, configure the trusted publisher:
 
-1. Go to https://pypi.org/project/fortias+/settings/
+1. Go to https://pypi.org/project/foretias+/settings/
 2. Scroll to "Trusted Publishers" and click "Add an item"
 3. Select "GitHub" as the integration
-4. Set the repository to `frcusaca/fortias`
+4. Set the repository to `frcusaca/foretias`
 5. Click "Save"
 
 This links your GitHub repo to PyPI — when a `v*` tag is pushed, PyPI

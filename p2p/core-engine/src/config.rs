@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-/// Runtime configuration for a Fortias P2P node, loaded from a JSON file.
+/// Runtime configuration for a Foretias P2P node, loaded from a JSON file.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct NodeConfig {
     /// Address the node listens on for incoming connections (default: `127.0.0.1:4001`).
@@ -12,7 +12,7 @@ pub struct NodeConfig {
     /// Node version string, defaults to the Cargo package version.
     #[serde(default = "default_version")]
     pub version: String,
-    /// Filesystem path where calendar data is persisted (default: `.fortias/calendars`).
+    /// Filesystem path where calendar data is persisted (default: `.foretias/calendars`).
     #[serde(default = "default_calendar_path")]
     pub calendar_path: PathBuf,
     /// Chronon interval in nanoseconds, defining the tick period (default: 60s).
@@ -39,7 +39,7 @@ pub struct NodeConfig {
     /// DHT namespace for Kademlia protocol isolation (default: "mainnet").
     #[serde(default = "default_dht_namespace")]
     pub dht_namespace: String,
-    /// DHT bootstrap peer multiaddrs (e.g. "/ip4/bootstrap.fortias.example/tcp/4101/p2p/<PeerId>").
+    /// DHT bootstrap peer multiaddrs (e.g. "/ip4/bootstrap.foretias.example/tcp/4101/p2p/<PeerId>").
     #[serde(default)]
     pub dht_bootstrap: Vec<String>,
     /// Collision detection configuration.
@@ -63,7 +63,7 @@ pub struct CollisionConfig {
 
 fn default_listen_addr() -> String { "127.0.0.1:4001".to_string() }
 fn default_version() -> String { env!("CARGO_PKG_VERSION").to_string() }
-fn default_calendar_path() -> PathBuf { PathBuf::from(".fortias/calendars") }
+fn default_calendar_path() -> PathBuf { PathBuf::from(".foretias/calendars") }
 fn default_chronon_ns() -> u64 { 60_000_000_000 }
 fn default_auto_attest_every_n() -> u64 { 1 }
 fn default_request_timeout_secs() -> u64 { 5 }
@@ -83,8 +83,8 @@ impl NodeConfig {
     /// Returns the default filesystem path where the configuration file is expected.
     pub fn default_path() -> String {
         std::env::var("HOME")
-            .map(|h| format!("{}/.config/fortias/fortias.settings.json", h))
-            .unwrap_or_else(|_| ".config/fortias/fortias.settings.json".to_string())
+            .map(|h| format!("{}/.config/foretias/foretias.settings.json", h))
+            .unwrap_or_else(|_| ".config/foretias/foretias.settings.json".to_string())
     }
     /// Validates the configuration, returning an error string if invalid.
     pub fn validate(&self) -> Result<(), String> {

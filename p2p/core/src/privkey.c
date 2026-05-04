@@ -1,5 +1,5 @@
 #include "platform.h"
-#include "fortias_core.h"
+#include "foretias_core.h"
 #include <sodium.h>
 #include <stdlib.h>
 
@@ -26,7 +26,7 @@ static void derive_nonce(uint8_t nonce[24], uint64_t counter) {
     uint8_t hash[crypto_hash_sha256_BYTES];
     crypto_hash_sha256(hash, (const unsigned char *)&counter, sizeof counter);
     memcpy(nonce, hash, 24);
-    fortias_memzero(hash, sizeof hash);
+    foretias_memzero(hash, sizeof hash);
 }
 
 /* ── Helper: encrypt seed → encrypted_key (32 ciphertext + 16 MAC) ──── */
@@ -55,35 +55,35 @@ static bool decrypt_seed(uint8_t tmp[32], const uint8_t encrypted_key[48],
  * ChaCha20-Poly1305 AEAD. The public key is cached since it's
  * public information.
  * ─────────────────────────────────────────────────────────────────────── */
-struct FortiasPrivKey {
+struct ForetiasPrivKey {
     uint8_t       encrypted_key[48];  /* 32 bytes ciphertext + 16 bytes MAC */
     uint8_t       nonce[24];          /* ChaCha20 nonce (24 bytes)           */
     uint8_t       public_key[32];     /* Cached public key (public info)     */
-    FortiasCurve  curve;              /* Curve identifier                    */
+    ForetiasCurve  curve;              /* Curve identifier                    */
 };
 
 /* ── Public API ──────────────────────────────────────────────────────── */
 
-void fortias_privkey_init(void) {
+void foretias_privkey_init(void) {
     if (instance_kek_initialized) return;
     randombytes_buf(instance_kek, sizeof instance_kek);
     instance_kek_initialized = true;
     key_gen_counter = 0;
 }
 
-void fortias_privkey_cleanup(void) {
-    fortias_memzero(instance_kek, sizeof instance_kek);
+void foretias_privkey_cleanup(void) {
+    foretias_memzero(instance_kek, sizeof instance_kek);
     instance_kek_initialized = false;
     key_gen_counter = 0;
 }
 
-FortiasPrivKey* fortias_privkey_ed25519_generate(void) {
+ForetiasPrivKey* foretias_privkey_ed25519_generate(void) {
     if (!instance_kek_initialized) return NULL;
 
-    FortiasPrivKey *key = (FortiasPrivKey *)calloc(1, sizeof(FortiasPrivKey));
+    ForetiasPrivKey *key = (ForetiasPrivKey *)calloc(1, sizeof(ForetiasPrivKey));
     if (!key) return NULL;
 
-    key->curve = FORTIAS_CURVE_ED25519;
+    key->curve = FORETIAS_CURVE_ED25519;
 
     /* 1. Generate raw 32-byte seed */
     uint8_t seed[crypto_sign_SEEDBYTES];
@@ -93,8 +93,8 @@ FortiasPrivKey* fortias_privkey_ed25519_generate(void) {
     unsigned char pub[crypto_sign_PUBLICKEYBYTES];
     unsigned char sec[crypto_sign_SECRETKEYBYTES];
     if (crypto_sign_seed_keypair(pub, sec, seed) != 0) {
-        fortias_memzero(seed, sizeof seed);
-        fortias_memzero(key, sizeof(FortiasPrivKey));
+        foretias_memzero(seed, sizeof seed);
+        foretias_memzero(key, sizeof(ForetiasPrivKey));
         free(key);
         return NULL;
     }
@@ -105,33 +105,33 @@ FortiasPrivKey* fortias_privkey_ed25519_generate(void) {
 
     /* 4. Encrypt seed with instance KEK */
     if (!encrypt_seed(key->encrypted_key, key->nonce, seed)) {
-        fortias_memzero(seed, sizeof seed);
-        fortias_memzero(key, sizeof(FortiasPrivKey));
+        foretias_memzero(seed, sizeof seed);
+        foretias_memzero(key, sizeof(ForetiasPrivKey));
         free(key);
         return NULL;
     }
 
     /* 5. Store public key, zero everything else */
     memcpy(key->public_key, pub, sizeof key->public_key);
-    fortias_memzero(sec, sizeof sec);
-    fortias_memzero(seed, sizeof seed);
+    foretias_memzero(sec, sizeof sec);
+    foretias_memzero(seed, sizeof seed);
 
     return key;
 }
 
-FortiasPrivKey* fortias_privkey_ed25519_from_seed(const uint8_t seed[32]) {
+ForetiasPrivKey* foretias_privkey_ed25519_from_seed(const uint8_t seed[32]) {
     if (!seed || !instance_kek_initialized) return NULL;
 
-    FortiasPrivKey *key = (FortiasPrivKey *)calloc(1, sizeof(FortiasPrivKey));
+    ForetiasPrivKey *key = (ForetiasPrivKey *)calloc(1, sizeof(ForetiasPrivKey));
     if (!key) return NULL;
 
-    key->curve = FORTIAS_CURVE_ED25519;
+    key->curve = FORETIAS_CURVE_ED25519;
 
     /* Derive public key from the provided seed */
     unsigned char pub[crypto_sign_PUBLICKEYBYTES];
     unsigned char sec[crypto_sign_SECRETKEYBYTES];
     if (crypto_sign_seed_keypair(pub, sec, seed) != 0) {
-        fortias_memzero(key, sizeof(FortiasPrivKey));
+        foretias_memzero(key, sizeof(ForetiasPrivKey));
         free(key);
         return NULL;
     }
@@ -142,87 +142,87 @@ FortiasPrivKey* fortias_privkey_ed25519_from_seed(const uint8_t seed[32]) {
 
     /* Encrypt the seed */
     if (!encrypt_seed(key->encrypted_key, key->nonce, seed)) {
-        fortias_memzero(sec, sizeof sec);
-        fortias_memzero(key, sizeof(FortiasPrivKey));
+        foretias_memzero(sec, sizeof sec);
+        foretias_memzero(key, sizeof(ForetiasPrivKey));
         free(key);
         return NULL;
     }
 
     /* Store public key, zero everything else */
     memcpy(key->public_key, pub, sizeof key->public_key);
-    fortias_memzero(sec, sizeof sec);
+    foretias_memzero(sec, sizeof sec);
 
     return key;
 }
 
-uint8_t* fortias_privkey_ed25519_public(const FortiasPrivKey *key, uint8_t out[32]) {
+uint8_t* foretias_privkey_ed25519_public(const ForetiasPrivKey *key, uint8_t out[32]) {
     if (!key || !out) return NULL;
     memcpy(out, key->public_key, 32);
     return out;
 }
 
-int fortias_privkey_ed25519_sign(const FortiasPrivKey *key, const uint8_t *msg, size_t msg_len, uint8_t sig[64]) {
-    if (!key || !msg || !sig) return FORTIAS_ERR_BAD_INPUT;
+int foretias_privkey_ed25519_sign(const ForetiasPrivKey *key, const uint8_t *msg, size_t msg_len, uint8_t sig[64]) {
+    if (!key || !msg || !sig) return FORETIAS_ERR_BAD_INPUT;
 
     /* 1. Decrypt seed */
     uint8_t tmp[32];
     if (!decrypt_seed(tmp, key->encrypted_key, key->nonce)) {
-        return FORTIAS_ERR_INTERNAL;
+        return FORETIAS_ERR_INTERNAL;
     }
 
     /* 2. Derive keypair and sign */
     unsigned char pub[crypto_sign_PUBLICKEYBYTES];
     unsigned char sec[crypto_sign_SECRETKEYBYTES];
     if (crypto_sign_seed_keypair(pub, sec, tmp) != 0) {
-        fortias_memzero(tmp, sizeof tmp);
-        return FORTIAS_ERR_INTERNAL;
+        foretias_memzero(tmp, sizeof tmp);
+        return FORETIAS_ERR_INTERNAL;
     }
 
     unsigned char raw_sig[crypto_sign_BYTES];
     if (crypto_sign_detached(raw_sig, NULL, msg, (unsigned long long)msg_len, sec) != 0) {
-        fortias_memzero(sec, sizeof sec);
-        fortias_memzero(tmp, sizeof tmp);
-        return FORTIAS_ERR_INTERNAL;
+        foretias_memzero(sec, sizeof sec);
+        foretias_memzero(tmp, sizeof tmp);
+        return FORETIAS_ERR_INTERNAL;
     }
 
     memcpy(sig, raw_sig, 64);
-    fortias_memzero(sec, sizeof sec);
-    fortias_memzero(raw_sig, sizeof raw_sig);
-    fortias_memzero(tmp, sizeof tmp);
+    foretias_memzero(sec, sizeof sec);
+    foretias_memzero(raw_sig, sizeof raw_sig);
+    foretias_memzero(tmp, sizeof tmp);
 
-    return FORTIAS_OK;
+    return FORETIAS_OK;
 }
 
-FortiasResult fortias_nullifier_derive_handle(const FortiasPrivKey *key, const uint8_t *context, size_t context_len, FortiasNullifier *out) {
-    if (!key || !context || !out) return FORTIAS_ERR_BAD_INPUT;
+ForetiasResult foretias_nullifier_derive_handle(const ForetiasPrivKey *key, const uint8_t *context, size_t context_len, ForetiasNullifier *out) {
+    if (!key || !context || !out) return FORETIAS_ERR_BAD_INPUT;
 
     /* Decrypt seed for HMAC */
     uint8_t tmp[32];
     if (!decrypt_seed(tmp, key->encrypted_key, key->nonce)) {
-        return FORTIAS_ERR_INTERNAL;
+        return FORETIAS_ERR_INTERNAL;
     }
 
     unsigned char hmac[crypto_auth_hmacsha256_BYTES];
     crypto_auth_hmacsha256(hmac, context, (unsigned long long)context_len, tmp);
     memcpy(out->bytes, hmac, 32);
-    fortias_memzero(hmac, sizeof hmac);
-    fortias_memzero(tmp, sizeof tmp);
+    foretias_memzero(hmac, sizeof hmac);
+    foretias_memzero(tmp, sizeof tmp);
 
-    return FORTIAS_OK;
+    return FORETIAS_OK;
 }
 
-FortiasResult fortias_privkey_derive_seal_key(
-    const FortiasPrivKey *key,
+ForetiasResult foretias_privkey_derive_seal_key(
+    const ForetiasPrivKey *key,
     const uint8_t *info,
     size_t info_len,
     uint8_t seal_key[32]
 ) {
-    if (!key || !info || !seal_key) return FORTIAS_ERR_BAD_INPUT;
+    if (!key || !info || !seal_key) return FORETIAS_ERR_BAD_INPUT;
 
     /* 1. Decrypt seed */
     uint8_t tmp[32];
     if (!decrypt_seed(tmp, key->encrypted_key, key->nonce)) {
-        return FORTIAS_ERR_INTERNAL;
+        return FORETIAS_ERR_INTERNAL;
     }
 
     /* 2. HKDF-SHA256 per RFC 5869:
@@ -241,17 +241,17 @@ FortiasResult fortias_privkey_derive_seal_key(
     memcpy(seal_key, okm, 32);
 
     /* 3. Zeroize all temporary buffers */
-    fortias_memzero(lmk, sizeof lmk);
-    fortias_memzero(expand_input, sizeof expand_input);
-    fortias_memzero(okm, sizeof okm);
-    fortias_memzero(tmp, sizeof tmp);
+    foretias_memzero(lmk, sizeof lmk);
+    foretias_memzero(expand_input, sizeof expand_input);
+    foretias_memzero(okm, sizeof okm);
+    foretias_memzero(tmp, sizeof tmp);
 
-    return FORTIAS_OK;
+    return FORETIAS_OK;
 }
 
-void fortias_privkey_free(FortiasPrivKey *key) {
+void foretias_privkey_free(ForetiasPrivKey *key) {
     if (key) {
-        fortias_memzero(key, sizeof(FortiasPrivKey));
+        foretias_memzero(key, sizeof(ForetiasPrivKey));
         free(key);
     }
 }

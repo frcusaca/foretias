@@ -3,7 +3,7 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "fortias"
+name = "foretias"
 dynamic = ["version"]
 description = "Free, Open-source and Resilient Time Integrity Attestation Service"
 readme = "README.md"
@@ -26,12 +26,12 @@ dependencies = []
 dev = ["pytest>=8"]
 
 [project.scripts]
-fortis = "fortias.cli:main"
+foretis = "foretias.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/frcusaca/fortias"
-Repository = "https://github.com/frcusaca/fortias"
+Homepage = "https://github.com/frcusaca/foretias"
+Repository = "https://github.com/frcusaca/foretias"
 
 [tool.maturin]
-manifest-path = "p2p/fortias-python/Cargo.toml"
-module-name = "fortias_p2p"
+manifest-path = "p2p/foretias-python/Cargo.toml"
+module-name = "foretias_p2p"

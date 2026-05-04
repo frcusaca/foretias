@@ -1,26 +1,26 @@
-//! Fortias libp2p network behaviour.
+//! Foretias libp2p network behaviour.
 
 use libp2p::{identify, ping, kad, gossipsub, swarm::NetworkBehaviour};
 
 #[derive(NetworkBehaviour)]
-pub struct FortiasBehaviour {
+pub struct ForetiasBehaviour {
     pub identify: identify::Behaviour,
     pub ping:     ping::Behaviour,
     pub kad:      kad::Behaviour<kad::store::MemoryStore>,
     pub gossip:   gossipsub::Behaviour,
 }
 
-impl FortiasBehaviour {
+impl ForetiasBehaviour {
     pub fn new(local_key: &libp2p::identity::Keypair, namespace: &str, json_rpc_addr: Option<&str>) -> Self {
         let local_peer_id = local_key.public().to_peer_id();
 
         let agent = match json_rpc_addr {
-            Some(addr) => format!("fortias/{} rpc={}", env!("CARGO_PKG_VERSION"), addr),
-            None => format!("fortias/{}", env!("CARGO_PKG_VERSION")),
+            Some(addr) => format!("foretias/{} rpc={}", env!("CARGO_PKG_VERSION"), addr),
+            None => format!("foretias/{}", env!("CARGO_PKG_VERSION")),
         };
 
         let kad_protocol = libp2p::StreamProtocol::try_from_owned(
-            format!("/fortias/kad/{}/1.0.0", namespace)
+            format!("/foretias/kad/{}/1.0.0", namespace)
         ).expect("valid protocol string");
         let mut kad_cfg = kad::Config::new(kad_protocol);
         kad_cfg.set_query_timeout(std::time::Duration::from_secs(30));
@@ -41,7 +41,7 @@ impl FortiasBehaviour {
 
         Self {
             identify: identify::Behaviour::new(
-                identify::Config::new("/fortias/0.4.0".into(), local_key.public().clone())
+                identify::Config::new("/foretias/0.4.0".into(), local_key.public().clone())
                     .with_agent_version(agent),
             ),
             ping: ping::Behaviour::new(ping::Config::new()),

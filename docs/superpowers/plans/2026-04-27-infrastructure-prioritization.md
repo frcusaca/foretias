@@ -1,4 +1,4 @@
-# Fortias v0.1 Tooling & Infrastructure Prioritization Plan
+# Foretias v0.1 Tooling & Infrastructure Prioritization Plan
 
 > **For agents:** REQUIRED SUB-SKILL: Use `subagent-driven-development` to implement this plan task-by-task.
 >
@@ -17,7 +17,7 @@ Task 6 ("Python uses ONLY Rust") is **not** a simple import swap. The current st
 | Protocol Feature | Python (`chronomatter.py`) | Rust PyO3 (`python.rs`) |
 |---|---|---|
 | Per-tick key rotation | Full (`_timebeing._tick`) | **Missing** |
-| Mutual acknowledgement | Full (forward/backward fortis) | **Missing** |
+| Mutual acknowledgement | Full (forward/backward foretis) | **Missing** |
 | Daemon ticking (V1 + V1Serial) | Full (thread-based, chronon) | **Missing** |
 | Inquirer (standalone verifier) | Full (chain integrity, MA verify) | **Missing** |
 | Calendar chain integrity | Full (`_verify_pair`, `_verify_chain`) | **Partial** (tick order only) |
@@ -89,8 +89,8 @@ Task 6 ("Python uses ONLY Rust") is **not** a simple import swap. The current st
 **Rationale:** No Makefile exists. CMake and Cargo work but have no unified entry point. A single `make all` should build everything.
 
 **Files:**
-- Create: `fortias/Makefile` (root)
-- Modify: `fortias/p2p/core/tests/CMakeLists.txt` (add test binaries)
+- Create: `foretias/Makefile` (root)
+- Modify: `foretias/p2p/core/tests/CMakeLists.txt` (add test binaries)
 
 **The Makefile should expose:**
 ```make
@@ -109,15 +109,15 @@ lint           # Clippy + mypy/flake8 equivalent
 ```
 
 **Key insight:** The `build.rs` already compiles C code via `cc` crate. The Makefile `build-c` target should use CMake (for standalone C builds and testing), while `build-rust` uses Cargo (which internally builds C via build.rs). These are complementary, not redundant:
-- `build-c` → standalone `libfortias_core.a` for C consumers and C test execution
-- `build-rust` → `libfortias_p2p.so` + `fortias` binary, includes C compilation internally
+- `build-c` → standalone `libforetias_core.a` for C consumers and C test execution
+- `build-rust` → `libforetias_p2p.so` + `foretias` binary, includes C compilation internally
 
 ### Task 2: Rust README docs (S — ~15 min)
 
 **Goal:** Build/debug/deploy documentation for the Rust layer.
 
 **Files:**
-- Create: `fortias/p2p/node/README.md`
+- Create: `foretias/p2p/node/README.md`
 
 **Contents:**
 - Build: `cargo build --release` / `cargo build --features python`
@@ -134,16 +134,16 @@ lint           # Clippy + mypy/flake8 equivalent
 **Goal:** Build/package/publish documentation for Python layer.
 
 **Files:**
-- Create: `fortias/README.md` (or update existing)
+- Create: `foretias/README.md` (or update existing)
 
 **Contents:**
 - Install: `pip install -e ".[dev]"` or `uv pip install -e ".[dev]"`
 - Build wheel: `python -m build`
 - Publish: `twine upload dist/*`
 - Dependencies: `cryptography>=42`
-- Optional native: build Rust layer first, set `FORTIAS_USE_NATIVE=1`
+- Optional native: build Rust layer first, set `FORETIAS_USE_NATIVE=1`
 - Test: `pytest tests/ -v`
-- CLI: `fortis serve` / `fortis stamp` / `fortis verify`
+- CLI: `foretis serve` / `foretis stamp` / `foretis verify`
 
 ### Task 4: C11 Unit Tests (M — ~2-3 hours)
 
@@ -152,21 +152,21 @@ lint           # Clippy + mypy/flake8 equivalent
 **Rationale:** 0 tests exist for 476 lines of C code. The spec calls for `ctest` via CMake. Each test file should cover happy path + every error code.
 
 **Files:**
-- Create: `fortias/p2p/core/tests/test_identity_ed25519.c`
-- Create: `fortias/p2p/core/tests/test_identity_p256.c`
-- Create: `fortias/p2p/core/tests/test_signing_ed25519.c`
-- Create: `fortias/p2p/core/tests/test_signing_p256.c`
-- Create: `fortias/p2p/core/tests/test_hash_sha256.c`
-- Create: `fortias/p2p/core/tests/test_hash_blake3.c`
-- Create: `fortias/p2p/core/tests/test_hash_legacy_md5.c`
-- Create: `fortias/p2p/core/tests/test_hash_legacy_sha1.c`
-- Create: `fortias/p2p/core/tests/test_noise_xx.c`
-- Create: `fortias/p2p/core/tests/test_merkle.c`
-- Create: `fortias/p2p/core/tests/test_frost_ed25519.c`
-- Create: `fortias/p2p/core/tests/test_nullifier.c`
-- Create: `fortias/p2p/core/tests/test_rng_mix.c`
-- Create: `fortias/p2p/core/tests/test_memzero.c`
-- Modify: `fortias/p2p/core/tests/CMakeLists.txt` (add all test executables)
+- Create: `foretias/p2p/core/tests/test_identity_ed25519.c`
+- Create: `foretias/p2p/core/tests/test_identity_p256.c`
+- Create: `foretias/p2p/core/tests/test_signing_ed25519.c`
+- Create: `foretias/p2p/core/tests/test_signing_p256.c`
+- Create: `foretias/p2p/core/tests/test_hash_sha256.c`
+- Create: `foretias/p2p/core/tests/test_hash_blake3.c`
+- Create: `foretias/p2p/core/tests/test_hash_legacy_md5.c`
+- Create: `foretias/p2p/core/tests/test_hash_legacy_sha1.c`
+- Create: `foretias/p2p/core/tests/test_noise_xx.c`
+- Create: `foretias/p2p/core/tests/test_merkle.c`
+- Create: `foretias/p2p/core/tests/test_frost_ed25519.c`
+- Create: `foretias/p2p/core/tests/test_nullifier.c`
+- Create: `foretias/p2p/core/tests/test_rng_mix.c`
+- Create: `foretias/p2p/core/tests/test_memzero.c`
+- Modify: `foretias/p2p/core/tests/CMakeLists.txt` (add all test executables)
 
 **Test framework:** Use CMocka or Unity (lightweight, no dependencies). CMocka preferred because it integrates with CTest natively.
 
@@ -194,7 +194,7 @@ find_package(cmocka REQUIRED)
 include(/usr/share/cmocka/CMocka.cmake)
 
 add_executable(test_identity_ed25519 tests/test_identity_ed25519.c)
-target_link_libraries(test_identity_ed25519 fortias_core cmocka)
+target_link_libraries(test_identity_ed25519 foretias_core cmocka)
 add_test(NAME test_identity_ed25519 COMMAND test_identity_ed25519)
 
 # ... repeat for each test file ...
@@ -207,12 +207,12 @@ add_test(NAME test_identity_ed25519 COMMAND test_identity_ed25519)
 **Rationale:** 0 Rust unit tests exist. The Rust code has existing defensive patterns (error propagation, tracing, timeouts, content limits) but no tests verify them.
 
 **Files:**
-- Create: `fortias/p2p/node/src/crypto_server/mod.rs` — add `#[cfg(test)] mod tests`
-- Create: `fortias/p2p/node/src/fortias/tick.rs` — add `#[cfg(test)] mod tests`
-- Create: `fortias/p2p/node/src/fortias/calendar.rs` — add `#[cfg(test)] mod tests`
-- Create: `fortias/p2p/node/src/error.rs` — add `#[cfg(test)] mod tests`
-- Create: `fortias/p2p/node/src/core/signing.rs` — add `#[cfg(test)] mod tests`
-- Create: `fortias/p2p/node/src/core/hashing.rs` — add `#[cfg(test)] mod tests`
+- Create: `foretias/p2p/node/src/crypto_server/mod.rs` — add `#[cfg(test)] mod tests`
+- Create: `foretias/p2p/node/src/foretias/tick.rs` — add `#[cfg(test)] mod tests`
+- Create: `foretias/p2p/node/src/foretias/calendar.rs` — add `#[cfg(test)] mod tests`
+- Create: `foretias/p2p/node/src/error.rs` — add `#[cfg(test)] mod tests`
+- Create: `foretias/p2p/node/src/core/signing.rs` — add `#[cfg(test)] mod tests`
+- Create: `foretias/p2p/node/src/core/hashing.rs` — add `#[cfg(test)] mod tests`
 
 **Test categories:**
 
@@ -235,7 +235,7 @@ add_test(NAME test_identity_ed25519 COMMAND test_identity_ed25519)
    - `test_md5_known_vector` — legacy MD5
    - `test_sha1_known_vector` — legacy SHA1
 
-3. **Fortis stamp/verify:**
+3. **Foretis stamp/verify:**
    - `test_stamp_verify_roundtrip` — stamp content, verify same content
    - `test_verify_wrong_content` — wrong content returns false
    - `test_verify_content_hash_mismatch` — tampered hash
@@ -278,7 +278,7 @@ The Rust PyO3 bindings in `python.rs` (402 lines) are **only 30% feature-complet
 | Component | Python | Rust needed | Effort |
 |---|---|---|---|
 | Per-tick key rotation | `_timebeing._tick()` | New Rust function: rotate keypair, create MA | M |
-| Mutual acknowledgement | `_genesis_ma()` + `_tick()` MA | New Rust: `tick_transition()` with forward/backward fortis | M |
+| Mutual acknowledgement | `_genesis_ma()` + `_tick()` MA | New Rust: `tick_transition()` with forward/backward foretis | M |
 | Chronomatter daemon | `_daemon_loop()` in V1 + V1Serial | New Rust: `tokio::task::spawn` ticker | M |
 | Inquirer (standalone verify) | `Inquirer` class with chain verify | New Rust: `Inquirer` struct + `verify()` | M |
 | Calendar chain integrity | `_verify_pair()`, `_verify_chain()` | Extend `calendar.rs` `integrity_check()` | S |
@@ -296,8 +296,8 @@ The Rust PyO3 bindings in `python.rs` (402 lines) are **only 30% feature-complet
 Do NOT attempt Task 6 as a single task. Instead:
 
 **Phase 2A: Rust Protocol Foundation** (separate plan, ~20 hours)
-1. Implement `_timebeing._tick()` equivalent in Rust (`fortias/tick.rs` — tick rotation with MA)
-2. Implement `_verify_pair()` / `_verify_chain()` in Rust (`fortias/calendar.rs`)
+1. Implement `_timebeing._tick()` equivalent in Rust (`foretias/tick.rs` — tick rotation with MA)
+2. Implement `_verify_pair()` / `_verify_chain()` in Rust (`foretias/calendar.rs`)
 3. Add Rust unit tests for protocol operations
 4. Wire into PyO3: expose `PyTimeFamily.tick()` that actually rotates keys
 
@@ -310,7 +310,7 @@ Do NOT attempt Task 6 as a single task. Instead:
 **Phase 2C: Inquirer & Python Migration** (separate plan, ~15 hours)
 1. Implement Rust `Inquirer` with chain integrity verification
 2. Expose through PyO3
-3. Modify Python to use Rust via `FORTIAS_USE_NATIVE=1`
+3. Modify Python to use Rust via `FORETIAS_USE_NATIVE=1`
 4. Migrate 131 Python tests to use Rust (or keep dual-mode)
 
 ---
@@ -346,16 +346,16 @@ Do NOT attempt Task 6 as a single task. Instead:
 | Risk | Severity | Mitigation |
 |---|---|---|
 | Task 4: C tests discover bugs in stub implementations (P-256, FROST) | Medium | Tests will expose these; fix stubs first, then test |
-| Task 4: `fortias_core_version()` is declared but not implemented — linker error | High | Implement before running any C tests |
+| Task 4: `foretias_core_version()` is declared but not implemented — linker error | High | Implement before running any C tests |
 | Task 5: Rust tests may expose that `build.rs` doesn't link all needed C files | Low | `build.rs` already lists all 14 source files |
 | Task 6: Attempting full migration in one shot will break Python tests | Critical | Use incremental phased approach with dual-mode |
-| Task 6: 131 Python tests will fail if we cut Python crypto before Rust is ready | Critical | Keep `FORTIAS_USE_NATIVE` as opt-in; default stays pure Python |
+| Task 6: 131 Python tests will fail if we cut Python crypto before Rust is ready | Critical | Keep `FORETIAS_USE_NATIVE` as opt-in; default stays pure Python |
 
 ---
 
 ## Immediate Action Items
 
-1. **Fix `fortias_core_version()`** before any C tests run — this is a linker time-bomb. Add implementation in a new `src/version.c` or inline it in `src/rng_mix.c`.
+1. **Fix `foretias_core_version()`** before any C tests run — this is a linker time-bomb. Add implementation in a new `src/version.c` or inline it in `src/rng_mix.c`.
 
 2. **Wave 1 is ready to dispatch** — no blockers. All 5 tasks are independent.
 
@@ -375,4 +375,4 @@ Do NOT attempt Task 6 as a single task. Instead:
 
 **Placeholder scan:** No "TBD", "TODO", or vague language found. All file paths, test names, and effort estimates are concrete.
 
-**Type consistency:** All C function names match `fortias_core.h`. All Rust struct names match existing codebase. All Python class names match existing `chronomatter.py`.
+**Type consistency:** All C function names match `foretias_core.h`. All Rust struct names match existing codebase. All Python class names match existing `chronomatter.py`.

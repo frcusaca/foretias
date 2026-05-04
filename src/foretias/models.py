@@ -1,6 +1,6 @@
-"""Fortias v1 — Data models.
+"""Foretias v1 — Data models.
 
-.. deprecated:: Use ``fortias_p2p.PyFortis`` / ``fortias_p2p.PyTickRecord`` (Rust) instead.
+.. deprecated:: Use ``foretias_p2p.PyForetis`` / ``foretias_p2p.PyTickRecord`` (Rust) instead.
 """
 
 from __future__ import annotations
@@ -8,7 +8,7 @@ from __future__ import annotations
 import warnings
 
 warnings.warn(
-    "fortias.models is deprecated. Use fortias (Rust-backed) instead.",
+    "foretias.models is deprecated. Use foretias (Rust-backed) instead.",
     DeprecationWarning,
     stacklevel=2,
 )
@@ -23,27 +23,27 @@ class TickRecord:
     Attributes:
         tick_number: Nanoseconds since Unix epoch; the tick's starting time boundary. This tick represents chronon containing nothing before this moment.
         public_key: Ed25519 public key for this tick (32 bytes).
-        forward_fortis: Auto-attestation signature by this tick's
+        forward_foretis: Auto-attestation signature by this tick's
                         *previous* private key.
-        backward_fortis: Auto-attestation signature by this tick's
+        backward_foretis: Auto-attestation signature by this tick's
                           private key.
     """
 
     tick_number: int
     public_key: bytes
-    forward_fortis: bytes
-    backward_fortis: bytes
+    forward_foretis: bytes
+    backward_foretis: bytes
 
     def __post_init__(self) -> None:
-        if self.forward_fortis is None:
-            raise TypeError("forward_fortis must never be None")
-        if self.backward_fortis is None:
-            raise TypeError("backward_fortis must never be None")
+        if self.forward_foretis is None:
+            raise TypeError("forward_foretis must never be None")
+        if self.backward_foretis is None:
+            raise TypeError("backward_foretis must never be None")
 
 
 @dataclass(frozen=True)
-class Fortis:
-    """A Fortias TimeStamp — the stamped artifact.
+class Foretis:
+    """A Foretias TimeStamp — the stamped artifact.
 
     Attributes:
         tick_number: The tick during which the content was signed.

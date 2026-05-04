@@ -1,9 +1,9 @@
-"""Fortias v1 — Cryptographic primitives.
+"""Foretias v1 — Cryptographic primitives.
 
 Ed25519 signatures over raw bytes (no pre-hash inside the signature input).
 SHA-256 for content hashing.
 
-.. deprecated:: Use ``fortias_p2p.CryptoServer`` (Rust) instead.
+.. deprecated:: Use ``foretias_p2p.CryptoServer`` (Rust) instead.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from __future__ import annotations
 import warnings
 
 warnings.warn(
-    "fortias.crypto is deprecated. Use fortias (Rust-backed) instead.",
+    "foretias.crypto is deprecated. Use foretias (Rust-backed) instead.",
     DeprecationWarning,
     stacklevel=2,
 )

@@ -1,10 +1,10 @@
 [package]
-name    = "fortias-python"
+name    = "foretias-python"
 version = "0.2.0"
 edition = "2021"
 
 [lib]
-name        = "fortias_p2p"
+name        = "foretias_p2p"
 crate-type  = ["cdylib"]
 
 [dependencies]

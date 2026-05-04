@@ -1,4 +1,4 @@
-//! Type aliases for core Fortias data types.
+//! Type aliases for core Foretias data types.
 //!
 //! These are zero-cost `type` aliases — no runtime difference from the underlying types.
 //! They make signatures self-documenting and prevent mixing up byte arrays.

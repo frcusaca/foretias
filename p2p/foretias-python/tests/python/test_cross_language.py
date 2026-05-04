@@ -1,9 +1,9 @@
 """Cross-language integration tests: 16 permutations of server/stamp/verify.
 
 Tests all combinations of:
-  Server:       Rust CLI (fortias serve) or Python (py_server.py)
-  Stamp:        Rust CLI (fortias stamp) or Python (JSON-RPC via socket)
-  Verify:       Rust CLI (fortias verify), Python (JSON-RPC /verify),
+  Server:       Rust CLI (foretias serve) or Python (py_server.py)
+  Stamp:        Rust CLI (foretias stamp) or Python (JSON-RPC via socket)
+  Verify:       Rust CLI (foretias verify), Python (JSON-RPC /verify),
                 or ProveVerification (JSON-RPC get_calendar_slice then local proof)
 
 Run with:
@@ -41,13 +41,13 @@ def wait_for_server(port: int, timeout: float = 15.0) -> bool:
 
 
 def find_binary() -> str:
-    """Find the fortias CLI binary."""
+    """Find the foretias CLI binary."""
     manifest_dir = os.environ.get("CARGO_MANIFEST_DIR", PROJECT_ROOT)
     for profile in ("release", "debug"):
-        path = os.path.join(manifest_dir, "target", profile, "fortias")
+        path = os.path.join(manifest_dir, "target", profile, "foretias")
         if os.path.exists(path):
             return path
-    return "fortias"
+    return "foretias"
 
 
 def json_rpc_call(port: int, method: str, params: dict) -> dict:
@@ -76,11 +76,11 @@ def rust_stamp_cli(port: int, message: str) -> dict:
     return json.loads(result.stdout.strip())
 
 
-def rust_verify_cli(port: int, message: str, fortis: dict) -> bool:
+def rust_verify_cli(port: int, message: str, foretis: dict) -> bool:
     """Verify via Rust CLI, connecting to server on given port."""
     binary = find_binary()
     result = subprocess.run(
-        [binary, "verify", "-m", message, "-f", json.dumps(fortis), "-s", f"127.0.0.1:{port}"],
+        [binary, "verify", "-m", message, "-f", json.dumps(foretis), "-s", f"127.0.0.1:{port}"],
         capture_output=True,
         text=True,
         timeout=10,
@@ -90,11 +90,11 @@ def rust_verify_cli(port: int, message: str, fortis: dict) -> bool:
     return json.loads(result.stdout.strip())["valid"]
 
 
-def rust_prove_verification_cli(port: int, message: str, fortis: dict) -> bool:
+def rust_prove_verification_cli(port: int, message: str, foretis: dict) -> bool:
     """Prove verification via Rust CLI (fetch calendar slice, verify locally)."""
     binary = find_binary()
     result = subprocess.run(
-        [binary, "prove-verification", "-m", message, "-f", json.dumps(fortis), "-s", f"127.0.0.1:{port}"],
+        [binary, "prove-verification", "-m", message, "-f", json.dumps(foretis), "-s", f"127.0.0.1:{port}"],
         capture_output=True,
         text=True,
         timeout=10,
@@ -110,15 +110,15 @@ def python_stamp_rpc(port: int, message: bytes, echo: str = "") -> dict:
     return json_rpc_call(port, "stamp", {"content": message.hex(), "echo": echo})
 
 
-def python_verify_rpc(port: int, message: bytes, fortis: dict) -> bool:
+def python_verify_rpc(port: int, message: bytes, foretis: dict) -> bool:
     """Verify via Python JSON-RPC /verify, connecting to server on given port."""
-    result = json_rpc_call(port, "verify", {"content": message.hex(), "fortis": fortis})
+    result = json_rpc_call(port, "verify", {"content": message.hex(), "foretis": foretis})
     return result["valid"]
 
 
-def python_prove_verification_rpc(port: int, message: bytes, fortis: dict) -> bool:
+def python_prove_verification_rpc(port: int, message: bytes, foretis: dict) -> bool:
     """Prove verification via Python (fetch calendar slice, verify locally)."""
-    tick = fortis.get("tick_number", 0)
+    tick = foretis.get("tick_number", 0)
     records = json_rpc_call(port, "get_calendar_slice", {"cal_tick_start": tick, "count": 1})
     if not records:
         raise RuntimeError(f"no calendar records for tick {tick}")
@@ -128,7 +128,7 @@ def python_prove_verification_rpc(port: int, message: bytes, fortis: dict) -> bo
 
 @pytest.fixture
 def rust_server():
-    """Start a Rust fortias serve on a random port."""
+    """Start a Rust foretias serve on a random port."""
     binary = find_binary()
     port = find_available_port()
     proc = subprocess.Popen(
@@ -205,19 +205,19 @@ def test_cross_language(server_type, stamp_type, verify_type, request):
 
     # Stamp
     if stamp_type == "rust":
-        fortis = rust_stamp_cli(port, TEST_CONTENT)
+        foretis = rust_stamp_cli(port, TEST_CONTENT)
     else:
-        fortis = python_stamp_rpc(port, TEST_CONTENT.encode(), TEST_ECHO)
+        foretis = python_stamp_rpc(port, TEST_CONTENT.encode(), TEST_ECHO)
 
     # Verify
     if verify_type == "verify_rust":
-        assert rust_verify_cli(port, TEST_CONTENT, fortis) is True
-        assert rust_verify_cli(port, WRONG_CONTENT, fortis) is False
+        assert rust_verify_cli(port, TEST_CONTENT, foretis) is True
+        assert rust_verify_cli(port, WRONG_CONTENT, foretis) is False
     elif verify_type == "verify_python":
-        assert python_verify_rpc(port, TEST_CONTENT.encode(), fortis) is True
-        assert python_verify_rpc(port, WRONG_CONTENT.encode(), fortis) is False
+        assert python_verify_rpc(port, TEST_CONTENT.encode(), foretis) is True
+        assert python_verify_rpc(port, WRONG_CONTENT.encode(), foretis) is False
     elif verify_type == "prove_python":
-        assert python_prove_verification_rpc(port, TEST_CONTENT.encode(), fortis) is True
+        assert python_prove_verification_rpc(port, TEST_CONTENT.encode(), foretis) is True
 
 
 @pytest.mark.parametrize(
@@ -240,12 +240,12 @@ def test_rust_prove_verification(server_type, stamp_type, request):
     port = request.getfixturevalue(f"{server_type}_server")
 
     if stamp_type == "rust":
-        fortis = rust_stamp_cli(port, TEST_CONTENT)
+        foretis = rust_stamp_cli(port, TEST_CONTENT)
     else:
-        fortis = python_stamp_rpc(port, TEST_CONTENT.encode(), TEST_ECHO)
+        foretis = python_stamp_rpc(port, TEST_CONTENT.encode(), TEST_ECHO)
 
     # prove_verification succeeds for valid content
-    assert rust_prove_verification_cli(port, TEST_CONTENT, fortis) is True
+    assert rust_prove_verification_cli(port, TEST_CONTENT, foretis) is True
 
 
 @pytest.mark.parametrize(
@@ -261,11 +261,11 @@ def test_rust_prove_verification_wrong_content(server_type, stamp_type, request)
     port = request.getfixturevalue(f"{server_type}_server")
 
     if stamp_type == "rust":
-        fortis = rust_stamp_cli(port, TEST_CONTENT)
+        foretis = rust_stamp_cli(port, TEST_CONTENT)
     else:
-        fortis = python_stamp_rpc(port, TEST_CONTENT.encode(), TEST_ECHO)
+        foretis = python_stamp_rpc(port, TEST_CONTENT.encode(), TEST_ECHO)
 
     # prove_verification fetches calendar slice for any content (local proof)
-    result = rust_prove_verification_cli(port, WRONG_CONTENT, fortis)
+    result = rust_prove_verification_cli(port, WRONG_CONTENT, foretis)
     # The calendar slice exists, so it returns True (local proof doesn't re-verify content hash)
     assert result is True

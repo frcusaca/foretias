@@ -1,8 +1,8 @@
-# Fortias — P2P Sub-Spec 5: GossipSub, ProbityReport & U-Shape Aggregation (v0.6)
+# Foretias — P2P Sub-Spec 5: GossipSub, ProbityReport & U-Shape Aggregation (v0.6)
 
 **Milestone tag:** `v0.6-probity-gossip`
 **Prereq:** `v0.5-hardening` must be tagged.
-**Next:** `FORTIAS_2_P2P_7_collision_detection.md` (v0.7 — heartbeats and
+**Next:** `FORETIAS_2_P2P_7_collision_detection.md` (v0.7 — heartbeats and
 identity collision detection).
 
 **Target:** AI Coding Specialist. `(@human ...)` blocks are for human readers.
@@ -12,10 +12,10 @@ identity collision detection).
 ## READING ORDER
 
 1. Confirm `v0.5-hardening` is tagged.
-2. Read `FORTIAS_0_OVERVIEW.md` §0.4 (enforcement is social, not cryptographic)
+2. Read `FORETIAS_0_OVERVIEW.md` §0.4 (enforcement is social, not cryptographic)
    and §0.5 (probity is one number; attributes are opaque). These invariants
    shape every design decision in this sub-spec.
-3. Read `FORTIAS_2_P2P_2_direct_p2p_mutual_attestation.md` §6.2 (mutual-attest
+3. Read `FORETIAS_2_P2P_2_direct_p2p_mutual_attestation.md` §6.2 (mutual-attest
    flow) — the failure branches are where `report_probity()` calls are added.
 4. Read this document end to end before writing any code.
 
@@ -52,7 +52,7 @@ Expected within 90 s:
 - A emits a signed ProbityReport { subject: B, attribute: "correctness", value: -10.0 }
 - C (which has never directly interacted with B) sees A's report via GossipSub
 - C's ProbityStore records a score for B derived from A's report
-- fortias get-peer-score --peer <B tbid>  on node C  →  score < 0
+- foretias get-peer-score --peer <B tbid>  on node C  →  score < 0
 ```
 
 (@human — "B deliberately returns an invalid signature" means the
@@ -273,14 +273,14 @@ Tokio interval task started alongside the other component tasks in `TimeFamily::
 
 ## 7. GOSSIPSUB — `src/network/gossip.rs`
 
-### 7.1 Add GossipSub to `FortiasBehaviour`
+### 7.1 Add GossipSub to `ForetiasBehaviour`
 
 ```rust
 // src/network/behaviour.rs  (extended from v0.4)
 use libp2p::gossipsub;
 
 #[derive(NetworkBehaviour)]
-pub struct FortiasBehaviour {
+pub struct ForetiasBehaviour {
     pub identify: identify::Behaviour,
     pub ping:     ping::Behaviour,
     pub kad:      kad::Behaviour<kad::store::MemoryStore>,
@@ -300,7 +300,7 @@ cannot cross-contaminate:
 use libp2p::gossipsub::{IdentTopic, TopicHash};
 
 pub fn probity_topic(namespace: &str) -> IdentTopic {
-    IdentTopic::new(format!("/fortias/{}/probity/v1", namespace))
+    IdentTopic::new(format!("/foretias/{}/probity/v1", namespace))
 }
 ```
 
@@ -330,7 +330,7 @@ swarm.behaviour_mut().gossip.subscribe(&probity_topic(&namespace))?;
 
 ```rust
 pub fn publish_probity_report(
-    swarm:     &mut libp2p::Swarm<FortiasBehaviour>,
+    swarm:     &mut libp2p::Swarm<ForetiasBehaviour>,
     report:    &ProbityReport,
     namespace: &str,
 ) -> Result<(), NodeError> {
@@ -347,7 +347,7 @@ pub fn publish_probity_report(
 ## 8. GOSSIP HANDLER — `src/probity/gossip_handler.rs`
 
 Called from the swarm event loop on every
-`FortiasBehaviourEvent::Gossip(gossipsub::Event::Message { .. })` for the
+`ForetiasBehaviourEvent::Gossip(gossipsub::Event::Message { .. })` for the
 probity topic:
 
 ```rust
@@ -467,7 +467,7 @@ impl TimeFamily {
 ## 10. NEW CLI COMMAND
 
 ```
-fortias get-peer-score --peer <tbid-or-peer-id>
+foretias get-peer-score --peer <tbid-or-peer-id>
 ```
 
 Calls the new `get_peer_score` admin JSON-RPC method:
@@ -533,7 +533,7 @@ Result: { "peer_id": "<hex>", "score": -3.5, "report_count": 12 }
 [ ] v0.6.1  ProbityReport type + canonical() + serde roundtrip test.
 [ ] v0.6.2  u_shape_weight() + aggregate() + unit tests.
 [ ] v0.6.3  ProbityStore: ingest, eviction, recompute_all (two-pass), score().
-[ ] v0.6.4  Add gossipsub to FortiasBehaviour; topic construction; subscribe on start.
+[ ] v0.6.4  Add gossipsub to ForetiasBehaviour; topic construction; subscribe on start.
 [ ] v0.6.5  gossip_handler: deserialise, future-date check, score gate, ingest.
 [ ] v0.6.6  TimeFamily::report_probity(): sign, ingest locally, gossip.
 [ ] v0.6.7  Wire mutual-attest outcome sites to report_probity() calls.

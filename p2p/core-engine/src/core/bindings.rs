@@ -23,7 +23,7 @@ const _: () = {
         [::std::mem::offset_of!(ForetiasCoreVersion, build_hash) - 8usize];
 };
 extern "C" {
-    #[link_name = "fortias_core_version"]
+    #[link_name = "foretias_core_version"]
     pub fn foretias_core_version() -> ForetiasCoreVersion;
 }
 pub const ForetiasResult_FORETIAS_OK: ForetiasResult = 0;
@@ -97,7 +97,8 @@ pub struct ForetiasSig64 {
 const _: () = {
     ["Size of ForetiasSig64"][::std::mem::size_of::<ForetiasSig64>() - 64usize];
     ["Alignment of ForetiasSig64"][::std::mem::align_of::<ForetiasSig64>() - 1usize];
-    ["Offset of field: ForetiasSig64::bytes"][::std::mem::offset_of!(ForetiasSig64, bytes) - 0usize];
+    ["Offset of field: ForetiasSig64::bytes"]
+        [::std::mem::offset_of!(ForetiasSig64, bytes) - 0usize];
 };
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -160,55 +161,55 @@ const _: () = {
         [::std::mem::offset_of!(ForetiasFrostShare, bytes) - 0usize];
 };
 extern "C" {
-    #[link_name = "fortias_ed25519_generate_keypair"]
+    #[link_name = "foretias_ed25519_generate_keypair"]
     pub fn foretias_ed25519_generate_keypair(        pub_out: *mut ForetiasPubKey32,        priv_out: *mut ForetiasPrivKey32,    ) -> ForetiasResult;
 }
 extern "C" {
-    #[link_name = "fortias_ed25519_derive_peer_id"]
+    #[link_name = "foretias_ed25519_derive_peer_id"]
     pub fn foretias_ed25519_derive_peer_id(        pub_: *const ForetiasPubKey32,        id_out: *mut ForetiasPeerID,    ) -> ForetiasResult;
 }
 extern "C" {
-    #[link_name = "fortias_ed25519_sign"]
+    #[link_name = "foretias_ed25519_sign"]
     pub fn foretias_ed25519_sign(        priv_: *const ForetiasPrivKey32,        msg: *const u8,        msg_len: usize,        sig_out: *mut ForetiasSig64,    ) -> ForetiasResult;
 }
 extern "C" {
-    #[link_name = "fortias_ed25519_verify"]
+    #[link_name = "foretias_ed25519_verify"]
     pub fn foretias_ed25519_verify(        pub_: *const ForetiasPubKey32,        msg: *const u8,        msg_len: usize,        sig: *const ForetiasSig64,    ) -> ForetiasResult;
 }
 extern "C" {
-    #[link_name = "fortias_p256_generate_keypair"]
+    #[link_name = "foretias_p256_generate_keypair"]
     pub fn foretias_p256_generate_keypair(        pub_out: *mut ForetiasPubKey33,        priv_out: *mut ForetiasPrivKey32,    ) -> ForetiasResult;
 }
 extern "C" {
-    #[link_name = "fortias_p256_derive_peer_id"]
+    #[link_name = "foretias_p256_derive_peer_id"]
     pub fn foretias_p256_derive_peer_id(        pub_: *const ForetiasPubKey33,        id_out: *mut ForetiasPeerID,    ) -> ForetiasResult;
 }
 extern "C" {
-    #[link_name = "fortias_p256_sign"]
+    #[link_name = "foretias_p256_sign"]
     pub fn foretias_p256_sign(        priv_: *const ForetiasPrivKey32,        msg: *const u8,        msg_len: usize,        sig_out: *mut ForetiasSig64,    ) -> ForetiasResult;
 }
 extern "C" {
-    #[link_name = "fortias_p256_verify"]
+    #[link_name = "foretias_p256_verify"]
     pub fn foretias_p256_verify(        pub_: *const ForetiasPubKey33,        msg: *const u8,        msg_len: usize,        sig: *const ForetiasSig64,    ) -> ForetiasResult;
 }
 extern "C" {
-    #[link_name = "fortias_hash_sha256"]
+    #[link_name = "foretias_hash_sha256"]
     pub fn foretias_hash_sha256(        data: *const u8,        len: usize,        out: *mut ForetiasHash32,    ) -> ForetiasResult;
 }
 extern "C" {
-    #[link_name = "fortias_hash_sha256_concat"]
+    #[link_name = "foretias_hash_sha256_concat"]
     pub fn foretias_hash_sha256_concat(        a: *const u8,        a_len: usize,        b: *const u8,        b_len: usize,        out: *mut ForetiasHash32,    ) -> ForetiasResult;
 }
 extern "C" {
-    #[link_name = "fortias_hash_blake3"]
+    #[link_name = "foretias_hash_blake3"]
     pub fn foretias_hash_blake3(        data: *const u8,        len: usize,        out: *mut ForetiasHash32,    ) -> ForetiasResult;
 }
 extern "C" {
-    #[link_name = "fortias_hash_legacy_insecure_md5"]
+    #[link_name = "foretias_hash_legacy_insecure_md5"]
     pub fn foretias_hash_legacy_insecure_md5(        data: *const u8,        len: usize,        out: *mut ForetiasHash16,    ) -> ForetiasResult;
 }
 extern "C" {
-    #[link_name = "fortias_hash_legacy_insecure_sha1"]
+    #[link_name = "foretias_hash_legacy_insecure_sha1"]
     pub fn foretias_hash_legacy_insecure_sha1(        data: *const u8,        len: usize,        out: *mut ForetiasHash20,    ) -> ForetiasResult;
 }
 #[repr(C)]
@@ -269,27 +270,27 @@ const _: () = {
         [::std::mem::offset_of!(ForetiasNoiseState, _pad) - 320usize];
 };
 extern "C" {
-    #[link_name = "fortias_noise_init_ed25519"]
+    #[link_name = "foretias_noise_init_ed25519"]
     pub fn foretias_noise_init_ed25519(        state: *mut ForetiasNoiseState,        my_static_priv: *const ForetiasPrivKey32,        their_static_pub: *const ForetiasPubKey32,        is_initiator: bool,    ) -> ForetiasResult;
 }
 extern "C" {
-    #[link_name = "fortias_noise_init_p256"]
+    #[link_name = "foretias_noise_init_p256"]
     pub fn foretias_noise_init_p256(        state: *mut ForetiasNoiseState,        my_static_priv: *const ForetiasPrivKey32,        their_static_pub: *const ForetiasPubKey33,        is_initiator: bool,    ) -> ForetiasResult;
 }
 extern "C" {
-    #[link_name = "fortias_noise_step"]
+    #[link_name = "foretias_noise_step"]
     pub fn foretias_noise_step(        state: *mut ForetiasNoiseState,        input: *const u8,        input_len: usize,        output: *mut u8,        output_len: *mut usize,    ) -> ForetiasResult;
 }
 extern "C" {
-    #[link_name = "fortias_noise_send"]
+    #[link_name = "foretias_noise_send"]
     pub fn foretias_noise_send(        state: *mut ForetiasNoiseState,        plaintext: *const u8,        pt_len: usize,        ciphertext: *mut u8,        ct_len: *mut usize,    ) -> ForetiasResult;
 }
 extern "C" {
-    #[link_name = "fortias_noise_recv"]
+    #[link_name = "foretias_noise_recv"]
     pub fn foretias_noise_recv(        state: *mut ForetiasNoiseState,        ciphertext: *const u8,        ct_len: usize,        plaintext: *mut u8,        pt_len: *mut usize,    ) -> ForetiasResult;
 }
 extern "C" {
-    #[link_name = "fortias_noise_destroy"]
+    #[link_name = "foretias_noise_destroy"]
     pub fn foretias_noise_destroy(state: *mut ForetiasNoiseState);
 }
 #[repr(C)]
@@ -311,11 +312,11 @@ const _: () = {
         [::std::mem::offset_of!(ForetiasMerkleProof, depth) - 1056usize];
 };
 extern "C" {
-    #[link_name = "fortias_merkle_leaf"]
+    #[link_name = "foretias_merkle_leaf"]
     pub fn foretias_merkle_leaf(        data: *const u8,        len: usize,        leaf_out: *mut ForetiasHash32,    ) -> ForetiasResult;
 }
 extern "C" {
-    #[link_name = "fortias_merkle_verify"]
+    #[link_name = "foretias_merkle_verify"]
     pub fn foretias_merkle_verify(        root: *const ForetiasHash32,        leaf: *const ForetiasHash32,        proof: *const ForetiasMerkleProof,    ) -> ForetiasResult;
 }
 #[repr(C)]
@@ -340,31 +341,31 @@ const _: () = {
         [::std::mem::offset_of!(ForetiasFrostRound1, commit_E) - 96usize];
 };
 extern "C" {
-    #[link_name = "fortias_frost_round1"]
+    #[link_name = "foretias_frost_round1"]
     pub fn foretias_frost_round1(out: *mut ForetiasFrostRound1) -> ForetiasResult;
 }
 extern "C" {
-    #[link_name = "fortias_frost_sign_share"]
+    #[link_name = "foretias_frost_sign_share"]
     pub fn foretias_frost_sign_share(        my_state: *const ForetiasFrostRound1,        my_key_share: *const ForetiasFrostShare,        msg: *const u8,        msg_len: usize,        all_commits: *const u8,        n_signers: usize,        my_index: i32,        sig_share_out: *mut ForetiasFrostShare,    ) -> ForetiasResult;
 }
 extern "C" {
-    #[link_name = "fortias_frost_aggregate"]
+    #[link_name = "foretias_frost_aggregate"]
     pub fn foretias_frost_aggregate(        shares: *const ForetiasFrostShare,        indices: *const i32,        k: usize,        all_commits: *const u8,        msg: *const u8,        msg_len: usize,        sig_out: *mut ForetiasSig64,    ) -> ForetiasResult;
 }
 extern "C" {
-    #[link_name = "fortias_frost_destroy_round1"]
+    #[link_name = "foretias_frost_destroy_round1"]
     pub fn foretias_frost_destroy_round1(state: *mut ForetiasFrostRound1);
 }
 extern "C" {
-    #[link_name = "fortias_nullifier_derive"]
+    #[link_name = "foretias_nullifier_derive"]
     pub fn foretias_nullifier_derive(        priv_: *const ForetiasPrivKey32,        context: *const u8,        context_len: usize,        out: *mut ForetiasNullifier,    ) -> ForetiasResult;
 }
 extern "C" {
-    #[link_name = "fortias_rng_bytes"]
+    #[link_name = "foretias_rng_bytes"]
     pub fn foretias_rng_bytes(buf: *mut u8, len: usize) -> ForetiasResult;
 }
 extern "C" {
-    #[link_name = "fortias_memzero"]
+    #[link_name = "foretias_memzero"]
     pub fn foretias_memzero(ptr: *mut ::std::os::raw::c_void, len: usize);
 }
 #[repr(C)]
@@ -373,38 +374,38 @@ pub struct ForetiasPrivKey {
     _unused: [u8; 0],
 }
 extern "C" {
-    #[link_name = "fortias_privkey_init"]
+    #[link_name = "foretias_privkey_init"]
     pub fn foretias_privkey_init();
 }
 extern "C" {
-    #[link_name = "fortias_privkey_cleanup"]
+    #[link_name = "foretias_privkey_cleanup"]
     pub fn foretias_privkey_cleanup();
 }
 extern "C" {
-    #[link_name = "fortias_privkey_ed25519_generate"]
+    #[link_name = "foretias_privkey_ed25519_generate"]
     pub fn foretias_privkey_ed25519_generate() -> *mut ForetiasPrivKey;
 }
 extern "C" {
-    #[link_name = "fortias_privkey_ed25519_from_seed"]
+    #[link_name = "foretias_privkey_ed25519_from_seed"]
     pub fn foretias_privkey_ed25519_from_seed(seed: *const u8) -> *mut ForetiasPrivKey;
 }
 extern "C" {
-    #[link_name = "fortias_privkey_ed25519_public"]
+    #[link_name = "foretias_privkey_ed25519_public"]
     pub fn foretias_privkey_ed25519_public(key: *const ForetiasPrivKey, out: *mut u8) -> *mut u8;
 }
 extern "C" {
-    #[link_name = "fortias_privkey_ed25519_sign"]
+    #[link_name = "foretias_privkey_ed25519_sign"]
     pub fn foretias_privkey_ed25519_sign(        key: *const ForetiasPrivKey,        msg: *const u8,        msg_len: usize,        sig: *mut u8,    ) -> ::std::os::raw::c_int;
 }
 extern "C" {
-    #[link_name = "fortias_nullifier_derive_handle"]
+    #[link_name = "foretias_nullifier_derive_handle"]
     pub fn foretias_nullifier_derive_handle(        key: *const ForetiasPrivKey,        context: *const u8,        context_len: usize,        out: *mut ForetiasNullifier,    ) -> ForetiasResult;
 }
 extern "C" {
-    #[link_name = "fortias_privkey_derive_seal_key"]
+    #[link_name = "foretias_privkey_derive_seal_key"]
     pub fn foretias_privkey_derive_seal_key(        key: *const ForetiasPrivKey,        info: *const u8,        info_len: usize,        seal_key: *mut u8,    ) -> ForetiasResult;
 }
 extern "C" {
-    #[link_name = "fortias_privkey_free"]
+    #[link_name = "foretias_privkey_free"]
     pub fn foretias_privkey_free(key: *mut ForetiasPrivKey);
 }

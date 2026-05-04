@@ -9,7 +9,7 @@ import tempfile
 
 import pytest
 
-from fortias import TimeFamily, Fortis
+from foretias import TimeFamily, Foretis
 
 
 class TestTimeFamily:
@@ -19,34 +19,34 @@ class TestTimeFamily:
         assert tbf.tbid is not None
         assert tbf.tbn.startswith("Time Being ")
 
-    def test_stamp_returns_fortis(self):
+    def test_stamp_returns_foretis(self):
         tbf = TimeFamily(serialized=True)
-        fortis = tbf.stamp(b"hello")
-        assert isinstance(fortis, Fortis)
-        assert fortis.tick_number >= 0
-        assert len(fortis.my_content_hash) == 32
-        assert len(fortis.signature) == 64
+        foretis = tbf.stamp(b"hello")
+        assert isinstance(foretis, Foretis)
+        assert foretis.tick_number >= 0
+        assert len(foretis.my_content_hash) == 32
+        assert len(foretis.signature) == 64
 
     def test_stamp_string(self):
         tbf = TimeFamily(serialized=True)
-        fortis = tbf.stamp("hello world")
-        assert isinstance(fortis, Fortis)
+        foretis = tbf.stamp("hello world")
+        assert isinstance(foretis, Foretis)
 
-    def test_verify_valid_fortis(self):
+    def test_verify_valid_foretis(self):
         tbf = TimeFamily(serialized=True)
-        fortis = tbf.stamp(b"hello")
-        assert tbf.verify(b"hello", fortis) is True
+        foretis = tbf.stamp(b"hello")
+        assert tbf.verify(b"hello", foretis) is True
 
     def test_verify_wrong_content_fails(self):
         tbf = TimeFamily(serialized=True)
-        fortis = tbf.stamp(b"hello")
-        assert tbf.verify(b"world", fortis) is False
+        foretis = tbf.stamp(b"hello")
+        assert tbf.verify(b"world", foretis) is False
 
     def test_verify_with_window_check(self):
         tbf = TimeFamily(serialized=True)
-        fortis = tbf.stamp(b"hello")
+        foretis = tbf.stamp(b"hello")
         current = tbf.current_tick()
-        result = tbf.verify(b"hello", fortis, next_tick_number=current + 1)
+        result = tbf.verify(b"hello", foretis, next_tick_number=current + 1)
         sig_valid, window_closed = result
         assert sig_valid is True
         assert window_closed is False
@@ -99,6 +99,6 @@ class TestTimeFamily:
 
     def test_tampered_content_fails(self):
         tbf = TimeFamily(serialized=True)
-        fortis = tbf.stamp(b"original")
-        assert tbf.verify(b"original", fortis) is True
-        assert tbf.verify(b"tampered", fortis) is False
+        foretis = tbf.stamp(b"original")
+        assert tbf.verify(b"original", foretis) is True
+        assert tbf.verify(b"tampered", foretis) is False

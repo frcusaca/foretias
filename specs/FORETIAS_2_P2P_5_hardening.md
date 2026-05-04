@@ -1,8 +1,8 @@
-# Fortias — P2P Sub-Spec 4: Hardening, Observability & Encrypted Persistence (v0.5)
+# Foretias — P2P Sub-Spec 4: Hardening, Observability & Encrypted Persistence (v0.5)
 
 **Milestone tag:** `v0.5-hardening`
 **Prereq:** `v0.4-dht-discovery` must be tagged.
-**Next:** `FORTIAS_2_P2P_6_probity_gossip.md` (v0.6 — GossipSub and ProbityReport).
+**Next:** `FORETIAS_2_P2P_6_probity_gossip.md` (v0.6 — GossipSub and ProbityReport).
 
 **Target:** AI Coding Specialist. `(@human ...)` blocks are for human readers.
 
@@ -14,7 +14,7 @@
 2. Read the full v0.2–v0.4 implementation before starting this spec.
    Threat model (§3) and observability (§4) require understanding all
    currently exposed surfaces.
-3. Read `FORTIAS_0_OVERVIEW.md` §0.3 (what persists) before touching
+3. Read `FORETIAS_0_OVERVIEW.md` §0.3 (what persists) before touching
    the calendar persistence format.
 4. Read this document end to end before writing any code.
 
@@ -27,7 +27,7 @@ Four independent deliverables, all shipped in this milestone:
 1. **Threat model document** — written analysis of the v0.2–v0.4 attack surface with mitigations, most of which are already implemented in prior sub-specs.
 2. **Admin / observability endpoints** — extend the JSON-RPC server with read-only admin methods and structured tracing.
 3. **Encrypted JSONL calendar persistence** — replace the plaintext JSON calendar file with an encrypted append-only format; old files are migrated on first load.
-4. **Formal verification PoC** — prove absence of out-of-bounds memory access and tree-root purity for `fortias/p2p/core/src/merkle.c` using Frama-C with the WP (weakest-precondition) plugin.
+4. **Formal verification PoC** — prove absence of out-of-bounds memory access and tree-root purity for `foretias/p2p/core/src/merkle.c` using Frama-C with the WP (weakest-precondition) plugin.
 
 (@human — these four pieces are bundled into one milestone because they
 are all hardening concerns that should land before probity gossip (v0.6)
@@ -43,7 +43,7 @@ opaque to disk readers.)
 | Deliverable | Acceptance gate |
 |---|---|
 | Threat model | Written doc present at `docs/threat_model_v0_5.md`; reviewed by human |
-| Observability | `fortias rpc --method get_health` returns JSON with version, tick, peer count |
+| Observability | `foretias rpc --method get_health` returns JSON with version, tick, peer count |
 | Encrypted persistence | Old plaintext calendar survives a round-trip: load → re-save encrypted → reload; all ticks and attestations preserved; file is unreadable without the node's key |
 | Frama-C PoC | `make frama-c-merkle` exits 0; proof artifact committed to `p2p/core/proofs/` |
 
@@ -91,7 +91,7 @@ Required entries:
 | Calendar file tampering | Disk | Encrypted JSONL (this sub-spec §5); authentication tag per block detects tampering |
 | Private-key exfiltration via disk | CryptoServer | Keys never written to disk (§0.3 invariant); `zeroize` on tick advance |
 | Tick-rate exhaustion (peer forces rapid tick advance) | Chronomatter | Rate limit gates inbound stamp jobs; tick advance is timer-driven, not stamp-driven (v0.2) |
-| JSON-RPC address spoofing via identify | Communerd | Address is advisory only; actual RPC call still requires verified Fortis response (v0.2 §6.2) |
+| JSON-RPC address spoofing via identify | Communerd | Address is advisory only; actual RPC call still requires verified Foretis response (v0.2 §6.2) |
 
 **D. Residual risks and deferred mitigations**
 Explicitly list threats with no current mitigation and note which future
@@ -211,7 +211,7 @@ identity can read the file.
 invariants. This means a calendar file written by run N cannot be decrypted
 by run N+1, which has a different identity. This is intentional: the
 calendar is a local audit log for the current run. Offline verification
-uses the public keys recorded in each TickRecord's forward/backward fortis;
+uses the public keys recorded in each TickRecord's forward/backward foretis;
 it does not require decrypting the private file. The encrypted format
 protects against a disk-reader inferring the node's stamping history
 or harvesting external attestation metadata.)
@@ -266,7 +266,7 @@ pub struct SealedBlob {
 ```
 
 `SoftwareCryptoServer` derives the symmetric key via HKDF-SHA256 over
-the Ed25519 seed with info string `b"fortias-calendar-seal-v1"`.
+the Ed25519 seed with info string `b"foretias-calendar-seal-v1"`.
 
 ### 5.3 `EncryptedJsonlCalendarStore`
 
@@ -314,7 +314,7 @@ impl EncryptedJsonlCalendarStore {
 ### 5.4 Storage policy and bin-based LRU
 
 For v0.5, implement `CalendarStoragePolicy` and `BinBasedLru` as defined in
-`FORTIAS_2_P2P_SPEC.md` (the original Part 12.2 and 12.3). These are
+`FORETIAS_2_P2P_SPEC.md` (the original Part 12.2 and 12.3). These are
 straightforward; reproduce them in `src/calendar_store/lru.rs`. The LRU is
 only active when `CalendarStoragePolicy::MyOwnPlusLru` is configured; the
 default for v0.5 is `MyOwn` (store only this node's calendar on disk).
@@ -357,11 +357,11 @@ never loaded again.
 
 ### 6.1 Target
 
-`fortias/p2p/core/src/merkle.c` — the sparse Merkle tree implementation.
+`foretias/p2p/core/src/merkle.c` — the sparse Merkle tree implementation.
 
 Properties to prove with Frama-C WP:
 1. No out-of-bounds array or pointer access in any public function.
-2. `fortias_merkle_root(...)` returns a value that is a pure function of its inputs (no hidden state read or written).
+2. `foretias_merkle_root(...)` returns a value that is a pure function of its inputs (no hidden state read or written).
 3. If two calls receive identical leaf arrays, they produce identical roots.
 
 (@human — property 3 is a relational property. Frama-C WP can express this
@@ -377,7 +377,7 @@ Add ACSL (ANSI/ISO C Specification Language) annotations directly in
 ```c
 /*@ requires \valid(leaves + (0 .. n_leaves-1));
   @ requires \valid(root_out);
-  @ requires n_leaves <= FORTIAS_MERKLE_MAX_LEAVES;
+  @ requires n_leaves <= FORETIAS_MERKLE_MAX_LEAVES;
   @ assigns  root_out->bytes[0 .. 31];
   @ ensures  \valid(root_out);
   @ behavior pure:
@@ -385,10 +385,10 @@ Add ACSL (ANSI/ISO C Specification Language) annotations directly in
   @   ensures \forall integer i; 0 <= i < 32 ==>
   @           root_out->bytes[i] == \old(computed_root(leaves, n_leaves))[i];
   @*/
-FortiasResult fortias_merkle_root(
-    const FortiasHash32* leaves,
+ForetiasResult foretias_merkle_root(
+    const ForetiasHash32* leaves,
     size_t               n_leaves,
-    FortiasHash32*       root_out
+    ForetiasHash32*       root_out
 );
 ```
 
@@ -398,7 +398,7 @@ close the proof; partial coverage leaves open goals.
 ### 6.3 Build integration
 
 ```makefile
-# fortias/p2p/core/Makefile  (new target)
+# foretias/p2p/core/Makefile  (new target)
 FRAMA_C     ?= frama-c
 WP_FLAGS     = -wp -wp-rte -wp-timeout 60
 
@@ -419,7 +419,7 @@ WP goal is not proved (exits non-zero).
 
 Frama-C WP produces a set of `.json` or `.why3` goal files in a `_why3`
 or `wp_proofs` subdirectory. Commit these to
-`fortias/p2p/core/proofs/merkle/` so the proof is reproducible without
+`foretias/p2p/core/proofs/merkle/` so the proof is reproducible without
 re-running the prover.
 
 (@human — Frama-C + WP + Why3 is installable on Ubuntu via apt. The CI

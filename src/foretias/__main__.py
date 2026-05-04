@@ -1,4 +1,4 @@
-"""Allow running fortias as ``python -m fortias``."""
+"""Allow running foretias as ``python -m foretias``."""
 
 from __future__ import annotations
 

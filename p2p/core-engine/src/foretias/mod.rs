@@ -1,4 +1,4 @@
-//! Fortias domain types (TickRecord, Foretis, Calendar, TimeFamily).
+//! Foretias domain types (TickRecord, Foretis, Calendar, TimeFamily).
 
 pub mod types;
 pub mod tick;

@@ -1,16 +1,16 @@
-"""Tests for fortias_p2p PyO3 Python bindings.
+"""Tests for foretias_p2p PyO3 Python bindings.
 
-Exercises: CryptoServer, Fortis, TickRecord, Calendar, TimeFamily.
+Exercises: CryptoServer, Foretis, TickRecord, Calendar, TimeFamily.
 Run with: python -m pytest tests/python/test_bindings.py -v
 """
 
 import json
 import pytest
 
-from fortias_p2p import (
+from foretias_p2p import (
     PyTimeFamily,
     PyCryptoServer,
-    PyFortis,
+    PyForetis,
     PyTickRecord,
     PyCalendar,
 )
@@ -66,27 +66,27 @@ class TestPyTimeFamily:
 
     def test_stamp(self):
         tf = PyTimeFamily(tbn="test-node")
-        fortis = tf.stamp(b"hello world")
-        assert isinstance(fortis, PyFortis)
-        assert fortis.tick_number == 1
-        assert len(fortis.content_hash) == 32
-        assert len(fortis.signature) == 64
-        assert len(fortis.tbid) == 16
-        assert fortis.tbn == "test-node"
-        assert isinstance(fortis.echo, str)
-        assert isinstance(fortis.time_being_reference_time, str)
-        assert fortis.time_being_reference_time.startswith("UE+")
-        assert fortis.time_being_reference_time.endswith("ns")
+        foretis = tf.stamp(b"hello world")
+        assert isinstance(foretis, PyForetis)
+        assert foretis.tick_number == 1
+        assert len(foretis.content_hash) == 32
+        assert len(foretis.signature) == 64
+        assert len(foretis.tbid) == 16
+        assert foretis.tbn == "test-node"
+        assert isinstance(foretis.echo, str)
+        assert isinstance(foretis.time_being_reference_time, str)
+        assert foretis.time_being_reference_time.startswith("UE+")
+        assert foretis.time_being_reference_time.endswith("ns")
 
     def test_verify_correct(self):
         tf = PyTimeFamily(tbn="test-node")
-        fortis = tf.stamp(b"hello world")
-        assert tf.verify(b"hello world", fortis) is True
+        foretis = tf.stamp(b"hello world")
+        assert tf.verify(b"hello world", foretis) is True
 
     def test_verify_wrong_content(self):
         tf = PyTimeFamily(tbn="test-node")
-        fortis = tf.stamp(b"hello world")
-        assert tf.verify(b"wrong content", fortis) is False
+        foretis = tf.stamp(b"hello world")
+        assert tf.verify(b"wrong content", foretis) is False
 
     def test_tick_increment(self):
         tf = PyTimeFamily(tbn="test-node")
@@ -118,13 +118,13 @@ class TestPyTimeFamily:
         assert len(pid) == 64  # hex string of 32 bytes
 
 
-class TestPyFortis:
-    """Test the Fortis Python binding."""
+class TestPyForetis:
+    """Test the Foretis Python binding."""
 
     def test_repr(self):
         tf = PyTimeFamily(tbn="test-node")
         f = tf.stamp(b"hello")
-        assert "Fortis" in repr(f)
+        assert "Foretis" in repr(f)
         assert "test-node" in repr(f)
 
     def test_to_json(self):

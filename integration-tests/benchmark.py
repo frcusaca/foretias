@@ -1,4 +1,4 @@
-"""Fortias Performance Benchmark: Rust vs Python stamp/verify comparison.
+"""Foretias Performance Benchmark: Rust vs Python stamp/verify comparison.
 
 Benchmarks PyTimeFamily (full stamp with calendar) against PyCryptoServer
 (direct SHA-256) to measure the overhead of the orchestration layer.
@@ -12,7 +12,7 @@ import argparse
 import sys
 import timeit
 
-from fortias_p2p import PyTimeFamily, PyCryptoServer
+from foretias_p2p import PyTimeFamily, PyCryptoServer
 
 
 def benchmark_stamp(iterations: int, runs: int) -> float:
@@ -42,7 +42,7 @@ def benchmark_stamp(iterations: int, runs: int) -> float:
 def benchmark_verify(iterations: int, runs: int) -> float:
     """Benchmark PyTimeFamily verify operation.
 
-    Stamps once, then verifies the same Fortis repeatedly.
+    Stamps once, then verifies the same Foretis repeatedly.
     Returns best time across runs.
 
     Args:
@@ -56,9 +56,9 @@ def benchmark_verify(iterations: int, runs: int) -> float:
     def _run():
         tf = PyTimeFamily(tbn="bench-verify")
         content = b"hello world"
-        fortis = tf.stamp(content)
+        foretis = tf.stamp(content)
         for _ in range(iterations):
-            tf.verify(content, fortis)
+            tf.verify(content, foretis)
 
     times = timeit.repeat(_run, repeat=runs, number=1)
     return min(times)
@@ -119,7 +119,7 @@ def print_results(iterations: int, runs: int) -> None:
         iterations: Number of operations per benchmark run.
         runs: Number of repetitions to take the best of.
     """
-    print("Fortias Performance Benchmark")
+    print("Foretias Performance Benchmark")
     print("=" * 65)
     print(f"  iterations: {iterations}")
     print(f"  runs:       {runs} (best-of)")
@@ -150,7 +150,7 @@ def print_results(iterations: int, runs: int) -> None:
 def main() -> None:
     """Parse arguments and run benchmarks."""
     parser = argparse.ArgumentParser(
-        description="Benchmark Fortias stamp/verify performance."
+        description="Benchmark Foretias stamp/verify performance."
     )
     parser.add_argument(
         "--iterations",

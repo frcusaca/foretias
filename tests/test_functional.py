@@ -1,12 +1,12 @@
-"""Functional tests for fortias._timebeing pure functions."""
+"""Functional tests for foretias._timebeing pure functions."""
 
 from __future__ import annotations
 
 import pytest
 
-from fortias._timebeing import _genesis_ma, _timebeing, _uint64_be
-from fortias.crypto import generate_keypair, sign
-from fortias.models import Fortis, TickRecord
+from foretias._timebeing import _genesis_ma, _timebeing, _uint64_be
+from foretias.crypto import generate_keypair, sign
+from foretias.models import Foretis, TickRecord
 
 
 def _make_genesis():
@@ -18,37 +18,37 @@ def _make_genesis():
     genesis_backward = sign(genesis_ma, sk)
     genesis = TickRecord(
         tick_number=0, public_key=pk,
-        forward_fortis=genesis_forward,
-        backward_fortis=genesis_backward,
+        forward_foretis=genesis_forward,
+        backward_foretis=genesis_backward,
     )
     return tbid, genesis, pk, sk
 
 
 class TestStamp:
-    def test_stamp_returns_fortis(self):
+    def test_stamp_returns_foretis(self):
         tbid, genesis, pk, sk = _make_genesis()
-        fortis = _timebeing._stamp(
+        foretis = _timebeing._stamp(
             content=b"hello",
             tbid=tbid,
             tick_number=0,
             private_key=sk,
         )
-        assert fortis.tick_number == 0
-        assert fortis.tbid == tbid
-        assert fortis.echo == ""
-        assert len(fortis.my_content_hash) == 32
-        assert len(fortis.signature) == 64
+        assert foretis.tick_number == 0
+        assert foretis.tbid == tbid
+        assert foretis.echo == ""
+        assert len(foretis.my_content_hash) == 32
+        assert len(foretis.signature) == 64
 
     def test_stamp_string_content(self):
         tbid, genesis, pk, sk = _make_genesis()
-        fortis = _timebeing._stamp(
+        foretis = _timebeing._stamp(
             content="hello",
             tbid=tbid,
             tick_number=0,
             private_key=sk,
         )
-        assert fortis.tick_number == 0
-        assert len(fortis.signature) == 64
+        assert foretis.tick_number == 0
+        assert len(foretis.signature) == 64
 
     def test_stamp_different_content_different_signatures(self):
         tbid, genesis, pk, sk = _make_genesis()
@@ -65,12 +65,12 @@ class TestStamp:
 
     def test_stamp_echo_and_tbn(self):
         tbid, genesis, pk, sk = _make_genesis()
-        fortis = _timebeing._stamp(
+        foretis = _timebeing._stamp(
             content=b"msg", tbid=tbid, tick_number=0,
             private_key=sk, echo="my-echo", tbn="Time Being test",
         )
-        assert fortis.echo == "my-echo"
-        assert fortis.tbn == "Time Being test"
+        assert foretis.echo == "my-echo"
+        assert foretis.tbn == "Time Being test"
 
 
 class TestTickTransition:
@@ -82,16 +82,16 @@ class TestTickTransition:
         assert len(new_record.public_key) == 32
         assert len(new_sk) == 32
 
-    def test_tick_creates_forward_fortis(self):
+    def test_tick_creates_forward_foretis(self):
         tbid, genesis, pk, sk = _make_genesis()
         new_record, new_sk = _timebeing._tick(tbid, genesis, sk)
-        assert len(new_record.forward_fortis) == 64
+        assert len(new_record.forward_foretis) == 64
 
-    def test_tick_creates_backward_fortis(self):
+    def test_tick_creates_backward_foretis(self):
         tbid, genesis, pk, sk = _make_genesis()
         new_record, new_sk = _timebeing._tick(tbid, genesis, sk)
-        assert new_record.backward_fortis is not None
-        assert len(new_record.backward_fortis) == 64
+        assert new_record.backward_foretis is not None
+        assert len(new_record.backward_foretis) == 64
 
     def test_tick_tick_number_increases(self):
         tbid, genesis, pk, sk = _make_genesis()
@@ -113,39 +113,39 @@ class TestVerifyPair:
         r2 = TickRecord(200, pk2, b"sign2", b"sign3")
         assert _timebeing._verify_pair(r2, r1, tbid) is False
 
-    def test_backward_fortis_required(self):
-        """backward_fortis must never be None."""
+    def test_backward_foretis_required(self):
+        """backward_foretis must never be None."""
         sk, pk = generate_keypair()
         with pytest.raises(TypeError):
-            TickRecord(tick_number=1, public_key=pk, forward_fortis=b"sig", backward_fortis=None)
+            TickRecord(tick_number=1, public_key=pk, forward_foretis=b"sig", backward_foretis=None)
 
-    def test_forward_fortis_required(self):
-        """forward_fortis must never be None."""
+    def test_forward_foretis_required(self):
+        """forward_foretis must never be None."""
         sk, pk = generate_keypair()
         with pytest.raises(TypeError):
-            TickRecord(tick_number=1, public_key=pk, forward_fortis=None, backward_fortis=b"sig")
+            TickRecord(tick_number=1, public_key=pk, forward_foretis=None, backward_foretis=b"sig")
 
-    def test_forward_fortis_verified_with_old_key(self):
-        """forward_fortis (signed by old key during _tick) verifies against old key."""
+    def test_forward_foretis_verified_with_old_key(self):
+        """forward_foretis (signed by old key during _tick) verifies against old key."""
         tbid, genesis, pk, sk = _make_genesis()
         new_record, new_sk = _timebeing._tick(tbid, genesis, sk)
-        # B.forward_fortis was signed by old key, verifies against old key
-        from fortias.crypto import verify
+        # B.forward_foretis was signed by old key, verifies against old key
+        from foretias.crypto import verify
         assert verify(
             _auto_attestation(genesis, new_record),
-            new_record.forward_fortis,
+            new_record.forward_foretis,
             genesis.public_key,
         ) is True
 
-    def test_backward_fortis_verified_with_new_key(self):
-        """backward_fortis (signed by new key during _tick) verifies against new key."""
+    def test_backward_foretis_verified_with_new_key(self):
+        """backward_foretis (signed by new key during _tick) verifies against new key."""
         tbid, genesis, pk, sk = _make_genesis()
         new_record, new_sk = _timebeing._tick(tbid, genesis, sk)
-        # B.backward_fortis was signed by new key, verifies against new key
-        from fortias.crypto import verify
+        # B.backward_foretis was signed by new key, verifies against new key
+        from foretias.crypto import verify
         assert verify(
             _auto_attestation(genesis, new_record),
-            new_record.backward_fortis,
+            new_record.backward_foretis,
             new_record.public_key,
         ) is True
 
@@ -200,45 +200,45 @@ class TestVerifyChain:
 
 
 class TestVerify:
-    def test_valid_fortis(self):
+    def test_valid_foretis(self):
         tbid, genesis, pk, sk = _make_genesis()
-        fortis = _timebeing._stamp(b"hello", tbid, 0, sk)
-        result = _timebeing._verify(b"hello", fortis, [genesis])
+        foretis = _timebeing._stamp(b"hello", tbid, 0, sk)
+        result = _timebeing._verify(b"hello", foretis, [genesis])
         assert result is True
 
-    def test_valid_fortis_string_content(self):
+    def test_valid_foretis_string_content(self):
         tbid, genesis, pk, sk = _make_genesis()
-        fortis = _timebeing._stamp("hello", tbid, 0, sk)
-        result = _timebeing._verify("hello", fortis, [genesis])
+        foretis = _timebeing._stamp("hello", tbid, 0, sk)
+        result = _timebeing._verify("hello", foretis, [genesis])
         assert result is True
 
     def test_wrong_content_fails(self):
         tbid, genesis, pk, sk = _make_genesis()
-        fortis = _timebeing._stamp(b"hello", tbid, 0, sk)
-        result = _timebeing._verify(b"world", fortis, [genesis])
+        foretis = _timebeing._stamp(b"hello", tbid, 0, sk)
+        result = _timebeing._verify(b"world", foretis, [genesis])
         assert result is False
 
     def test_wrong_key_fails(self):
         tbid, genesis, pk, sk = _make_genesis()
         other_sk, other_pk = generate_keypair()
-        fortis = _timebeing._stamp(b"hello", tbid, 0, other_sk)
-        result = _timebeing._verify(b"hello", fortis, [genesis])
+        foretis = _timebeing._stamp(b"hello", tbid, 0, other_sk)
+        result = _timebeing._verify(b"hello", foretis, [genesis])
         assert result is False
 
     def test_verify_with_next_tick_none_when_active(self):
         tbid, genesis, pk, sk = _make_genesis()
-        fortis = _timebeing._stamp(b"hello", tbid, 0, sk)
-        result = _timebeing._verify(b"hello", fortis, [genesis], next_tick_number=1)
+        foretis = _timebeing._stamp(b"hello", tbid, 0, sk)
+        result = _timebeing._verify(b"hello", foretis, [genesis], next_tick_number=1)
         sig_valid, window_closed = result
         assert sig_valid is True
         assert window_closed is False
 
     def test_verify_with_next_tick_exists(self):
         tbid, genesis, pk, sk = _make_genesis()
-        fortis = _timebeing._stamp(b"hello", tbid, 0, sk)
+        foretis = _timebeing._stamp(b"hello", tbid, 0, sk)
         new_record, _ = _timebeing._tick(tbid, genesis, sk)
         result = _timebeing._verify(
-            b"hello", fortis, [genesis, new_record],
+            b"hello", foretis, [genesis, new_record],
             next_tick_number=new_record.tick_number,
         )
         sig_valid, window_closed = result
@@ -247,14 +247,14 @@ class TestVerify:
 
     def test_verify_with_invalid_sig_returns_none_window(self):
         tbid, genesis, pk, sk = _make_genesis()
-        fortis = _timebeing._stamp(b"hello", tbid, 0, sk)
-        tampered = Fortis(
-            tick_number=fortis.tick_number,
-            my_content_hash=fortis.my_content_hash,
+        foretis = _timebeing._stamp(b"hello", tbid, 0, sk)
+        tampered = Foretis(
+            tick_number=foretis.tick_number,
+            my_content_hash=foretis.my_content_hash,
             signature=b"\x00" * 64,
-            tbid=fortis.tbid,
-            echo=fortis.echo,
-            tbn=fortis.tbn,
+            tbid=foretis.tbid,
+            echo=foretis.echo,
+            tbn=foretis.tbn,
         )
         result = _timebeing._verify(b"hello", tampered, [genesis], next_tick_number=1)
         sig_valid, window_closed = result
@@ -263,6 +263,6 @@ class TestVerify:
 
     def test_verify_missing_tick(self):
         tbid, genesis, pk, sk = _make_genesis()
-        fortis = _timebeing._stamp(b"hello", tbid, 999, sk)
-        result = _timebeing._verify(b"hello", fortis, [genesis])
+        foretis = _timebeing._stamp(b"hello", tbid, 999, sk)
+        result = _timebeing._verify(b"hello", foretis, [genesis])
         assert result is False

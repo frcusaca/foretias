@@ -1,8 +1,8 @@
-# Fortias — P2P Sub-Spec 7: Epoch Consensus (v0.8)
+# Foretias — P2P Sub-Spec 7: Epoch Consensus (v0.8)
 
 **Milestone tag:** `v0.8-epoch-consensus`
 **Prereq:** `v0.7-collision-detection` must be tagged.
-**Next:** `v0.9+` custom-plugin enclave backends (`FORTIAS_9_ENCLAVE_SPEC.md`).
+**Next:** `v0.9+` custom-plugin enclave backends (`FORETIAS_9_ENCLAVE_SPEC.md`).
   Do not consult that document until this milestone is tagged.
 
 **Target:** AI Coding Specialist. `(@human ...)` blocks are for human readers.
@@ -12,11 +12,11 @@
 ## READING ORDER
 
 1. Confirm `v0.7-collision-detection` is tagged.
-2. Re-read `FORTIAS_0_OVERVIEW.md` §0.4 (enforcement is social, not cryptographic)
+2. Re-read `FORETIAS_0_OVERVIEW.md` §0.4 (enforcement is social, not cryptographic)
    and §0.5 (probity is one number). Epoch snapshots are the network's
    mechanism for producing a cryptographically-attested shared view of peer
    scores — they are not enforcement; they are a durable, verifiable record.
-3. Re-read `FORTIAS_2_P2P_6_probity_gossip.md` §6 (`ProbityStore`) —
+3. Re-read `FORETIAS_2_P2P_6_probity_gossip.md` §6 (`ProbityStore`) —
    epoch snapshots are derived from the store's current scores.
 4. Read this document end to end before writing any code.
 
@@ -60,7 +60,7 @@ detection (v0.7). Epoch duration set to 2 minutes for the demo.
 # ... (startup elided; same pattern as prior demos) ...
 
 # After 2 minutes:
-$ fortias get-latest-epoch --server 127.0.0.1:4001
+$ foretias get-latest-epoch --server 127.0.0.1:4001
 {
   "epoch_number": 1,
   "epoch_start_ns": ...,
@@ -76,7 +76,7 @@ $ fortias get-latest-epoch --server 127.0.0.1:4001
 }
 
 # Verify the FROST signature locally:
-$ fortias verify-epoch-snapshot --snapshot epoch_1.json
+$ foretias verify-epoch-snapshot --snapshot epoch_1.json
 FROST signature: VALID
 Committee: 3 of 3 configured signers present
 ```
@@ -159,7 +159,7 @@ Gossip        55 min             Peers accumulate ProbityReports normally.
 Freeze         2 min             ProbityStore::ingest() halted; committee
                                  members finalise their local score view.
 Consensus      2 min             Committee runs FROST signing rounds.
-Publish        1 min             Snapshot gossiped on /fortias/<ns>/epoch/v1;
+Publish        1 min             Snapshot gossiped on /foretias/<ns>/epoch/v1;
                                  all peers adopt it as ground truth.
                ─────
                60 min total (default)
@@ -278,7 +278,7 @@ For v0.8, the rounds are coordinated over GossipSub using a dedicated topic:
 ```rust
 // src/network/gossip.rs  (addition)
 pub fn frost_topic(namespace: &str, epoch_num: u64) -> IdentTopic {
-    IdentTopic::new(format!("/fortias/{}/frost/{}/v1", namespace, epoch_num))
+    IdentTopic::new(format!("/foretias/{}/frost/{}/v1", namespace, epoch_num))
 }
 ```
 
@@ -379,11 +379,11 @@ pub trait CryptoServer: Send + Sync {
     /// Aggregate shares into a final signature. Coordinator only.
     fn frost_aggregate(
         &self, msg: &[u8], shares: &[FrostShare],
-    ) -> Result<(FrostiasSig64, FortiasPubKey32), NodeError>;
+    ) -> Result<(FrostiasSig64, ForetiasPubKey32), NodeError>;
 
     /// Verify a FROST aggregate signature against a group public key.
     fn frost_verify(
-        &self, msg: &[u8], sig: &FortiasSig64, group_pubkey: &FortiasPubKey32,
+        &self, msg: &[u8], sig: &ForetiasSig64, group_pubkey: &ForetiasPubKey32,
     ) -> Result<bool, NodeError>;
 }
 ```
@@ -417,9 +417,9 @@ pub fn handle_epoch_snapshot(
 
     // 2. Verify FROST aggregate signature
     let msg = snapshot.canonical_bytes();
-    let sig = FortiasSig64 { bytes: snapshot.frost_signature.clone().try_into()
+    let sig = ForetiasSig64 { bytes: snapshot.frost_signature.clone().try_into()
         .map_err(|_| NodeError::BadFormat("frost_signature length"))? };
-    let pubkey = FortiasPubKey32 { bytes: snapshot.committee_pubkey.clone().try_into()
+    let pubkey = ForetiasPubKey32 { bytes: snapshot.committee_pubkey.clone().try_into()
         .map_err(|_| NodeError::BadFormat("committee_pubkey length"))? };
     if !inner.crypto.frost_verify(&msg, &sig, &pubkey)? {
         return Err(NodeError::BadFormat("invalid FROST signature on epoch snapshot"));
@@ -497,8 +497,8 @@ Result: { "valid": true, "epoch_number": 1, "committee_size": 3 }
 ```
 
 ```bash
-fortias get-latest-epoch [--server host:port]
-fortias verify-epoch-snapshot --snapshot <path-to-json>
+foretias get-latest-epoch [--server host:port]
+foretias verify-epoch-snapshot --snapshot <path-to-json>
 ```
 
 ---
@@ -542,7 +542,7 @@ fortias verify-epoch-snapshot --snapshot <path-to-json>
 - ❌ Nobility-based committee selection — FOSITAS application layer replaces `TopProbitySelector`.
 - ❌ Rotating/random committee selection — future sub-spec.
 - ❌ Cross-epoch score continuity beyond one `apply_epoch_snapshot` call — the store simply adopts the snapshot; historical aggregation across epochs is application logic.
-- ❌ Custom-plugin (enclave) backend for FROST — v0.9+ (`FORTIAS_9_ENCLAVE_SPEC.md`).
+- ❌ Custom-plugin (enclave) backend for FROST — v0.9+ (`FORETIAS_9_ENCLAVE_SPEC.md`).
 
 ---
 
@@ -571,7 +571,7 @@ the full network stack is operational: two-node direct mutual attestation
 encrypted storage (v0.5), gossip-based probity scoring (v0.6), collision
 detection and dormancy (v0.7), and epoch-level FROST consensus (v0.8).
 v0.9+ introduces custom-plugin enclave backends — consult
-FORTIAS_9_ENCLAVE_SPEC.md only after this tag.)
+FORETIAS_9_ENCLAVE_SPEC.md only after this tag.)
 
 ---
 # END OF SUB-SPEC 7 (v0.8)

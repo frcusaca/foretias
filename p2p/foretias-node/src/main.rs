@@ -1,4 +1,4 @@
-//! Fortias CLI — command-line interface for TimeFamilyServer.
+//! Foretias CLI — command-line interface for TimeFamilyServer.
 #![cfg_attr(debug_assertions, allow(rustdoc::all))]
 
 use std::path::PathBuf;
@@ -17,8 +17,8 @@ use foretias_core::noise;
 use foretias_node::server::TimeFamilyServer;
 
 #[derive(Parser)]
-#[command(name = "fortias")]
-#[command(about = "Fortias Time Integrity Attestation Service CLI")]
+#[command(name = "foretias")]
+#[command(about = "Foretias Time Integrity Attestation Service CLI")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -90,7 +90,7 @@ enum Commands {
         foretis: Option<String>,
         /// Read Foretis from file
         #[arg(short = 'F', long = "foretis-file")]
-        fortis_file: Option<String>,
+        foretis_file: Option<String>,
         /// Write verify output to file (default: stdout)
         #[arg(short = 'o', long = "verify-output")]
         verify_output: Option<String>,
@@ -111,7 +111,7 @@ enum Commands {
         foretis: Option<String>,
         /// Read Foretis from file
         #[arg(short = 'F', long = "foretis-file")]
-        fortis_file: Option<String>,
+        foretis_file: Option<String>,
         /// Write proof output to file (default: stdout)
         #[arg(short = 'o', long = "proof-output")]
         proof_output: Option<String>,
@@ -137,7 +137,7 @@ struct SettingsConfig {
 
 fn load_config() -> SettingsConfig {
     let path = std::env::var("HOME")
-        .map(|h| format!("{}/.config/fortias/fortias.settings.json", h))
+        .map(|h| format!("{}/.config/foretias/foretias.settings.json", h))
         .unwrap_or_default();
     let path = PathBuf::from(path);
 
@@ -237,8 +237,8 @@ fn read_message(msg: Option<String>, msg_file: Option<String>) -> Result<Vec<u8>
     }
 }
 
-fn read_fortis(foretis: Option<String>, fortis_file: Option<String>) -> Result<String, std::io::Error> {
-    match (foretis, fortis_file) {
+fn read_foretis(foretis: Option<String>, foretis_file: Option<String>) -> Result<String, std::io::Error> {
+    match (foretis, foretis_file) {
         (Some(j), None) => Ok(j),
         (None, Some(f)) => std::fs::read_to_string(&f),
         (None, None) => Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Must provide --foretis or --foretis-file")),
@@ -328,7 +328,7 @@ async fn cmd_serve(
     }
 
     // Print server info before starting
-    println!("Fortias TimeFamilyServer starting...");
+    println!("Foretias TimeFamilyServer starting...");
     println!("  Listen : {}", addr);
     println!("  TBN    : {}", server.get_tbn());
     println!("  TBID   : {}", hex::encode(server.get_tbid()));
@@ -391,19 +391,19 @@ async fn cmd_verify(
     message: Option<String>,
     message_file: Option<String>,
     foretis: Option<String>,
-    fortis_file: Option<String>,
+    foretis_file: Option<String>,
     verify_output: Option<String>,
     server_addr: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let content = read_message(message, message_file)?;
     let content_hex = hex::encode(&content);
-    let fortis_str = read_fortis(foretis, fortis_file)?;
-    let fortis_value: serde_json::Value = serde_json::from_str(&fortis_str)?;
+    let foretis_str = read_foretis(foretis, foretis_file)?;
+    let foretis_value: serde_json::Value = serde_json::from_str(&foretis_str)?;
 
     let result = json_rpc_call(
         &server_addr,
         "verify",
-        serde_json::json!({"content": content_hex, "foretis": fortis_value}),
+        serde_json::json!({"content": content_hex, "foretis": foretis_value}),
     )
     .await?;
 
@@ -420,16 +420,16 @@ async fn cmd_prove_verification(
     message: Option<String>,
     message_file: Option<String>,
     foretis: Option<String>,
-    fortis_file: Option<String>,
+    foretis_file: Option<String>,
     proof_output: Option<String>,
     server_addr: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let _content = read_message(message, message_file)?;
-    let fortis_str = read_fortis(foretis, fortis_file)?;
-    let fortis_value: serde_json::Value = serde_json::from_str(&fortis_str)?;
+    let foretis_str = read_foretis(foretis, foretis_file)?;
+    let foretis_value: serde_json::Value = serde_json::from_str(&foretis_str)?;
 
     // Extract tick_number from the foretis to fetch the right calendar slice
-    let tick_number = fortis_value.get("tick_number")
+    let tick_number = foretis_value.get("tick_number")
         .and_then(|v| v.as_u64())
         .ok_or("foretis missing 'tick_number'")?;
 
@@ -444,7 +444,7 @@ async fn cmd_prove_verification(
         "verified_locally": true,
         "tick_number": tick_number,
         "calendar_records": records,
-        "foretis": fortis_value,
+        "foretis": foretis_value,
         "method": "prove_verification",
     });
 
@@ -631,11 +631,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Stamp { message, message_file, stamp_output, server } => {
             cmd_stamp(message, message_file, stamp_output, server).await
         }
-        Commands::Verify { message, message_file, foretis, fortis_file, verify_output, server } => {
-            cmd_verify(message, message_file, foretis, fortis_file, verify_output, server).await
+        Commands::Verify { message, message_file, foretis, foretis_file, verify_output, server } => {
+            cmd_verify(message, message_file, foretis, foretis_file, verify_output, server).await
         }
-        Commands::ProveVerification { message, message_file, foretis, fortis_file, proof_output, server } => {
-            cmd_prove_verification(message, message_file, foretis, fortis_file, proof_output, server).await
+        Commands::ProveVerification { message, message_file, foretis, foretis_file, proof_output, server } => {
+            cmd_prove_verification(message, message_file, foretis, foretis_file, proof_output, server).await
         }
         Commands::InspectAttestations { calendar } => {
             cmd_inspect_attestations(calendar)?;

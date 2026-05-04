@@ -15,7 +15,7 @@ int test_legacy_hash_main(void);
 int test_privkey_main(void);
 
 int main(void) {
-    printf("Fortias Core Test Suite\n");
+    printf("Foretias Core Test Suite\n");
     printf("=======================\n\n");
 
     int failures = 0;

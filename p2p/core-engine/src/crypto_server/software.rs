@@ -13,7 +13,7 @@ use super::{CryptoServer, CryptoServerCapabilities, ForetiasCurve, PublicKeyByte
 /// Derive seal key via HKDF-SHA256 over the Ed25519 seed.
 /// The seed never leaves C memory; the derivation happens inside C11.
 fn derive_seal_key(handle: &PrivKeyHandle) -> Result<[u8; 32], CryptoError> {
-    handle.derive_seal_key(b"fortias-calendar-seal-v1")
+    handle.derive_seal_key(b"foretias-calendar-seal-v1")
 }
 
 /// Software-based crypto server backed by libsodium and ChaCha20-Poly1305.
