@@ -200,6 +200,7 @@ impl Chronomatter {
         Ok(TickRecord {
             tick_number: tick,
             public_key: new_pub.to_vec(),
+            signature_algorithm: self.crypto.signature_algorithm().to_id_string().to_string(),
             forward_foretis,
             backward_foretis,
             aa_nonce,
@@ -263,6 +264,7 @@ impl Chronomatter {
             tick_number: tick,
             content_hash: content_hash.bytes,
             signature: sig.bytes.to_vec(),
+            signature_algorithm: self.crypto.signature_algorithm().to_id_string().to_string(),
             tbid,
             echo,
             tbn,
@@ -387,7 +389,7 @@ impl Chronomatter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::foretias::types::{PublicKey, TickNumber};
+    use crate::foretias::types::TickNumber;
     use std::sync::atomic::AtomicU64 as AtomicU64Std;
     use parking_lot::RwLock;
     use crate::foretias::Calendar;
@@ -397,7 +399,7 @@ mod tests {
         calendar: Arc<RwLock<Calendar>>,
     }
     impl TickObserver for DummyObserver {
-        fn on_tick_advance(&self, tick_number: TickNumber, _public_key: &PublicKey, tick_record: &TickRecord) {
+        fn on_tick_advance(&self, tick_number: TickNumber, _public_key: &[u8], tick_record: &TickRecord) {
             self.last_tick.store(tick_number, SeqCst);
             self.calendar.write().append(tick_record.clone()).unwrap();
         }

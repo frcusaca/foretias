@@ -7,7 +7,11 @@ use zeroize::Zeroizing;
 
 use crate::core::bindings::*;
 use crate::core::identity::PrivKeyHandle;
+use crate::crypto_server::kem_mlkem;
+use crate::crypto_server::signing_sphincs;
+use crate::crypto_server::signing_dilithium;
 use crate::error::CryptoError;
+use crate::foretias::types::{SignatureAlgorithm, SignatureBytes};
 use super::{CryptoServer, CryptoServerCapabilities, ForetiasCurve, PublicKeyBytes, SharedSecret, SealedBlob};
 
 /// Derive seal key via HKDF-SHA256 over the Ed25519 seed.
@@ -30,6 +34,12 @@ pub struct SoftwareCryptoServer {
     seal_key: Zeroizing<[u8; 32]>,
     /// In-memory store for FROST threshold signing shares.
     frost_shares: parking_lot::Mutex<HashMap<String, Zeroizing<Vec<u8>>>>,
+    pub sphincs_pub_key: Option<SignatureBytes>,
+    pub sphincs_secret_key: Option<SignatureBytes>,
+    pub dilithium_pub_key: Option<SignatureBytes>,
+    pub dilithium_secret_key: Option<SignatureBytes>,
+    pub mlkem_pub_key: Option<SignatureBytes>,
+    pub mlkem_secret_key: Option<SignatureBytes>,
 }
 
 impl SoftwareCryptoServer {
@@ -43,6 +53,15 @@ impl SoftwareCryptoServer {
                 let pub_key = ForetiasPubKey32 { bytes: pub_key_bytes };
                 let peer_id = crate::core::identity::derive_ed25519_peer_id(&pub_key)?;
                 let seal_key = derive_seal_key(&handle)?;
+                let sphincs_keys = signing_sphincs::sphincs_keypair()?;
+                let sphincs_pub = sphincs_keys.0;
+                let sphincs_secret = sphincs_keys.1;
+                let dilithium_keys = signing_dilithium::dilithium3_keypair()?;
+                let dilithium_pub = dilithium_keys.0;
+                let dilithium_secret = dilithium_keys.1;
+                let mlkem_keys = kem_mlkem::mlkem_768_keypair()?;
+                let mlkem_pub = mlkem_keys.0;
+                let mlkem_secret = mlkem_keys.1;
 
                 Ok(Self {
                     curve: ForetiasCurve::Ed25519,
@@ -51,6 +70,12 @@ impl SoftwareCryptoServer {
                     peer_id,
                     seal_key: Zeroizing::new(seal_key),
                     frost_shares: parking_lot::Mutex::new(HashMap::new()),
+                    sphincs_pub_key: Some(sphincs_pub),
+                    sphincs_secret_key: Some(sphincs_secret),
+                    dilithium_pub_key: Some(dilithium_pub),
+                    dilithium_secret_key: Some(dilithium_secret),
+                    mlkem_pub_key: Some(mlkem_pub),
+                    mlkem_secret_key: Some(mlkem_secret),
                 })
             }
             ForetiasCurve::P256 => {
@@ -66,6 +91,15 @@ impl SoftwareCryptoServer {
         let pub_key = ForetiasPubKey32 { bytes: pub_key_bytes };
         let peer_id = crate::core::identity::derive_ed25519_peer_id(&pub_key)?;
         let seal_key = derive_seal_key(&handle)?;
+        let sphincs_keys = signing_sphincs::sphincs_keypair()?;
+        let sphincs_pub = sphincs_keys.0;
+        let sphincs_secret = sphincs_keys.1;
+        let dilithium_keys = signing_dilithium::dilithium3_keypair()?;
+        let dilithium_pub = dilithium_keys.0;
+        let dilithium_secret = dilithium_keys.1;
+        let mlkem_keys = kem_mlkem::mlkem_768_keypair()?;
+        let mlkem_pub = mlkem_keys.0;
+        let mlkem_secret = mlkem_keys.1;
 
         Ok(Self {
             curve: ForetiasCurve::Ed25519,
@@ -74,6 +108,12 @@ impl SoftwareCryptoServer {
             peer_id,
             seal_key: Zeroizing::new(seal_key),
             frost_shares: parking_lot::Mutex::new(HashMap::new()),
+            sphincs_pub_key: Some(sphincs_pub),
+            sphincs_secret_key: Some(sphincs_secret),
+            dilithium_pub_key: Some(dilithium_pub),
+            dilithium_secret_key: Some(dilithium_secret),
+            mlkem_pub_key: Some(mlkem_pub),
+            mlkem_secret_key: Some(mlkem_secret),
         })
     }
 }
@@ -81,6 +121,12 @@ impl SoftwareCryptoServer {
 impl Drop for SoftwareCryptoServer {
     fn drop(&mut self) {
         self.seal_key.fill(0);
+        if let Some(ref mut sk) = self.sphincs_secret_key {
+            sk.fill(0);
+        }
+        if let Some(ref mut sk) = self.mlkem_secret_key {
+            sk.fill(0);
+        }
     }
 }
 
@@ -177,6 +223,47 @@ impl CryptoServer for SoftwareCryptoServer {
 
     fn backend_self_proof(&self, _challenge: &[u8]) -> Result<Option<Vec<u8>>, CryptoError> {
         Ok(None)
+    }
+
+    fn signature_algorithm(&self) -> SignatureAlgorithm {
+        SignatureAlgorithm::SPHINCS_SHA2_128S
+    }
+
+    fn sign_with(&self, msg: &[u8], alg: SignatureAlgorithm) -> Result<SignatureBytes, CryptoError> {
+        match alg {
+            SignatureAlgorithm::Ed25519 => {
+                let sig = self.sign(msg)?;
+                Ok(sig.bytes.to_vec())
+            }
+            SignatureAlgorithm::SPHINCS_SHA2_128S => {
+                let secret = self.sphincs_secret_key.as_ref()
+                    .ok_or(CryptoError::BadKey)?;
+                signing_sphincs::sphincs_sign(secret, msg)
+            }
+            SignatureAlgorithm::Dilithium3 => {
+                let secret = self.dilithium_secret_key.as_ref()
+                    .ok_or(CryptoError::BadKey)?;
+                signing_dilithium::dilithium3_sign(secret, msg)
+            }
+        }
+    }
+
+    fn verify_with(&self, pub_key: &SignatureBytes, alg_id: &str, msg: &[u8], sig: &SignatureBytes) -> Result<bool, CryptoError> {
+        match SignatureAlgorithm::from_id_string(alg_id)? {
+            SignatureAlgorithm::Ed25519 => {
+                let pk_bytes: [u8; 32] = pub_key[..32].try_into()
+                    .map_err(|_| CryptoError::BadKey)?;
+                let sig_bytes: [u8; 64] = sig[..64].try_into()
+                    .map_err(|_| CryptoError::BadSignature)?;
+                self.verify_ed25519(&ForetiasPubKey32 { bytes: pk_bytes }, msg, &ForetiasSig64 { bytes: sig_bytes })
+            }
+            SignatureAlgorithm::SPHINCS_SHA2_128S => {
+                signing_sphincs::sphincs_verify(pub_key, msg, sig)
+            }
+            SignatureAlgorithm::Dilithium3 => {
+                signing_dilithium::dilithium3_verify(pub_key, msg, sig)
+            }
+        }
     }
 }
 

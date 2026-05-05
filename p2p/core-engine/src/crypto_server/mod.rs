@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::bindings::*;
 use crate::error::CryptoError;
+use crate::foretias::types::{SignatureAlgorithm, SignatureBytes};
 
 /// Supported elliptic curve types for signing and key exchange.
 #[derive(Debug, Clone, Copy)]
@@ -117,9 +118,31 @@ pub trait CryptoServer: Send + Sync {
     fn frost_sign_partial(&self, committee_id: &str, session_state: &[u8]) -> Result<Vec<u8>, CryptoError>;
     /// Returns a proof that this backend executed the operation on a trusted device, if available.
     fn backend_self_proof(&self, challenge: &[u8]) -> Result<Option<Vec<u8>>, CryptoError>;
+
+    // ── Algorithm-aware operations ────────────────────────────
+
+    /// Returns the signature algorithm this server uses.
+    fn signature_algorithm(&self) -> SignatureAlgorithm;
+
+    /// Signs with the server's configured algorithm.
+    /// Replaces the old `sign()` which was always Ed25519.
+    fn sign_with(&self, msg: &[u8], alg: SignatureAlgorithm)
+        -> Result<SignatureBytes, CryptoError>;
+
+    /// Verifies a signature given the algorithm ID.
+    /// The algorithm ID is carried in the Foretis/TickRecord itself.
+    fn verify_with(&self,
+        pub_key: &SignatureBytes,
+        alg_id: &str,
+        msg: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<bool, CryptoError>;
 }
 
 pub mod software;
+pub mod signing_sphincs;
+pub mod kem_mlkem;
+pub mod signing_dilithium;
 
 /// Creates a software-backed crypto server using the specified curve.
 pub fn new_software(curve: ForetiasCurve) -> Result<Box<dyn CryptoServer>, CryptoError> {

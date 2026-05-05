@@ -26,6 +26,7 @@ mod tests {
         TickRecord {
             tick_number: 42,
             public_key: vec![0u8; 32],
+            signature_algorithm: "Ed25519".to_string(),
             forward_foretis: vec![],
             backward_foretis: vec![],
             aa_nonce: [0u8; 16],
@@ -40,6 +41,7 @@ mod tests {
             tick_number: 42,
             content_hash: [1u8; 32],
             signature: vec![2u8; 64],
+            signature_algorithm: "Ed25519".to_string(),
             tbid: [3u8; 16],
             echo: "test".to_string(),
             tbn: "test".to_string(),

@@ -1,14 +1,63 @@
 use std::env;
 use std::path::PathBuf;
+use std::process::Command;
 
 fn main() {
     let manifest = env::var("CARGO_MANIFEST_DIR").unwrap();
     let core_dir = PathBuf::from(&manifest).join("../core");
 
+    // ── Build liboqs from source (v0.13.0) ──────────────────────────────
+    let liboqs_dir = PathBuf::from(&manifest).join("deps/liboqs");
+    let liboqs_build_dir = liboqs_dir.join("build");
+    let oqs_include = liboqs_build_dir.join("include");
+    let oqs_lib_dir = liboqs_build_dir.join("lib");
+
+    if !liboqs_dir.join("src").exists() {
+        std::fs::create_dir_all(&liboqs_dir).ok();
+        Command::new("git")
+            .args(&[
+                "clone", "--depth", "1", "--branch", "0.13.0",
+                "https://github.com/open-quantum-safe/liboqs.git",
+                liboqs_dir.to_str().unwrap(),
+            ])
+            .status()
+            .expect("failed to clone liboqs");
+    }
+
+    std::fs::create_dir_all(&liboqs_build_dir).unwrap();
+
+    let cmake_config_cmd = format!(
+        "cmake -S {} -B {} -DCMAKE_BUILD_TYPE=Release \
+         -Doqs_enable_open_ssl=OFF -Doqs_enable_s2n=OFF \
+         -Denable_test=OFF -Denable_benchmark=OFF -Denable_samples=OFF \
+         -DENABLE_EXPERIMENTAL=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON",
+        liboqs_dir.display(),
+        liboqs_build_dir.display(),
+    );
+    println!("cargo:rerun-if-changed={}", liboqs_dir.join("src").display());
+    println!("cargo:rerun-if-changed={}/CMakeLists.txt", liboqs_dir.display());
+
+    Command::new("sh")
+        .arg("-c")
+        .arg(&cmake_config_cmd)
+        .status()
+        .expect("cmake configure failed");
+
+    Command::new("cmake")
+        .args(&["--build", liboqs_build_dir.to_str().unwrap(), "--config", "Release"])
+        .status()
+        .expect("cmake build failed");
+
+    println!("cargo:include={}", oqs_include.display());
+    println!("cargo:rustc-link-search=native={}", oqs_lib_dir.display());
+    println!("cargo:rustc-link-lib=oqs");
+
+    // ── Compile C11 core ─────────────────────────────────────────────────
     let sources = [
         "src/version.c",
         "src/identity_ed25519.c", "src/identity_p256.c",
-        "src/signing_ed25519.c", "src/signing_p256.c",
+        "src/signing_ed25519.c", "src/signing_p256.c", "src/signing_sphincs.c", "src/signing_dilithium.c",
+        "src/kem_mlkem.c",
         "src/hash_sha256.c", "src/hash_blake3.c",
         "src/hash_legacy_insecure_md5.c", "src/hash_legacy_insecure_sha1.c",
         "src/noise_xx.c", "src/merkle.c",
@@ -26,7 +75,8 @@ fn main() {
         .flag("-O2").flag("-fno-strict-aliasing")
         .flag("-fstack-protector").flag("-fvisibility=hidden")
         .include(core_dir.join("include"))
-        .include(core_dir.join("src"));
+        .include(core_dir.join("src"))
+        .include(&oqs_include);
     for s in &sources {
         build.file(core_dir.join(s));
     }

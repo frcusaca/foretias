@@ -36,9 +36,11 @@ uuid                = { version = "1", features = ["v4", "serde"] }
 hex                 = "0.4"
 zeroize             = "1"
 tokio               = { version = "1", features = ["full"] }
+oqs                 = { version = "0.11", default-features = false, features = ["sphincs", "dilithium", "ml_dsa", "ml_kem", "vendored"] }
 
 [build-dependencies]
 cc      = "1.0"
 bindgen = "0.70"
+cmake   = "0.1"
 
 

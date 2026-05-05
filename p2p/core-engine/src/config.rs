@@ -1,10 +1,11 @@
 //! Node configuration (JSON).
 
+use crate::foretias::types::{KemAlgorithm, SignatureAlgorithm};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 /// Runtime configuration for a Foretias P2P node, loaded from a JSON file.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeConfig {
     /// Address the node listens on for incoming connections (default: `127.0.0.1:4001`).
     #[serde(default = "default_listen_addr")]
@@ -45,6 +46,12 @@ pub struct NodeConfig {
     /// Collision detection configuration.
     #[serde(default)]
     pub collision: CollisionConfig,
+    /// Signature algorithm for stamping (default: SPHINCS+-SHA2-128s-simple).
+    #[serde(default = "default_signature_algorithm")]
+    pub signature_algorithm: SignatureAlgorithm,
+    /// KEM algorithm for key exchange (default: Noise-XX).
+    #[serde(default = "default_kem_algorithm")]
+    pub kem_algorithm: KemAlgorithm,
 }
 
 /// Collision detection configuration.
@@ -71,6 +78,30 @@ fn default_dht_namespace() -> String { "mainnet".to_string() }
 fn default_heartbeat_interval_secs() -> u64 { 30 }
 fn default_nonce_window() -> usize { 10 }
 fn default_liege_wait_secs() -> u64 { 30 }
+fn default_signature_algorithm() -> SignatureAlgorithm { SignatureAlgorithm::SPHINCS_SHA2_128S }
+fn default_kem_algorithm() -> KemAlgorithm { KemAlgorithm::NoiseXX }
+
+impl Default for NodeConfig {
+    fn default() -> Self {
+        Self {
+            listen_addr: default_listen_addr(),
+            version: default_version(),
+            calendar_path: default_calendar_path(),
+            chronon_ns: default_chronon_ns(),
+            serialized: false,
+            peers: Vec::new(),
+            auto_attest_every_n: default_auto_attest_every_n(),
+            request_timeout_secs: default_request_timeout_secs(),
+            p2p_listen: None,
+            p2p_dial: Vec::new(),
+            dht_namespace: default_dht_namespace(),
+            dht_bootstrap: Vec::new(),
+            collision: CollisionConfig::default(),
+            signature_algorithm: default_signature_algorithm(),
+            kem_algorithm: default_kem_algorithm(),
+        }
+    }
+}
 
 impl NodeConfig {
     /// Loads configuration from a JSON file at the given path; returns defaults on any error.

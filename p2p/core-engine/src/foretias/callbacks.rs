@@ -5,10 +5,10 @@
 
 use crate::error::NodeError;
 use crate::foretias::tick::{Foretis, TickRecord};
-use crate::foretias::types::{Message, PublicKey, TickNumber};
+use crate::foretias::types::{Message, TickNumber};
 
 pub trait TickObserver: Send + Sync {
-    fn on_tick_advance(&self, tick_number: TickNumber, public_key: &PublicKey, tick_record: &TickRecord);
+    fn on_tick_advance(&self, tick_number: TickNumber, public_key: &[u8], tick_record: &TickRecord);
 }
 
 pub trait Attester: Send + Sync {

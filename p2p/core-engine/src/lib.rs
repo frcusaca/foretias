@@ -14,3 +14,5 @@ pub mod collision;
 pub mod epoch;
 pub mod probity;
 pub mod noise;
+#[cfg(test)]
+mod integration_tests;

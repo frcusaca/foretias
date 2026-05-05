@@ -3,7 +3,6 @@
 use serde::{Deserialize, Serialize};
 
 use crate::crypto_server::CryptoServer;
-use crate::core::bindings::{ForetiasPubKey32, ForetiasSig64};
 use crate::core::rng::random_bytes;
 use crate::error::NodeError;
 
@@ -14,6 +13,8 @@ pub struct TickRecord {
     pub tick_number: u64,
     /// The public key active at this tick.
     pub public_key: Vec<u8>,
+    /// Plain-text algorithm identifier for this tick's key.
+    pub signature_algorithm: String,
     /// Serialized Foretis attesting forward to the next tick.
     pub forward_foretis: Vec<u8>,
     /// Serialized Foretis attesting backward to the previous tick.
@@ -39,6 +40,8 @@ pub struct Foretis {
     pub content_hash: [u8; 32],
     /// Ed25519 signature over the content and tick metadata.
     pub signature: Vec<u8>,
+    /// Plain-text algorithm identifier (e.g. "SPHINCS+-SHA2-128s-simple").
+    pub signature_algorithm: String,
     /// TimeBeing identifier of the signing node.
     pub tbid: [u8; 16],
     /// Echo string identifying the tick (e.g. `"tick-42"`).
@@ -79,6 +82,7 @@ pub fn stamp(
     sig_input.extend_from_slice(content);
 
     let signature = server.sign(&sig_input)?;
+    let sig_alg = server.signature_algorithm().to_id_string().to_string();
     let content_hash = server.sha256(content)?;
 
     let now_ns = std::time::SystemTime::now()
@@ -91,6 +95,7 @@ pub fn stamp(
         tick_number,
         content_hash: content_hash.bytes,
         signature: signature.bytes.to_vec(),
+        signature_algorithm: sig_alg,
         tbid: *tbid,
         echo: echo.to_string(),
         tbn: tbn.to_string(),
@@ -113,20 +118,26 @@ pub fn verify(
     let records = calendar.get(foretis.tick_number, 1)?;
     let rec = records.first().ok_or(NodeError::NotFound("tick"))?;
 
+    // Reconcile algorithms
+    if rec.signature_algorithm != foretis.signature_algorithm {
+        return Err(NodeError::AlgorithmMismatch(
+            format!("tick uses '{}' but Foretis claims '{}'",
+                   rec.signature_algorithm, foretis.signature_algorithm)
+        ));
+    }
+
     let mut sig_input = Vec::new();
     sig_input.extend_from_slice(&foretis.tbid);
     sig_input.extend_from_slice(&foretis.tick_number.to_be_bytes());
     sig_input.extend_from_slice(content);
 
-    let pub_key_bytes: [u8; 32] = rec.public_key[..32].try_into()
-        .map_err(|_| NodeError::BadFormat("public_key".to_string()))?;
-    let pub_key = ForetiasPubKey32 { bytes: pub_key_bytes };
-
-    let sig_bytes: [u8; 64] = foretis.signature[..].try_into()
-        .map_err(|_| NodeError::BadFormat("signature".to_string()))?;
-    let sig = ForetiasSig64 { bytes: sig_bytes };
-
-    Ok(server.verify_ed25519(&pub_key, &sig_input, &sig)?)
+    // Verify with algorithm-aware method
+    Ok(server.verify_with(
+        &rec.public_key,
+        &rec.signature_algorithm,
+        &sig_input,
+        &foretis.signature,
+    )?)
 }
 
 /// Build auto-attestation blob: tbid || A.tick || A.pk || B.tick || B.pk || stamps_per_tick || nonce
@@ -181,37 +192,30 @@ pub fn verify_pair(
     prev: &TickRecord,
     curr: &TickRecord,
 ) -> Result<bool, NodeError> {
-    let prev_pk: [u8; 32] = prev.public_key[..32].try_into()
-        .map_err(|_| NodeError::BadFormat("public_key".to_string()))?;
-    let curr_pk: [u8; 32] = curr.public_key[..32].try_into()
-        .map_err(|_| NodeError::BadFormat("public_key".to_string()))?;
-
     let nonce = curr.aa_nonce;
     let stamps = curr.stamps_per_tick;
-    let mut ma_blob = Vec::with_capacity(tbid_str.len() + 8 + 32 + 8 + 32 + 8 + 16);
+    let mut ma_blob = Vec::with_capacity(tbid_str.len() + 8 + prev.public_key.len() + 8 + curr.public_key.len() + 8 + 16);
     ma_blob.extend_from_slice(tbid_str.as_bytes());
     ma_blob.extend_from_slice(&prev.tick_number.to_be_bytes());
-    ma_blob.extend_from_slice(&prev_pk);
+    ma_blob.extend_from_slice(&prev.public_key);
     ma_blob.extend_from_slice(&curr.tick_number.to_be_bytes());
-    ma_blob.extend_from_slice(&curr_pk);
+    ma_blob.extend_from_slice(&curr.public_key);
     // Backward compat: pre-v0.9 TickRecords have stamps_per_tick=0 (serde default)
     ma_blob.extend_from_slice(&stamps.to_be_bytes());
     ma_blob.extend_from_slice(&nonce);
 
-    let forward_sig: [u8; 64] = curr.forward_foretis[..64].try_into()
-        .map_err(|_| NodeError::BadFormat("forward_foretis".to_string()))?;
-    let forward_valid = crypto.verify_ed25519(
-        &ForetiasPubKey32 { bytes: prev_pk },
+    let forward_valid = crypto.verify_with(
+        &prev.public_key,
+        &curr.signature_algorithm,
         &ma_blob,
-        &ForetiasSig64 { bytes: forward_sig },
+        &curr.forward_foretis,
     )?;
 
-    let backward_sig: [u8; 64] = curr.backward_foretis[..64].try_into()
-        .map_err(|_| NodeError::BadFormat("backward_foretis".to_string()))?;
-    let backward_valid = crypto.verify_ed25519(
-        &ForetiasPubKey32 { bytes: curr_pk },
+    let backward_valid = crypto.verify_with(
+        &curr.public_key,
+        &curr.signature_algorithm,
         &ma_blob,
-        &ForetiasSig64 { bytes: backward_sig },
+        &curr.backward_foretis,
     )?;
 
     Ok(forward_valid && backward_valid)
@@ -242,6 +246,7 @@ mod tests {
         cal.append(TickRecord {
             tick_number,
             public_key,
+            signature_algorithm: server.signature_algorithm().to_id_string().to_string(),
             forward_foretis: serde_json::to_vec(&foretis).unwrap(),
             backward_foretis: vec![],
             aa_nonce: [0u8; 16],
@@ -317,6 +322,7 @@ mod tests {
         cal.append(TickRecord {
             tick_number: 1,
             public_key: vec![0u8; 32],
+            signature_algorithm: "Ed25519".to_string(),
             forward_foretis: vec![],
             backward_foretis: vec![],
             aa_nonce: [0u8; 16],
@@ -346,9 +352,12 @@ mod tests {
         let sig = server.sign(&ma_blob).unwrap();
         let sig_bytes = sig.bytes.to_vec();
 
+        let sig_alg = server.signature_algorithm().to_id_string().to_string();
+
         let prev = TickRecord {
             tick_number: 1,
             public_key: pub_key.to_vec(),
+            signature_algorithm: sig_alg.clone(),
             forward_foretis: vec![],
             backward_foretis: vec![],
             aa_nonce: [0u8; 16],
@@ -358,6 +367,7 @@ mod tests {
         let curr = TickRecord {
             tick_number: 2,
             public_key: pub_key.to_vec(),
+            signature_algorithm: sig_alg.clone(),
             forward_foretis: sig_bytes.clone(),
             backward_foretis: sig_bytes,
             aa_nonce: nonce,
@@ -382,10 +392,12 @@ mod tests {
         let (ma_blob, nonce) = auto_attestation_blob(&tbid_str, 1, &pub_key, 2, &pub_key).unwrap();
         let sig = server.sign(&ma_blob).unwrap();
         let mut sig_bytes = sig.bytes.to_vec();
+        let sig_alg = server.signature_algorithm().to_id_string().to_string();
 
         let prev = TickRecord {
             tick_number: 1,
             public_key: pub_key.to_vec(),
+            signature_algorithm: sig_alg.clone(),
             forward_foretis: vec![],
             backward_foretis: vec![],
             aa_nonce: [0u8; 16],
@@ -395,6 +407,7 @@ mod tests {
         let curr = TickRecord {
             tick_number: 2,
             public_key: pub_key.to_vec(),
+            signature_algorithm: sig_alg.clone(),
             forward_foretis: sig_bytes.clone(),
             backward_foretis: sig_bytes.clone(),
             aa_nonce: nonce,
@@ -408,6 +421,7 @@ mod tests {
         let curr_tampered = TickRecord {
             tick_number: 2,
             public_key: pub_key.to_vec(),
+            signature_algorithm: sig_alg,
             forward_foretis: sig_bytes,
             backward_foretis: vec![0u8; 64],
             aa_nonce: nonce,

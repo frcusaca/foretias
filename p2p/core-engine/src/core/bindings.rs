@@ -2,6 +2,18 @@
 
 pub const FORETIAS_CORE_VERSION_MAJOR: u32 = 0;
 pub const FORETIAS_CORE_VERSION_MINOR: u32 = 1;
+pub const FORETIAS_SIG_ID_ED25519: &[u8; 8] = b"Ed25519\0";
+pub const FORETIAS_SIG_ID_SPHINCS_SHA2_128S: &[u8; 26] = b"SPHINCS+-SHA2-128s-simple\0";
+pub const FORETIAS_SIG_ID_DILITHIUM3: &[u8; 11] = b"Dilithium3\0";
+pub const FORETIAS_KEM_ID_NOISE_XX: &[u8; 9] = b"Noise-XX\0";
+pub const FORETIAS_KEM_ID_MLKEM_768: &[u8; 11] = b"ML-KEM-768\0";
+pub const FORETIAS_SIG_MAX_PUBKEY_BYTES: u32 = 2048;
+pub const FORETIAS_SIG_MAX_SECRET_BYTES: u32 = 4096;
+pub const FORETIAS_SIG_MAX_SIG_BYTES: u32 = 8192;
+pub const FORETIAS_KEM_MAX_PUBKEY_BYTES: u32 = 1184;
+pub const FORETIAS_KEM_MAX_CIPHERTEXT: u32 = 1088;
+pub const FORETIAS_KEM_MAX_SECRET_BYTES: u32 = 2400;
+pub const FORETIAS_KEM_SHARED_SECRET: u32 = 32;
 pub const FORETIAS_NOISE_MAX_MSG: u32 = 65535;
 pub const FORETIAS_MERKLE_MAX_DEPTH: u32 = 32;
 #[repr(C)]
@@ -40,6 +52,13 @@ pub type ForetiasResult = ::std::os::raw::c_int;
 pub const ForetiasCurve_FORETIAS_CURVE_ED25519: ForetiasCurve = 1;
 pub const ForetiasCurve_FORETIAS_CURVE_P256: ForetiasCurve = 2;
 pub type ForetiasCurve = ::std::os::raw::c_uint;
+pub const ForetiasSignatureAlgorithm_FORETIAS_SIG_ED25519: ForetiasSignatureAlgorithm = 1;
+pub const ForetiasSignatureAlgorithm_FORETIAS_SIG_SPHINCS_SHA2_128S: ForetiasSignatureAlgorithm = 2;
+pub const ForetiasSignatureAlgorithm_FORETIAS_SIG_DILITHIUM3: ForetiasSignatureAlgorithm = 3;
+pub type ForetiasSignatureAlgorithm = ::std::os::raw::c_uint;
+pub const ForetiasKemAlgorithm_FORETIAS_KEM_NOISE_XX: ForetiasKemAlgorithm = 1;
+pub const ForetiasKemAlgorithm_FORETIAS_KEM_MLKEM_768: ForetiasKemAlgorithm = 2;
+pub type ForetiasKemAlgorithm = ::std::os::raw::c_uint;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct ForetiasPubKey32 {
@@ -160,6 +179,117 @@ const _: () = {
     ["Offset of field: ForetiasFrostShare::bytes"]
         [::std::mem::offset_of!(ForetiasFrostShare, bytes) - 0usize];
 };
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ForetiasPubKeyVar {
+    pub bytes: [u8; 2048usize],
+    pub len: usize,
+}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of ForetiasPubKeyVar"][::std::mem::size_of::<ForetiasPubKeyVar>() - 2056usize];
+    ["Alignment of ForetiasPubKeyVar"][::std::mem::align_of::<ForetiasPubKeyVar>() - 8usize];
+    ["Offset of field: ForetiasPubKeyVar::bytes"]
+        [::std::mem::offset_of!(ForetiasPubKeyVar, bytes) - 0usize];
+    ["Offset of field: ForetiasPubKeyVar::len"]
+        [::std::mem::offset_of!(ForetiasPubKeyVar, len) - 2048usize];
+};
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ForetiasSecretKeyVar {
+    pub bytes: [u8; 4096usize],
+    pub len: usize,
+}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of ForetiasSecretKeyVar"][::std::mem::size_of::<ForetiasSecretKeyVar>() - 4104usize];
+    ["Alignment of ForetiasSecretKeyVar"][::std::mem::align_of::<ForetiasSecretKeyVar>() - 8usize];
+    ["Offset of field: ForetiasSecretKeyVar::bytes"]
+        [::std::mem::offset_of!(ForetiasSecretKeyVar, bytes) - 0usize];
+    ["Offset of field: ForetiasSecretKeyVar::len"]
+        [::std::mem::offset_of!(ForetiasSecretKeyVar, len) - 4096usize];
+};
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ForetiasSigVar {
+    pub bytes: [u8; 8192usize],
+    pub len: usize,
+}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of ForetiasSigVar"][::std::mem::size_of::<ForetiasSigVar>() - 8200usize];
+    ["Alignment of ForetiasSigVar"][::std::mem::align_of::<ForetiasSigVar>() - 8usize];
+    ["Offset of field: ForetiasSigVar::bytes"]
+        [::std::mem::offset_of!(ForetiasSigVar, bytes) - 0usize];
+    ["Offset of field: ForetiasSigVar::len"]
+        [::std::mem::offset_of!(ForetiasSigVar, len) - 8192usize];
+};
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ForetiasKemPubKey {
+    pub bytes: [u8; 1184usize],
+    pub len: usize,
+}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of ForetiasKemPubKey"][::std::mem::size_of::<ForetiasKemPubKey>() - 1192usize];
+    ["Alignment of ForetiasKemPubKey"][::std::mem::align_of::<ForetiasKemPubKey>() - 8usize];
+    ["Offset of field: ForetiasKemPubKey::bytes"]
+        [::std::mem::offset_of!(ForetiasKemPubKey, bytes) - 0usize];
+    ["Offset of field: ForetiasKemPubKey::len"]
+        [::std::mem::offset_of!(ForetiasKemPubKey, len) - 1184usize];
+};
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ForetiasKemSecretKey {
+    pub bytes: [u8; 2400usize],
+    pub len: usize,
+}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of ForetiasKemSecretKey"][::std::mem::size_of::<ForetiasKemSecretKey>() - 2408usize];
+    ["Alignment of ForetiasKemSecretKey"][::std::mem::align_of::<ForetiasKemSecretKey>() - 8usize];
+    ["Offset of field: ForetiasKemSecretKey::bytes"]
+        [::std::mem::offset_of!(ForetiasKemSecretKey, bytes) - 0usize];
+    ["Offset of field: ForetiasKemSecretKey::len"]
+        [::std::mem::offset_of!(ForetiasKemSecretKey, len) - 2400usize];
+};
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ForetiasKemCiphertext {
+    pub bytes: [u8; 1088usize],
+    pub len: usize,
+}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of ForetiasKemCiphertext"][::std::mem::size_of::<ForetiasKemCiphertext>() - 1096usize];
+    ["Alignment of ForetiasKemCiphertext"]
+        [::std::mem::align_of::<ForetiasKemCiphertext>() - 8usize];
+    ["Offset of field: ForetiasKemCiphertext::bytes"]
+        [::std::mem::offset_of!(ForetiasKemCiphertext, bytes) - 0usize];
+    ["Offset of field: ForetiasKemCiphertext::len"]
+        [::std::mem::offset_of!(ForetiasKemCiphertext, len) - 1088usize];
+};
+extern "C" {
+    #[link_name = "foretias_sig_algorithm_id"]
+    pub fn foretias_sig_algorithm_id(        alg: ForetiasSignatureAlgorithm,    ) -> *const ::std::os::raw::c_char;
+}
+extern "C" {
+    #[link_name = "foretias_kem_algorithm_id"]
+    pub fn foretias_kem_algorithm_id(alg: ForetiasKemAlgorithm) -> *const ::std::os::raw::c_char;
+}
+extern "C" {
+    #[link_name = "foretias_sig_pubkey_bytes"]
+    pub fn foretias_sig_pubkey_bytes(alg: ForetiasSignatureAlgorithm) -> usize;
+}
+extern "C" {
+    #[link_name = "foretias_sig_secret_bytes"]
+    pub fn foretias_sig_secret_bytes(alg: ForetiasSignatureAlgorithm) -> usize;
+}
+extern "C" {
+    #[link_name = "foretias_sig_signature_bytes"]
+    pub fn foretias_sig_signature_bytes(alg: ForetiasSignatureAlgorithm) -> usize;
+}
 extern "C" {
     #[link_name = "foretias_ed25519_generate_keypair"]
     pub fn foretias_ed25519_generate_keypair(        pub_out: *mut ForetiasPubKey32,        priv_out: *mut ForetiasPrivKey32,    ) -> ForetiasResult;
@@ -408,4 +538,40 @@ extern "C" {
 extern "C" {
     #[link_name = "foretias_privkey_free"]
     pub fn foretias_privkey_free(key: *mut ForetiasPrivKey);
+}
+extern "C" {
+    #[link_name = "foretias_sphincs_sha2_128s_keypair"]
+    pub fn foretias_sphincs_sha2_128s_keypair(        secret_out: *mut ForetiasSecretKeyVar,        public_out: *mut ForetiasPubKeyVar,    ) -> ForetiasResult;
+}
+extern "C" {
+    #[link_name = "foretias_sphincs_sha2_128s_sign"]
+    pub fn foretias_sphincs_sha2_128s_sign(        secret: *const ForetiasSecretKeyVar,        msg: *const u8,        msg_len: usize,        sig_out: *mut ForetiasSigVar,    ) -> ForetiasResult;
+}
+extern "C" {
+    #[link_name = "foretias_sphincs_sha2_128s_verify"]
+    pub fn foretias_sphincs_sha2_128s_verify(        public_key: *const ForetiasPubKeyVar,        msg: *const u8,        msg_len: usize,        sig: *const ForetiasSigVar,    ) -> ForetiasResult;
+}
+extern "C" {
+    #[link_name = "foretias_dilithium3_keypair"]
+    pub fn foretias_dilithium3_keypair(        secret_out: *mut ForetiasSecretKeyVar,        public_out: *mut ForetiasPubKeyVar,    ) -> ForetiasResult;
+}
+extern "C" {
+    #[link_name = "foretias_dilithium3_sign"]
+    pub fn foretias_dilithium3_sign(        secret: *const ForetiasSecretKeyVar,        msg: *const u8,        msg_len: usize,        sig_out: *mut ForetiasSigVar,    ) -> ForetiasResult;
+}
+extern "C" {
+    #[link_name = "foretias_dilithium3_verify"]
+    pub fn foretias_dilithium3_verify(        public_key: *const ForetiasPubKeyVar,        msg: *const u8,        msg_len: usize,        sig: *const ForetiasSigVar,    ) -> ForetiasResult;
+}
+extern "C" {
+    #[link_name = "foretias_mlkem_768_keypair"]
+    pub fn foretias_mlkem_768_keypair(        secret_out: *mut ForetiasKemSecretKey,        public_out: *mut ForetiasKemPubKey,    ) -> ForetiasResult;
+}
+extern "C" {
+    #[link_name = "foretias_mlkem_768_encapsulate"]
+    pub fn foretias_mlkem_768_encapsulate(        public_key: *const ForetiasKemPubKey,        ciphertext_out: *mut ForetiasKemCiphertext,        shared_secret_out: *mut u8,    ) -> ForetiasResult;
+}
+extern "C" {
+    #[link_name = "foretias_mlkem_768_decapsulate"]
+    pub fn foretias_mlkem_768_decapsulate(        secret: *const ForetiasKemSecretKey,        ciphertext: *const ForetiasKemCiphertext,        shared_secret_out: *mut u8,    ) -> ForetiasResult;
 }

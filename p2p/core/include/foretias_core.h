@@ -46,6 +46,35 @@ typedef enum {
     FORETIAS_CURVE_P256    = 2,
 } ForetiasCurve;
 
+/* ── Signature algorithm selector ─────────────────── */
+typedef enum {
+    FORETIAS_SIG_ED25519              = 1,   // Legacy, retained
+    FORETIAS_SIG_SPHINCS_SHA2_128S    = 2,   // Default PQ signing
+    FORETIAS_SIG_DILITHIUM3           = 3,   // Optional PQ signing
+} ForetiasSignatureAlgorithm;
+
+/* ── KEM algorithm selector ───────────────────────── */
+typedef enum {
+    FORETIAS_KEM_NOISE_XX             = 1,   // Default (Ed25519/X25519 via Noise_XX)
+    FORETIAS_KEM_MLKEM_768            = 2,   // Optional PQ key exchange
+} ForetiasKemAlgorithm;
+
+/* ── Algorithm ID strings ─────────────────────────── */
+#define FORETIAS_SIG_ID_ED25519           "Ed25519"
+#define FORETIAS_SIG_ID_SPHINCS_SHA2_128S "SPHINCS+-SHA2-128s-simple"
+#define FORETIAS_SIG_ID_DILITHIUM3        "Dilithium3"
+#define FORETIAS_KEM_ID_NOISE_XX          "Noise-XX"
+#define FORETIAS_KEM_ID_MLKEM_768         "ML-KEM-768"
+
+/* ── Maximum PQC sizes ────────────────────────────── */
+#define FORETIAS_SIG_MAX_PUBKEY_BYTES   2048   // Dilithium3 pubkey (1952)
+#define FORETIAS_SIG_MAX_SECRET_BYTES   4096   // Dilithium3 secret (4000)
+#define FORETIAS_SIG_MAX_SIG_BYTES      8192   // SPHINCS+ 128s signature (7856)
+#define FORETIAS_KEM_MAX_PUBKEY_BYTES   1184   // ML-KEM-768
+#define FORETIAS_KEM_MAX_CIPHERTEXT     1088   // ML-KEM-768
+#define FORETIAS_KEM_MAX_SECRET_BYTES   2400   // ML-KEM-768
+#define FORETIAS_KEM_SHARED_SECRET      32
+
 /* ── Key / signature types ──────────────────────── */
 typedef struct { uint8_t bytes[32]; } ForetiasPubKey32;   /* Ed25519 pub, P-256 X */
 typedef struct { uint8_t bytes[33]; } ForetiasPubKey33;   /* P-256 compressed    */
@@ -62,6 +91,44 @@ _Static_assert(sizeof(ForetiasPubKey32)  == 32, "ForetiasPubKey32");
 _Static_assert(sizeof(ForetiasPrivKey32) == 32, "ForetiasPrivKey32");
 _Static_assert(sizeof(ForetiasSig64)     == 64, "ForetiasSig64");
 _Static_assert(sizeof(ForetiasHash32)    == 32, "ForetiasHash32");
+
+/* ── Variable-size key/signature types (PQC) ─────── */
+typedef struct {
+    uint8_t bytes[FORETIAS_SIG_MAX_PUBKEY_BYTES];
+    size_t  len;
+} ForetiasPubKeyVar;
+
+typedef struct {
+    uint8_t bytes[FORETIAS_SIG_MAX_SECRET_BYTES];
+    size_t  len;
+} ForetiasSecretKeyVar;
+
+typedef struct {
+    uint8_t bytes[FORETIAS_SIG_MAX_SIG_BYTES];
+    size_t  len;
+} ForetiasSigVar;
+
+typedef struct {
+    uint8_t bytes[FORETIAS_KEM_MAX_PUBKEY_BYTES];
+    size_t  len;
+} ForetiasKemPubKey;
+
+typedef struct {
+    uint8_t bytes[FORETIAS_KEM_MAX_SECRET_BYTES];
+    size_t  len;
+} ForetiasKemSecretKey;
+
+typedef struct {
+    uint8_t bytes[FORETIAS_KEM_MAX_CIPHERTEXT];
+    size_t  len;
+} ForetiasKemCiphertext;
+
+/* ── Algorithm helpers ───────────────────────────── */
+const char* foretias_sig_algorithm_id(ForetiasSignatureAlgorithm alg);
+const char* foretias_kem_algorithm_id(ForetiasKemAlgorithm alg);
+size_t      foretias_sig_pubkey_bytes(ForetiasSignatureAlgorithm alg);
+size_t      foretias_sig_secret_bytes(ForetiasSignatureAlgorithm alg);
+size_t      foretias_sig_signature_bytes(ForetiasSignatureAlgorithm alg);
 
 /* ── Identity (Ed25519) ─────────────────────────── */
 ForetiasResult foretias_ed25519_generate_keypair(
@@ -346,6 +413,58 @@ ForetiasResult foretias_privkey_derive_seal_key(
 
 /* Destroy the handle, securely zeroing all key material. */
 void foretias_privkey_free(ForetiasPrivKey *key);
+
+/* ── SPHINCS+ (SHA2-128s-simple) ──────────────────── */
+ForetiasResult foretias_sphincs_sha2_128s_keypair(
+    ForetiasSecretKeyVar* secret_out,
+    ForetiasPubKeyVar*    public_out
+);
+ForetiasResult foretias_sphincs_sha2_128s_sign(
+    const ForetiasSecretKeyVar* secret,
+    const uint8_t*            msg,
+    size_t                    msg_len,
+    ForetiasSigVar*            sig_out
+);
+ForetiasResult foretias_sphincs_sha2_128s_verify(
+    const ForetiasPubKeyVar*  public_key,
+    const uint8_t*            msg,
+    size_t                    msg_len,
+    const ForetiasSigVar*     sig
+);
+
+/* ── Dilithium3 ───────────────────────────────────── */
+ForetiasResult foretias_dilithium3_keypair(
+    ForetiasSecretKeyVar* secret_out,
+    ForetiasPubKeyVar*    public_out
+);
+ForetiasResult foretias_dilithium3_sign(
+    const ForetiasSecretKeyVar* secret,
+    const uint8_t*            msg,
+    size_t                    msg_len,
+    ForetiasSigVar*            sig_out
+);
+ForetiasResult foretias_dilithium3_verify(
+    const ForetiasPubKeyVar*  public_key,
+    const uint8_t*            msg,
+    size_t                    msg_len,
+    const ForetiasSigVar*     sig
+);
+
+/* ── ML-KEM-768 ───────────────────────────────────── */
+ForetiasResult foretias_mlkem_768_keypair(
+    ForetiasKemSecretKey* secret_out,
+    ForetiasKemPubKey*    public_out
+);
+ForetiasResult foretias_mlkem_768_encapsulate(
+    const ForetiasKemPubKey*  public_key,
+    ForetiasKemCiphertext*    ciphertext_out,
+    uint8_t*                  shared_secret_out   /* 32 bytes */
+);
+ForetiasResult foretias_mlkem_768_decapsulate(
+    const ForetiasKemSecretKey* secret,
+    const ForetiasKemCiphertext* ciphertext,
+    uint8_t*                    shared_secret_out   /* 32 bytes */
+);
 
 #ifdef __cplusplus
 }

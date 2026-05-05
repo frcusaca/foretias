@@ -56,6 +56,9 @@ pub enum NodeError {
     /// The requested feature or curve is not supported.
     #[error("unsupported: {0}")]
     Unsupported(&'static str),
+    /// The peer's algorithm does not match the expected algorithm.
+    #[error("algorithm mismatch: {0}")]
+    AlgorithmMismatch(String),
 }
 
 /// Errors originating from the cryptographic backend.
@@ -76,6 +79,9 @@ pub enum CryptoError {
     /// An internal error from the underlying crypto library, identified by error code.
     #[error("internal crypto error: code {0}")]
     Internal(i32),
+    /// The requested algorithm identifier is not recognized.
+    #[error("unknown algorithm: {0}")]
+    UnknownAlgorithm(String),
 }
 
 /// Convert C11 ForetiasResult code to CryptoError.

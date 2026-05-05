@@ -6,7 +6,7 @@ pub mod calendar;
 pub mod external_attestation;
 pub mod callbacks;
 
-pub use types::{Tbid, PublicKey, Signature, Digest, Message, AaNonce, TickNumber};
+pub use types::{Tbid, PublicKeyBytes, SignatureBytes, AlgorithmId, Digest, Message, AaNonce, TickNumber, SignatureAlgorithm, KemAlgorithm};
 pub use tick::{TickRecord, Foretis, CalendarLookup, stamp, verify, auto_attestation_blob, auto_attestation_blob_with_count, verify_pair};
 pub use calendar::Calendar;
 pub use external_attestation::ExternalAttestation;
