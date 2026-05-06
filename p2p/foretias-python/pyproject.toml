@@ -13,6 +13,9 @@ license = { text = "MIT" }
 [project.optional-dependencies]
 dev = ["pytest>=7"]
 
+[project.scripts]
+foretias = "foretias_cli:main"
+
 [tool.maturin]
 features = ["pyo3/extension-module"]
 module-name = "foretias_p2p"

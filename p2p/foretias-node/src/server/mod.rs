@@ -15,14 +15,14 @@ use foretias_core::foretias::TickRecord;
 use foretias_core::error::NodeError;
 use foretias_core::noise;
 
-use super::calendar::Calendar;
+use super::calendar::{Calendar, MirrorStore};
 use super::communerd::Communerd;
 use super::metrics::{NodeMetrics, MetricField};
 use self::jsonrpc::JsonRpcResponse;
 
 struct NoOpObserver;
 impl TickObserver for NoOpObserver {
-    fn on_tick_advance(&self, _tick_number: u64, _public_key: &[u8; 32], _tick_record: &TickRecord) {}
+    fn on_tick_advance(&self, _tick_number: u64, _public_key: &[u8], _tick_record: &TickRecord) {}
 }
 
 pub mod jsonrpc;
@@ -31,6 +31,7 @@ pub mod handlers;
 pub struct TimeFamilyServer {
     chronomatter: Arc<Chronomatter>,
     calendar: Arc<Calendar>,
+    mirror_store: MirrorStore,
     communerd: Option<Arc<Communerd>>,
     listen_addr: String,
     persist_path: Option<std::path::PathBuf>,
@@ -74,6 +75,7 @@ impl TimeFamilyServer {
         Ok(Self {
             chronomatter: Arc::new(cm),
             calendar,
+            mirror_store: MirrorStore::new("/tmp/foretias-mirrors", 64),
             communerd,
             listen_addr: listen_addr.to_string(),
             persist_path,
@@ -100,6 +102,7 @@ impl TimeFamilyServer {
         Ok(Self {
             chronomatter: Arc::new(cm),
             calendar,
+            mirror_store: MirrorStore::new("/tmp/foretias-mirrors", 64),
             communerd: None,
             listen_addr: listen_addr.to_string(),
             persist_path: None,
@@ -132,6 +135,10 @@ impl TimeFamilyServer {
 
     pub fn calendar(&self) -> &Calendar {
         &self.calendar
+    }
+
+    pub fn mirror_store(&self) -> &MirrorStore {
+        &self.mirror_store
     }
 
     pub fn communerd(&self) -> Option<&Arc<Communerd>> {
@@ -371,6 +378,7 @@ fn process_request_from_value(server: &TimeFamilyServer, req: serde_json::Value)
 
     match method {
         "stamp" => Ok(handlers::handle_stamp(server, params)),
+        "route_stamp" => Ok(handlers::handle_route_stamp(server, params)),
         "verify" => Ok(handlers::handle_verify(server, params)),
         "get_calendar_slice" => Ok(handlers::handle_get_calendar_slice(server, params)),
         "integrity_check" => Ok(handlers::handle_integrity_check(server, params)),
@@ -378,6 +386,14 @@ fn process_request_from_value(server: &TimeFamilyServer, req: serde_json::Value)
         "collision_status" => Ok(handlers::handle_collision_status(server, params)),
         "get_latest_epoch" => Ok(handlers::handle_get_latest_epoch(server, params)),
         "verify_epoch_snapshot" => Ok(handlers::handle_verify_epoch_snapshot(server, params)),
+        "mirror_request" => Ok(handlers::handle_mirror_request(server, params)),
+        "mirror_accept" => Ok(handlers::handle_mirror_accept(server, params)),
+        "ship_batch" => Ok(handlers::handle_ship_batch(server, params)),
+        "ship_ack" => Ok(handlers::handle_ship_ack(server, params)),
+        "stream_tick" => Ok(handlers::handle_stream_tick(server, params)),
+        "stream_ack" => Ok(handlers::handle_stream_ack(server, params)),
+        "mirror_mutual" => Ok(handlers::handle_mirror_mutual(server, params)),
+        "mirror_reconcile" => Ok(handlers::handle_mirror_reconcile(server, params)),
         _ => Ok(jsonrpc::JsonRpcResponse::error(
             id.cloned(),
             jsonrpc::METHOD_NOT_FOUND,

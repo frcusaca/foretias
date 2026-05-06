@@ -5,7 +5,7 @@
 
 use foretias_core::crypto_server::CryptoServer;
 use foretias_core::error::NodeError;
-use foretias_core::foretias::types::{PublicKey, Tbid};
+use foretias_core::foretias::types::{PublicKeyBytes, Tbid};
 use libp2p::PeerId;
 use rand::Rng;
 use std::sync::Arc;
@@ -23,7 +23,7 @@ pub struct TbidProofResponse {
     /// The 16-byte TBID being proven.
     pub tbid: Tbid,
     /// The Ed25519 public key (32 bytes) used for verification.
-    pub public_key: PublicKey,
+    pub public_key: PublicKeyBytes,
     /// The signed payload: tbid + peer_id + nonce + timestamp.
     pub signed_payload: Vec<u8>,
     /// Ed25519 signature (64 bytes) over the signed payload.
@@ -59,8 +59,8 @@ impl TbidHandshake {
         peer_id: PeerId,
     ) -> Result<TbidProofResponse, NodeError> {
         let tbid = self.local_tbid;
-        let public_key = match self.crypto.public_key() {
-            foretias_core::crypto_server::PublicKeyBytes::Ed25519(pk) => pk.bytes,
+        let public_key: Vec<u8> = match self.crypto.public_key() {
+            foretias_core::crypto_server::PublicKeyBytes::Ed25519(pk) => pk.bytes.to_vec(),
             _ => return Err(NodeError::Internal("non-Ed25519 public key".into())),
         };
 
@@ -93,8 +93,14 @@ impl TbidHandshake {
         expected_nonce: &[u8; 32],
         peer_id: PeerId,
     ) -> TbidProofResult {
+        let public_key: [u8; 32] = match response.public_key.as_slice().try_into() {
+            Ok(pk) => pk,
+            Err(_) => return TbidProofResult::Failed {
+                reason: "public key is not 32 bytes".into(),
+            },
+        };
         let valid = self.crypto.verify_ed25519(
-            &foretias_core::core::bindings::ForetiasPubKey32 { bytes: response.public_key },
+            &foretias_core::core::bindings::ForetiasPubKey32 { bytes: public_key },
             &response.signed_payload,
             &foretias_core::core::bindings::ForetiasSig64 { bytes: response.signature },
         ).unwrap_or(false);

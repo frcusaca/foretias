@@ -2,11 +2,15 @@
 
 use std::sync::Arc;
 
+pub mod mirror;
+
 use foretias_core::foretias::callbacks::TickObserver;
 use foretias_core::foretias::tick::CalendarLookup;
 use foretias_core::foretias::{Calendar as CoreCalendar, TickRecord};
 use foretias_core::error::NodeError;
 use parking_lot::RwLock;
+
+pub use mirror::{MirrorStore, compute_hash_sanity};
 
 pub struct Calendar {
     inner: Arc<RwLock<CoreCalendar>>,
@@ -40,7 +44,7 @@ impl Calendar {
 }
 
 impl TickObserver for Calendar {
-    fn on_tick_advance(&self, _tick_number: u64, _public_key: &[u8; 32], tick_record: &TickRecord) {
+    fn on_tick_advance(&self, _tick_number: u64, _public_key: &[u8], tick_record: &TickRecord) {
         let mut cal = self.inner.write();
         if let Err(e) = cal.append(tick_record.clone()) {
             tracing::error!("Calendar::on_tick_advance failed: {}", e);

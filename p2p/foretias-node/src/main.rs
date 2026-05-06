@@ -38,8 +38,8 @@ enum Commands {
         #[arg(long)]
         persist_path: Option<String>,
         /// Start in dormant (verify-only) mode, loads calendar from --persist-path
-        #[arg(long, requires = "persist_path")]
-        dormant: bool,
+        #[arg(long = "start-dormant", requires = "persist_path")]
+        start_dormant: bool,
         /// Peer address for auto attestation (can specify multiple times)
         #[arg(long)]
         peer: Vec<String>,
@@ -49,18 +49,27 @@ enum Commands {
         /// RPC request timeout in seconds (default: 5)
         #[arg(long, default_value_t = 5)]
         request_timeout_secs: u64,
-        /// libp2p listen multiaddr (e.g. "/ip4/0.0.0.0/tcp/9901")
+        /// libp2p listen multiaddr (e.g. "/ip4/0.0.0.0/tcp/9901"). If omitted and --p2p-port-range is set, auto-select port.
         #[arg(long)]
         p2p_listen: Option<String>,
+        /// Port range for auto-selection when --p2p-listen is omitted. Format: start..end (inclusive start, exclusive end). Default: 9900..9999
+        #[arg(long, default_value = "9900..9999")]
+        p2p_port_range: String,
         /// libp2p peer multiaddr to dial (repeatable, e.g. "/ip4/127.0.0.1/tcp/9901/p2p/<PeerId>")
         #[arg(long)]
         p2p_dial: Vec<String>,
+        /// Known server address for self-registration (repeatable, host:port). Node dials known servers, registers its address, and discovers peers via DHT.
+        #[arg(long, short = 'k')]
+        known_servers: Vec<String>,
         /// DHT namespace for Kademlia protocol isolation (default: "mainnet")
         #[arg(long, default_value = "mainnet")]
         dht_namespace: String,
-        /// DHT bootstrap peer multiaddr (repeatable)
+        /// DHT bootstrap peer multiaddr (repeatable). Legacy mode — use --known-servers for auto-discovery.
         #[arg(long)]
         dht_bootstrap: Vec<String>,
+        /// Maximum number of peers to auto-discover from DHT (default: 13)
+        #[arg(long, default_value_t = 13)]
+        max_discovered_peers: usize,
     },
     /// Stamp content via TimeFamilyServer
     Stamp {
@@ -260,14 +269,17 @@ async fn cmd_serve(
     addr: String,
     chronon_ns: u64,
     persist_path: Option<String>,
-    dormant: bool,
+    start_dormant: bool,
     peers: Vec<String>,
     auto_attest_every_chronons: u64,
     request_timeout_secs: u64,
     p2p_listen: Option<String>,
+    p2p_port_range: String,
     p2p_dial: Vec<String>,
+    known_servers: Vec<String>,
     dht_namespace: String,
     dht_bootstrap: Vec<String>,
+    max_discovered_peers: usize,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let cfg = load_config();
     let addr = if addr == "127.0.0.1:4001" {
@@ -281,7 +293,7 @@ async fn cmd_serve(
         chronon_ns
     };
 
-    let server: TimeFamilyServer = if dormant {
+    let server: TimeFamilyServer = if start_dormant {
         let persist = persist_path.ok_or("--persist-path is required for --dormant mode")?;
         let json_path = PathBuf::from(&persist);
         TimeFamilyServer::from_calendar(
@@ -299,6 +311,8 @@ async fn cmd_serve(
             peers,
             auto_attest_every_n: auto_attest_every_chronons,
             request_timeout_secs,
+            dht_namespace: dht_namespace.clone(),
+            max_discovered_peers,
             ..Default::default()
         };
         Arc::new(server.with_config(node_config))
@@ -306,36 +320,71 @@ async fn cmd_serve(
         Arc::new(server)
     };
 
-    // Enable libp2p swarm if --p2p-listen is provided
-    if let Some(ref p2p_listen) = p2p_listen {
-        let listen_addr: libp2p::Multiaddr = p2p_listen.parse()
-            .map_err(|e| format!("invalid --p2p-listen {}: {}", p2p_listen, e))?;
-        let dials: Vec<libp2p::Multiaddr> = p2p_dial.iter()
-            .map(|s| s.parse::<libp2p::Multiaddr>()
-                .map_err(|e| format!("invalid --p2p-dial {}: {}", s, e)))
-            .collect::<Result<Vec<_>, String>>()?;
+    let port_range = parse_port_range(&p2p_port_range)?;
+
+    let p2p_listen_addr: Option<libp2p::Multiaddr> = if let Some(ref listen_str) = p2p_listen {
+        Some(listen_str.parse()
+            .map_err(|e| format!("invalid --p2p-listen {}: {}", listen_str, e))?)
+    } else if !known_servers.is_empty() {
+        let port = foretias_node::communerd::p2p::swarm::find_free_port(port_range.clone())
+            .map_err(|e| format!("failed to find free port in {}: {}", p2p_port_range, e))?;
+        Some(format!("/ip4/0.0.0.0/tcp/{}", port).parse().unwrap())
+    } else {
+        None
+    };
+
+    let dials: Vec<libp2p::Multiaddr> = p2p_dial.iter()
+        .map(|s| s.parse::<libp2p::Multiaddr>()
+            .map_err(|e| format!("invalid --p2p-dial {}: {}", s, e)))
+        .collect::<Result<Vec<_>, String>>()?;
+
+    if let Some(listen_ma) = &p2p_listen_addr {
         if let Some(communerd) = server.communerd() {
-            communerd.enable_p2p(listen_addr, dials, &dht_namespace, Some(&addr)).await
+            communerd.enable_p2p(Some(listen_ma.clone()), dials.clone(), &dht_namespace, Some(&addr)).await
                 .map_err(|e| format!("failed to start libp2p swarm: {}", e))?;
         }
     }
 
-    // Bootstrap DHT if bootstrap peers configured
     if let Some(communerd) = server.communerd() {
         if !dht_bootstrap.is_empty() {
             communerd.bootstrap_dht(dht_bootstrap.clone()).await.ok();
         }
     }
 
-    // Print server info before starting
+    // Wire --known-servers: self-register and discover peers via DHT
+    if let Some(communerd) = server.communerd() {
+        if !known_servers.is_empty() {
+            let tbid = server.get_tbid();
+            communerd.register_and_discover(
+                known_servers.clone(),
+                &dht_namespace,
+                tbid,
+                chronon_ns,
+                &addr,
+                max_discovered_peers,
+            ).await.ok();
+        }
+    }
+
     println!("Foretias TimeFamilyServer starting...");
     println!("  Listen : {}", addr);
     println!("  TBN    : {}", server.get_tbn());
     println!("  TBID   : {}", hex::encode(server.get_tbid()));
-    if dormant {
+    if start_dormant {
         println!("  Mode   : dormant (verify-only)");
     } else {
         println!("  Chronon: {}", humanize_nanoseconds(chronon_ns));
+    }
+    if server.communerd().is_some() {
+        if let Some(ma) = &p2p_listen_addr {
+            println!("  P2P Listen : {}", ma);
+        }
+        if let Some(peer_id) = server.communerd().and_then(|c| c.local_peer_id()) {
+            println!("  PeerId     : {}", peer_id);
+        }
+    }
+    if !known_servers.is_empty() {
+        println!("  Known Servers : {}", known_servers.join(", "));
     }
     if server.communerd().is_some() {
         println!("  Peers  : {}", server.communerd().unwrap().config().peers.join(", "));
@@ -345,7 +394,6 @@ async fn cmd_serve(
     let handle = server.clone().start()?;
     server.start_daemon_arc();
 
-    // Wait for Ctrl+C
     tokio::select! {
         _ = tokio::signal::ctrl_c() => {
             println!("\nShutting down...");
@@ -360,6 +408,21 @@ async fn cmd_serve(
     }
 
     Ok(())
+}
+
+fn parse_port_range(range_str: &str) -> Result<std::ops::Range<u16>, String> {
+    let parts: Vec<&str> = range_str.splitn(2, "..").collect();
+    if parts.len() != 2 {
+        return Err(format!("invalid port range '{}', expected format: start..end", range_str));
+    }
+    let start: u16 = parts[0].trim().parse()
+        .map_err(|e| format!("invalid port range start '{}': {}", parts[0], e))?;
+    let end: u16 = parts[1].trim().parse()
+        .map_err(|e| format!("invalid port range end '{}': {}", parts[1], e))?;
+    if start >= end {
+        return Err(format!("port range start ({}) must be less than end ({})", start, end));
+    }
+    Ok(start..end)
 }
 
 async fn cmd_stamp(
@@ -403,7 +466,7 @@ async fn cmd_verify(
     let result = json_rpc_call(
         &server_addr,
         "verify",
-        serde_json::json!({"content": content_hex, "foretis": foretis_value}),
+        serde_json::json!({"content": content_hex, "foretis": foretis_value, "cross_node": true}),
     )
     .await?;
 
@@ -625,8 +688,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Serve { addr, chronon_ns, persist_path, dormant, peer, auto_attest_every_chronons, request_timeout_secs, p2p_listen, p2p_dial, dht_namespace, dht_bootstrap } => {
-            cmd_serve(addr, chronon_ns, persist_path, dormant, peer, auto_attest_every_chronons, request_timeout_secs, p2p_listen, p2p_dial, dht_namespace, dht_bootstrap).await
+        Commands::Serve { addr, chronon_ns, persist_path, start_dormant, peer, auto_attest_every_chronons, request_timeout_secs, p2p_listen, p2p_port_range, p2p_dial, known_servers, dht_namespace, dht_bootstrap, max_discovered_peers } => {
+            cmd_serve(addr, chronon_ns, persist_path, start_dormant, peer, auto_attest_every_chronons, request_timeout_secs, p2p_listen, p2p_port_range, p2p_dial, known_servers, dht_namespace, dht_bootstrap, max_discovered_peers).await
         }
         Commands::Stamp { message, message_file, stamp_output, server } => {
             cmd_stamp(message, message_file, stamp_output, server).await

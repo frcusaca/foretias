@@ -4,6 +4,8 @@ use crate::foretias::types::{KemAlgorithm, SignatureAlgorithm};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+use super::p2p::CollisionConfig;
+
 /// Runtime configuration for a Foretias P2P node, loaded from a JSON file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeConfig {
@@ -43,6 +45,15 @@ pub struct NodeConfig {
     /// DHT bootstrap peer multiaddrs (e.g. "/ip4/bootstrap.foretias.example/tcp/4101/p2p/<PeerId>").
     #[serde(default)]
     pub dht_bootstrap: Vec<String>,
+    /// Port range for auto-selection when --p2p-listen is omitted. Format: [start, end] (inclusive start, exclusive end). Default: [9900, 9999]
+    #[serde(default = "default_p2p_port_range")]
+    pub p2p_port_range: [u16; 2],
+    /// Known server addresses for auto-registration, format "host:port".
+    #[serde(default)]
+    pub known_servers: Vec<String>,
+    /// Maximum number of peers to auto-discover from DHT (default: 13).
+    #[serde(default = "default_max_discovered_peers")]
+    pub max_discovered_peers: usize,
     /// Collision detection configuration.
     #[serde(default)]
     pub collision: CollisionConfig,
@@ -54,18 +65,10 @@ pub struct NodeConfig {
     pub kem_algorithm: KemAlgorithm,
 }
 
-/// Collision detection configuration.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct CollisionConfig {
-    /// Heartbeat broadcast interval in seconds (default: 30).
-    #[serde(default = "default_heartbeat_interval_secs")]
-    pub heartbeat_interval_secs: u64,
-    /// Number of recent nonces to track for collision detection (default: 10).
-    #[serde(default = "default_nonce_window")]
-    pub nonce_window: usize,
-    /// Seconds to wait for liege response after collision (default: 30).
-    #[serde(default = "default_liege_wait_secs")]
-    pub liege_wait_secs: u64,
+pub const FORETIAS_MUTUAL_ATTESTATION_MINIMUM: u64 = 60_000_000_000;
+
+pub fn compute_attestation_interval(my_chronon_ns: u64, peer_chronon_ns: u64) -> u64 {
+    FORETIAS_MUTUAL_ATTESTATION_MINIMUM.max(50 * (my_chronon_ns + peer_chronon_ns))
 }
 
 fn default_listen_addr() -> String { "127.0.0.1:4001".to_string() }
@@ -75,11 +78,10 @@ fn default_chronon_ns() -> u64 { 60_000_000_000 }
 fn default_auto_attest_every_n() -> u64 { 1 }
 fn default_request_timeout_secs() -> u64 { 5 }
 fn default_dht_namespace() -> String { "mainnet".to_string() }
-fn default_heartbeat_interval_secs() -> u64 { 30 }
-fn default_nonce_window() -> usize { 10 }
-fn default_liege_wait_secs() -> u64 { 30 }
 fn default_signature_algorithm() -> SignatureAlgorithm { SignatureAlgorithm::SPHINCS_SHA2_128S }
 fn default_kem_algorithm() -> KemAlgorithm { KemAlgorithm::NoiseXX }
+fn default_p2p_port_range() -> [u16; 2] { [9900, 9999] }
+fn default_max_discovered_peers() -> usize { 13 }
 
 impl Default for NodeConfig {
     fn default() -> Self {
@@ -96,6 +98,9 @@ impl Default for NodeConfig {
             p2p_dial: Vec::new(),
             dht_namespace: default_dht_namespace(),
             dht_bootstrap: Vec::new(),
+            p2p_port_range: default_p2p_port_range(),
+            known_servers: Vec::new(),
+            max_discovered_peers: default_max_discovered_peers(),
             collision: CollisionConfig::default(),
             signature_algorithm: default_signature_algorithm(),
             kem_algorithm: default_kem_algorithm(),

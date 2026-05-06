@@ -1,6 +1,6 @@
 //! Network events from the libp2p swarm.
 
-use libp2p::{identify, Multiaddr, PeerId};
+use libp2p::{identify, kad, Multiaddr, PeerId};
 
 #[derive(Debug, Clone)]
 pub enum NetworkEvent {
@@ -12,4 +12,8 @@ pub enum NetworkEvent {
     DhtBootstrapComplete,
     GossipMessage { data: Vec<u8>, source: PeerId },
     HeartbeatMessage { data: Vec<u8>, source: PeerId },
+    /// Swarm has successfully bound to a listen address
+    ListenReady { multiaddr: Multiaddr },
+    /// DHT record retrieval completed
+    RecordRetrieved { key: kad::RecordKey, records: Vec<kad::Record> },
 }

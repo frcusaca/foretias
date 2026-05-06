@@ -13,12 +13,28 @@ use libp2p::{
     tcp, noise, yamux,
     SwarmBuilder, PeerId,
 };
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::net::TcpListener;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use rand::seq::SliceRandom;
 use tokio::sync::mpsc;
+
+/// Find a free port within the given range by shuffling and testing each port.
+pub fn find_free_port(range: std::ops::Range<u16>) -> Result<u16, NodeError> {
+    let mut ports: Vec<u16> = range.collect();
+    ports.shuffle(&mut rand::thread_rng());
+    for port in ports {
+        if let Ok(_listener) = TcpListener::bind(format!("0.0.0.0:{}", port)) {
+            return Ok(port);
+        }
+    }
+    Err(NodeError::Internal("no free ports in range".into()))
+}
 
 pub struct SwarmHandle {
     pub local_peer_id: PeerId,
+    pub local_multiaddr: Arc<Mutex<Option<libp2p::Multiaddr>>>,
     pub events: mpsc::UnboundedReceiver<NetworkEvent>,
     pub cmd_tx: mpsc::UnboundedSender<SwarmCommand>,
     pub task: tokio::task::JoinHandle<()>,
@@ -28,6 +44,8 @@ pub enum SwarmCommand {
     Bootstrap,
     Provide { key: kad::RecordKey },
     GetProviders { key: kad::RecordKey },
+    PutRecord { key: kad::RecordKey, record: kad::Record },
+    GetRecord { key: kad::RecordKey },
     Dial { addr: libp2p::Multiaddr },
     EnterDormancy,
     PublishProbity { report: ProbityReport, namespace: String },
@@ -36,7 +54,7 @@ pub enum SwarmCommand {
 
 /// Build and spawn a libp2p swarm.
 pub async fn build_and_spawn_swarm(
-    listen: libp2p::Multiaddr,
+    listen: Option<libp2p::Multiaddr>,
     dials: Vec<libp2p::Multiaddr>,
     namespace: &str,
     json_rpc_addr: Option<&str>,
@@ -59,8 +77,10 @@ pub async fn build_and_spawn_swarm(
         })
         .build();
 
-    swarm.listen_on(listen)
-        .map_err(|e| NodeError::Internal(format!("{e}")))?;
+    if let Some(listen_addr) = listen {
+        swarm.listen_on(listen_addr)
+            .map_err(|e| NodeError::Internal(format!("{e}")))?;
+    }
 
     // Subscribe to probity topic
     let topic = probity_topic(namespace);
@@ -78,10 +98,12 @@ pub async fn build_and_spawn_swarm(
 
     let (events_tx, events_rx) = mpsc::unbounded_channel();
     let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
-    let task = tokio::spawn(swarm_loop(swarm, events_tx, cmd_rx, namespace.to_string()));
+    let local_multiaddr = Arc::new(Mutex::new(None));
+    let task = tokio::spawn(swarm_loop(swarm, events_tx, cmd_rx, namespace.to_string(), local_multiaddr.clone()));
 
     Ok(SwarmHandle {
         local_peer_id,
+        local_multiaddr,
         events: events_rx,
         cmd_tx,
         task,
@@ -93,8 +115,10 @@ async fn swarm_loop(
     tx: mpsc::UnboundedSender<NetworkEvent>,
     mut cmd_rx: mpsc::UnboundedReceiver<SwarmCommand>,
     _namespace: String,
+    local_multiaddr: Arc<Mutex<Option<libp2p::Multiaddr>>>,
 ) {
     let mut listener_ids: HashSet<ListenerId> = HashSet::new();
+    let mut pending_get_record: HashMap<libp2p::kad::QueryId, (kad::RecordKey, Vec<kad::Record>)> = HashMap::new();
 
     loop {
         tokio::select! {
@@ -148,13 +172,30 @@ async fn swarm_loop(
                             tracing::warn!("failed to publish heartbeat: {e}");
                         }
                     }
+                    Some(SwarmCommand::PutRecord { key, record }) => {
+                        let key_vec = key.to_vec();
+                        match swarm.behaviour_mut().kad.put_record(record, kad::Quorum::One) {
+                            Ok(_) => tracing::info!(key = ?key_vec, "PutRecord initiated"),
+                            Err(e) => tracing::warn!(key = ?key_vec, ?e, "PutRecord failed"),
+                        }
+                    }
+                    Some(SwarmCommand::GetRecord { key }) => {
+                        let entry = (key.clone(), Vec::new());
+                        let query_id = swarm.behaviour_mut().kad.get_record(key);
+                        pending_get_record.insert(query_id, entry);
+                    }
                     None => break,
                 }
             }
             event = swarm.select_next_some() => {
                 match event {
-                    SwarmEvent::NewListenAddr { listener_id, .. } => {
+                    SwarmEvent::NewListenAddr { address, listener_id, .. } => {
                         listener_ids.insert(listener_id);
+                        let mut ma = local_multiaddr.lock().unwrap();
+                        if ma.is_none() {
+                            *ma = Some(address.clone());
+                        }
+                        let _ = tx.send(NetworkEvent::ListenReady { multiaddr: address });
                     }
                     SwarmEvent::ListenerClosed { listener_id, .. }
                     | SwarmEvent::ListenerError { listener_id, .. } => {
@@ -201,11 +242,30 @@ async fn swarm_loop(
                     }
                     SwarmEvent::Behaviour(ForetiasBehaviourEvent::Kad(event)) => {
                         match event {
-                            kad::Event::OutboundQueryProgressed { result, .. } => {
+                            kad::Event::OutboundQueryProgressed { id, result, .. } => {
                                 match result {
                                     kad::QueryResult::Bootstrap(Ok(_)) => {
                                         let _ = tx.send(NetworkEvent::DhtBootstrapComplete);
                                         tracing::info!("DHT bootstrap complete");
+                                    }
+                                    kad::QueryResult::GetRecord(Ok(kad::GetRecordOk::FoundRecord(kad::PeerRecord { record, .. }))) => {
+                                        if let Some(entry) = pending_get_record.get_mut(&id) {
+                                            entry.1.push(record);
+                                        }
+                                    }
+                                    kad::QueryResult::GetRecord(Ok(kad::GetRecordOk::FinishedWithNoAdditionalRecord { .. })) => {
+                                        if let Some((key, records)) = pending_get_record.remove(&id) {
+                                            let _ = tx.send(NetworkEvent::RecordRetrieved {
+                                                key,
+                                                records,
+                                            });
+                                            tracing::info!("DHT: GetRecord query finished");
+                                        }
+                                    }
+                                    kad::QueryResult::GetRecord(Err(e)) => {
+                                        if let Some((key, _)) = pending_get_record.remove(&id) {
+                                            tracing::warn!(?e, key = ?key.to_vec(), "DHT: GetRecord query failed");
+                                        }
                                     }
                                     kad::QueryResult::GetProviders(Ok(kad::GetProvidersOk::FoundProviders { providers, .. })) => {
                                         for peer_id in providers {
@@ -266,7 +326,7 @@ mod tests {
     #[tokio::test]
     async fn swarm_listen_only() {
         let listen: libp2p::Multiaddr = "/ip4/127.0.0.1/tcp/0".parse().unwrap();
-        let mut handle = build_and_spawn_swarm(listen, vec![], "mainnet", None).await.unwrap();
+        let mut handle = build_and_spawn_swarm(Some(listen), vec![], "mainnet", None).await.unwrap();
         let _ = tokio::time::timeout(Duration::from_secs(2), handle.events.recv()).await;
         assert!(!handle.local_peer_id.to_string().is_empty());
         handle.task.abort();

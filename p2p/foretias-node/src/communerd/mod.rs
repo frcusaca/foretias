@@ -26,6 +26,18 @@ use self::p2p::swarm::{build_and_spawn_swarm, SwarmCommand};
 use self::transport::{PeerAddr, PeerTransport, TransportError};
 use crate::probity::{ProbityReport, ProbityStore, handle_gossip_message};
 use libp2p::kad;
+use std::collections::HashMap;
+
+/// Peer registration record stored in the DHT for self-registration and peer discovery.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PeerRegistrationRecord {
+    pub peer_id: String,
+    pub tbid: String,
+    pub multiaddr: String,
+    pub json_rpc: String,
+    pub chronon_ns: u64,
+    pub registered_at_ns: u64,
+}
 
 /// Communerd — all P2P traffic flows through this component.
 ///
@@ -46,6 +58,11 @@ pub struct Communerd {
     recompute_task: Arc<OnceLock<tokio::task::JoinHandle<()>>>,
     collision_task: Arc<OnceLock<tokio::task::JoinHandle<()>>>,
     heartbeat_task: Arc<OnceLock<tokio::task::JoinHandle<()>>>,
+    _local_multiaddr_arc: Arc<std::sync::Mutex<Option<libp2p::Multiaddr>>>,
+    /// In-memory cache of TBID → PeerRegistrationRecord, populated by DHT TBID index records.
+    tbid_index: Arc<std::sync::RwLock<HashMap<String, PeerRegistrationRecord>>>,
+    /// Pending DHT lookups waiting for callback resolution (key → oneshot sender).
+    pending_lookups: Arc<std::sync::Mutex<HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<PeerRegistrationRecord>>>>>,
 }
 
 impl Clone for Communerd {
@@ -65,6 +82,9 @@ impl Clone for Communerd {
             recompute_task: Arc::clone(&self.recompute_task),
             collision_task: Arc::clone(&self.collision_task),
             heartbeat_task: Arc::clone(&self.heartbeat_task),
+            _local_multiaddr_arc: Arc::clone(&self._local_multiaddr_arc),
+            tbid_index: Arc::clone(&self.tbid_index),
+            pending_lookups: Arc::clone(&self.pending_lookups),
         }
     }
 }
@@ -94,6 +114,9 @@ impl Communerd {
             recompute_task: Arc::new(OnceLock::new()),
             collision_task: Arc::new(OnceLock::new()),
             heartbeat_task: Arc::new(OnceLock::new()),
+            _local_multiaddr_arc: Arc::new(std::sync::Mutex::new(None)),
+            tbid_index: Arc::new(std::sync::RwLock::new(HashMap::new())),
+            pending_lookups: Arc::new(std::sync::Mutex::new(HashMap::new())),
         }
     }
 
@@ -111,6 +134,25 @@ impl Communerd {
         echo: &str,
     ) -> Result<Foretis, TransportError> {
         let result = self.transport.stamp(peer, content_hex, echo).await?;
+        let foretis: Foretis = serde_json::from_value(result)
+            .map_err(|e| TransportError::Decode(e.to_string()))?;
+        Ok(foretis)
+    }
+
+    pub async fn route_stamp(
+        &self,
+        target_tbid: &str,
+        content_hex: &str,
+        echo: &str,
+    ) -> Result<Foretis, TransportError> {
+        let owner = self.lookup_tbid(target_tbid, &self.namespace()).await
+            .ok_or_else(|| TransportError::Decode(format!("TBID {} not found in DHT", target_tbid)))?;
+        let peer = PeerAddr {
+            json_rpc: owner.json_rpc,
+            peer_id: owner.peer_id.parse().ok(),
+            last_seen_ns: 0,
+        };
+        let result = self.transport.route_stamp(&peer, target_tbid, content_hex, echo).await?;
         let foretis: Foretis = serde_json::from_value(result)
             .map_err(|e| TransportError::Decode(e.to_string()))?;
         Ok(foretis)
@@ -161,9 +203,13 @@ impl Communerd {
         self.namespace.lock().unwrap().clone()
     }
 
+    pub fn local_multiaddr(&self) -> Option<libp2p::Multiaddr> {
+        self._local_multiaddr_arc.lock().unwrap().clone()
+    }
+
     pub async fn enable_p2p(
         &self,
-        listen: libp2p::Multiaddr,
+        listen: Option<libp2p::Multiaddr>,
         dials: Vec<libp2p::Multiaddr>,
         namespace: &str,
         json_rpc_addr: Option<&str>,
@@ -180,6 +226,7 @@ impl Communerd {
         let _ = self.local_peer_id.set(peer_id);
         let _ = self.p2p_task.set(handle.task);
         let _ = self.p2p_cmd_tx.set(handle.cmd_tx);
+        *self._local_multiaddr_arc.lock().unwrap() = handle.local_multiaddr.lock().unwrap().clone();
 
         tracing::info!(peer = %peer_id, "libp2p swarm started");
 
@@ -199,8 +246,11 @@ impl Communerd {
         let probity_store = Arc::clone(&self.probity_store);
         let crypto = Arc::clone(&self.crypto);
         let det = Arc::clone(&detector);
+        let peer_pool = self.peer_pool.clone();
+        let tbid_index = Arc::clone(&self.tbid_index);
+        let pending_lookups = Arc::clone(&self.pending_lookups);
         let task = tokio::spawn(async move {
-            Self::gossip_event_loop(events, cmd_tx, probity_store, crypto, Some(det)).await;
+            Self::gossip_event_loop(events, cmd_tx, probity_store, crypto, Some(det), peer_pool, tbid_index, pending_lookups).await;
         });
         let _ = self.gossip_task.set(task);
 
@@ -281,6 +331,9 @@ impl Communerd {
         probity_store: Arc<ProbityStore>,
         crypto: Arc<dyn CryptoServer>,
         detector: Option<Arc<CollisionDetector>>,
+        peer_pool: PeerPool,
+        tbid_index: Arc<std::sync::RwLock<HashMap<String, PeerRegistrationRecord>>>,
+        pending_lookups: Arc<std::sync::Mutex<HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<PeerRegistrationRecord>>>>>,
     ) {
         while let Some(event) = events.recv().await {
             match event {
@@ -309,6 +362,55 @@ impl Communerd {
                             }
                         }
                     }
+                }
+                NetworkEvent::RecordRetrieved { key, records } => {
+                    if (&*key.to_vec()).ends_with(b"/peers/v1") {
+                        for record in &records {
+                            if let Ok(peer_record) = serde_json::from_slice::<PeerRegistrationRecord>(&record.value) {
+                                let peer_addr = PeerAddr {
+                                    json_rpc: peer_record.json_rpc.clone(),
+                                    peer_id: peer_record.peer_id.parse().ok(),
+                                    last_seen_ns: std::time::SystemTime::now()
+                                        .duration_since(std::time::UNIX_EPOCH)
+                                        .map(|d| d.as_nanos() as u64)
+                                        .unwrap_or(0),
+                                };
+                                peer_pool.add_peer(peer_addr).await;
+                                tracing::info!(peer = %peer_record.peer_id, "DHT-discovered peer added to pool");
+                            }
+                        }
+                    }
+                    let key_bytes = key.to_vec();
+                    if key_bytes.ends_with(b"/v1") {
+                        let key_str = String::from_utf8_lossy(&key_bytes);
+                        if key_str.contains("/tbid/") {
+                            for record in &records {
+                                if let Ok(peer_record) = serde_json::from_slice::<PeerRegistrationRecord>(&record.value) {
+                                    let tbid_hex = peer_record.tbid.clone();
+                                    tbid_index.write().unwrap().insert(tbid_hex.clone(), peer_record.clone());
+                                    tracing::debug!(tbid = %tbid_hex, "TBID index record cached");
+                                }
+                            }
+                            if let Some(sender) = pending_lookups.lock().unwrap().remove(&key) {
+                                let result = records.iter().find_map(|r| {
+                                    serde_json::from_slice::<PeerRegistrationRecord>(&r.value).ok()
+                                });
+                                let _ = sender.send(result);
+                            }
+                        }
+                    }
+                }
+                NetworkEvent::DhtPeerDiscovered { peer_id, addresses: _ } => {
+                    let peer_addr = PeerAddr {
+                        json_rpc: String::new(),
+                        peer_id: Some(peer_id),
+                        last_seen_ns: std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_nanos() as u64)
+                            .unwrap_or(0),
+                    };
+                    peer_pool.add_peer(peer_addr).await;
+                    tracing::info!(peer = %peer_id, "DHT-discovered peer added to pool");
                 }
                 _ => {}
             }
@@ -368,6 +470,197 @@ impl Communerd {
         let score = self.probity_store.score(peer_id);
         let count = self.probity_store.report_count(peer_id);
         (score, count)
+    }
+
+    pub async fn register_and_discover(
+        &self,
+        known_servers: Vec<String>,
+        namespace: &str,
+        tbid: [u8; 16],
+        chronon_ns: u64,
+        json_rpc_addr: &str,
+        _max_peers: usize,
+    ) -> Result<(), NodeError> {
+        let Some(cmd_tx) = self.p2p_cmd_tx.get() else {
+            return Err(NodeError::Internal("P2P not enabled".into()));
+        };
+
+        let peer_id = self.local_peer_id.get()
+            .copied()
+            .ok_or_else(|| NodeError::Internal("PeerId not available".into()))?;
+
+        // Step 1: Dial all known servers
+        for addr_str in &known_servers {
+            let multiaddr = resolve_known_server(addr_str)?;
+            let _ = cmd_tx.send(SwarmCommand::Dial { addr: multiaddr });
+        }
+
+        // Wait a moment for connections to establish
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
+        // Step 2: Get our listen address
+        let my_multiaddr = self.local_multiaddr()
+            .ok_or_else(|| NodeError::Internal("timed out waiting for listen address".into()))?;
+
+        // Step 3: Bootstrap DHT
+        let _ = cmd_tx.send(SwarmCommand::Bootstrap);
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+        // Step 4: Self-register (PUT record)
+        let key = kad::RecordKey::new(&format!("/foretias/{}/peers/v1", namespace));
+        let peer_record = PeerRegistrationRecord {
+            peer_id: peer_id.to_string(),
+            tbid: hex::encode(tbid),
+            multiaddr: my_multiaddr.to_string(),
+            json_rpc: json_rpc_addr.to_string(),
+            chronon_ns,
+            registered_at_ns: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos() as u64)
+                .unwrap_or(0),
+        };
+        let record = kad::Record {
+            key: key.clone(),
+            value: serde_json::to_vec(&peer_record)
+                .map_err(|e| NodeError::Internal(format!("serialization error: {e}")))?,
+            publisher: Some(peer_id),
+            expires: None,
+        };
+        let _ = cmd_tx.send(SwarmCommand::PutRecord { key: key.clone(), record });
+        tracing::info!(peer = %peer_id, "self-registration initiated");
+
+        let tbid_hex = hex::encode(tbid);
+        let tbid_key = kad::RecordKey::new(&format!("/foretias/{}/tbid/{}/v1", namespace, tbid_hex));
+        let tbid_record = kad::Record {
+            key: tbid_key.clone(),
+            value: serde_json::to_vec(&peer_record)
+                .map_err(|e| NodeError::Internal(format!("serialization error: {e}")))?,
+            publisher: Some(peer_id),
+            expires: None,
+        };
+        let _ = cmd_tx.send(SwarmCommand::PutRecord { key: tbid_key.clone(), record: tbid_record });
+        tracing::info!(tbid = %tbid_hex, "TBID index record published");
+
+        // Step 5: Discover peers (GET record)
+        let _ = cmd_tx.send(SwarmCommand::GetRecord { key: key.clone() });
+
+        // Step 6: Start background registration refresh task
+        let cmd_tx_clone = cmd_tx.clone();
+        let ns = self.namespace.clone();
+        let tbid_arc = tbid;
+        let chronon = chronon_ns;
+        let rpc = json_rpc_addr.to_string();
+        let ma_arc = self._local_multiaddr_arc.clone();
+        let pid = peer_id;
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+            loop {
+                interval.tick().await;
+                Self::refresh_self_registration(
+                    cmd_tx_clone.clone(), ns.clone(), tbid_arc, chronon, &rpc, ma_arc.clone(), pid,
+                ).await;
+            }
+        });
+
+        Ok(())
+    }
+
+    async fn refresh_self_registration(
+        cmd_tx: tokio::sync::mpsc::UnboundedSender<SwarmCommand>,
+        namespace: Arc<std::sync::Mutex<String>>,
+        tbid: [u8; 16],
+        chronon_ns: u64,
+        json_rpc_addr: &str,
+        local_multiaddr: Arc<std::sync::Mutex<Option<libp2p::Multiaddr>>>,
+        peer_id: libp2p::PeerId,
+    ) {
+        let ns = namespace.lock().unwrap().clone();
+        let key = kad::RecordKey::new(&format!("/foretias/{}/peers/v1", ns));
+        let ma = match local_multiaddr.lock().unwrap().clone() {
+            Some(m) => m.to_string(),
+            None => return,
+        };
+        let peer_record = PeerRegistrationRecord {
+            peer_id: peer_id.to_string(),
+            tbid: hex::encode(tbid),
+            multiaddr: ma,
+            json_rpc: json_rpc_addr.to_string(),
+            chronon_ns,
+            registered_at_ns: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos() as u64)
+                .unwrap_or(0),
+        };
+        let record = match serde_json::to_vec(&peer_record) {
+            Ok(v) => kad::Record {
+                key: key.clone(),
+                value: v,
+                publisher: Some(peer_id),
+                expires: None,
+            },
+            Err(e) => {
+                tracing::warn!("failed to serialize peer record for refresh: {e}");
+                return;
+            }
+        };
+        let _ = cmd_tx.send(SwarmCommand::PutRecord { key, record });
+        let tbid_hex = hex::encode(tbid);
+        let tbid_key = kad::RecordKey::new(&format!("/foretias/{}/tbid/{}/v1", ns, tbid_hex));
+        let tbid_record = kad::Record {
+            key: tbid_key.clone(),
+            value: serde_json::to_vec(&peer_record).unwrap_or_default(),
+            publisher: Some(peer_id),
+            expires: None,
+        };
+        let _ = cmd_tx.send(SwarmCommand::PutRecord { key: tbid_key, record: tbid_record });
+        tracing::debug!(peer = %peer_id, "self-registration refreshed");
+    }
+
+    pub fn lookup_tbid_cached(&self, tbid_hex: &str) -> Option<PeerRegistrationRecord> {
+        self.tbid_index.read().unwrap().get(tbid_hex).cloned()
+    }
+
+    pub async fn lookup_tbid(&self, tbid_hex: &str, namespace: &str) -> Option<PeerRegistrationRecord> {
+        if let Some(record) = self.lookup_tbid_cached(tbid_hex) {
+            return Some(record);
+        }
+        let Some(cmd_tx) = self.p2p_cmd_tx.get() else {
+            return None;
+        };
+        let key = kad::RecordKey::new(&format!("/foretias/{}/tbid/{}/v1", namespace, tbid_hex));
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.pending_lookups.lock().unwrap().insert(key.clone(), tx);
+        let _ = cmd_tx.send(SwarmCommand::GetRecord { key: key.clone() });
+        match tokio::time::timeout(std::time::Duration::from_secs(5), rx).await {
+            Ok(Ok(result)) => result,
+            Ok(Err(_)) => {
+                tracing::debug!(tbid = %tbid_hex, "TBID lookup channel closed");
+                None
+            }
+            Err(_) => {
+                tracing::debug!(tbid = %tbid_hex, "TBID lookup timed out");
+                self.pending_lookups.lock().unwrap().remove(&key);
+                None
+            }
+        }
+    }
+}
+
+fn resolve_known_server(addr_str: &str) -> Result<libp2p::Multiaddr, NodeError> {
+    let parts: Vec<&str> = addr_str.rsplitn(2, ':').collect();
+    if parts.len() != 2 {
+        return Err(NodeError::Internal(format!("invalid known server address: {}", addr_str)));
+    }
+    let port: u16 = parts[0].parse()
+        .map_err(|e| NodeError::Internal(format!("invalid port in known server: {e}")))?;
+    let host = parts[1];
+
+    if host.parse::<std::net::Ipv4Addr>().is_ok() {
+        Ok(format!("/ip4/{}/tcp/{}", host, port).parse().unwrap())
+    } else if host.parse::<std::net::Ipv6Addr>().is_ok() {
+        Ok(format!("/ip6/{}/tcp/{}", host, port).parse().unwrap())
+    } else {
+        Ok(format!("/dns/{}/tcp/{}", host, port).parse().unwrap())
     }
 }
 

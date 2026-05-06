@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "core-engine",
+    "foretias-java",
     "foretias-node",
     "foretias-python",
 ]

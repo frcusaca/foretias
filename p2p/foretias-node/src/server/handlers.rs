@@ -70,6 +70,62 @@ pub fn handle_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse
     }
 }
 
+pub fn handle_route_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    let id = params.get("id").cloned();
+
+    let target_tbid = match params.get("target_tbid").and_then(|v| v.as_str()) {
+        Some(h) => h.to_string(),
+        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            "missing or invalid 'target_tbid' (hex string)".into()),
+    };
+
+    let content_hex = match params.get("content").and_then(|v| v.as_str()) {
+        Some(h) => h.to_string(),
+        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            "missing or invalid 'content' (hex string)".into()),
+    };
+
+    let content = match hex::decode(&content_hex) {
+        Ok(b) => b,
+        Err(e) => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            format!("invalid hex: {}", e)),
+    };
+
+    if content.len() > MAX_CONTENT_BYTES {
+        return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            format!("content exceeds maximum size of {} bytes", MAX_CONTENT_BYTES));
+    }
+
+    let echo = params.get("echo")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let my_tbid_hex = hex::encode(server.get_tbid());
+    if target_tbid == my_tbid_hex {
+        return handle_stamp(server, params);
+    }
+
+    let Some(cm) = server.communerd() else {
+        return resp_error(server, id, jsonrpc::INTERNAL_ERROR,
+            "p2p not enabled".into());
+    };
+
+    match tokio::runtime::Handle::current().block_on(async {
+        cm.route_stamp(&target_tbid, &content_hex, &echo).await
+    }) {
+        Ok(foretis) => {
+            server.metrics().inc(MetricField::StampsTotal);
+            if let Err(e) = server.save() {
+                tracing::warn!("failed to persist calendar after routed stamp: {}", e);
+            }
+            resp_success(server, id, serde_json::to_value(&foretis).unwrap_or(Value::Null))
+        }
+        Err(e) => resp_error(server, id, jsonrpc::INTERNAL_ERROR,
+            format!("route stamp failed: {}", e)),
+    }
+}
+
 pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
     let id = params.get("id").cloned();
 
@@ -96,14 +152,88 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
             format!("content exceeds maximum size of {} bytes", MAX_CONTENT_BYTES));
     }
 
-    let cm = server.chronomatter();
-    let valid = match cm.verify(&foretis, &content, &*server.calendar().inner().read()) {
-        Ok(v) => v,
-        Err(e) => return resp_error(server, id, jsonrpc::INTERNAL_ERROR,
-            format!("verify failed: {}", e)),
-    };
+    let cross_node = params.get("cross_node")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
-    resp_success(server, id, serde_json::json!({"valid": valid}))
+    // Try local calendar first
+    let cm = server.chronomatter();
+    let calendar = server.calendar().inner();
+    let cal_read = calendar.read();
+    let local_result = cm.verify(&foretis, &content, &*cal_read);
+    drop(cal_read);
+
+    if let Ok(valid) = local_result {
+        return resp_success(server, id, serde_json::json!({"valid": valid, "method": "local"}));
+    }
+
+    // Local calendar miss — if cross_node is enabled, try DHT lookup
+    if !cross_node {
+        // Fall back to returning false for unknown TBID (legacy behavior)
+        return resp_success(server, id, serde_json::json!({"valid": false, "method": "local", "note": "foretis.tbid not found in local calendar"}));
+    }
+
+    let foretis_tbid_hex = hex::encode(foretis.tbid);
+    if foretis.tbid == server.get_tbid() {
+        return resp_success(server, id, serde_json::json!({"valid": false, "method": "local", "note": "own TBID but calendar miss"}));
+    }
+
+    // Cross-node verification: lookup TBID owner via DHT, fetch calendar slice, retry
+    match tokio::runtime::Handle::current().block_on(async {
+        cross_node_verify(server, &foretis, &content, &foretis_tbid_hex).await
+    }) {
+        Ok(valid) => resp_success(server, id, serde_json::json!({"valid": valid, "method": "cross_node"})),
+        Err(e) => resp_error(server, id, jsonrpc::INTERNAL_ERROR,
+            format!("cross-node verify failed: {}", e)),
+    }
+}
+
+async fn cross_node_verify(
+    server: &TimeFamilyServer,
+    foretis: &Foretis,
+    content: &[u8],
+    foretis_tbid_hex: &str,
+) -> Result<bool, NodeError> {
+    let Some(com) = server.communerd() else {
+        return Err(NodeError::Internal("P2P not enabled".into()));
+    };
+    let ns = com.namespace();
+
+    let owner = com.lookup_tbid(foretis_tbid_hex, &ns).await
+        .ok_or_else(|| NodeError::Internal(format!("TBID {} not found in DHT", foretis_tbid_hex)))?;
+
+    let owner_peer = crate::communerd::transport::PeerAddr {
+        json_rpc: owner.json_rpc.clone(),
+        peer_id: owner.peer_id.parse().ok(),
+        last_seen_ns: 0,
+    };
+    let records = com.get_calendar_slice(&owner_peer, foretis.tick_number, 1).await
+        .map_err(|e| NodeError::Internal(format!("calendar fetch failed: {}", e)))?;
+
+    let rec = records.first().ok_or_else(|| NodeError::Internal(format!("tick {} not found on owner", foretis.tick_number)))?;
+
+    // Reconcile algorithms
+    if rec.signature_algorithm != foretis.signature_algorithm {
+        return Err(NodeError::AlgorithmMismatch(
+            format!("tick uses '{}' but Foretis claims '{}'",
+                rec.signature_algorithm, foretis.signature_algorithm)
+        ));
+    }
+
+    // Rebuild signature input and verify
+    let cm = server.chronomatter();
+    let mut sig_input = Vec::new();
+    sig_input.extend_from_slice(&foretis.tbid);
+    sig_input.extend_from_slice(&foretis.tick_number.to_be_bytes());
+    sig_input.extend_from_slice(content);
+
+    let crypto = cm.crypto_server();
+    crypto.verify_with(
+        &rec.public_key,
+        &rec.signature_algorithm,
+        &sig_input,
+        &foretis.signature,
+    ).map_err(|e| NodeError::Internal(e.to_string()))
 }
 
 pub fn handle_get_calendar_slice(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
@@ -224,6 +354,243 @@ pub fn handle_verify_epoch_snapshot(server: &TimeFamilyServer, params: Value) ->
             "error": "missing snapshot parameter",
         }))
     }
+}
+
+pub fn handle_mirror_request(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    let id = params.get("id").cloned();
+    let tbid = match params.get("tbid").and_then(|v| v.as_str()) {
+        Some(t) => t.to_string(),
+        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            "missing 'tbid'".into()),
+    };
+
+    let mirror_store = server.mirror_store();
+    if !mirror_store.can_accept_mirror(&tbid) {
+        return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            "mirror_reject".into());
+    }
+
+    let cal = server.calendar().inner();
+    let cal_read = cal.read();
+    let tick_count = cal_read.ticks.len() as u64;
+    let latest_tick = cal_read.latest().unwrap_or(0);
+    let hash_sanity = crate::calendar::compute_hash_sanity(&cal_read.ticks);
+    drop(cal_read);
+
+    resp_success(server, id, serde_json::json!({
+        "status": "accept",
+        "tick_count": tick_count,
+        "latest_tick": latest_tick,
+        "hash_sanity": hash_sanity,
+    }))
+}
+
+pub fn handle_mirror_accept(_server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    let id = params.get("id").cloned();
+    let tbid = params.get("tbid").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let tick_count = params.get("tick_count").and_then(|v| v.as_u64()).unwrap_or(0);
+    let latest_tick = params.get("latest_tick").and_then(|v| v.as_u64()).unwrap_or(0);
+    let hash_sanity = params.get("hash_sanity").and_then(|v| v.as_str()).unwrap_or("").to_string();
+
+    let mirror_store = _server.mirror_store();
+    mirror_store.mirrored_tbids();
+
+    resp_success(_server, id, serde_json::json!({
+        "status": "accepted",
+        "tbid": tbid,
+        "tick_count": tick_count,
+        "latest_tick": latest_tick,
+        "hash_sanity": hash_sanity,
+    }))
+}
+
+pub fn handle_ship_batch(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    let id = params.get("id").cloned();
+
+    let tick_start = params.get("tick_start")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+
+    let count = params.get("count")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(10) as usize;
+
+    if count > MAX_CALENDAR_SLICE_COUNT {
+        return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            format!("count exceeds maximum of {}", MAX_CALENDAR_SLICE_COUNT));
+    }
+
+    let cal = server.calendar().inner();
+    let cal_read = cal.read();
+    let records = cal_read.get(tick_start, count)
+        .map_err(|e| NodeError::Internal(format!("calendar lookup failed: {}", e)));
+    drop(cal_read);
+
+    match records {
+        Ok(recs) => {
+            let batch_hash = crate::calendar::compute_hash_sanity(&recs);
+            resp_success(server, id, serde_json::json!({
+                "records": recs,
+                "batch_hash": batch_hash,
+                "count": recs.len(),
+            }))
+        }
+        Err(e) => resp_error(server, id, jsonrpc::INTERNAL_ERROR, format!("{}", e)),
+    }
+}
+
+pub fn handle_ship_ack(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    let id = params.get("id").cloned();
+
+    let tbid = params.get("tbid").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let records: Vec<foretias_core::foretias::tick::TickRecord> =
+        params.get("records").and_then(|v| serde_json::from_value(v.clone()).ok())
+            .unwrap_or_default();
+
+    let mirror_store = server.mirror_store();
+    for record in records {
+        if let Err(e) = mirror_store.insert_mirrored(&tbid, record) {
+            tracing::warn!("mirror insert failed for {}: {}", tbid, e);
+        }
+    }
+
+    let tick_count = mirror_store.mirror_tick_count(&tbid);
+
+    resp_success(server, id, serde_json::json!({
+        "status": "acked",
+        "tbid": tbid,
+        "tick_count": tick_count,
+    }))
+}
+
+pub fn handle_stream_tick(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    let id = params.get("id").cloned();
+
+    let tbid = params.get("tbid").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let tick_number = params.get("tick_number").and_then(|v| v.as_u64()).unwrap_or(0);
+    let record: foretias_core::foretias::tick::TickRecord =
+        match params.get("record").and_then(|v| serde_json::from_value(v.clone()).ok()) {
+            Some(r) => r,
+            None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+                "missing 'record'".into()),
+        };
+
+    let mirror_store = server.mirror_store();
+    if let Err(e) = mirror_store.insert_mirrored(&tbid, record) {
+        return resp_error(server, id, jsonrpc::INTERNAL_ERROR,
+            format!("mirror insert failed: {}", e));
+    }
+
+    let tick_count = mirror_store.mirror_tick_count(&tbid);
+
+    resp_success(server, id, serde_json::json!({
+        "status": "acked",
+        "tbid": tbid,
+        "tick_number": tick_number,
+        "tick_count": tick_count,
+    }))
+}
+
+pub fn handle_stream_ack(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    let id = params.get("id").cloned();
+    let tick_number = params.get("tick_number").and_then(|v| v.as_u64()).unwrap_or(0);
+
+    resp_success(server, id, serde_json::json!({
+        "status": "acked",
+        "tick_number": tick_number,
+    }))
+}
+
+pub fn handle_mirror_mutual(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    let id = params.get("id").cloned();
+
+    let peer_addr = params.get("peer_addr")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let my_tbid = params.get("my_tbid")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let peer_tbid = params.get("peer_tbid")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let mirror_store = server.mirror_store();
+    if !mirror_store.can_accept_mirror(&peer_tbid) {
+        return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            "cannot accept mirror: limit exceeded".into());
+    }
+
+    let cal = server.calendar().inner();
+    let cal_read = cal.read();
+    let my_tick_count = cal_read.ticks.len() as u64;
+    let my_latest_tick = cal_read.latest().unwrap_or(0);
+    let my_hash_sanity = crate::calendar::compute_hash_sanity(&cal_read.ticks);
+    drop(cal_read);
+
+    resp_success(server, id, serde_json::json!({
+        "status": "ready",
+        "my_addr": &server.listen_addr,
+        "my_tbid": my_tbid,
+        "peer_tbid": peer_tbid,
+        "my_tick_count": my_tick_count,
+        "my_latest_tick": my_latest_tick,
+        "my_hash_sanity": my_hash_sanity,
+        "peer_addr": peer_addr,
+    }))
+}
+
+pub fn handle_mirror_reconcile(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    let id = params.get("id").cloned();
+
+    let tbid = params.get("tbid").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let peer_tick_count = params.get("peer_tick_count").and_then(|v| v.as_u64()).unwrap_or(0);
+    let _peer_latest_tick = params.get("peer_latest_tick").and_then(|v| v.as_u64()).unwrap_or(0);
+    let peer_hash_sanity = params.get("peer_hash_sanity").and_then(|v| v.as_str()).unwrap_or("").to_string();
+
+    let mirror_store = server.mirror_store();
+    let my_info = mirror_store.mirror_info(&tbid);
+
+    let result = match my_info {
+        Some((my_tick_count, my_latest_tick, my_hash)) => {
+            let status = if my_tick_count == peer_tick_count && my_hash == peer_hash_sanity {
+                "in_sync"
+            } else if my_tick_count < peer_tick_count {
+                "behind"
+            } else if my_tick_count > peer_tick_count {
+                "ahead"
+            } else {
+                "diverged"
+            };
+
+            let divergence_tick = if status == "behind" || status == "diverged" {
+                Some(my_latest_tick + 1)
+            } else {
+                None
+            };
+
+            serde_json::json!({
+                "status": status,
+                "my_tick_count": my_tick_count,
+                "my_latest_tick": my_latest_tick,
+                "my_hash_sanity": my_hash,
+                "divergence_tick": divergence_tick,
+            })
+        }
+        None => {
+            serde_json::json!({
+                "status": "not_mirrored",
+                "my_tick_count": 0u64,
+                "my_latest_tick": 0u64,
+                "my_hash_sanity": String::new(),
+                "divergence_tick": None::<u64>,
+            })
+        }
+    };
+
+    resp_success(server, id, result)
 }
 
 #[cfg(test)]

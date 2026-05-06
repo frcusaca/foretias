@@ -37,6 +37,22 @@ impl PeerTransport for JsonRpcTransport {
         Ok(result)
     }
 
+    async fn route_stamp(
+        &self,
+        peer: &PeerAddr,
+        target_tbid: &str,
+        content_hex: &str,
+        echo: &str,
+    ) -> Result<serde_json::Value, TransportError> {
+        let params = serde_json::json!({
+            "target_tbid": target_tbid,
+            "content": content_hex,
+            "echo": echo,
+        });
+        let result = self.json_rpc_call(peer, "route_stamp", params).await?;
+        Ok(result)
+    }
+
     async fn get_calendar_slice(
         &self,
         peer: &PeerAddr,

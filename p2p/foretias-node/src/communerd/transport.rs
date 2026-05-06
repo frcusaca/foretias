@@ -65,6 +65,14 @@ pub trait PeerTransport: Send + Sync {
         echo: &str,
     ) -> Result<serde_json::Value, TransportError>;
 
+    async fn route_stamp(
+        &self,
+        peer: &PeerAddr,
+        target_tbid: &str,
+        content_hex: &str,
+        echo: &str,
+    ) -> Result<serde_json::Value, TransportError>;
+
     async fn get_calendar_slice(
         &self,
         peer: &PeerAddr,

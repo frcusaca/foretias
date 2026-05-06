@@ -7,3 +7,4 @@ pub mod calendar;
 pub mod metrics;
 pub mod calendar_store;
 pub mod probity;
+pub mod replication_logger;
