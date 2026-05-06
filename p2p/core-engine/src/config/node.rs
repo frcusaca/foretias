@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use super::p2p::CollisionConfig;
 
 /// Runtime configuration for a Foretias P2P node, loaded from a JSON file.
+#[deprecated(since = "0.5.0", note = "Use TimeFamilyConfig instead")]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeConfig {
     /// Address the node listens on for incoming connections (default: `127.0.0.1:4001`).

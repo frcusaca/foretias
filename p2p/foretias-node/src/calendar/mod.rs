@@ -41,6 +41,31 @@ impl Calendar {
     pub fn save(&self, path: &str) -> Result<(), NodeError> {
         self.inner.read().save(path)
     }
+
+    /// Save the calendar wrapped in `PersistedCalendar` format (with metadata header).
+    /// This is an additional save format alongside the raw JSON `save()` method.
+    pub fn save_as_persisted(&self, path: &str) -> Result<(), NodeError> {
+        use foretias_core::config::{PersistedCalendar, CalendarMetadata, CalendarConfig};
+
+        let cal = self.inner.read();
+        let persisted = PersistedCalendar {
+            config: CalendarMetadata {
+                tbid: hex::encode(cal.tbid()),
+                tbn: cal.tbn().to_string(),
+                stamp_tbid: hex::encode(cal.tbid()),
+                persisted_by: env!("CARGO_PKG_VERSION").to_string(),
+                calendar_config: CalendarConfig::default(),
+            },
+            ticks: cal.ticks.iter()
+                .map(|t| serde_json::to_value(t).unwrap_or_default())
+                .collect(),
+        };
+        let json = serde_json::to_string_pretty(&persisted)
+            .map_err(|e| NodeError::Internal(format!("failed to serialize persisted calendar: {}", e)))?;
+        std::fs::write(path, json)
+            .map_err(|e| NodeError::Internal(format!("failed to write persisted calendar: {}", e)))?;
+        Ok(())
+    }
 }
 
 impl TickObserver for Calendar {

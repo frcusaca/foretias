@@ -8,7 +8,7 @@ use tokio::net::TcpListener;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
 
 use foretias_core::chronomatter::Chronomatter;
-use foretias_core::config::NodeConfig;
+use foretias_core::config::{NodeConfig, TimeFamilyConfig};
 use foretias_core::core::identity::{generate_ed25519_keypair, derive_ed25519_peer_id};
 use foretias_core::foretias::callbacks::{TickObserver, AutoAttestObserver};
 use foretias_core::foretias::TickRecord;

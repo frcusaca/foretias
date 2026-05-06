@@ -8,7 +8,7 @@ use clap::{Parser, Subcommand};
 use serde::Deserialize;
 use tokio::io::{AsyncWriteExt};
 
-use foretias_core::config::NodeConfig;
+use foretias_core::config::{NodeConfig, TimeFamilyConfig};
 use foretias_core::core::identity::generate_ed25519_keypair;
 use foretias_core::crypto_server;
 use foretias_core::foretias::tick::{TickRecord, CalendarLookup};
@@ -293,6 +293,33 @@ async fn cmd_serve(
         chronon_ns
     };
 
+    let tfc_path = TimeFamilyConfig::default_path();
+    let tfc_path_opt = if std::path::Path::new(&tfc_path).exists() {
+        Some(tfc_path.as_str())
+    } else {
+        None
+    };
+    let time_family_cfg = TimeFamilyConfig::from_cli_and_file(
+        &addr,
+        chronon_ns,
+        persist_path.clone().map(PathBuf::from),
+        start_dormant,
+        peers.clone(),
+        auto_attest_every_chronons,
+        request_timeout_secs,
+        p2p_listen.clone(),
+        {
+            let r = parse_port_range(&p2p_port_range)?;
+            [r.start, r.end]
+        },
+        p2p_dial.clone(),
+        known_servers.clone(),
+        &dht_namespace,
+        dht_bootstrap.clone(),
+        max_discovered_peers,
+        tfc_path_opt,
+    );
+
     let server: TimeFamilyServer = if start_dormant {
         let persist = persist_path.ok_or("--persist-path is required for --dormant mode")?;
         let json_path = PathBuf::from(&persist);
@@ -370,6 +397,7 @@ async fn cmd_serve(
     println!("  Listen : {}", addr);
     println!("  TBN    : {}", server.get_tbn());
     println!("  TBID   : {}", hex::encode(server.get_tbid()));
+    println!("  Config : TimeFamilyConfig v{}", time_family_cfg.version);
     if start_dormant {
         println!("  Mode   : dormant (verify-only)");
     } else {

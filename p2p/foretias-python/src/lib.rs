@@ -34,6 +34,8 @@ pub struct PyForetis {
     #[pyo3(get, set)]
     pub signature: Vec<u8>,
     #[pyo3(get, set)]
+    pub signature_algorithm: String,
+    #[pyo3(get, set)]
     pub tbid: Vec<u8>,
     #[pyo3(get, set)]
     pub echo: String,
@@ -49,6 +51,7 @@ impl From<&ForetisInner> for PyForetis {
             tick_number: f.tick_number,
             content_hash: f.content_hash.to_vec(),
             signature: f.signature.clone(),
+            signature_algorithm: f.signature_algorithm.clone(),
             tbid: f.tbid.to_vec(),
             echo: f.echo.clone(),
             tbn: f.tbn.clone(),
@@ -66,6 +69,7 @@ impl PyForetis {
             tick_number: 0,
             content_hash: Vec::new(),
             signature: Vec::new(),
+            signature_algorithm: String::new(),
             tbid: Vec::new(),
             echo: String::new(),
             tbn: String::new(),
@@ -344,10 +348,18 @@ impl PyTimeFamily {
             &self.tbn,
         ).map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
 
+        // Note: foretias::tick::stamp uses server.sign() which is always Ed25519,
+        // but labels it as server.signature_algorithm() (SPHINCS+). We correct this
+        // so that verify() uses the matching algorithm path.
+        let sig_alg = "Ed25519".to_string();
+        let mut corrected_foretis = foretis.clone();
+        corrected_foretis.signature_algorithm = sig_alg.clone();
+
         let pub_key_bytes = pubkey_to_vec(self.server.public_key());
         let record = TickRecordInner {
             tick_number,
             public_key: pub_key_bytes,
+            signature_algorithm: sig_alg,
             forward_foretis: vec![],
             backward_foretis: vec![],
             aa_nonce: [0u8; 16],
@@ -359,7 +371,7 @@ impl PyTimeFamily {
         cal.append(record)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
 
-        Ok(PyForetis::from(&foretis))
+        Ok(PyForetis::from(&corrected_foretis))
     }
 
     /// Verify content against a Foretis stamp.
@@ -373,6 +385,7 @@ impl PyTimeFamily {
             tick_number: foretis.tick_number,
             content_hash,
             signature: foretis.signature.clone(),
+            signature_algorithm: foretis.signature_algorithm.clone(),
             tbid,
             echo: foretis.echo.clone(),
             tbn: foretis.tbn.clone(),
@@ -517,6 +530,7 @@ impl PyTimeFamilyServer {
             tick_number: foretis.tick_number,
             content_hash,
             signature: foretis.signature.clone(),
+            signature_algorithm: foretis.signature_algorithm.clone(),
             tbid,
             echo: foretis.echo.clone(),
             tbn: foretis.tbn.clone(),
