@@ -551,6 +551,33 @@ async fn cmd_prove_verification(
     Ok(())
 }
 
+/// Validate that a deserialized JSON value conforms to the JSON-RPC 2.0 response schema.
+/// Must be called before trusting any fields from untrusted network data.
+fn validate_jsonrpc_response(response: &serde_json::Value) -> Result<(), String> {
+    // Must be an object
+    if !response.is_object() {
+        return Err("invalid JSON-RPC response: not an object".into());
+    }
+
+    // Must have "jsonrpc" field equal to "2.0"
+    match response.get("jsonrpc").and_then(|v| v.as_str()) {
+        Some("2.0") => (),
+        Some(other) => {
+            return Err(format!("invalid JSON-RPC response: unexpected version {other:?}"));
+        }
+        None => {
+            return Err("invalid JSON-RPC response: missing jsonrpc field".into());
+        }
+    }
+
+    // Must have either "result" or "error"
+    if response.get("result").is_none() && response.get("error").is_none() {
+        return Err("invalid JSON-RPC response: missing both result and error".into());
+    }
+
+    Ok(())
+}
+
 async fn json_rpc_call(
     server: &str,
     method: &str,
@@ -587,6 +614,9 @@ async fn json_rpc_call(
 
     let plaintext = session.recv(&resp_buf)?;
     let response: serde_json::Value = serde_json::from_slice(&plaintext)?;
+
+    // Validate JSON-RPC 2.0 response structure before trusting any fields
+    validate_jsonrpc_response(&response)?;
 
     if let Some(err) = response.get("error") {
         let msg = err.get("message")

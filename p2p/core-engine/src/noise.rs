@@ -268,21 +268,21 @@ pub async fn noise_handshake(
 
 async fn write_len(stream: &mut tokio::net::TcpStream, msg: &[u8]) -> Result<(), CryptoError> {
     let len = (msg.len() as u32).to_le_bytes();
-    tokio::io::AsyncWriteExt::write_all(stream, &len).await.map_err(|_| CryptoError::Internal(-99))?;
-    tokio::io::AsyncWriteExt::write_all(stream, msg).await.map_err(|_| CryptoError::Internal(-99))?;
-    tokio::io::AsyncWriteExt::flush(stream).await.map_err(|_| CryptoError::Internal(-99))?;
+    tokio::io::AsyncWriteExt::write_all(stream, &len).await.map_err(|e| CryptoError::IoWrite(e.to_string()))?;
+    tokio::io::AsyncWriteExt::write_all(stream, msg).await.map_err(|e| CryptoError::IoWrite(e.to_string()))?;
+    tokio::io::AsyncWriteExt::flush(stream).await.map_err(|e| CryptoError::IoWrite(e.to_string()))?;
     Ok(())
 }
 
 async fn read_len(stream: &mut tokio::net::TcpStream) -> Result<Vec<u8>, CryptoError> {
     let mut len_buf = [0u8; 4];
-    tokio::io::AsyncReadExt::read_exact(stream, &mut len_buf).await.map_err(|_| CryptoError::Internal(-99))?;
+    tokio::io::AsyncReadExt::read_exact(stream, &mut len_buf).await.map_err(|e| CryptoError::IoRead(e.to_string()))?;
     let len = u32::from_le_bytes(len_buf) as usize;
     if len > NOISE_MAX_MSG {
-        return Err(CryptoError::Internal(-99));
+        return Err(CryptoError::BadInput("message exceeds maximum size"));
     }
     let mut buf = vec![0u8; len];
-    tokio::io::AsyncReadExt::read_exact(stream, &mut buf).await.map_err(|_| CryptoError::Internal(-99))?;
+    tokio::io::AsyncReadExt::read_exact(stream, &mut buf).await.map_err(|e| CryptoError::IoRead(e.to_string()))?;
     Ok(buf)
 }
 

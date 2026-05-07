@@ -85,6 +85,12 @@ pub enum CryptoError {
     /// The requested algorithm identifier is not recognized.
     #[error("unknown algorithm: {0}")]
     UnknownAlgorithm(String),
+    /// An I/O write operation failed on the noise transport channel.
+    #[error("noise write error: {0}")]
+    IoWrite(String),
+    /// An I/O read operation failed on the noise transport channel.
+    #[error("noise read error: {0}")]
+    IoRead(String),
 }
 
 /// Convert C11 ForetiasResult code to CryptoError.
