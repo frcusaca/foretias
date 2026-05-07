@@ -248,6 +248,6 @@ mod tests {
     #[test]
     fn base_dir_is_preserved() {
         let store = MirrorStore::new("/custom/path", 64);
-        assert_eq!(store.base_dir, Path::new("/custom/path"));
+        assert_eq!(store.base_dir, std::path::Path::new("/custom/path"));
     }
 }

@@ -217,6 +217,7 @@ mod tests {
         TickRecord {
             tick_number,
             public_key: vec![0u8; 32],
+            signature_algorithm: "Ed25519".to_string(),
             forward_foretis: vec![],
             backward_foretis: vec![],
             aa_nonce: [0u8; 16],

@@ -312,6 +312,7 @@ fn test_crash_recovery_calendar() {
         let record = foretias_core::foretias::tick::TickRecord {
             tick_number: i,
             public_key: vec![0u8; 32],
+            signature_algorithm: "Ed25519".to_string(),
             forward_foretis: vec![],
             backward_foretis: vec![],
             aa_nonce: [0u8; 16],
@@ -330,6 +331,7 @@ fn test_crash_recovery_calendar() {
         let record = foretias_core::foretias::tick::TickRecord {
             tick_number: i,
             public_key: vec![0u8; 32],
+            signature_algorithm: "Ed25519".to_string(),
             forward_foretis: vec![],
             backward_foretis: vec![],
             aa_nonce: [0u8; 16],
@@ -363,11 +365,11 @@ async fn two_swarms_connect_and_identify() {
     let ma_a: libp2p::Multiaddr = format!("/ip4/127.0.0.1/tcp/{}", port_a).parse().unwrap();
     let ma_b: libp2p::Multiaddr = format!("/ip4/127.0.0.1/tcp/{}", port_b).parse().unwrap();
 
-    let mut handle_a = build_and_spawn_swarm(ma_a.clone(), vec![], "mainnet", None).await.unwrap();
+    let mut handle_a = build_and_spawn_swarm(Some(ma_a.clone()), vec![], "mainnet", None).await.unwrap();
     let peer_id_a = handle_a.local_peer_id.clone();
 
     let dial_a: libp2p::Multiaddr = format!("{}/p2p/{}", ma_a, peer_id_a).parse().unwrap();
-    let mut handle_b = build_and_spawn_swarm(ma_b, vec![dial_a], "mainnet", None).await.unwrap();
+    let mut handle_b = build_and_spawn_swarm(Some(ma_b), vec![dial_a], "mainnet", None).await.unwrap();
 
     let mut a_connected = false;
     let mut b_connected = false;
@@ -431,17 +433,17 @@ async fn three_nodes_discover_and_attest() {
     let namespace = "testnet";
 
     // Start node A (isolated, no dials)
-    let mut handle_a = build_and_spawn_swarm(ma_a.clone(), vec![], namespace, Some("127.0.0.1:3001")).await.unwrap();
+    let mut handle_a = build_and_spawn_swarm(Some(ma_a.clone()), vec![], namespace, Some("127.0.0.1:3001")).await.unwrap();
     let peer_id_a = handle_a.local_peer_id;
 
     // Start node B (isolated, no dials)
-    let mut handle_b = build_and_spawn_swarm(ma_b.clone(), vec![], namespace, Some("127.0.0.1:3002")).await.unwrap();
+    let mut handle_b = build_and_spawn_swarm(Some(ma_b.clone()), vec![], namespace, Some("127.0.0.1:3002")).await.unwrap();
     let peer_id_b = handle_b.local_peer_id;
 
     // Start node C (connects to both A and B — acts as bridge)
     let dial_a: libp2p::Multiaddr = format!("{}/p2p/{}", ma_a, peer_id_a).parse().unwrap();
     let dial_b: libp2p::Multiaddr = format!("{}/p2p/{}", ma_b, peer_id_b).parse().unwrap();
-    let mut handle_c = build_and_spawn_swarm(ma_c, vec![dial_a, dial_b], namespace, Some("127.0.0.1:3003")).await.unwrap();
+    let mut handle_c = build_and_spawn_swarm(Some(ma_c), vec![dial_a, dial_b], namespace, Some("127.0.0.1:3003")).await.unwrap();
 
     let deadline = std::time::Instant::now() + Duration::from_secs(30);
 
@@ -526,11 +528,11 @@ async fn gossip_probity_propagation() {
 
     let namespace = "testnet";
 
-    let mut handle_a = build_and_spawn_swarm(ma_a.clone(), vec![], namespace, None).await.unwrap();
+    let mut handle_a = build_and_spawn_swarm(Some(ma_a.clone()), vec![], namespace, None).await.unwrap();
     let peer_id_a = handle_a.local_peer_id;
 
     let dial_a: libp2p::Multiaddr = format!("{}/p2p/{}", ma_a, peer_id_a).parse().unwrap();
-    let mut handle_b = build_and_spawn_swarm(ma_b, vec![dial_a], namespace, None).await.unwrap();
+    let mut handle_b = build_and_spawn_swarm(Some(ma_b), vec![dial_a], namespace, None).await.unwrap();
     let peer_id_b = handle_b.local_peer_id;
 
     let deadline = std::time::Instant::now() + Duration::from_secs(15);
