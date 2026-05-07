@@ -10,26 +10,84 @@ Please read the entire document word for word do not skip any thing.
 
 ---
 
+## SPECS DIRECTORY CONVENTIONS (`foretias/specs/`)
+
+The `specs/` directory contains two kinds of files that work together:
+
+### SPEC.md Files — "What is needed"
+A `*_SPEC.md` file provides a **detailed description of functionality or internal design**. It specifies requirements, behavior, data structures, protocols, and constraints. A spec answers: *what must the system do, and how should it behave?*
+
+### PLAN.md Files — "How to build it"
+A `*_PLAN.md` file contains a **serialized or parallelized plan for actually implementing the corresponding spec**. It breaks the spec down into concrete, actionable tasks with dependencies and ordering. A plan answers: *what do we build first, next, and in parallel?*
+
+### Naming Convention
+Spec and plan files should always be paired by prefix:
+- `X_SPEC.md` pairs with `X_PLAN.md`
+- Example: `FORETIAS_2_P2P_SPEC.md` ↔ `FORETIAS_2_P2P_3_IMPLEMENTATION_PLAN.md`
+
+### Checkbox Format in PLAN.md
+Checkboxes in PLAN.md files track progress. When an item is checked off, **always place a timestamp (to the minute) next to the checkbox**:
+
+```markdown
+- [ ] Task not yet done
+- [x] Task completed                    ← bad (no timestamp)
+- [x](2026-05-06 13:11) Task completed  ← good (timestamped)
+```
+
+This gives both agents and humans a clear idea of how work is progressing over time.
+
+### Worktree Branch Tracking in PLAN.md
+If a worktree branch is used for implementation, the PLAN.md **must** document the lifecycle of that worktree as explicit, separate checkbox tasks placed at appropriate points in the plan:
+
+```markdown
+- [ ] Create worktree at ${FULL_WORKTREE_PATH} with branch name ${BRANCH_NAME}
+...
+  (implementation tasks go here)
+...
+- [ ] Verify all work is complete in ${FULL_WORKTREE_PATH} and committed to ${BRANCH_NAME}
+- [ ] Merge ${BRANCH_NAME} to alpha
+```
+
+These tasks ensure the worktree lifecycle is tracked alongside the implementation work itself. Replace `${FULL_WORKTREE_PATH}` and `${BRANCH_NAME}` with actual values when writing the plan.
+
+---
+
+### Sub tasks
+If scoping was incorrect for any task, and and it became many tasks, It is possible to write additional sub-tasks. These are indented in markdown
+```markdown
+...
+- [ ] Merge ${BRANCH_NAME} to alpha
+  - [x](2026-05-06 14:00)  Detected complex merge situation # Note, here we used a completed task to justify these subtasks
+  - [ ] Update ${BRANCH_NAME} to follow new coding style
+  - [ ] Update ${BRANCH_NAME} to use new API call convention
+  - [x](2026-05-06 14:31) Merged breaking alpha # Again, this is needed to document a clear need for more work as subtasks
+  - [ ] repair tests in alpha.
+```
+This example also illustrates that because foolish uses git merge and not rebase this situation where a fix to merge on alpha may be required.
+
 ## PROJECT STRUCTURE (Permanent Reference — Do Not Rescan)
 
 ```
 foretias/                               # Repository root
 │
-├── specs/                              # All working specifications
+├── specs/                              # All working specifications (SPEC.md & PLAN.md — see below)
 │   ├── FORETIAS_0_OVERVIEW.md          # Design invariants, roadmap, milestones
 │   ├── FORETIAS_1_MVP_SPEC.md          # v0.1 local-server stack (C11+Rust+PyO3)
 │   ├── FORETIAS_2_IMPLEMENTATION_PLAN.md
 │   ├── FORETIAS_2_P2P_SPEC.md          # v0.2-v0.8 network layers
 │   ├── FORETIAS_2_P2P_*.md             # P2P sub-specs (handshake, DHT, hardening, probity, etc.)
-│   ├── FORETIAS_3_PQC_INTEGRATION.md
+│   ├── FORETIAS_3_PQC_INTEGRATION.md   # Post-quantum crypto (liboqs integration)
 │   ├── FORETIAS_4_GPU_CRYPTO_ACCELERATION.md
-│   ├── FORETIAS_CLI_SPEC.md
+│   ├── FORETIAS_CLI_SPEC.md            # CLI unified specification
+│   ├── CLI_SPECIFIED.md                # CLI specification (supplementary)
+│   ├── CALENDAR_REPLICATION_SPEC.md    # Calendar replication over P2P
 │   ├── foretias-v1.md                  # Product & technical specification
-│   └── PYTHON_REMOVAL_PLAN.md          # Plan to retire pure-Python prototype
+│   ├── *_PLAN.md                       # Implementation plans (paired with SPEC.md files)
+│   └── questions.md                    # Open design questions
 │
 ├── src/foretias/                       # Python shim (thin re-export layer)
 │   ├── __init__.py                     # Re-exports from foretias_p2p (Rust PyO3)
-│   ├── cli.py                          # Python CLI wrapper (calls Rust via PyO3)
+│   ├── cli.py                          # CLI #1 (Python): "foretis" entry point (calls Rust via PyO3)
 │   ├── thin_client.py                  # Convenience client wrapper (calls Rust via PyO3)
 │   └── _version.py                     # Version string
 │
@@ -65,11 +123,11 @@ foretias/                               # Repository root
 │   │       ├── noise.rs                # Noise_XX handshake (Rust-side integration)
 │   │       └── error.rs                # NodeError, CryptoError
 │   │
-│   ├── foretias-node/                  # Rust crate — server + CLI binary
-│   │   ├── Cargo.toml                  # foretias-node (depends on foretias-core)
+│   ├── foretias-node/                  # Rust crate — server + CLI binary (CLI #2)
+│   │   ├── Cargo.toml                  # foretias-node (depends on foretias-core, libp2p, liboqs via core-engine)
 │   │   ├── src/
 │   │   │   ├── lib.rs                  # Re-exports: server, communerd, calendar, calendar_store, metrics, probity
-│   │   │   ├── main.rs                 # CLI binary: foretias serve/stamp/verify/prove-verification/inspect-attestations
+│   │   │   ├── main.rs                 # CLI #2 (Rust): "foretias" binary — serve/stamp/verify/prove-verification/inspect-attestations
 │   │   │   ├── server/                 # TimeFamilyServer (stamp, verify, integrity_check, daemon, JSON-RPC, HTTP handlers)
 │   │   │   ├── communerd/              # P2P layer: libp2p swarm, DHT, gossipsub, peer pool, mutual attestation
 │   │   │   ├── calendar/               # Calendar wrapper
@@ -89,7 +147,15 @@ foretias/                               # Repository root
 │       ├── pom.xml                     # Maven: org.foretias:foretias-java:0.2.0
 │       ├── build.sh                    # Build script (cargo + javac + jar)
 │       └── src/                        # Java source + Rust JNI crate
-```
+
+**CLI Implementations (two active, possibly more):**
+
+| # | CLI | Language | Entry | Binary/Command | Location |
+|---|-----|----------|-------|----------------|----------|
+| 1 | Python "foretis" | Python (shim → Rust) | `src/foretias/cli.py` | `foretis` | Top-level pyproject.toml |
+| 2 | Rust "foretias" | Rust (native) | `p2p/foretias-node/src/main.rs` | `foretias` | p2p/ Cargo workspace |
+
+Both CLIs provide stamp, verify, and server commands. The Rust binary is the full-featured implementation; the Python CLI is a convenience wrapper that delegates to the Rust backend via PyO3. Additional CLI wrappers (e.g., Java) may exist or be added.
 
 ### Architecture Layers
 
@@ -99,25 +165,41 @@ foretias/                               # Repository root
                     └────────┬────────┘
                              │
                     ┌────────▼────────┐
-                    │  foretias-node  │   Server, JSON-RPC, P2P swarm, calendar store
+                    │  foretias-node  │   Server, JSON-RPC, calendar store
                     └────────┬────────┘
-                             │
-              ┌──────────────┴──────────────┐
-              │ foretias-python (PyO3)      │
-              │ foretias-java (JNI)         │   Client-language bindings
-              └──────────────┬──────────────┘
-                             │
-                    ┌────────▼────────┐
-                    │ foretias-core   │   Safe Rust wrappers, CryptoServer, domain types
-                    └────────┬────────┘
-                             │  (FFI via bindgen)
-                    ┌────────▼────────┐
-                    │  C11 core       │   libsodium-based primitives (Ed25519, P-256, SHA-256, etc.)
-                    └────────┬────────┘
-                             │
-                    ┌────────▼────────┐
-                    │   libsodium     │   System dependency (Ed25519, hash, AEAD)
-                    └─────────────────┘
+            ┌─────────────────┼──────────────────┐
+            │                 │                  │
+ ┌──────────▼──────┐  ┌──────▼───────┐  ┌──────▼────────┐
+ │   communerd     │  │ foretias-py  │  │ foretias-java │
+ │  (libp2p P2P)   │  │   (PyO3)     │  │    (JNI)      │
+ │                 │  │              │  │               │
+ │ - DHT           │  │ Client-lang  │  │ Client-lang   │
+ │ - GossipSub     │  │ bindings     │  │ bindings      │
+ │ - Peer pool     │  │              │  │               │
+ │ - Mutual attest │  └──────┬───────┘  └──────┬────────┘
+ └────────┬────────┘         │                  │
+          │                  │                  │
+          │        ┌─────────▼──────────────────┴────────┐
+          │        │       foretias-core                 │
+          │        │  Safe Rust wrappers, CryptoServer,  │
+          │        │  domain types                       │
+          │        └─────────┬───────────────────────────┘
+          │                  │  (FFI via bindgen)
+          │        ┌─────────▼───────────────────────────┐
+          │        │       C11 core                      │
+          │        │  libsodium + OpenSSL + liboqs       │
+          │        └─────────┬───────────────────────────┘
+          │                  │
+ ┌────────▼────────┐   ┌─────▼────────┐   ┌────────────┐
+ │   libp2p        │   │  libsodium   │   │  liboqs    │
+ │  (Rust crate)   │   │ (Ed25519,    │   │ (PQC:      │
+ │                 │   │  hash, AEAD) │   │  Kyber,    │
+ │ - noise protocols│  └──────────────┘   │  Dilithium, │
+ │ - yamux/mplex   │                      │  etc.)      │
+ │ - identify      │                      └────────────┘
+ │ - ping          │
+ │ - dht           │
+ └─────────────────┘
 ```
 
 ---
