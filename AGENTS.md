@@ -61,7 +61,8 @@ If scoping was incorrect for any task, and and it became many tasks, It is possi
   - [ ] Update ${BRANCH_NAME} to follow new coding style
   - [ ] Update ${BRANCH_NAME} to use new API call convention
   - [x](2026-05-06 14:31) Merged breaking alpha # Again, this is needed to document a clear need for more work as subtasks
-  - [ ] repair tests in alpha.
+  - [ ] repair ALL tests in alpha.
+  - [ ] cleanup ${FULL_WORKTREE_PATH} after successful merge
 ```
 This example also illustrates that because foolish uses git merge and not rebase this situation where a fix to merge on alpha may be required.
 
