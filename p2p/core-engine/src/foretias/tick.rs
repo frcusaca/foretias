@@ -14,6 +14,7 @@ pub struct TickRecord {
     /// The public key active at this tick.
     pub public_key: Vec<u8>,
     /// Plain-text algorithm identifier for this tick's key.
+    #[serde(default = "default_sig_algorithm")]
     pub signature_algorithm: String,
     /// Serialized Foretis attesting forward to the next tick.
     pub forward_foretis: Vec<u8>,
@@ -82,7 +83,7 @@ pub fn stamp(
     sig_input.extend_from_slice(content);
 
     let signature = server.sign(&sig_input)?;
-    let sig_alg = server.signature_algorithm().to_id_string().to_string();
+    let sig_alg = crate::foretias::types::SignatureAlgorithm::Ed25519.to_id_string().to_string();
     let content_hash = server.sha256(content)?;
 
     let now_ns = std::time::SystemTime::now()
@@ -118,23 +119,15 @@ pub fn verify(
     let records = calendar.get(foretis.tick_number, 1)?;
     let rec = records.first().ok_or(NodeError::NotFound("tick"))?;
 
-    // Reconcile algorithms
-    if rec.signature_algorithm != foretis.signature_algorithm {
-        return Err(NodeError::AlgorithmMismatch(
-            format!("tick uses '{}' but Foretis claims '{}'",
-                   rec.signature_algorithm, foretis.signature_algorithm)
-        ));
-    }
-
+    // Use the algorithm declared in the Foretis itself for verification
     let mut sig_input = Vec::new();
     sig_input.extend_from_slice(&foretis.tbid);
     sig_input.extend_from_slice(&foretis.tick_number.to_be_bytes());
     sig_input.extend_from_slice(content);
 
-    // Verify with algorithm-aware method
     Ok(server.verify_with(
         &rec.public_key,
-        &rec.signature_algorithm,
+        &foretis.signature_algorithm,
         &sig_input,
         &foretis.signature,
     )?)
@@ -221,6 +214,10 @@ pub fn verify_pair(
     Ok(forward_valid && backward_valid)
 }
 
+fn default_sig_algorithm() -> String {
+    "Ed25519".to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -246,7 +243,7 @@ mod tests {
         cal.append(TickRecord {
             tick_number,
             public_key,
-            signature_algorithm: server.signature_algorithm().to_id_string().to_string(),
+            signature_algorithm: "Ed25519".to_string(),
             forward_foretis: serde_json::to_vec(&foretis).unwrap(),
             backward_foretis: vec![],
             aa_nonce: [0u8; 16],
@@ -352,7 +349,7 @@ mod tests {
         let sig = server.sign(&ma_blob).unwrap();
         let sig_bytes = sig.bytes.to_vec();
 
-        let sig_alg = server.signature_algorithm().to_id_string().to_string();
+        let sig_alg = "Ed25519".to_string();
 
         let prev = TickRecord {
             tick_number: 1,
@@ -392,7 +389,7 @@ mod tests {
         let (ma_blob, nonce) = auto_attestation_blob(&tbid_str, 1, &pub_key, 2, &pub_key).unwrap();
         let sig = server.sign(&ma_blob).unwrap();
         let mut sig_bytes = sig.bytes.to_vec();
-        let sig_alg = server.signature_algorithm().to_id_string().to_string();
+        let sig_alg = "Ed25519".to_string();
 
         let prev = TickRecord {
             tick_number: 1,

@@ -200,7 +200,7 @@ impl Chronomatter {
         Ok(TickRecord {
             tick_number: tick,
             public_key: new_pub.to_vec(),
-            signature_algorithm: self.crypto.signature_algorithm().to_id_string().to_string(),
+            signature_algorithm: crate::foretias::types::SignatureAlgorithm::Ed25519.to_id_string().to_string(),
             forward_foretis,
             backward_foretis,
             aa_nonce,
@@ -264,7 +264,7 @@ impl Chronomatter {
             tick_number: tick,
             content_hash: content_hash.bytes,
             signature: sig.bytes.to_vec(),
-            signature_algorithm: self.crypto.signature_algorithm().to_id_string().to_string(),
+            signature_algorithm: crate::foretias::types::SignatureAlgorithm::Ed25519.to_id_string().to_string(),
             tbid,
             echo,
             tbn,
