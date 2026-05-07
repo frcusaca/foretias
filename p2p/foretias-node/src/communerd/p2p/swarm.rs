@@ -45,8 +45,12 @@ pub enum SwarmCommand {
     Provide { key: kad::RecordKey },
     GetProviders { key: kad::RecordKey },
     PutRecord { key: kad::RecordKey, record: kad::Record },
+    PutRecordTo { key: kad::RecordKey, record: kad::Record, peers: Vec<PeerId> },
+    /// Store a record directly in the local kad store (bypasses network entirely).
+    StoreRecordLocal { record: kad::Record },
     GetRecord { key: kad::RecordKey },
     Dial { addr: libp2p::Multiaddr },
+    AddAddress { peer_id: PeerId, addr: libp2p::Multiaddr },
     EnterDormancy,
     PublishProbity { report: ProbityReport, namespace: String },
     PublishHeartbeat { heartbeat: Heartbeat, namespace: String },
@@ -138,6 +142,9 @@ async fn swarm_loop(
                     Some(SwarmCommand::Dial { addr }) => {
                         let _ = swarm.dial(addr);
                     }
+                    Some(SwarmCommand::AddAddress { peer_id, addr }) => {
+                        swarm.behaviour_mut().kad.add_address(&peer_id, addr);
+                    }
                     Some(SwarmCommand::EnterDormancy) => {
                         let peers: Vec<PeerId> = swarm.connected_peers().cloned().collect();
                         for peer in peers {
@@ -187,6 +194,22 @@ async fn swarm_loop(
                                 });
                                 tracing::warn!(key = ?key_vec, ?e, "PutRecord failed");
                             }
+                        }
+                    }
+                    Some(SwarmCommand::PutRecordTo { key, record, peers }) => {
+                        let num = peers.len();
+                        let key_vec = key.to_vec();
+                        let query_id = swarm.behaviour_mut().kad.put_record_to(record, peers.into_iter(), kad::Quorum::One);
+                        pending_put_record.insert(query_id, key.clone());
+                        tracing::info!(key = ?key_vec, num_peers = num, "PutRecordTo initiated");
+                    }
+                    Some(SwarmCommand::StoreRecordLocal { record }) => {
+                        use libp2p::kad::store::RecordStore;
+                        let key = record.key.clone();
+                        if let Err(e) = swarm.behaviour_mut().kad.store_mut().put(record) {
+                            tracing::warn!(?e, key = ?key.to_vec(), "StoreRecordLocal failed");
+                        } else {
+                            tracing::info!(key = ?key.to_vec(), "StoreRecordLocal succeeded");
                         }
                     }
                     Some(SwarmCommand::GetRecord { key }) => {
