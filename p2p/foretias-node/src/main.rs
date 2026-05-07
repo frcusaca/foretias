@@ -7,6 +7,8 @@ use std::sync::Arc;
 use clap::{Parser, Subcommand};
 use serde::Deserialize;
 use tokio::io::{AsyncWriteExt};
+use tracing_appender::rolling;
+use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
 use foretias_core::config::{NodeConfig, TimeFamilyConfig};
 use foretias_core::core::identity::generate_ed25519_keypair;
@@ -705,15 +707,56 @@ impl CalendarLookup for CalendarInspect<'_> {
     }
 }
 
+fn init_tracing_with_file() -> Result<(), Box<dyn std::error::Error>> {
+    let logging = TimeFamilyConfig::default().logging;
+    let log_dir = PathBuf::from(&logging.log_dir);
+    std::fs::create_dir_all(&log_dir)?;
+
+    let env_filter = {
+        let mut filter = EnvFilter::try_new(&logging.level)?;
+        for comp_level in &logging.component_levels {
+            if let Ok(directive) = comp_level.parse() {
+                filter = filter.add_directive(directive);
+            }
+        }
+        filter
+    };
+
+    let file_appender = rolling::daily(&log_dir, "foretias");
+    let file_layer = fmt::layer()
+        .with_ansi(false)
+        .with_writer(file_appender)
+        .with_target(false)
+        .with_level(true)
+        .with_filter(env_filter.clone());
+
+    let stdout_layer = fmt::layer()
+        .with_target(false)
+        .with_level(true)
+        .with_filter(env_filter);
+
+    tracing_subscriber::Registry::default()
+        .with(file_layer)
+        .with(stdout_layer)
+        .init();
+    Ok(())
+}
+
 // ── Entry point ─────────────────────────────────────────────────────────────
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt()
-        .with_target(false)
-        .with_level(true)
-        .init();
     let cli = Cli::parse();
+
+    match &cli.command {
+        Commands::Serve { .. } => init_tracing_with_file()?,
+        _ => {
+            fmt()
+                .with_target(false)
+                .with_level(true)
+                .init();
+        }
+    }
 
     match cli.command {
         Commands::Serve { addr, chronon_ns, persist_path, start_dormant, peer, auto_attest_every_chronons, request_timeout_secs, p2p_listen, p2p_port_range, p2p_dial, known_servers, dht_namespace, dht_bootstrap, max_discovered_peers } => {

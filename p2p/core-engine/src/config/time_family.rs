@@ -7,6 +7,55 @@ use super::chronomatter::{ChronomatterConfig, AutoAttestConfig, KeyRotationConfi
 use super::calendar::{CalendarConfig, EncryptionConfig};
 use super::node::NodeConfig;
 
+/// Logging configuration for the TimeFamily logger.
+///
+/// Controls file output, per-component log levels, and format.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoggingConfig {
+    /// Directory where log files are written.
+    /// Default: `~/.local/share/foretias/log/`
+    #[serde(default = "default_log_dir")]
+    pub log_dir: String,
+    /// Global minimum log level. Lower levels (TRACE, DEBUG) are filtered
+    /// before any formatting work occurs. Default: "info".
+    #[serde(default = "default_log_level")]
+    pub level: String,
+    /// Per-component overrides in `tracing-subscriber` EnvFilter syntax.
+    /// Examples: ["communerd=debug", "foretias_core::chronomatter=trace"]
+    /// These refine or override the global `level` for specific modules.
+    #[serde(default)]
+    pub component_levels: Vec<String>,
+    /// Log file format: "pretty" (human-readable), "json" (structured).
+    /// Default: "pretty".
+    #[serde(default = "default_log_format")]
+    pub format: String,
+}
+
+fn default_log_dir() -> String {
+    std::env::var("HOME")
+        .map(|h| format!("{}/.local/share/foretias/log", h))
+        .unwrap_or_else(|_| "/tmp/foretias-log".to_string())
+}
+
+fn default_log_level() -> String {
+    "info".to_string()
+}
+
+fn default_log_format() -> String {
+    "pretty".to_string()
+}
+
+impl Default for LoggingConfig {
+    fn default() -> Self {
+        Self {
+            log_dir: default_log_dir(),
+            level: default_log_level(),
+            component_levels: Vec::new(),
+            format: default_log_format(),
+        }
+    }
+}
+
 /// Top-level configuration for a TimeFamily node.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TimeFamilyConfig {
@@ -21,6 +70,9 @@ pub struct TimeFamilyConfig {
     /// P2P / networking configuration
     #[serde(default)]
     pub p2p: P2PConfig,
+    /// Logging configuration (file output, levels, format)
+    #[serde(default)]
+    pub logging: LoggingConfig,
 }
 
 fn default_calendars() -> Vec<CalendarConfig> {
@@ -34,6 +86,7 @@ impl Default for TimeFamilyConfig {
             chronomatter: ChronomatterConfig::default(),
             calendars: default_calendars(),
             p2p: P2PConfig::default(),
+            logging: LoggingConfig::default(),
         }
     }
 }
@@ -164,6 +217,7 @@ impl From<NodeConfig> for TimeFamilyConfig {
                 },
                 collision: node.collision,
             },
+            logging: LoggingConfig::default(),
         }
     }
 }
