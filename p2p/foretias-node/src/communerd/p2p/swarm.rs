@@ -119,6 +119,7 @@ async fn swarm_loop(
 ) {
     let mut listener_ids: HashSet<ListenerId> = HashSet::new();
     let mut pending_get_record: HashMap<libp2p::kad::QueryId, (kad::RecordKey, Vec<kad::Record>)> = HashMap::new();
+    let mut pending_put_record: HashMap<libp2p::kad::QueryId, kad::RecordKey> = HashMap::new();
 
     loop {
         tokio::select! {
@@ -175,8 +176,17 @@ async fn swarm_loop(
                     Some(SwarmCommand::PutRecord { key, record }) => {
                         let key_vec = key.to_vec();
                         match swarm.behaviour_mut().kad.put_record(record, kad::Quorum::One) {
-                            Ok(_) => tracing::info!(key = ?key_vec, "PutRecord initiated"),
-                            Err(e) => tracing::warn!(key = ?key_vec, ?e, "PutRecord failed"),
+                            Ok(query_id) => {
+                                pending_put_record.insert(query_id, key.clone());
+                                tracing::info!(key = ?key_vec, "PutRecord initiated");
+                            }
+                            Err(e) => {
+                                let _ = tx.send(NetworkEvent::RecordPutError {
+                                    key: key.clone(),
+                                    error: e.to_string(),
+                                });
+                                tracing::warn!(key = ?key_vec, ?e, "PutRecord failed");
+                            }
                         }
                     }
                     Some(SwarmCommand::GetRecord { key }) => {
@@ -260,6 +270,21 @@ async fn swarm_loop(
                                                 records,
                                             });
                                             tracing::info!("DHT: GetRecord query finished");
+                                        }
+                                    }
+                                    kad::QueryResult::PutRecord(Ok(kad::PutRecordOk { .. })) => {
+                                        if let Some(k) = pending_put_record.remove(&id) {
+                                            let _ = tx.send(NetworkEvent::RecordPutOk { key: k });
+                                            tracing::info!("DHT: PutRecord succeeded");
+                                        }
+                                    }
+                                    kad::QueryResult::PutRecord(Err(e)) => {
+                                        if let Some(k) = pending_put_record.remove(&id) {
+                                            let _ = tx.send(NetworkEvent::RecordPutError {
+                                                key: k,
+                                                error: e.to_string(),
+                                            });
+                                            tracing::warn!(?e, "DHT: PutRecord failed");
                                         }
                                     }
                                     kad::QueryResult::GetRecord(Err(e)) => {

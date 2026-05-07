@@ -16,4 +16,8 @@ pub enum NetworkEvent {
     ListenReady { multiaddr: Multiaddr },
     /// DHT record retrieval completed
     RecordRetrieved { key: kad::RecordKey, records: Vec<kad::Record> },
+    /// DHT record put completed successfully
+    RecordPutOk { key: kad::RecordKey },
+    /// DHT record put failed
+    RecordPutError { key: kad::RecordKey, error: String },
 }

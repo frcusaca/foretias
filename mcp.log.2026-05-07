@@ -23,3 +23,132 @@
 2026-05-07T07:21:06.824581Z  INFO serve_inner: rust_mcp_server::workspace: No Cargo.toml in CWD (/home/hcbusy/webhash/foretias), will attempt workspace detection via client roots
 2026-05-07T07:21:06.824592Z  INFO serve_inner: rust_mcp_server::workspace: Checking client roots capability: supports_roots=false
 2026-05-07T07:21:06.824602Z  WARN serve_inner: rust_mcp_server::workspace: Client does not support roots capability; cannot auto-detect workspace
+2026-05-07T15:59:30.439428Z  INFO serve_inner: rmcp::service: input stream terminated
+2026-05-07T15:59:30.439608Z  INFO serve_inner: rmcp::service: serve finished quit_reason=Closed
+2026-05-07T15:59:30.439725Z  INFO rust_mcp_server: Server closed normally
+2026-05-07T15:59:43.614858Z  INFO rust_mcp_server: Starting Rust MCP Server: Args { log_level: "info", log_file: Some("mcp.log"), disabled_tools: [], workspace: None, registry: None, generate_docs: None, no_recommendations: false }
+2026-05-07T15:59:43.614970Z  INFO rust_mcp_server: Server version: 0.3.7.
+2026-05-07T15:59:43.614988Z  INFO rust_mcp_server: RMCP crate version: unknown
+2026-05-07T15:59:43.614999Z  INFO rust_mcp_server: No workspace root specified, workspace auto-detection enabled
+2026-05-07T15:59:43.628657Z  INFO serve_inner: rmcp::service: Service initialized as server peer_info=Some(InitializeRequestParams { meta: None, protocol_version: ProtocolVersion("2025-11-25"), capabilities: ClientCapabilities { experimental: None, extensions: None, roots: None, sampling: None, elicitation: None, tasks: None }, client_info: Implementation { name: "opencode", title: None, version: "1.14.40", description: None, icons: None, website_url: None } })
+2026-05-07T15:59:43.682479Z  INFO serve_inner: rmcp::service: received notification notification=InitializedNotification(NotificationNoParam { method: InitializedNotificationMethod, extensions: Extensions })
+2026-05-07T15:59:43.682707Z  INFO serve_inner: rust_mcp_server::rmcp_server: MCP client initialized
+2026-05-07T15:59:43.682786Z  INFO serve_inner: rust_mcp_server::workspace: Checking current working directory for Cargo project: Some("/home/hcbusy/webhash/foretias")
+2026-05-07T15:59:43.682838Z  INFO serve_inner: rust_mcp_server::workspace: No Cargo.toml in CWD (/home/hcbusy/webhash/foretias), will attempt workspace detection via client roots
+2026-05-07T15:59:43.682856Z  INFO serve_inner: rust_mcp_server::workspace: Checking client roots capability: supports_roots=false
+2026-05-07T15:59:43.682870Z  WARN serve_inner: rust_mcp_server::workspace: Client does not support roots capability; cannot auto-detect workspace
+2026-05-07T16:02:43.771590Z  INFO serve_inner: rmcp::service: input stream terminated
+2026-05-07T16:02:43.771733Z  INFO serve_inner: rmcp::service: serve finished quit_reason=Closed
+2026-05-07T16:02:43.771834Z  INFO rust_mcp_server: Server closed normally
+2026-05-07T16:04:49.211955Z  INFO rust_mcp_server: Starting Rust MCP Server: Args { log_level: "info", log_file: Some("mcp.log"), disabled_tools: [], workspace: None, registry: None, generate_docs: None, no_recommendations: false }
+2026-05-07T16:04:49.212041Z  INFO rust_mcp_server: Server version: 0.3.7.
+2026-05-07T16:04:49.212055Z  INFO rust_mcp_server: RMCP crate version: unknown
+2026-05-07T16:04:49.212066Z  INFO rust_mcp_server: No workspace root specified, workspace auto-detection enabled
+2026-05-07T16:04:49.226486Z  INFO serve_inner: rmcp::service: Service initialized as server peer_info=Some(InitializeRequestParams { meta: None, protocol_version: ProtocolVersion("2025-11-25"), capabilities: ClientCapabilities { experimental: None, extensions: None, roots: None, sampling: None, elicitation: None, tasks: None }, client_info: Implementation { name: "opencode", title: None, version: "1.14.33", description: None, icons: None, website_url: None } })
+2026-05-07T16:04:49.268254Z  INFO serve_inner: rmcp::service: received notification notification=InitializedNotification(NotificationNoParam { method: InitializedNotificationMethod, extensions: Extensions })
+2026-05-07T16:04:49.268460Z  INFO serve_inner: rust_mcp_server::rmcp_server: MCP client initialized
+2026-05-07T16:04:49.268537Z  INFO serve_inner: rust_mcp_server::workspace: Checking current working directory for Cargo project: Some("/home/hcbusy/webhash/foretias")
+2026-05-07T16:04:49.268581Z  INFO serve_inner: rust_mcp_server::workspace: No Cargo.toml in CWD (/home/hcbusy/webhash/foretias), will attempt workspace detection via client roots
+2026-05-07T16:04:49.268599Z  INFO serve_inner: rust_mcp_server::workspace: Checking client roots capability: supports_roots=false
+2026-05-07T16:04:49.268638Z  WARN serve_inner: rust_mcp_server::workspace: Client does not support roots capability; cannot auto-detect workspace
+2026-05-07T16:31:14.380648Z  INFO serve_inner: rmcp::service: input stream terminated
+2026-05-07T16:31:14.380789Z  INFO serve_inner: rmcp::service: serve finished quit_reason=Closed
+2026-05-07T16:31:14.380932Z  INFO rust_mcp_server: Server closed normally
+2026-05-07T16:31:22.943068Z  INFO rust_mcp_server: Starting Rust MCP Server: Args { log_level: "info", log_file: Some("mcp.log"), disabled_tools: [], workspace: None, registry: None, generate_docs: None, no_recommendations: false }
+2026-05-07T16:31:22.943218Z  INFO rust_mcp_server: Server version: 0.3.7.
+2026-05-07T16:31:22.943234Z  INFO rust_mcp_server: RMCP crate version: unknown
+2026-05-07T16:31:22.943246Z  INFO rust_mcp_server: No workspace root specified, workspace auto-detection enabled
+2026-05-07T16:31:22.959847Z  INFO serve_inner: rmcp::service: Service initialized as server peer_info=Some(InitializeRequestParams { meta: None, protocol_version: ProtocolVersion("2025-11-25"), capabilities: ClientCapabilities { experimental: None, extensions: None, roots: None, sampling: None, elicitation: None, tasks: None }, client_info: Implementation { name: "opencode", title: None, version: "1.14.41", description: None, icons: None, website_url: None } })
+2026-05-07T16:31:23.014786Z  INFO serve_inner: rmcp::service: received notification notification=InitializedNotification(NotificationNoParam { method: InitializedNotificationMethod, extensions: Extensions })
+2026-05-07T16:31:23.014963Z  INFO serve_inner: rust_mcp_server::rmcp_server: MCP client initialized
+2026-05-07T16:31:23.015024Z  INFO serve_inner: rust_mcp_server::workspace: Checking current working directory for Cargo project: Some("/home/hcbusy/webhash/foretias")
+2026-05-07T16:31:23.015055Z  INFO serve_inner: rust_mcp_server::workspace: No Cargo.toml in CWD (/home/hcbusy/webhash/foretias), will attempt workspace detection via client roots
+2026-05-07T16:31:23.015066Z  INFO serve_inner: rust_mcp_server::workspace: Checking client roots capability: supports_roots=false
+2026-05-07T16:31:23.015076Z  WARN serve_inner: rust_mcp_server::workspace: Client does not support roots capability; cannot auto-detect workspace
+2026-05-07T16:42:32.996407Z  INFO rust_mcp_server: Starting Rust MCP Server: Args { log_level: "info", log_file: Some("mcp.log"), disabled_tools: [], workspace: None, registry: None, generate_docs: None, no_recommendations: false }
+2026-05-07T16:42:32.996496Z  INFO rust_mcp_server: Server version: 0.3.7.
+2026-05-07T16:42:32.996513Z  INFO rust_mcp_server: RMCP crate version: unknown
+2026-05-07T16:42:32.996551Z  INFO rust_mcp_server: No workspace root specified, workspace auto-detection enabled
+2026-05-07T16:42:33.007771Z  INFO serve_inner: rmcp::service: Service initialized as server peer_info=Some(InitializeRequestParams { meta: None, protocol_version: ProtocolVersion("2025-11-25"), capabilities: ClientCapabilities { experimental: None, extensions: None, roots: None, sampling: None, elicitation: None, tasks: None }, client_info: Implementation { name: "opencode", title: None, version: "1.14.33", description: None, icons: None, website_url: None } })
+2026-05-07T16:42:33.042150Z  INFO serve_inner: rmcp::service: received notification notification=InitializedNotification(NotificationNoParam { method: InitializedNotificationMethod, extensions: Extensions })
+2026-05-07T16:42:33.042362Z  INFO serve_inner: rust_mcp_server::rmcp_server: MCP client initialized
+2026-05-07T16:42:33.042489Z  INFO serve_inner: rust_mcp_server::workspace: Checking current working directory for Cargo project: Some("/home/hcbusy/webhash/foretias")
+2026-05-07T16:42:33.042555Z  INFO serve_inner: rust_mcp_server::workspace: No Cargo.toml in CWD (/home/hcbusy/webhash/foretias), will attempt workspace detection via client roots
+2026-05-07T16:42:33.042577Z  INFO serve_inner: rust_mcp_server::workspace: Checking client roots capability: supports_roots=false
+2026-05-07T16:42:33.042592Z  WARN serve_inner: rust_mcp_server::workspace: Client does not support roots capability; cannot auto-detect workspace
+2026-05-07T16:43:13.562745Z  INFO serve_inner: rmcp::service: input stream terminated
+2026-05-07T16:43:13.562990Z  INFO serve_inner: rmcp::service: serve finished quit_reason=Closed
+2026-05-07T16:43:13.563169Z  INFO rust_mcp_server: Server closed normally
+2026-05-07T16:43:20.297671Z  INFO rust_mcp_server: Starting Rust MCP Server: Args { log_level: "info", log_file: Some("mcp.log"), disabled_tools: [], workspace: None, registry: None, generate_docs: None, no_recommendations: false }
+2026-05-07T16:43:20.297737Z  INFO rust_mcp_server: Server version: 0.3.7.
+2026-05-07T16:43:20.297747Z  INFO rust_mcp_server: RMCP crate version: unknown
+2026-05-07T16:43:20.297753Z  INFO rust_mcp_server: No workspace root specified, workspace auto-detection enabled
+2026-05-07T16:43:20.314159Z  INFO serve_inner: rmcp::service: Service initialized as server peer_info=Some(InitializeRequestParams { meta: None, protocol_version: ProtocolVersion("2025-11-25"), capabilities: ClientCapabilities { experimental: None, extensions: None, roots: None, sampling: None, elicitation: None, tasks: None }, client_info: Implementation { name: "opencode", title: None, version: "1.14.33", description: None, icons: None, website_url: None } })
+2026-05-07T16:43:20.352109Z  INFO serve_inner: rmcp::service: received notification notification=InitializedNotification(NotificationNoParam { method: InitializedNotificationMethod, extensions: Extensions })
+2026-05-07T16:43:20.352260Z  INFO serve_inner: rust_mcp_server::rmcp_server: MCP client initialized
+2026-05-07T16:43:20.352302Z  INFO serve_inner: rust_mcp_server::workspace: Checking current working directory for Cargo project: Some("/home/hcbusy/webhash/foretias")
+2026-05-07T16:43:20.352327Z  INFO serve_inner: rust_mcp_server::workspace: No Cargo.toml in CWD (/home/hcbusy/webhash/foretias), will attempt workspace detection via client roots
+2026-05-07T16:43:20.352338Z  INFO serve_inner: rust_mcp_server::workspace: Checking client roots capability: supports_roots=false
+2026-05-07T16:43:20.352348Z  WARN serve_inner: rust_mcp_server::workspace: Client does not support roots capability; cannot auto-detect workspace
+2026-05-07T16:49:57.523110Z  INFO rust_mcp_server: Starting Rust MCP Server: Args { log_level: "info", log_file: Some("mcp.log"), disabled_tools: [], workspace: None, registry: None, generate_docs: None, no_recommendations: false }
+2026-05-07T16:49:57.523195Z  INFO rust_mcp_server: Server version: 0.3.7.
+2026-05-07T16:49:57.523212Z  INFO rust_mcp_server: RMCP crate version: unknown
+2026-05-07T16:49:57.523223Z  INFO rust_mcp_server: No workspace root specified, workspace auto-detection enabled
+2026-05-07T16:49:57.543938Z  INFO serve_inner: rmcp::service: Service initialized as server peer_info=Some(InitializeRequestParams { meta: None, protocol_version: ProtocolVersion("2025-11-25"), capabilities: ClientCapabilities { experimental: None, extensions: None, roots: None, sampling: None, elicitation: None, tasks: None }, client_info: Implementation { name: "opencode", title: None, version: "1.14.33", description: None, icons: None, website_url: None } })
+2026-05-07T16:49:57.587745Z  INFO serve_inner: rmcp::service: received notification notification=InitializedNotification(NotificationNoParam { method: InitializedNotificationMethod, extensions: Extensions })
+2026-05-07T16:49:57.587998Z  INFO serve_inner: rust_mcp_server::rmcp_server: MCP client initialized
+2026-05-07T16:49:57.588078Z  INFO serve_inner: rust_mcp_server::workspace: Checking current working directory for Cargo project: Some("/home/hcbusy/webhash/foretias")
+2026-05-07T16:49:57.588123Z  INFO serve_inner: rust_mcp_server::workspace: No Cargo.toml in CWD (/home/hcbusy/webhash/foretias), will attempt workspace detection via client roots
+2026-05-07T16:49:57.588141Z  INFO serve_inner: rust_mcp_server::workspace: Checking client roots capability: supports_roots=false
+2026-05-07T16:49:57.588156Z  WARN serve_inner: rust_mcp_server::workspace: Client does not support roots capability; cannot auto-detect workspace
+2026-05-07T16:50:06.376924Z  INFO serve_inner: rmcp::service: input stream terminated
+2026-05-07T16:50:06.377147Z  INFO serve_inner: rmcp::service: serve finished quit_reason=Closed
+2026-05-07T16:50:06.377280Z  INFO rust_mcp_server: Server closed normally
+2026-05-07T16:50:14.547680Z  INFO rust_mcp_server: Starting Rust MCP Server: Args { log_level: "info", log_file: Some("mcp.log"), disabled_tools: [], workspace: None, registry: None, generate_docs: None, no_recommendations: false }
+2026-05-07T16:50:14.547774Z  INFO rust_mcp_server: Server version: 0.3.7.
+2026-05-07T16:50:14.547790Z  INFO rust_mcp_server: RMCP crate version: unknown
+2026-05-07T16:50:14.547801Z  INFO rust_mcp_server: No workspace root specified, workspace auto-detection enabled
+2026-05-07T16:50:14.565115Z  INFO serve_inner: rmcp::service: Service initialized as server peer_info=Some(InitializeRequestParams { meta: None, protocol_version: ProtocolVersion("2025-11-25"), capabilities: ClientCapabilities { experimental: None, extensions: None, roots: None, sampling: None, elicitation: None, tasks: None }, client_info: Implementation { name: "opencode", title: None, version: "1.14.33", description: None, icons: None, website_url: None } })
+2026-05-07T16:50:14.622912Z  INFO serve_inner: rmcp::service: received notification notification=InitializedNotification(NotificationNoParam { method: InitializedNotificationMethod, extensions: Extensions })
+2026-05-07T16:50:14.623077Z  INFO serve_inner: rust_mcp_server::rmcp_server: MCP client initialized
+2026-05-07T16:50:14.623110Z  INFO serve_inner: rust_mcp_server::workspace: Checking current working directory for Cargo project: Some("/home/hcbusy/webhash/foretias")
+2026-05-07T16:50:14.623132Z  INFO serve_inner: rust_mcp_server::workspace: No Cargo.toml in CWD (/home/hcbusy/webhash/foretias), will attempt workspace detection via client roots
+2026-05-07T16:50:14.623141Z  INFO serve_inner: rust_mcp_server::workspace: Checking client roots capability: supports_roots=false
+2026-05-07T16:50:14.623149Z  WARN serve_inner: rust_mcp_server::workspace: Client does not support roots capability; cannot auto-detect workspace
+2026-05-07T17:05:52.107907Z  INFO serve_inner: rust_mcp_server::command: Executing command for cargo-test: cargo test --workspace --all-targets --locked
+2026-05-07T17:05:52.209114Z  WARN serve_inner: rust_mcp_server::command: Command execution failed for cargo-test (status: Some(101)): stdout='
+
+', stderr='
+error: could not find `Cargo.toml` in `/home/hcbusy/webhash/foretias` or any parent directory
+'
+2026-05-07T17:12:58.837070Z  INFO serve_inner: rmcp::service: input stream terminated
+2026-05-07T17:12:58.837233Z  INFO serve_inner: rmcp::service: serve finished quit_reason=Closed
+2026-05-07T17:12:58.837349Z  INFO rust_mcp_server: Server closed normally
+2026-05-07T18:14:43.899697Z  INFO serve_inner: rmcp::service: input stream terminated
+2026-05-07T18:14:43.899848Z  INFO serve_inner: rmcp::service: serve finished quit_reason=Closed
+2026-05-07T18:14:43.900015Z  INFO rust_mcp_server: Server closed normally
+2026-05-07T18:14:52.514149Z  INFO rust_mcp_server: Starting Rust MCP Server: Args { log_level: "info", log_file: Some("mcp.log"), disabled_tools: [], workspace: None, registry: None, generate_docs: None, no_recommendations: false }
+2026-05-07T18:14:52.514238Z  INFO rust_mcp_server: Server version: 0.3.7.
+2026-05-07T18:14:52.514250Z  INFO rust_mcp_server: RMCP crate version: unknown
+2026-05-07T18:14:52.514257Z  INFO rust_mcp_server: No workspace root specified, workspace auto-detection enabled
+2026-05-07T18:14:52.538285Z  INFO serve_inner: rmcp::service: Service initialized as server peer_info=Some(InitializeRequestParams { meta: None, protocol_version: ProtocolVersion("2025-11-25"), capabilities: ClientCapabilities { experimental: None, extensions: None, roots: None, sampling: None, elicitation: None, tasks: None }, client_info: Implementation { name: "opencode", title: None, version: "1.14.33", description: None, icons: None, website_url: None } })
+2026-05-07T18:14:52.585711Z  INFO serve_inner: rmcp::service: received notification notification=InitializedNotification(NotificationNoParam { method: InitializedNotificationMethod, extensions: Extensions })
+2026-05-07T18:14:52.585998Z  INFO serve_inner: rust_mcp_server::rmcp_server: MCP client initialized
+2026-05-07T18:14:52.586052Z  INFO serve_inner: rust_mcp_server::workspace: Checking current working directory for Cargo project: Some("/home/hcbusy/webhash/foretias")
+2026-05-07T18:14:52.586079Z  INFO serve_inner: rust_mcp_server::workspace: No Cargo.toml in CWD (/home/hcbusy/webhash/foretias), will attempt workspace detection via client roots
+2026-05-07T18:14:52.586090Z  INFO serve_inner: rust_mcp_server::workspace: Checking client roots capability: supports_roots=false
+2026-05-07T18:14:52.586099Z  WARN serve_inner: rust_mcp_server::workspace: Client does not support roots capability; cannot auto-detect workspace
+2026-05-07T18:20:01.935203Z  INFO serve_inner: rmcp::service: input stream terminated
+2026-05-07T18:20:01.935441Z  INFO serve_inner: rmcp::service: serve finished quit_reason=Closed
+2026-05-07T18:20:01.935626Z  INFO rust_mcp_server: Server closed normally
+2026-05-07T18:23:57.515187Z  INFO rust_mcp_server: Starting Rust MCP Server: Args { log_level: "info", log_file: Some("mcp.log"), disabled_tools: [], workspace: None, registry: None, generate_docs: None, no_recommendations: false }
+2026-05-07T18:23:57.515291Z  INFO rust_mcp_server: Server version: 0.3.7.
+2026-05-07T18:23:57.515307Z  INFO rust_mcp_server: RMCP crate version: unknown
+2026-05-07T18:23:57.515319Z  INFO rust_mcp_server: No workspace root specified, workspace auto-detection enabled
+2026-05-07T18:23:57.523630Z  INFO serve_inner: rmcp::service: Service initialized as server peer_info=Some(InitializeRequestParams { meta: None, protocol_version: ProtocolVersion("2025-11-25"), capabilities: ClientCapabilities { experimental: None, extensions: None, roots: None, sampling: None, elicitation: None, tasks: None }, client_info: Implementation { name: "opencode", title: None, version: "1.14.33", description: None, icons: None, website_url: None } })
+2026-05-07T18:23:57.560713Z  INFO serve_inner: rmcp::service: received notification notification=InitializedNotification(NotificationNoParam { method: InitializedNotificationMethod, extensions: Extensions })
+2026-05-07T18:23:57.560928Z  INFO serve_inner: rust_mcp_server::rmcp_server: MCP client initialized
+2026-05-07T18:23:57.560993Z  INFO serve_inner: rust_mcp_server::workspace: Checking current working directory for Cargo project: Some("/home/hcbusy/webhash/foretias")
+2026-05-07T18:23:57.561036Z  INFO serve_inner: rust_mcp_server::workspace: No Cargo.toml in CWD (/home/hcbusy/webhash/foretias), will attempt workspace detection via client roots
+2026-05-07T18:23:57.561054Z  INFO serve_inner: rust_mcp_server::workspace: Checking client roots capability: supports_roots=false
+2026-05-07T18:23:57.561069Z  WARN serve_inner: rust_mcp_server::workspace: Client does not support roots capability; cannot auto-detect workspace
