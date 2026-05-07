@@ -9,6 +9,7 @@ use foretias_core::foretias::tick::CalendarLookup;
 use foretias_core::foretias::{Calendar as CoreCalendar, TickRecord};
 use foretias_core::error::NodeError;
 use parking_lot::RwLock;
+use tracing::{debug, info};
 
 pub use mirror::{MirrorStore, compute_hash_sanity};
 
@@ -19,6 +20,7 @@ pub struct Calendar {
 
 impl Calendar {
     pub fn new(tbid: [u8; 16], tbn: &str) -> Self {
+        info!(component = "calendar", tbid = %hex::encode(tbid), tbn = %tbn, "calendar initialized");
         Self {
             inner: Arc::new(RwLock::new(CoreCalendar::new(tbid, tbn))),
             tbn: tbn.to_string(),
@@ -27,7 +29,9 @@ impl Calendar {
 
     pub fn from_persisted(path: &str) -> Result<Self, NodeError> {
         let cal = CoreCalendar::load(path)?;
+        let tbid = cal.tbid();
         let tbn = cal.tbn.clone();
+        info!(component = "calendar", tbid = %hex::encode(tbid), tbn = %tbn, "calendar loaded from persisted: {}", path);
         Ok(Self {
             inner: Arc::new(RwLock::new(cal)),
             tbn,
@@ -39,7 +43,11 @@ impl Calendar {
     }
 
     pub fn save(&self, path: &str) -> Result<(), NodeError> {
-        self.inner.read().save(path)
+        let cal = self.inner.read();
+        let tick_count = cal.ticks.len();
+        cal.save(path)?;
+        info!(component = "calendar", tbid = %hex::encode(cal.tbid()), tick_count, "calendar saved to: {}", path);
+        Ok(())
     }
 
     /// Save the calendar wrapped in `PersistedCalendar` format (with metadata header).
@@ -69,10 +77,12 @@ impl Calendar {
 }
 
 impl TickObserver for Calendar {
-    fn on_tick_advance(&self, _tick_number: u64, _public_key: &[u8], tick_record: &TickRecord) {
+    fn on_tick_advance(&self, tick_number: u64, _public_key: &[u8], tick_record: &TickRecord) {
         let mut cal = self.inner.write();
         if let Err(e) = cal.append(tick_record.clone()) {
-            tracing::error!("Calendar::on_tick_advance failed: {}", e);
+            tracing::error!(component = "calendar", tbid = %hex::encode(cal.tbid()), tick = tick_number, "calendar: on_tick_advance failed: {}", e);
+        } else {
+            debug!(component = "calendar", tbid = %hex::encode(cal.tbid()), tick = tick_number, tick_count = cal.ticks.len(), "calendar: heartbeat");
         }
     }
 }

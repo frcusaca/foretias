@@ -10,6 +10,7 @@ pub mod dht_peer_source;
 pub mod p2p;
 
 use std::sync::{Arc, OnceLock};
+use rand::seq::SliceRandom;
 
 use foretias_core::config::NodeConfig;
 use foretias_core::collision::{CollisionDetector, CollisionEvent};
@@ -228,7 +229,7 @@ impl Communerd {
         let _ = self.p2p_cmd_tx.set(handle.cmd_tx);
         *self._local_multiaddr_arc.lock().unwrap() = handle.local_multiaddr.lock().unwrap().clone();
 
-        tracing::info!(peer = %peer_id, "libp2p swarm started");
+        tracing::info!(component = "communerd", peer = %peer_id, "communerd: libp2p swarm started");
 
         // Create collision detector (shared between gossip loop and heartbeat broadcaster)
         let pub_key = self.crypto.public_key();
@@ -376,7 +377,7 @@ impl Communerd {
                                         .unwrap_or(0),
                                 };
                                 peer_pool.add_peer(peer_addr).await;
-                                tracing::info!(peer = %peer_record.peer_id, "DHT-discovered peer added to pool");
+                                tracing::info!(component = "communerd", peer = %peer_record.peer_id, "communerd: DHT-discovered peer added to pool");
                             }
                         }
                     }
@@ -410,7 +411,7 @@ impl Communerd {
                             .unwrap_or(0),
                     };
                     peer_pool.add_peer(peer_addr).await;
-                    tracing::info!(peer = %peer_id, "DHT-discovered peer added to pool");
+                    tracing::info!(component = "communerd", peer = %peer_id, "communerd: DHT-discovered peer added to pool");
                 }
                 _ => {}
             }
@@ -489,8 +490,25 @@ impl Communerd {
             .copied()
             .ok_or_else(|| NodeError::Internal("PeerId not available".into()))?;
 
-        // Step 1: Dial all known servers
-        for addr_str in &known_servers {
+        // Step 1: Shuffle known servers so each node connects in random order
+        let mut servers: Vec<String> = known_servers
+            .iter()
+            .filter(|s| {
+                // Self-recognition: skip dialing our own RPC address
+                if *s == json_rpc_addr {
+                    tracing::debug!(addr = %s, "skipping self-dial (matches own RPC address)");
+                    false
+                } else {
+                    true
+                }
+            })
+            .cloned()
+            .collect();
+        let mut rng = rand::thread_rng();
+        servers.shuffle(&mut rng);
+
+        // Dial all (non-self) known servers in random order
+        for addr_str in &servers {
             let multiaddr = resolve_known_server(addr_str)?;
             let _ = cmd_tx.send(SwarmCommand::Dial { addr: multiaddr });
         }
@@ -527,7 +545,7 @@ impl Communerd {
             expires: None,
         };
         let _ = cmd_tx.send(SwarmCommand::PutRecord { key: key.clone(), record });
-        tracing::info!(peer = %peer_id, "self-registration initiated");
+        tracing::info!(component = "communerd", peer = %peer_id, "communerd: self-registration initiated");
 
         let tbid_hex = hex::encode(tbid);
         let tbid_key = kad::RecordKey::new(&format!("/foretias/{}/tbid/{}/v1", namespace, tbid_hex));
@@ -539,7 +557,7 @@ impl Communerd {
             expires: None,
         };
         let _ = cmd_tx.send(SwarmCommand::PutRecord { key: tbid_key.clone(), record: tbid_record });
-        tracing::info!(tbid = %tbid_hex, "TBID index record published");
+        tracing::info!(component = "communerd", tbid = %tbid_hex, "communerd: TBID index record published");
 
         // Step 5: Discover peers (GET record)
         let _ = cmd_tx.send(SwarmCommand::GetRecord { key: key.clone() });
@@ -613,7 +631,7 @@ impl Communerd {
             expires: None,
         };
         let _ = cmd_tx.send(SwarmCommand::PutRecord { key: tbid_key, record: tbid_record });
-        tracing::debug!(peer = %peer_id, "self-registration refreshed");
+        tracing::debug!(component = "communerd", peer = %peer_id, "communerd: self-registration refreshed");
     }
 
     pub fn lookup_tbid_cached(&self, tbid_hex: &str) -> Option<PeerRegistrationRecord> {
@@ -682,12 +700,40 @@ impl PeerMessenger for Communerd {
     ) -> Result<foretias_core::foretias::callbacks::CommunityResponse, CoreTransportError> {
         match query {
             CommunityQuery::KnownPeers => {
-                Ok(CommunityResponse::KnownPeers(Vec::new()))
+                // Bridge sync trait → async PeerPool via tokio block_on.
+                // Safe: we hold no async-unsafe locks here, and get_peers() is a
+                // non-blocking read (tokio::sync::RwLock::read is future-based).
+                let peers = match tokio::runtime::Handle::try_current() {
+                    Ok(handle) => {
+                        handle.block_on(async { self.peer_pool.get_peers().await })
+                    }
+                    Err(_) => {
+                        tracing::warn!("query_community: no tokio runtime available, returning empty peer list");
+                        Vec::new()
+                    }
+                };
+                // Map our PeerAddr (with json_rpc, peer_id, last_seen_ns) to core PeerAddr (json_rpc only)
+                let core_peers: Vec<CorePeerAddr> = peers
+                    .into_iter()
+                    .filter(|p| !p.json_rpc.is_empty())
+                    .map(|p| CorePeerAddr { json_rpc: p.json_rpc })
+                    .collect();
+                Ok(CommunityResponse::KnownPeers(core_peers))
             }
             CommunityQuery::PeerByAddr(addr) => {
+                // Check liveness: is this peer in our pool and does it have a recent last_seen_ns?
+                let alive = match tokio::runtime::Handle::try_current() {
+                    Ok(handle) => {
+                        handle.block_on(async {
+                            let peers = self.peer_pool.get_peers().await;
+                            peers.iter().any(|p| p.json_rpc == addr.json_rpc && p.last_seen_ns > 0)
+                        })
+                    }
+                    Err(_) => false,
+                };
                 Ok(CommunityResponse::PeerStatus {
                     peer: addr,
-                    alive: false,
+                    alive,
                 })
             }
         }

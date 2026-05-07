@@ -302,22 +302,24 @@ impl Chronomatter {
         );
         let this = Arc::clone(self);
 
+        let tbid = this.get_tbid();
         let handle = tokio::spawn(async move {
             let mut interval = tokio::time::interval(duration);
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
             loop {
                 interval.tick().await;
-                debug!("chronomatter daemon tick");
+                let tick_before = this.current_tick.load(SeqCst);
+                debug!(tbid = %hex::encode(tbid), tick = tick_before, "chronomatter: heartbeat");
                 if let Err(e) = this.daemon_tick() {
-                    error!("daemon tick failed: {}", e);
+                    error!(tbid = %hex::encode(tbid), "chronomatter: daemon tick failed: {}", e);
                 }
             }
         });
 
         let mut daemon = self.daemon_handle.lock();
         *daemon = Some(handle);
-        info!("chronomatter daemon started with chronon interval: {} ms", chronon_ms);
+        info!(tbid = %hex::encode(self.tbid), component = "chronomatter", "chronomatter daemon started with chronon interval: {} ms", chronon_ms);
     }
 
     pub fn stop_daemon(&self) {

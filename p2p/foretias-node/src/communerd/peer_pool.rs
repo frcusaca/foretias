@@ -6,7 +6,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
-use tracing::warn;
+use tracing::{debug, info, warn};
 
 use super::transport::{PeerAddr, PeerTransport};
 
@@ -43,13 +43,16 @@ impl PeerPool {
     pub async fn add_peer(&self, addr: PeerAddr) {
         let mut peers = self.peers.write().await;
         if !peers.iter().any(|p| p.json_rpc == addr.json_rpc) {
+            let peer_rpc = addr.json_rpc.clone();
             peers.push(addr);
+            info!(component = "communerd", peer = %peer_rpc, "communerd: peer added");
         }
     }
 
     pub async fn remove_peer(&self, addr: &PeerAddr) {
         let mut peers = self.peers.write().await;
         peers.retain(|p| p.json_rpc != addr.json_rpc);
+        info!(component = "communerd", peer = %addr.json_rpc, "communerd: peer removed");
     }
 
     pub async fn get_peers(&self) -> Vec<PeerAddr> {
@@ -59,9 +62,12 @@ impl PeerPool {
     /// Start background liveness ping loop.
     pub async fn start_liveness_pings(self) {
         if self.peers.read().await.is_empty() {
-            warn!("no peers configured, liveness pings disabled");
+            warn!(component = "communerd", "no peers configured, liveness pings disabled");
             return;
         }
+
+        info!(component = "communerd", "liveness ping loop started, interval={}s, peers={}",
+            self.ping_interval_secs, self.peers.read().await.len());
 
         let mut interval = tokio::time::interval(Duration::from_secs(
             self.ping_interval_secs.max(1),
@@ -72,10 +78,16 @@ impl PeerPool {
             interval.tick().await;
             let peers = self.get_peers().await;
             for peer in &peers {
-                if let Err(e) = self.transport.ping(peer).await {
-                    warn!("liveness ping failed for {}: {}", peer, e);
+                match self.transport.ping(peer).await {
+                    Ok(()) => {
+                        debug!(component = "communerd", peer = %peer.json_rpc, "liveness ping: alive");
+                    }
+                    Err(e) => {
+                        warn!(component = "communerd", peer = %peer.json_rpc, "liveness ping failed: {}", e);
+                    }
                 }
             }
+            debug!(component = "communerd", peer_count = peers.len(), "communerd: heartbeat");
         }
     }
 }
@@ -109,6 +121,16 @@ mod tests {
 
         async fn ping(&self, _peer: &PeerAddr) -> Result<(), crate::communerd::transport::TransportError> {
             Ok(())
+        }
+
+        async fn route_stamp(
+            &self,
+            _peer: &PeerAddr,
+            _target_tbid: &str,
+            _content_hex: &str,
+            _echo: &str,
+        ) -> Result<serde_json::Value, crate::communerd::transport::TransportError> {
+            Ok(serde_json::json!({}))
         }
     }
 

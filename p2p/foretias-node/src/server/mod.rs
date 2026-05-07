@@ -267,10 +267,12 @@ async fn handle_connection(
     let (mut session, stream) = match noise::noise_handshake(stream, &static_priv, None, false).await {
         Ok(res) => res,
         Err(e) => {
-            tracing::warn!("noise handshake failed: {}", e);
+            tracing::warn!(component = "server", tbid = %hex::encode(server.get_tbid()), "noise handshake failed: {}", e);
             return Err(NodeError::Internal("noise handshake failed".into()));
         }
     };
+    let peer_addr = stream.peer_addr().ok().map(|a| a.to_string());
+    tracing::info!(component = "server", tbid = %hex::encode(server.get_tbid()), peer = %peer_addr.as_deref().unwrap_or("unknown"), "noise handshake: success");
 
     let (reader, writer) = stream.into_split();
     let mut reader = tokio::io::BufReader::new(reader);
