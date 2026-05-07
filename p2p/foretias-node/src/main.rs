@@ -213,10 +213,10 @@ fn humanize_nanoseconds(ns: u64) -> String {
 
     match parts.len() {
         0 => format_comma_delimited(ns, "ns"),
-        1 => parts.into_iter().next().unwrap(),
+        1 => parts.into_iter().next().expect("parts has 1 element"),
         2 => format!("{} and {}", parts[0], parts[1]),
         _ => {
-            let last = parts.pop().unwrap();
+            let last = parts.pop().expect("parts.len() >= 3 in this arm");
             format!("{}, and {}", parts.join(", "), last)
         }
     }
@@ -260,7 +260,8 @@ fn read_foretis(foretis: Option<String>, foretis_file: Option<String>) -> Result
 fn client_echo() -> String {
     let now_ns = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
+        .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "system time before UNIX epoch"))
+        .unwrap_or_else(|_| std::time::Duration::from_secs(0))
         .as_nanos() as u64;
     format!("UE+{}ns", now_ns)
 }
@@ -326,7 +327,7 @@ async fn cmd_serve(
         let persist = persist_path.ok_or("--persist-path is required for --dormant mode")?;
         let json_path = PathBuf::from(&persist);
         TimeFamilyServer::from_calendar(
-            json_path.to_str().unwrap(),
+            json_path.to_str().ok_or_else(|| format!("persist path contains invalid UTF-8: {:?}", json_path))?,
             &addr,
         )?
     } else {
@@ -357,7 +358,8 @@ async fn cmd_serve(
     } else if !known_servers.is_empty() {
         let port = foretias_node::communerd::p2p::swarm::find_free_port(port_range.clone())
             .map_err(|e| format!("failed to find free port in {}: {}", p2p_port_range, e))?;
-        Some(format!("/ip4/0.0.0.0/tcp/{}", port).parse().unwrap())
+        Some(format!("/ip4/0.0.0.0/tcp/{}", port).parse()
+            .map_err(|e| format!("failed to parse auto listen address: {}", e))?)
     } else {
         None
     };
@@ -416,9 +418,9 @@ async fn cmd_serve(
     if !known_servers.is_empty() {
         println!("  Known Servers : {}", known_servers.join(", "));
     }
-    if server.communerd().is_some() {
-        println!("  Peers  : {}", server.communerd().unwrap().config().peers.join(", "));
-        println!("  Auto Attest Every: {} chronons", server.communerd().unwrap().config().auto_attest_every_n);
+    if let Some(c) = server.communerd() {
+        println!("  Peers  : {}", c.config().peers.join(", "));
+        println!("  Auto Attest Every: {} chronons", c.config().auto_attest_every_n);
     }
 
     let handle = server.clone().start()?;

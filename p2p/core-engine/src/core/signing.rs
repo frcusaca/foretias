@@ -6,7 +6,9 @@ use crate::error::{CryptoError, c_result_to_error};
 
 /// Sign a message with Ed25519.
 pub fn ed25519_sign(priv_key: &ForetiasPrivKey32, msg: &[u8]) -> Result<ForetiasSig64, CryptoError> {
+    // SAFETY: zeroing known-good #[repr(C)] struct from bindings.
     let mut sig = unsafe { std::mem::zeroed() };
+    // SAFETY: priv_key, msg, sig buffers are valid for their lengths.
     let rc = unsafe {
         foretias_ed25519_sign(priv_key, msg.as_ptr(), msg.len(), &mut sig)
     };
@@ -25,6 +27,7 @@ pub fn ed25519_verify(
     msg: &[u8],
     sig: &ForetiasSig64,
 ) -> Result<bool, CryptoError> {
+    // SAFETY: pub_key, msg, sig buffers are valid for their lengths.
     let rc = unsafe {
         foretias_ed25519_verify(pub_key, msg.as_ptr(), msg.len(), sig)
     };

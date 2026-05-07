@@ -34,7 +34,7 @@ pub enum PublicKeyBytes {
 }
 
 /// A 32-byte shared secret derived via ECDH; zeroized on drop.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct SharedSecret(pub [u8; 32]);
 
 impl Drop for SharedSecret {
@@ -125,12 +125,10 @@ pub trait CryptoServer: Send + Sync {
     fn signature_algorithm(&self) -> SignatureAlgorithm;
 
     /// Signs with the server's configured algorithm.
-    /// Replaces the old `sign()` which was always Ed25519.
     fn sign_with(&self, msg: &[u8], alg: SignatureAlgorithm)
         -> Result<SignatureBytes, CryptoError>;
 
     /// Verifies a signature given the algorithm ID.
-    /// The algorithm ID is carried in the Foretis/TickRecord itself.
     fn verify_with(&self,
         pub_key: &SignatureBytes,
         alg_id: &str,

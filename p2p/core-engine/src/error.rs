@@ -59,6 +59,9 @@ pub enum NodeError {
     /// The peer's algorithm does not match the expected algorithm.
     #[error("algorithm mismatch: {0}")]
     AlgorithmMismatch(String),
+    /// Input data failed validation (e.g. invalid tick number or empty key).
+    #[error("invalid input: {0}")]
+    InvalidInput(String),
 }
 
 /// Errors originating from the cryptographic backend.

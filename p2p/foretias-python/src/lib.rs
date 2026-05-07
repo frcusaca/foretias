@@ -339,8 +339,10 @@ impl PyTimeFamily {
         *tick += 1;
         let tick_number = *tick;
 
+        let clock = foretias_core::clock::SystemClock;
         let foretis = foretias::tick::stamp(
             self.server.as_ref(),
+            &clock,
             &self.tbid,
             tick_number,
             content,

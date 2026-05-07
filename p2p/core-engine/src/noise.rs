@@ -30,6 +30,9 @@ const HANDSHAKE_MAX: usize = 128;
 /// Opaque handle to a C11 `ForetiasNoiseState` with RAII cleanup.
 pub struct NoiseSession(ManuallyDrop<NonNull<ForetiasNoiseState>>);
 
+// SAFETY: NoiseSession wraps a C11 `ForetiasNoiseState` allocated via std::alloc.
+// The C11 state is only accessed through this handle, and Drop ensures deterministic
+// cleanup via foretias_noise_destroy + dealloc. No interior mutability exists in C.
 unsafe impl Send for NoiseSession {}
 
 impl NoiseSession {
@@ -69,6 +72,7 @@ impl NoiseSession {
             their_static_pub.map_or(std::ptr::null(), |p| p as *const _ as *const ForetiasPubKey32);
 
         let layout = std::alloc::Layout::new::<ForetiasNoiseState>();
+        // SAFETY: alloc_zeroed returns a valid, aligned pointer for the layout; null check below guards allocation failure.
         let state_ptr = unsafe {
             let ptr = std::alloc::alloc_zeroed(layout);
             if ptr.is_null() {
@@ -77,6 +81,7 @@ impl NoiseSession {
             ptr as *mut ForetiasNoiseState
         };
 
+        // SAFETY: state_ptr is valid and aligned (from alloc_zeroed above); priv_key and their_pub remain valid for duration of this call.
         let rc = unsafe {
             foretias_noise_init_ed25519(
                 state_ptr,
@@ -91,7 +96,10 @@ impl NoiseSession {
 
         c_result_to_error(rc)?;
 
-        Ok(Self(ManuallyDrop::new(NonNull::new(state_ptr).unwrap())))
+        // SAFETY: C11 API guarantees non-null pointer on success (rc == 0).
+        let ptr = NonNull::new(state_ptr)
+            .ok_or(CryptoError::BadInput("noise: C library returned null state pointer"))?;
+        Ok(Self(ManuallyDrop::new(ptr)))
     }
 
     /// Execute the next handshake step.
@@ -105,6 +113,7 @@ impl NoiseSession {
         let mut output = vec![0u8; HANDSHAKE_MAX];
         let mut output_len = output.len() as usize;
 
+        // SAFETY: self.0 is valid (invariant of NoiseSession); output buf is HANDSHAKE_MAX bytes; input ptr is valid for its length or null.
         let rc = unsafe {
             foretias_noise_step(
                 self.0.as_ptr(),
@@ -128,6 +137,7 @@ impl NoiseSession {
         let mut ciphertext = vec![0u8; ct_len];
         let mut actual_len = ct_len;
 
+        // SAFETY: self.0 is valid; plaintext and ciphertext buffers are valid for their respective lengths.
         let rc = unsafe {
             foretias_noise_send(
                 self.0.as_ptr(),
@@ -151,6 +161,7 @@ impl NoiseSession {
         let mut plaintext = vec![0u8; ciphertext.len()];
         let mut actual_len = plaintext.len();
 
+        // SAFETY: self.0 is valid; ciphertext and plaintext buffers are valid for their respective lengths.
         let rc = unsafe {
             foretias_noise_recv(
                 self.0.as_ptr(),
@@ -168,17 +179,20 @@ impl NoiseSession {
 
     /// Check if the handshake has completed and encrypted transport is ready.
     pub fn is_complete(&self) -> bool {
+        // SAFETY: self.0 is valid for the lifetime of this NoiseSession.
         unsafe { (*self.0.as_ptr()).handshake_complete != 0 }
     }
 
     /// Get the local static public key (X25519 point derived from Ed25519 key).
     pub fn local_static_pub(&self) -> [u8; 32] {
+        // SAFETY: self.0 is valid for the lifetime of this NoiseSession.
         unsafe { (*self.0.as_ptr()).local_static_pub }
     }
 
     /// Get the remote static public key (populated after handshake).
     pub fn remote_static_pub(&self) -> Option<[u8; 32]> {
         if self.is_complete() {
+            // SAFETY: self.0 is valid; remote_static is populated by C11 after handshake completion.
             let pub_key = unsafe { (*self.0.as_ptr()).remote_static };
             if pub_key.iter().any(|&b| b != 0) {
                 Some(pub_key)
@@ -193,6 +207,7 @@ impl NoiseSession {
 
 impl Drop for NoiseSession {
     fn drop(&mut self) {
+        // SAFETY: self.0 is valid (RAII guarantee); layout matches the allocation used in NoiseSession::new.
         unsafe {
             foretias_noise_destroy(self.0.as_ptr());
             let layout = std::alloc::Layout::new::<ForetiasNoiseState>();
@@ -245,7 +260,9 @@ pub async fn noise_handshake(
         session.step(Some(&e3))?;
     }
 
-    assert!(session.is_complete(), "handshake should be complete");
+    if !session.is_complete() {
+        return Err(CryptoError::Internal(-99));
+    }
     Ok((session, stream))
 }
 

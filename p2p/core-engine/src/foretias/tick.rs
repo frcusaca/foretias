@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::clock::Clock;
 use crate::crypto_server::CryptoServer;
 use crate::core::rng::random_bytes;
 use crate::error::NodeError;
@@ -32,6 +33,39 @@ pub struct TickRecord {
     pub external_attestations: Vec<super::external_attestation::ExternalAttestation>,
 }
 
+impl TickRecord {
+    /// Create a validated TickRecord.
+    ///
+    /// # Errors
+    /// Returns `NodeError::InvalidInput` if `tick_number` is 0 or `public_key` is empty.
+    pub fn new(
+        tick_number: u64,
+        public_key: Vec<u8>,
+        signature_algorithm: String,
+        forward_foretis: Vec<u8>,
+        backward_foretis: Vec<u8>,
+        aa_nonce: [u8; 16],
+        stamps_per_tick: u64,
+    ) -> Result<Self, NodeError> {
+        if tick_number == 0 {
+            return Err(NodeError::InvalidInput("tick_number must be > 0".into()));
+        }
+        if public_key.is_empty() {
+            return Err(NodeError::InvalidInput("public_key must not be empty".into()));
+        }
+        Ok(Self {
+            tick_number,
+            public_key,
+            signature_algorithm,
+            forward_foretis,
+            backward_foretis,
+            aa_nonce,
+            stamps_per_tick,
+            external_attestations: Vec::new(),
+        })
+    }
+}
+
 /// A cryptographically signed attestation of content at a specific tick.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Foretis {
@@ -53,6 +87,40 @@ pub struct Foretis {
     pub time_being_reference_time: String,
 }
 
+impl Foretis {
+    /// Create a validated Foretis.
+    ///
+    /// # Errors
+    /// Returns `NodeError::InvalidInput` if `tick_number` is 0 or `signature` is empty.
+    pub fn new(
+        tick_number: u64,
+        content_hash: [u8; 32],
+        signature: Vec<u8>,
+        signature_algorithm: String,
+        tbid: [u8; 16],
+        echo: String,
+        tbn: String,
+        time_being_reference_time: String,
+    ) -> Result<Self, NodeError> {
+        if tick_number == 0 {
+            return Err(NodeError::InvalidInput("tick_number must be > 0".into()));
+        }
+        if signature.is_empty() {
+            return Err(NodeError::InvalidInput("signature must not be empty".into()));
+        }
+        Ok(Self {
+            tick_number,
+            content_hash,
+            signature,
+            signature_algorithm,
+            tbid,
+            echo,
+            tbn,
+            time_being_reference_time,
+        })
+    }
+}
+
 /// Trait for looking up TickRecords from a calendar or calendar-like store.
 ///
 /// Implemented by the Calendar component. Chronomatter uses this for verification
@@ -71,6 +139,7 @@ pub trait CalendarLookup: Send + Sync {
 /// Stamp content under the current tick's key.
 pub fn stamp(
     server: &dyn CryptoServer,
+    clock: &dyn Clock,
     tbid: &[u8; 16],
     tick_number: u64,
     content: &[u8],
@@ -86,10 +155,8 @@ pub fn stamp(
     let sig_alg = crate::foretias::types::SignatureAlgorithm::Ed25519.to_id_string().to_string();
     let content_hash = server.sha256(content)?;
 
-    let now_ns = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|e| NodeError::Internal(format!("SystemTime before UNIX_EPOCH: {}", e)))?
-        .as_nanos() as u64;
+    let now_ns = clock.now_ns()
+        .map_err(|e| NodeError::Internal(format!("clock error: {e}")))?;
     let time_being_reference_time = format!("UE+{}ns", now_ns);
 
     Ok(Foretis {
@@ -222,6 +289,7 @@ fn default_sig_algorithm() -> String {
 mod tests {
     use super::*;
     use crate::crypto_server;
+    use crate::clock::{Clock, SystemClock};
     use crate::foretias::calendar::Calendar;
 
     fn make_server() -> Box<dyn CryptoServer> {
@@ -229,12 +297,16 @@ mod tests {
             .expect("failed to create software crypto server")
     }
 
+    fn make_clock() -> Box<dyn Clock> {
+        Box::new(SystemClock)
+    }
+
     fn make_cal(server: &dyn CryptoServer) -> Calendar {
         let tbid: [u8; 16] = [0xAA; 16];
         let mut cal = Calendar::new(tbid, "test-cal");
         let tick_number = 1;
         let content = b"init";
-        let foretis = stamp(server, &tbid, tick_number, content, "init", "test-cal")
+        let foretis = stamp(server, &SystemClock, &tbid, tick_number, content, "init", "test-cal")
             .expect("stamp init tick");
         let public_key = match server.public_key() {
             crate::crypto_server::PublicKeyBytes::Ed25519(pk) => pk.bytes.to_vec(),
@@ -257,7 +329,7 @@ mod tests {
     fn stamp_creates_valid_foretis() {
         let server = make_server();
         let tbid: [u8; 16] = [1u8; 16];
-        let foretis = stamp(server.as_ref(), &tbid, 42, b"hello", "echo-42", "tbn")
+        let foretis = stamp(server.as_ref(), &SystemClock, &tbid, 42, b"hello", "echo-42", "tbn")
             .expect("stamp should succeed");
         assert_eq!(foretis.tick_number, 42);
         assert_eq!(foretis.tbid, tbid);
@@ -271,8 +343,8 @@ mod tests {
     fn stamp_different_content_different_hash() {
         let server = make_server();
         let tbid: [u8; 16] = [2u8; 16];
-        let f1 = stamp(server.as_ref(), &tbid, 1, b"aaa", "e", "t").unwrap();
-        let f2 = stamp(server.as_ref(), &tbid, 1, b"bbb", "e", "t").unwrap();
+        let f1 = stamp(server.as_ref(), &SystemClock, &tbid, 1, b"aaa", "e", "t").unwrap();
+        let f2 = stamp(server.as_ref(), &SystemClock, &tbid, 1, b"bbb", "e", "t").unwrap();
         assert_ne!(f1.content_hash, f2.content_hash);
     }
 
@@ -280,7 +352,7 @@ mod tests {
     fn stamp_empty_content_produces_valid_stamp() {
         let server = make_server();
         let tbid: [u8; 16] = [3u8; 16];
-        let foretis = stamp(server.as_ref(), &tbid, 1, b"", "empty", "t").unwrap();
+        let foretis = stamp(server.as_ref(), &SystemClock, &tbid, 1, b"", "empty", "t").unwrap();
         assert_eq!(foretis.tick_number, 1);
         assert!(!foretis.signature.is_empty());
     }
@@ -291,7 +363,7 @@ mod tests {
         let cal = make_cal(server.as_ref());
         let tbid: [u8; 16] = [0xAA; 16];
         let content = b"init";
-        let foretis = stamp(server.as_ref(), &tbid, 1, content, "init", "test-cal")
+        let foretis = stamp(server.as_ref(), &SystemClock, &tbid, 1, content, "init", "test-cal")
             .expect("stamp");
         let valid = verify(server.as_ref(), &foretis, content, &cal)
             .expect("verify should not error");
@@ -304,7 +376,7 @@ mod tests {
         let cal = make_cal(server.as_ref());
         let tbid: [u8; 16] = [0xAA; 16];
         let content = b"init";
-        let foretis = stamp(server.as_ref(), &tbid, 1, content, "init", "test-cal")
+        let foretis = stamp(server.as_ref(), &SystemClock, &tbid, 1, content, "init", "test-cal")
             .expect("stamp");
         let valid = verify(server.as_ref(), &foretis, b"wrong", &cal)
             .expect("verify should not error");
@@ -327,7 +399,7 @@ mod tests {
             external_attestations: Vec::new(),
         }).unwrap();
         let content = b"test";
-        let foretis = stamp(server.as_ref(), &tbid, 1, content, "e", "bad-cal")
+        let foretis = stamp(server.as_ref(), &SystemClock, &tbid, 1, content, "e", "bad-cal")
             .expect("stamp");
         let result = verify(server.as_ref(), &foretis, content, &cal);
         if let Ok(valid) = result {

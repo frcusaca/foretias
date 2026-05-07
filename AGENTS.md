@@ -2,11 +2,320 @@
 
 Please read the entire document word for word do not skip any thing.
   - This is the code repository for foretias
-  - The active and working spececifications are in the 'foretias/specs' directory.
+  - The active and working specifications are in the `foretias/specs` directory.
   - The architectures, including project language and dependencies are stated here.
   - Sometimes new specifications come from user, and they may be placed in a new file in foretias/specs/
   - Working specs may be updated while coding.
   - When it is detected that specs diverge while coding, we maintain the reliance on `foretias/specs`.
+
+---
+
+## PROJECT STRUCTURE (Permanent Reference — Do Not Rescan)
+
+```
+foretias/                               # Repository root
+│
+├── specs/                              # All working specifications
+│   ├── FORETIAS_0_OVERVIEW.md          # Design invariants, roadmap, milestones
+│   ├── FORETIAS_1_MVP_SPEC.md          # v0.1 local-server stack (C11+Rust+PyO3)
+│   ├── FORETIAS_2_IMPLEMENTATION_PLAN.md
+│   ├── FORETIAS_2_P2P_SPEC.md          # v0.2-v0.8 network layers
+│   ├── FORETIAS_2_P2P_*.md             # P2P sub-specs (handshake, DHT, hardening, probity, etc.)
+│   ├── FORETIAS_3_PQC_INTEGRATION.md
+│   ├── FORETIAS_4_GPU_CRYPTO_ACCELERATION.md
+│   ├── FORETIAS_CLI_SPEC.md
+│   ├── foretias-v1.md                  # Product & technical specification
+│   └── PYTHON_REMOVAL_PLAN.md          # Plan to retire pure-Python prototype
+│
+├── src/foretias/                       # Python shim (thin re-export layer)
+│   ├── __init__.py                     # Re-exports from foretias_p2p (Rust PyO3)
+│   ├── cli.py                          # Python CLI wrapper (calls Rust via PyO3)
+│   ├── thin_client.py                  # Convenience client wrapper (calls Rust via PyO3)
+│   └── _version.py                     # Version string
+│
+├── tests/                              # Python shim integration tests
+│
+├── pyproject.toml                      # Top-level: hatchling build (installs shim pkg)
+│                                       # Runtime dep: foretias-p2p (the Rust bindings)
+│
+├── p2p/                                # Rust + C11 workspace root
+│   ├── Cargo.toml                      # Workspace: core-engine, foretias-node, foretias-python, foretias-java
+│   │
+│   ├── core/                           # C11 verified cryptographic primitives
+│   │   ├── include/
+│   │   │   └── foretias_core.h         # Single public header (Ed25519, P-256, SHA-256, BLAKE3, Noise, Merkle, FROST, etc.)
+│   │   ├── src/                        # 15 .c files (identity, signing, hashing, noise, merkle, frost, nullifier, rng, memzero, etc.)
+│   │   ├── tests/                      # 14 test files (test_ed25519.c, test_sha256.c, test_noise.c, etc.)
+│   │   ├── CMakeLists.txt              # Builds static lib (foretias_core), links libsodium + OpenSSL
+│   │   └── Makefile                    # Convenience targets (make, make test, make install)
+│   │
+│   ├── core-engine/                    # Rust crate — safe wrappers over C11 FFI + domain logic
+│   │   ├── Cargo.toml                  # foretias-core (links C11 via build.rs + bindgen)
+│   │   ├── build.rs                    # Compiles C11 core, runs bindgen over foretias_core.h
+│   │   └── src/
+│   │       ├── lib.rs                  # Re-exports: core, crypto_server, foretias, config, collision, epoch, noise, probity
+│   │       ├── core/                   # Safe Rust wrappers (bindings.rs, identity.rs, signing.rs, hash.rs, etc.)
+│   │       ├── crypto_server/          # CryptoServer trait + SoftwareCryptoServer backend
+│   │       ├── foretias/               # Domain types: tick.rs, foretis.rs, calendar.rs, external_attestation.rs
+│   │       ├── chronomatter/           # Time-being mutable logic (stamp, tick, auto-attestation, daemon)
+│   │       ├── config/                 # NodeConfig, TimeFamilyConfig
+│   │       ├── collision/              # Heartbeat, collision detection
+│   │       ├── epoch/                  # Epoch scheduler, snapshot, committee
+│   │       ├── probity/                # ProbityReport, aggregator, store
+│   │       ├── noise.rs                # Noise_XX handshake (Rust-side integration)
+│   │       └── error.rs                # NodeError, CryptoError
+│   │
+│   ├── foretias-node/                  # Rust crate — server + CLI binary
+│   │   ├── Cargo.toml                  # foretias-node (depends on foretias-core)
+│   │   ├── src/
+│   │   │   ├── lib.rs                  # Re-exports: server, communerd, calendar, calendar_store, metrics, probity
+│   │   │   ├── main.rs                 # CLI binary: foretias serve/stamp/verify/prove-verification/inspect-attestations
+│   │   │   ├── server/                 # TimeFamilyServer (stamp, verify, integrity_check, daemon, JSON-RPC, HTTP handlers)
+│   │   │   ├── communerd/              # P2P layer: libp2p swarm, DHT, gossipsub, peer pool, mutual attestation
+│   │   │   ├── calendar/               # Calendar wrapper
+│   │   │   ├── calendar_store/         # LRU policy, encrypted JSONL persistence
+│   │   │   ├── probity/                # Probity gossip handler
+│   │   │   ├── metrics.rs              # Node metrics
+│   │   │   └── replication_logger.rs   # Calendar replication logging
+│   │   └── tests/                      # Integration tests (e2e stamp/verify, P2P connect, probity gossip)
+│   │
+│   ├── foretias-python/                # Rust crate — PyO3 Python bindings
+│   │   ├── Cargo.toml                  # foretias-python (cdylib, depends on foretias-core + foretias-node)
+│   │   ├── pyproject.toml              # maturin build (produces foretias-p2p pip package)
+│   │   └── src/lib.rs                  # PyO3 classes: PyForetis, PyTickRecord, PyCalendar, PyTimeFamily, PyTimeFamilyServer, PyCryptoServer, etc.
+│   │
+│   └── foretias-java/                  # Rust crate — JNI bindings for Java
+│       ├── Cargo.toml                  # foretias-jni (cdylib, depends on ed25519-dalek, sha2, blake3)
+│       ├── pom.xml                     # Maven: org.foretias:foretias-java:0.2.0
+│       ├── build.sh                    # Build script (cargo + javac + jar)
+│       └── src/                        # Java source + Rust JNI crate
+```
+
+### Architecture Layers
+
+```
+                    ┌─────────────────┐
+                    │   Application   │   (foretias-node CLI, Python shim, Java CLI)
+                    └────────┬────────┘
+                             │
+                    ┌────────▼────────┐
+                    │  foretias-node  │   Server, JSON-RPC, P2P swarm, calendar store
+                    └────────┬────────┘
+                             │
+              ┌──────────────┴──────────────┐
+              │ foretias-python (PyO3)      │
+              │ foretias-java (JNI)         │   Client-language bindings
+              └──────────────┬──────────────┘
+                             │
+                    ┌────────▼────────┐
+                    │ foretias-core   │   Safe Rust wrappers, CryptoServer, domain types
+                    └────────┬────────┘
+                             │  (FFI via bindgen)
+                    ┌────────▼────────┐
+                    │  C11 core       │   libsodium-based primitives (Ed25519, P-256, SHA-256, etc.)
+                    └────────┬────────┘
+                             │
+                    ┌────────▼────────┐
+                    │   libsodium     │   System dependency (Ed25519, hash, AEAD)
+                    └─────────────────┘
+```
+
+---
+
+## BUILD, TEST, RUN COMMANDS
+
+### Prerequisites (System Dependencies)
+
+```bash
+# Required
+sudo apt install build-essential cmake clang libsodium-dev libssl-dev
+# For BLAKE3 in C11 core
+# For P-256 support
+pip install maturin    # For Python bindings build
+rustup install stable  # Rust toolchain
+java -version >= 17    # For Java bindings (optional)
+```
+
+### 1. Build Everything
+
+```bash
+# Step 1: Build C11 core library (static lib)
+cd p2p/core && cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build
+
+# Step 2: Build Rust workspace (core-engine, foretias-node, foretias-python, foretias-java)
+cd p2p && cargo build --workspace
+
+# Step 3: Build Python bindings (installs foretias-p2p .so locally)
+cd p2p/foretias-python && maturin develop
+
+# Step 4: Install Python shim package (re-exports from foretias-p2p)
+cd /home/hcbusy/webhash/foretias && pip install -e .
+```
+
+### 2. Run All Tests
+
+```bash
+# C11 core tests (ctest)
+cd p2p/core/build && ctest --output-on-failure
+
+# Rust workspace tests (unit + integration) — 111 tests
+cd p2p && cargo test --workspace
+
+# Python shim tests
+cd /home/hcbusy/webhash/foretias && python -m pytest tests/ -v
+
+# All tests at once
+cd p2p/core/build && ctest --output-on-failure && cd ../.. && cargo test --workspace && cd ../../foretias && python -m pytest tests/ -v
+```
+
+### 3. Run Individual / Targeted Tests
+
+```bash
+# --- C11 tests ---
+
+# Run a specific test file (CMake builds all into test_all, use -V to list):
+cd p2p/core/build && ctest -R foretias_core_tests --verbose
+
+# Or rebuild and run the test binary directly:
+cd p2p/core && cmake --build build --target test_all && ./build/test_all
+
+# --- Rust tests ---
+
+# Run all tests in one crate:
+cd p2p && cargo test -p foretias-core
+cd p2p && cargo test -p foretias-node
+cd p2p && cargo test -p foretias-python
+
+# Run a specific test by name (substring match):
+cd p2p && cargo test -p foretias-node -- test_stamp_and_verify_e2e
+cd p2p && cargo test -p foretias-core -- ed25519
+cd p2p && cargo test -- calendar_store
+
+# Run only unit tests (exclude integration):
+cd p2p && cargo test -p foretias-node --lib
+
+# Run only integration tests:
+cd p2p && cargo test -p foretias-node --test integration
+
+# Run with output (don't capture stdout):
+cd p2p && cargo test -- --nocapture
+
+# --- Python tests ---
+
+# Run one test file:
+python -m pytest tests/test_shim.py -v
+
+# Run one specific test function:
+python -m pytest tests/test_shim.py::test_stamp_and_verify -v
+
+# Run tests matching a pattern:
+python -m pytest tests/ -k "calendar" -v
+```
+
+### 4. Build for Release
+
+```bash
+# Release build — optimized, LTO, stripped
+cd p2p && cargo build --workspace --release
+
+# Release binary: p2p/target/release/foretias
+# Release C11 lib: p2p/core/build/libforetias_core.a
+```
+
+### 5. Package & Publish
+
+```bash
+# --- Python: foretias-p2p (Rust bindings) ---
+cd p2p/foretias-python
+maturin build --release                       # Produces wheel in target/wheels/
+pip install target/wheels/foretias_p2p-*.whl  # Install from wheel
+# To publish to PyPI: maturin publish
+
+# --- Python: foretias (shim package) ---
+cd /home/hcbusy/webhash/foretias
+pip install build
+python -m build                               # Produces sdist + wheel in dist/
+pip install dist/foretias-*.whl               # Install from wheel
+# To publish: twine upload dist/*
+
+# --- C11: install system-wide ---
+cd p2p/core && make install PREFIX=/usr/local
+
+# --- Java ---
+cd p2p/foretias-java && ./build.sh
+# Produces: target/foretias-java.jar
+```
+
+### 6. CLI Usage — Rust Binary (`foretias`)
+
+```bash
+# Build first:
+cd p2p && cargo build --release
+
+# Start server (daemon, stamps every chronon):
+target/release/foretias serve --addr 127.0.0.1:4001 --chronon_ns 60000000000
+
+# Start server with persistence:
+target/release/foretias serve --addr 127.0.0.1:4001 --persist-path /tmp/cal
+
+# Start server in dormant mode (verify-only, loads persisted calendar):
+target/release/foretias serve --addr 127.0.0.1:4001 --start-dormant --persist-path /tmp/cal
+
+# Start server with P2P peers:
+target/release/foretias serve --addr 127.0.0.1:4001 --peer 127.0.0.1:4002 --auto_attest_every_chronons 10
+
+# Stamp a message (sends to running server via Noise+JSON-RPC):
+target/release/foretias stamp --message "hello world" --server 127.0.0.1:4001
+
+# Stamp from file:
+target/release/foretias stamp --message-file myfile.txt --server 127.0.0.1:4001 --stamp-output stamp.json
+
+# Verify a stamp (server-side verification):
+target/release/foretias verify --message "hello world" --foretis-file stamp.json --server 127.0.0.1:4001
+
+# Prove verification (fetch calendar slice, verify locally):
+target/release/foretias prove-verification --message "hello world" --foretis-file stamp.json --server 127.0.0.1:4001
+
+# Inspect external attestations in a persisted calendar:
+target/release/foretias inspect-attestations --calendar /tmp/cal/calendar.json
+```
+
+### 7. CLI Usage — Python (`foretis`)
+
+```bash
+# Install first:
+pip install -e /home/hcbusy/webhash/foretias
+
+# Stamp a message (creates ephemeral server, stamps, exits):
+foretis stamp -m "hello world"
+
+# Stamp from file, write output to file:
+foretis stamp -M myfile.txt -o stamp.json
+
+# Verify a stamp (loads persisted calendar in dormant mode):
+foretis verify -m "hello world" -F stamp.json --persist-path /tmp/cal
+
+# Chain integrity check:
+foretis integrity --persist-path /tmp/cal --start 0 --end 10
+
+# Note: "foretis serve" is a stub. Use the Rust binary for serving:
+#   cargo run --release -- serve (or target/release/foretias serve)
+```
+
+### 8. CLI Usage — Python thin_client (programmatic)
+
+```python
+from foretias.thin_client import ForetiasClient
+
+client = ForetiasClient("my-app")
+stamp = client.stamp("hello world")
+assert client.verify("hello world", stamp)
+print(client.public_key())
+print(client.tbid())
+print(client.calendar())
+```
+
+---
 
 ## Project Segmentation
 Software projects May be large or small. Their complexity and diffiulty may also vary. Generally speaking we use these terms for disjoint components of softare:

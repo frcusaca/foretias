@@ -26,8 +26,16 @@ pub type Message = Vec<u8>;
 /// Auto-attestation nonce — 16 bytes of entropy.
 pub type AaNonce = [u8; 16];
 
-/// Tick number.
-pub type TickNumber = u64;
+/// Tick number — monotonically increasing identifier for a calendar tick.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct TickNumber(pub u64);
+
+impl TickNumber {
+    /// Returns zero-based tick index as usize.
+    pub fn as_usize(&self) -> usize {
+        self.0 as usize
+    }
+}
 
 /// Signature algorithm selector.
 #[allow(non_camel_case_types)]

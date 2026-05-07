@@ -6,7 +6,7 @@ pub mod mirror;
 
 use foretias_core::foretias::callbacks::TickObserver;
 use foretias_core::foretias::tick::CalendarLookup;
-use foretias_core::foretias::{Calendar as CoreCalendar, TickRecord};
+use foretias_core::foretias::{Calendar as CoreCalendar, TickRecord, types::TickNumber};
 use foretias_core::error::NodeError;
 use parking_lot::RwLock;
 use tracing::{debug, info};
@@ -77,12 +77,12 @@ impl Calendar {
 }
 
 impl TickObserver for Calendar {
-    fn on_tick_advance(&self, tick_number: u64, _public_key: &[u8], tick_record: &TickRecord) {
+    fn on_tick_advance(&self, tick_number: TickNumber, _public_key: &[u8], tick_record: &TickRecord) {
         let mut cal = self.inner.write();
         if let Err(e) = cal.append(tick_record.clone()) {
-            tracing::error!(component = "calendar", tbid = %hex::encode(cal.tbid()), tick = tick_number, "calendar: on_tick_advance failed: {}", e);
+            tracing::error!(component = "calendar", tbid = %hex::encode(cal.tbid()), tick = tick_number.0, "calendar: on_tick_advance failed: {}", e);
         } else {
-            debug!(component = "calendar", tbid = %hex::encode(cal.tbid()), tick = tick_number, tick_count = cal.ticks.len(), "calendar: heartbeat");
+            debug!(component = "calendar", tbid = %hex::encode(cal.tbid()), tick = tick_number.0, tick_count = cal.ticks.len(), "calendar: heartbeat");
         }
     }
 }
@@ -127,7 +127,7 @@ mod tests {
         let cal = Calendar::new([0x01; 16], "observer-test");
         let tick = make_tick(1);
 
-        cal.on_tick_advance(1, &[0u8; 32], &tick);
+        cal.on_tick_advance(TickNumber(1), &[0u8; 32], &tick);
 
         assert_eq!(cal.latest(), Some(1));
         let records = cal.get(1, 10).unwrap();
@@ -140,8 +140,8 @@ mod tests {
         let cal = Calendar::new([0x02; 16], "dup-test");
         let tick = make_tick(5);
 
-        cal.on_tick_advance(5, &[0u8; 32], &tick);
-        cal.on_tick_advance(5, &[0u8; 32], &tick);
+        cal.on_tick_advance(TickNumber(5), &[0u8; 32], &tick);
+        cal.on_tick_advance(TickNumber(5), &[0u8; 32], &tick);
 
         assert_eq!(cal.latest(), Some(5));
         let records = cal.get(5, 10).unwrap();
@@ -151,9 +151,9 @@ mod tests {
     #[test]
     fn calendar_lookup_get_returns_ticks() {
         let cal = Calendar::new([0x03; 16], "lookup-test");
-        cal.on_tick_advance(1, &[0u8; 32], &make_tick(1));
-        cal.on_tick_advance(2, &[0u8; 32], &make_tick(2));
-        cal.on_tick_advance(3, &[0u8; 32], &make_tick(3));
+        cal.on_tick_advance(TickNumber(1), &[0u8; 32], &make_tick(1));
+        cal.on_tick_advance(TickNumber(2), &[0u8; 32], &make_tick(2));
+        cal.on_tick_advance(TickNumber(3), &[0u8; 32], &make_tick(3));
 
         let records = cal.get(2, 10).unwrap();
         assert_eq!(records.len(), 2);
@@ -164,9 +164,9 @@ mod tests {
     #[test]
     fn calendar_lookup_get_respects_count() {
         let cal = Calendar::new([0x04; 16], "count-test");
-        cal.on_tick_advance(1, &[0u8; 32], &make_tick(1));
-        cal.on_tick_advance(2, &[0u8; 32], &make_tick(2));
-        cal.on_tick_advance(3, &[0u8; 32], &make_tick(3));
+        cal.on_tick_advance(TickNumber(1), &[0u8; 32], &make_tick(1));
+        cal.on_tick_advance(TickNumber(2), &[0u8; 32], &make_tick(2));
+        cal.on_tick_advance(TickNumber(3), &[0u8; 32], &make_tick(3));
 
         let records = cal.get(1, 2).unwrap();
         assert_eq!(records.len(), 2);
@@ -194,8 +194,8 @@ mod tests {
     #[test]
     fn calendar_save_and_load() {
         let cal = Calendar::new([0x07; 16], "persist-test");
-        cal.on_tick_advance(1, &[0u8; 32], &make_tick(1));
-        cal.on_tick_advance(2, &[0u8; 32], &make_tick(2));
+        cal.on_tick_advance(TickNumber(1), &[0u8; 32], &make_tick(1));
+        cal.on_tick_advance(TickNumber(2), &[0u8; 32], &make_tick(2));
 
         let path = "/tmp/foretias-test-calendar.json";
         cal.save(path).unwrap();

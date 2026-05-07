@@ -5,7 +5,9 @@ use crate::error::{CryptoError, c_result_to_error};
 
 /// SHA-256 hash.
 pub fn sha256(data: &[u8]) -> Result<ForetiasHash32, CryptoError> {
+    // SAFETY: zeroing known-good #[repr(C)] struct from bindings.
     let mut out = unsafe { std::mem::zeroed() };
+    // SAFETY: data and out buffers are valid for their lengths.
     let rc = unsafe { foretias_hash_sha256(data.as_ptr(), data.len(), &mut out) };
     c_result_to_error(rc)?;
     Ok(out)
@@ -13,7 +15,9 @@ pub fn sha256(data: &[u8]) -> Result<ForetiasHash32, CryptoError> {
 
 /// SHA-256 of concatenated a || b.
 pub fn sha256_concat(a: &[u8], b: &[u8]) -> Result<ForetiasHash32, CryptoError> {
+    // SAFETY: zeroing known-good #[repr(C)] struct from bindings.
     let mut out = unsafe { std::mem::zeroed() };
+    // SAFETY: a, b, out buffers are valid for their lengths.
     let rc = unsafe {
         foretias_hash_sha256_concat(a.as_ptr(), a.len(), b.as_ptr(), b.len(), &mut out)
     };
@@ -23,7 +27,9 @@ pub fn sha256_concat(a: &[u8], b: &[u8]) -> Result<ForetiasHash32, CryptoError> 
 
 /// BLAKE3 hash (C11 stub returns unsupported).
 pub fn blake3(data: &[u8]) -> Result<ForetiasHash32, CryptoError> {
+    // SAFETY: zeroing known-good #[repr(C)] struct from bindings.
     let mut out = unsafe { std::mem::zeroed() };
+    // SAFETY: data and out buffers are valid for their lengths.
     let rc = unsafe { foretias_hash_blake3(data.as_ptr(), data.len(), &mut out) };
     c_result_to_error(rc)?;
     Ok(out)
@@ -31,7 +37,9 @@ pub fn blake3(data: &[u8]) -> Result<ForetiasHash32, CryptoError> {
 
 /// Legacy MD5 (noncrypto use only).
 pub fn legacy_insecure_md5(data: &[u8]) -> Result<ForetiasHash16, CryptoError> {
+    // SAFETY: zeroing known-good #[repr(C)] struct from bindings.
     let mut out = unsafe { std::mem::zeroed() };
+    // SAFETY: data and out buffers are valid for their lengths.
     let rc = unsafe {
         foretias_hash_legacy_insecure_md5(data.as_ptr(), data.len(), &mut out)
     };
@@ -41,7 +49,9 @@ pub fn legacy_insecure_md5(data: &[u8]) -> Result<ForetiasHash16, CryptoError> {
 
 /// Legacy SHA-1 (noncrypto use only).
 pub fn legacy_insecure_sha1(data: &[u8]) -> Result<ForetiasHash20, CryptoError> {
+    // SAFETY: zeroing known-good #[repr(C)] struct from bindings.
     let mut out = unsafe { std::mem::zeroed() };
+    // SAFETY: data and out buffers are valid for their lengths.
     let rc = unsafe {
         foretias_hash_legacy_insecure_sha1(data.as_ptr(), data.len(), &mut out)
     };

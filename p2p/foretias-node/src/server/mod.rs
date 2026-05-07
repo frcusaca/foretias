@@ -11,7 +11,7 @@ use foretias_core::chronomatter::Chronomatter;
 use foretias_core::config::{NodeConfig, TimeFamilyConfig};
 use foretias_core::core::identity::{generate_ed25519_keypair, derive_ed25519_peer_id};
 use foretias_core::foretias::callbacks::{TickObserver, AutoAttestObserver};
-use foretias_core::foretias::TickRecord;
+use foretias_core::foretias::{TickRecord, types::TickNumber};
 use foretias_core::error::NodeError;
 use foretias_core::noise;
 
@@ -22,7 +22,7 @@ use self::jsonrpc::JsonRpcResponse;
 
 struct NoOpObserver;
 impl TickObserver for NoOpObserver {
-    fn on_tick_advance(&self, _tick_number: u64, _public_key: &[u8], _tick_record: &TickRecord) {}
+    fn on_tick_advance(&self, _tick_number: TickNumber, _public_key: &[u8], _tick_record: &TickRecord) {}
 }
 
 pub mod jsonrpc;
@@ -165,7 +165,7 @@ impl TimeFamilyServer {
         if let Some(ref p) = self.persist_path {
             let json_path = p.join(format!("{}.json", hex::encode(self.get_tbid())));
             std::fs::create_dir_all(p)?;
-            self.calendar.save(json_path.to_str().unwrap())?;
+            self.calendar.save(json_path.to_str().ok_or(NodeError::Internal("persist path contains invalid UTF-8".into()))?)?;
             self.metrics.inc(MetricField::CalendarFlushCount);
         }
         Ok(())
@@ -256,7 +256,6 @@ async fn jsonrpc_handler(
 }
 
 const MAX_REQUEST_LINE_BYTES: usize = 4096;
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 async fn handle_connection(
     server: Arc<TimeFamilyServer>,

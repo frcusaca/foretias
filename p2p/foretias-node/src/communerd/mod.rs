@@ -99,7 +99,7 @@ impl Communerd {
             .map(|p| PeerAddr { json_rpc: p.clone(), peer_id: None, last_seen_ns: 0 })
             .collect();
         let peer_pool = PeerPool::new(peers, Arc::clone(&transport), 30);
-        let crypto = Arc::from(new_software(ForetiasCurve::Ed25519).expect("failed to create crypto server"));
+        let crypto = Arc::from(new_software(ForetiasCurve::Ed25519).expect("libsodium must be available at runtime"));
         Self {
             transport,
             peer_pool,
@@ -674,11 +674,14 @@ fn resolve_known_server(addr_str: &str) -> Result<libp2p::Multiaddr, NodeError> 
     let host = parts[1];
 
     if host.parse::<std::net::Ipv4Addr>().is_ok() {
-        Ok(format!("/ip4/{}/tcp/{}", host, port).parse().unwrap())
+        Ok(format!("/ip4/{}/tcp/{}", host, port).parse()
+            .map_err(|e| NodeError::Internal(format!("invalid multiaddr parse: {}", e)))?)
     } else if host.parse::<std::net::Ipv6Addr>().is_ok() {
-        Ok(format!("/ip6/{}/tcp/{}", host, port).parse().unwrap())
+        Ok(format!("/ip6/{}/tcp/{}", host, port).parse()
+            .map_err(|e| NodeError::Internal(format!("invalid multiaddr parse: {}", e)))?)
     } else {
-        Ok(format!("/dns/{}/tcp/{}", host, port).parse().unwrap())
+        Ok(format!("/dns/{}/tcp/{}", host, port).parse()
+            .map_err(|e| NodeError::Internal(format!("invalid multiaddr parse: {}", e)))?)
     }
 }
 

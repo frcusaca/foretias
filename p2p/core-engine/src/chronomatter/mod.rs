@@ -14,10 +14,11 @@ use tracing::{debug, error, info, warn};
 use crate::crypto_server::{self, CryptoServer};
 use crate::core::identity::PrivKeyHandle;
 use crate::error::NodeError;
+use crate::clock::Clock;
 use crate::foretias::{auto_attestation_blob_with_count, Foretis, TickRecord};
 use crate::foretias::tick::CalendarLookup;
 use crate::foretias::callbacks::{TickObserver, AutoAttestObserver};
-use crate::foretias::types::Tbid;
+use crate::foretias::types::{Tbid, TickNumber};
 
 struct TickKeyPair {
     pub_key: [u8; 32],
@@ -30,6 +31,7 @@ pub struct Chronomatter {
     current_tick: AtomicU64,
     keypairs: RwLock<Vec<TickKeyPair>>,
     crypto: Arc<dyn CryptoServer>,
+    clock: Arc<dyn Clock>,
     tick_observer: Arc<dyn TickObserver>,
     auto_attest_observer: Option<Arc<dyn AutoAttestObserver>>,
     chronon_ns: u64,
@@ -56,6 +58,7 @@ impl Chronomatter {
             current_tick: AtomicU64::new(0),
             keypairs: RwLock::new(Vec::new()),
             crypto,
+            clock: Arc::new(crate::clock::SystemClock),
             tick_observer,
             auto_attest_observer: None,
             chronon_ns,
@@ -89,6 +92,7 @@ impl Chronomatter {
             current_tick: AtomicU64::new(latest_tick),
             keypairs: RwLock::new(Vec::new()),
             crypto,
+            clock: Arc::new(crate::clock::SystemClock),
             tick_observer,
             auto_attest_observer: None,
             chronon_ns: 0,
@@ -210,7 +214,7 @@ impl Chronomatter {
     }
 
     fn notify_observer(&self, tick: u64, pk: &[u8; 32], record: &TickRecord) {
-        self.tick_observer.on_tick_advance(tick, pk, record);
+        self.tick_observer.on_tick_advance(TickNumber(tick), pk, record);
     }
 
     // ── Stamp ────────────────────────────────────────────────────────────────
@@ -241,23 +245,26 @@ impl Chronomatter {
         let tbn = self.tbn.clone();
 
         let kp_idx = self.generate_and_store_keypair()?;
-        let new_pub = self.keypair_pub(kp_idx).unwrap();
+        let new_pub = self.keypair_pub(kp_idx)
+            .ok_or_else(|| NodeError::Internal("keypair not found after generation".into()))?;
 
         let mut sig_input = Vec::with_capacity(16 + 8 + content.len());
         sig_input.extend_from_slice(&tbid);
         sig_input.extend_from_slice(&tick.to_be_bytes());
         sig_input.extend_from_slice(&content);
 
-        let sig = self.keypairs.read().get(kp_idx).unwrap().priv_key
-            .sign(&sig_input)
-            .map_err(|e| NodeError::Crypto(e))?;
+        let sig = {
+            let guard = self.keypairs.read();
+            let kp = guard.get(kp_idx)
+                .ok_or_else(|| NodeError::Internal("keypair not found after generation".into()))?;
+            kp.priv_key.sign(&sig_input)
+                .map_err(|e| NodeError::Crypto(e))?
+        };
 
         let content_hash = self.crypto.sha256(&content)?;
 
-        let now_ns = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|e| NodeError::Internal(format!("SystemTime before UNIX_EPOCH: {}", e)))?
-            .as_nanos() as u64;
+        let now_ns = self.clock.now_ns()
+            .map_err(|e| NodeError::Internal(format!("clock error: {e}")))?;
         let time_being_reference_time = format!("UE+{}ns", now_ns);
 
         let foretis = Foretis {
@@ -344,7 +351,8 @@ impl Chronomatter {
         };
 
         let kp_idx = self.generate_and_store_keypair()?;
-        let new_pub = self.keypair_pub(kp_idx).unwrap();
+        let new_pub = self.keypair_pub(kp_idx)
+            .ok_or_else(|| NodeError::Internal("keypair not found after generation".into()))?;
 
         let record = self.build_tick_record(tick, new_pub)?;
         self.notify_observer(tick, &new_pub, &record);
@@ -402,7 +410,7 @@ mod tests {
     }
     impl TickObserver for DummyObserver {
         fn on_tick_advance(&self, tick_number: TickNumber, _public_key: &[u8], tick_record: &TickRecord) {
-            self.last_tick.store(tick_number, SeqCst);
+            self.last_tick.store(tick_number.0, SeqCst);
             self.calendar.write().append(tick_record.clone()).unwrap();
         }
     }

@@ -5,6 +5,7 @@ use crate::error::{CryptoError, c_result_to_error};
 
 /// Fill buffer with cryptographically secure random bytes.
 pub fn random_bytes(buf: &mut [u8]) -> Result<(), CryptoError> {
+    // SAFETY: buf is valid for its length.
     let rc = unsafe { foretias_rng_bytes(buf.as_mut_ptr(), buf.len()) };
     c_result_to_error(rc)?;
     Ok(())
@@ -12,6 +13,7 @@ pub fn random_bytes(buf: &mut [u8]) -> Result<(), CryptoError> {
 
 /// Securely zero memory (volatile write loop).
 pub fn memzero(buf: &mut [u8]) {
+    // SAFETY: buf is valid for its length; memzero handles zero-length safely.
     unsafe { foretias_memzero(buf.as_mut_ptr() as *mut std::ffi::c_void, buf.len()) }
 }
 

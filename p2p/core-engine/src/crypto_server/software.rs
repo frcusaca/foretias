@@ -35,11 +35,11 @@ pub struct SoftwareCryptoServer {
     /// In-memory store for FROST threshold signing shares.
     frost_shares: parking_lot::Mutex<HashMap<String, Zeroizing<Vec<u8>>>>,
     pub sphincs_pub_key: Option<SignatureBytes>,
-    pub sphincs_secret_key: Option<SignatureBytes>,
+    sphincs_secret_key: Option<zeroize::Zeroizing<SignatureBytes>>,
     pub dilithium_pub_key: Option<SignatureBytes>,
-    pub dilithium_secret_key: Option<SignatureBytes>,
+    dilithium_secret_key: Option<zeroize::Zeroizing<SignatureBytes>>,
     pub mlkem_pub_key: Option<SignatureBytes>,
-    pub mlkem_secret_key: Option<SignatureBytes>,
+    mlkem_secret_key: Option<zeroize::Zeroizing<SignatureBytes>>,
 }
 
 impl SoftwareCryptoServer {
@@ -71,11 +71,11 @@ impl SoftwareCryptoServer {
                     seal_key: Zeroizing::new(seal_key),
                     frost_shares: parking_lot::Mutex::new(HashMap::new()),
                     sphincs_pub_key: Some(sphincs_pub),
-                    sphincs_secret_key: Some(sphincs_secret),
+                    sphincs_secret_key: Some(Zeroizing::new(sphincs_secret)),
                     dilithium_pub_key: Some(dilithium_pub),
-                    dilithium_secret_key: Some(dilithium_secret),
+                    dilithium_secret_key: Some(Zeroizing::new(dilithium_secret)),
                     mlkem_pub_key: Some(mlkem_pub),
-                    mlkem_secret_key: Some(mlkem_secret),
+                    mlkem_secret_key: Some(Zeroizing::new(mlkem_secret)),
                 })
             }
             ForetiasCurve::P256 => {
@@ -109,24 +109,20 @@ impl SoftwareCryptoServer {
             seal_key: Zeroizing::new(seal_key),
             frost_shares: parking_lot::Mutex::new(HashMap::new()),
             sphincs_pub_key: Some(sphincs_pub),
-            sphincs_secret_key: Some(sphincs_secret),
+            sphincs_secret_key: Some(Zeroizing::new(sphincs_secret)),
             dilithium_pub_key: Some(dilithium_pub),
-            dilithium_secret_key: Some(dilithium_secret),
+            dilithium_secret_key: Some(Zeroizing::new(dilithium_secret)),
             mlkem_pub_key: Some(mlkem_pub),
-            mlkem_secret_key: Some(mlkem_secret),
+            mlkem_secret_key: Some(Zeroizing::new(mlkem_secret)),
         })
     }
 }
 
 impl Drop for SoftwareCryptoServer {
     fn drop(&mut self) {
+        // Zeroize seal key manually; Zeroizing wrappers on PQC secret keys
+        // already handle zeroization on drop, so no need to repeat here.
         self.seal_key.fill(0);
-        if let Some(ref mut sk) = self.sphincs_secret_key {
-            sk.fill(0);
-        }
-        if let Some(ref mut sk) = self.mlkem_secret_key {
-            sk.fill(0);
-        }
     }
 }
 

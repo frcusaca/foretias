@@ -6,6 +6,7 @@
 
 pub mod error;
 pub mod config;
+pub mod clock;
 pub mod core;
 pub mod crypto_server;
 pub mod foretias;
