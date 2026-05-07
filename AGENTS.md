@@ -37,10 +37,9 @@ Checkboxes in PLAN.md files track progress. When an item is checked off, **alway
 This gives both agents and humans a clear idea of how work is progressing over time.
 
 ### Worktree Branch Tracking in PLAN.md
-If a worktree branch is used for implementation, the PLAN.md **must** document the lifecycle of that worktree as explicit, separate checkbox tasks placed at appropriate points in the plan:
-
+If a worktree branch is used for implementation, the PLAN.md **must** document the lifecycle of that worktree as explicit, separate checkbox tasks placed at appropriate points in the plan. The workpath shall always be `FULL_WORKTREE_PATH=${HOME}/tmp/{SPEC_NAME_WITHOUT_MARKDOWN_EXTENSION}_${RANDOM}`, that random differentiator is set once while creating the plan file and stays consistent throughout the plan file.
 ```markdown
-- [ ] Create worktree at ${FULL_WORKTREE_PATH} with branch name ${BRANCH_NAME}
+- [ ] Create worktree `git worktree add -b ${BRANCH_NAME} ${FULL_WORKTREE_PATH}}`
 ...
   (implementation tasks go here)
 ...
@@ -61,8 +60,8 @@ If scoping was incorrect for any task, and and it became many tasks, It is possi
   - [ ] Update ${BRANCH_NAME} to follow new coding style
   - [ ] Update ${BRANCH_NAME} to use new API call convention
   - [x](2026-05-06 14:31) Merged breaking alpha # Again, this is needed to document a clear need for more work as subtasks
-  - [ ] repair ALL tests in alpha.
-  - [ ] cleanup ${FULL_WORKTREE_PATH} after successful merge
+  - [ ] Repair ALL tests in alpha
+  - [ ] Cleanup ${FULL_WORKTREE_PATH} after successful merge
 ```
 This example also illustrates that because foolish uses git merge and not rebase this situation where a fix to merge on alpha may be required.
 
