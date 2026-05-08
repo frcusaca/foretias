@@ -1,7 +1,7 @@
 # Foretias — Peering v1 Plan (Auto-Port, Self-Registration, DHT Discovery)
 
 **Version:** v0.5.238
-**Status:** Draft — TBID index implemented, Phase 2 complete
+**Status:** Draft — Phase 2 & 3 verified complete, Phase 4 partial, Phase 5 pending
 **Prerequisites:** v0.4 DHT discovery (`FORETIAS_2_P2P_4_dht_discovery.md`)
 
 ---
@@ -506,40 +506,40 @@ Java CLI uses JNI to this FFI layer.
 - [x] `foretias/specs/CLI_SPECIFIED.md` — Complete CLI spec covering all commands/flags
 - [x] `foretias/specs/PEERING_V1_PLAN.md` — This document
 
-### Phase 2 — Rust DHT/P2P Core (PENDING)
+### Phase 2 — Rust DHT/P2P Core (COMPLETE)
 
-- [ ] Implement `find_free_port()` with range shuffle in `swarm.rs`
-- [ ] Modify `build_and_spawn_swarm()` to accept `Option<Multiaddr>`
-- [ ] Add `local_multiaddr` field to `SwarmHandle`
-- [ ] Add `PutRecord` and `GetRecord` to `SwarmCommand`
-- [ ] Handle `PutRecord`/`GetRecord` in `swarm_loop`
-- [ ] Emit `ListenReady` event from `NewListenAddr` handler
-- [ ] Emit `RecordRetrieved` event from `GetRecord` query result
-- [ ] Add `p2p_port_range`, `known_servers`, `max_discovered_peers` to `NodeConfig`
-- [ ] Add `register_and_discover()` method to `Communerd`
-- [ ] Wire `cmd_serve` to accept and use new parameters
-- [ ] Wire `main()` match arm to pass new parameters
+- [x](2026-05-08 12:30) Implement `find_free_port()` with range shuffle in `swarm.rs` — swarm.rs:25-34
+- [x](2026-05-08 12:30) Modify `build_and_spawn_swarm()` to accept `Option<Multiaddr>` — swarm.rs:63-118
+- [x](2026-05-08 12:30) Add `local_multiaddr` field to `SwarmHandle` — swarm.rs:38
+- [x](2026-05-08 12:30) Add `PutRecord` and `GetRecord` to `SwarmCommand` — swarm.rs:48-52
+- [x](2026-05-08 12:30) Handle `PutRecord`/`GetRecord` in `swarm_loop` — swarm.rs:186-231
+- [x](2026-05-08 12:30) Emit `ListenReady` event from `NewListenAddr` handler — swarm.rs:236-242
+- [x](2026-05-08 12:30) Emit `RecordRetrieved` event from `GetRecord` query result — swarm.rs:300-308
+- [x](2026-05-08 12:30) Add `p2p_port_range`, `known_servers`, `max_discovered_peers` to `NodeConfig` — config/node.rs:49-57
+- [x](2026-05-08 12:30) Add `register_and_discover()` method to `Communerd` — communerd/mod.rs:484-593
+- [x](2026-05-08 12:30) Wire `cmd_serve` to accept and use new parameters — main.rs:271-443
+- [x](2026-05-08 12:30) Wire `main()` match arm to pass new parameters — main.rs:794-811
 
-### Phase 3 — Peer Attestation (PENDING)
+### Phase 3 — Peer Attestation (COMPLETE)
 
-- [ ] Wire `DhtPeerDiscovered` events into `PeerPool.add_peer()` in gossip loop
-- [ ] Implement attestation interval formula in auto-attestation scheduler
-- [ ] Print server startup info with P2P details (actual port, TBID, PeerId, multiaddr)
+- [x](2026-05-08 12:30) Wire `DhtPeerDiscovered` events into `PeerPool.add_peer()` in gossip loop — communerd/mod.rs:412-422
+- [x](2026-05-08 12:30) Implement attestation interval formula in auto-attestation scheduler — config/node.rs:71-73
+- [x](2026-05-08 12:30) Print server startup info with P2P details (actual port, TBID, PeerId, multiaddr) — main.rs:400-424
 
-### Phase 4 — Multi-Language Expansion (PENDING)
+### Phase 4 — Multi-Language Expansion (PARTIAL)
 
-- [ ] Update Python CLI (`foretias-python/src/cli.py`) to match CLI spec
-- [ ] Update PyO3 bindings to expose auto-port and known-servers
-- [ ] Ensure Python TimeFamily can register to DHT and discover peers
-- [ ] Create Java CLI with jcommander/picocli matching CLI spec
-- [ ] Create JNI bridge to `foretias_core.h`
+- [x](2026-05-08 12:30) Update Python CLI (`foretias-python/src/cli.py`) to match CLI spec — foretias_cli.py:236-241, has --p2p-port-range, --known-servers, --max-discovered-peers
+- [ ] Update PyO3 bindings to expose auto-port and known-servers — GAP: PyNodeConfig missing p2p_port_range, known_servers, max_discovered_peers; no Python-accessible find_free_port()
+- [ ] Ensure Python TimeFamily can register to DHT and discover peers — GAP: PyTimeFamily/PyTimeFamilyServer expose stamp/verify/calendar only, no DHT/peer discovery methods
+- [ ] Create Java CLI with jcommander/picocli matching CLI spec — PARTIAL: Cli.java exists with stamp/verify/prove/inspect, no serve command, no jcommander/picocli, no P2P flags
+- [ ] Create JNI bridge to `foretias_core.h` — PARTIAL: Rust JNI (lib.rs) provides ed25519/sign/verify/hash/RNG, C JNI (jni_crypto.c) exists, neither bridges to foretias_core.h
 
 ### Phase 5 — Integration Tests (PENDING)
 
-- [ ] Rust: 1 node + 100 peers, verify DHT discovery and attestation
-- [ ] Rust ↔ Python: Cross-language DHT discovery
-- [ ] Rust ↔ Java: Cross-language DHT discovery
-- [ ] Python ↔ Java: Cross-language DHT discovery
+- [ ] Rust: 1 node + 100 peers, verify DHT discovery and attestation — NOT FOUND: integration_tests.rs is PQC-only, no DHT stress test
+- [ ] Rust ↔ Python: Cross-language DHT discovery — NOT FOUND: test_cross_language.py exists but tests JSON-RPC stamp/verify only, not DHT
+- [ ] Rust ↔ Java: Cross-language DHT discovery — NOT FOUND: IntegrationTest.java is crypto-only, no network/DHT
+- [ ] Python ↔ Java: Cross-language DHT discovery — NOT FOUND: no such test exists
 
 ---
 

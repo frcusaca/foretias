@@ -122,8 +122,8 @@ pip install -e .
 ### Phase 5: Final cleanup
 
 - [x](2026-05-08 11:52) `pytest` is still needed for shim tests — keep `[project.optional-dependencies] dev`
-- [ ] Update `README.md` — remove pure-Python quick start, keep Rust + shim examples
-- [ ] Update `AGENTS.md` references if any point to old Python modules
+- [x](2026-05-08 12:31) Update `README.md` — no references to old pure-Python modules found, already clean
+- [x](2026-05-08 12:31) Update `AGENTS.md` references — only hit is Rust crate dir `chronomatter/` (line 118), not old Python module. Correct reference, no changes needed.
 - [x](2026-05-08 11:52) Verify no lingering imports of removed modules anywhere in the repo
 
 ---
