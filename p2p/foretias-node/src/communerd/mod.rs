@@ -7,6 +7,7 @@ pub mod transport;
 pub mod json_rpc_transport;
 pub mod peer_pool;
 pub mod dht_peer_source;
+pub mod capabilities;
 pub mod p2p;
 
 use std::sync::{Arc, OnceLock};
@@ -25,6 +26,7 @@ use self::peer_pool::PeerPool;
 use self::p2p::events::NetworkEvent;
 use self::p2p::swarm::{build_and_spawn_swarm, SwarmCommand};
 use self::transport::{PeerAddr, PeerTransport, TransportError};
+use self::capabilities::PeerCapability;
 use crate::probity::{ProbityReport, ProbityStore, handle_gossip_message};
 use libp2p::kad;
 use std::collections::HashMap;
@@ -38,6 +40,12 @@ pub struct PeerRegistrationRecord {
     pub json_rpc: String,
     pub chronon_ns: u64,
     pub registered_at_ns: u64,
+    #[serde(default = "default_capabilities")]
+    pub capabilities: Vec<PeerCapability>,
+}
+
+fn default_capabilities() -> Vec<PeerCapability> {
+    vec![PeerCapability::AttestWilling]
 }
 
 /// Communerd — all P2P traffic flows through this component.
@@ -536,6 +544,7 @@ impl Communerd {
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_nanos() as u64)
                 .unwrap_or(0),
+            capabilities: vec![PeerCapability::AttestWilling],
         };
         let record = kad::Record {
             key: key.clone(),
@@ -608,6 +617,7 @@ impl Communerd {
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_nanos() as u64)
                 .unwrap_or(0),
+            capabilities: vec![PeerCapability::AttestWilling],
         };
         let record = match serde_json::to_vec(&peer_record) {
             Ok(v) => kad::Record {

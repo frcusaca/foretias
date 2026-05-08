@@ -1,5 +1,6 @@
 //! Network events from the libp2p swarm.
 
+use super::super::capabilities::PeerCapability;
 use libp2p::{identify, kad, Multiaddr, PeerId};
 
 #[derive(Debug, Clone)]
@@ -20,4 +21,8 @@ pub enum NetworkEvent {
     RecordPutOk { key: kad::RecordKey },
     /// DHT record put failed
     RecordPutError { key: kad::RecordKey, error: String },
+    /// Peer discovered via DHT provider query for a specific capability
+    DhtPeerDiscoveredByCapability { capability: PeerCapability, peer_id: PeerId, addresses: Vec<Multiaddr> },
+    /// Peer registration record retrieved from DHT
+    PeerRegistrationRetrieved { record: crate::communerd::PeerRegistrationRecord },
 }

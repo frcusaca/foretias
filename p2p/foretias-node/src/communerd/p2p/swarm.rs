@@ -2,6 +2,7 @@
 
 use super::behaviour::{ForetiasBehaviour, ForetiasBehaviourEvent};
 use super::events::NetworkEvent;
+use super::super::capabilities::PeerCapability;
 use super::gossip::{probity_topic, heartbeat_topic};
 use crate::probity::ProbityReport;
 use foretias_core::collision::Heartbeat;
@@ -54,6 +55,8 @@ pub enum SwarmCommand {
     EnterDormancy,
     PublishProbity { report: ProbityReport, namespace: String },
     PublishHeartbeat { heartbeat: Heartbeat, namespace: String },
+    ProvideForCapability { capability: PeerCapability, namespace: String },
+    GetProvidersForCapability { capability: PeerCapability, namespace: String },
 }
 
 /// Build and spawn a libp2p swarm.
@@ -216,6 +219,14 @@ async fn swarm_loop(
                         let entry = (key.clone(), Vec::new());
                         let query_id = swarm.behaviour_mut().kad.get_record(key);
                         pending_get_record.insert(query_id, entry);
+                    }
+                    Some(SwarmCommand::ProvideForCapability { capability, namespace }) => {
+                        let key = capability.provider_key(&namespace);
+                        let _ = swarm.behaviour_mut().kad.start_providing(key);
+                    }
+                    Some(SwarmCommand::GetProvidersForCapability { capability, namespace }) => {
+                        let key = capability.provider_key(&namespace);
+                        let _ = swarm.behaviour_mut().kad.get_providers(key);
                     }
                     None => break,
                 }
