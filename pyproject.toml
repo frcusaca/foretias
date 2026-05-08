@@ -1,10 +1,10 @@
 [build-system]
-requires = ["maturin>=1.0,<2.0"]
-build-backend = "maturin"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "foretias"
-dynamic = ["version"]
+version = "0.2.0"
 description = "Free, Open-source and Resilient Time Integrity Attestation Service"
 readme = "README.md"
 license = { text = "BSD 3-Clause Clear License" }
@@ -20,7 +20,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Operating System :: OS Independent",
 ]
-dependencies = []
+dependencies = ["foretias-p2p>=0.2.0"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
@@ -31,7 +31,3 @@ foretis = "foretias.cli:main"
 [project.urls]
 Homepage = "https://github.com/frcusaca/foretias"
 Repository = "https://github.com/frcusaca/foretias"
-
-[tool.maturin]
-manifest-path = "p2p/foretias-python/Cargo.toml"
-module-name = "foretias_p2p"

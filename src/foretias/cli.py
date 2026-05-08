@@ -24,7 +24,7 @@ def main(argv: list[str] | None = None) -> int:
     verify_p = sub.add_parser("verify", help="Verify a Foretis")
     verify_p.add_argument("-m", "--message", help="Message text")
     verify_p.add_argument("-M", "--message-file", help="Read message from file")
-    verify_p.add_argument("-f", "--foretis", required=True, help="Foretis JSON")
+    verify_p.add_argument("-f", "--foretis", help="Foretis JSON (inline or file path)")
     verify_p.add_argument("-F", "--foretis-file", help="Load Foretis from file")
     verify_p.add_argument("--persist-path", help="Calendar persistence directory (dormant mode)")
 

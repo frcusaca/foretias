@@ -88,43 +88,43 @@ pip install -e .
 
 ### Phase 1: Fix shim `__init__.py` and `pyproject.toml`
 
-- [ ] Rewrite `src/foretias/__init__.py` to re-export from `foretias_p2p` with correct names
-- [ ] Switch top-level `pyproject.toml` from `maturin` to `hatchling`
-- [ ] Add `foretias-p2p` as a runtime dependency
-- [ ] Verify `pip install -e .` succeeds (after `maturin develop` in `p2p/foretias-python/`)
+- [x](2026-05-08 11:47) Rewrite `src/foretias/__init__.py` to re-export from `foretias_p2p` with correct names (also added all additional Py* types)
+- [x](2026-05-08 11:47) Switch top-level `pyproject.toml` from `maturin` to `hatchling`
+- [x](2026-05-08 11:47) Add `foretias-p2p` as a runtime dependency
+- [x](2026-05-08 11:47) Verify `pip install -e .` succeeds (after `maturin develop` in `p2p/foretias-python/`)
 
 ### Phase 2: Remove old Python modules
 
-- [ ] Delete `_timebeing.py`
-- [ ] Delete `chronomatter.py`
-- [ ] Delete `calendar.py`
-- [ ] Delete `time_family.py`
-- [ ] Delete `crypto.py`
-- [ ] Delete `models.py`
-- [ ] Delete `config.py`
-- [ ] Delete `timebeing.py`
-- [ ] Remove `__pycache__/` entries
+- [x](2026-05-08 11:49) Delete `_timebeing.py`
+- [x](2026-05-08 11:49) Delete `chronomatter.py`
+- [x](2026-05-08 11:49) Delete `calendar.py`
+- [x](2026-05-08 11:49) Delete `time_family.py`
+- [x](2026-05-08 11:49) Delete `crypto.py`
+- [x](2026-05-08 11:49) Delete `models.py`
+- [x](2026-05-08 11:49) Delete `config.py`
+- [x](2026-05-08 11:49) Delete `timebeing.py`
+- [x](2026-05-08 11:49) Remove `__pycache__/` entries
 
 ### Phase 3: Rewrite shim CLI and thin_client
 
-- [ ] Audit `cli.py` — ensure it imports only from `foretias_p2p` and the shim `__init__.py`
-- [ ] Audit `thin_client.py` — ensure it imports only from `foretias_p2p`
-- [ ] Verify both work with the new shim structure
+- [x](2026-05-08 11:49) Audit `cli.py` — imports only from `foretias_p2p`. Fixed: removed `required=True` on `-f/--foretis` so `-F/--foretis-file` works independently
+- [x](2026-05-08 11:49) Audit `thin_client.py` — imports only from `foretias_p2p`
+- [x](2026-05-08 11:49) Verify both work with the new shim structure
 
 ### Phase 4: Replace tests
 
-- [ ] Delete all 10 old test files
-- [ ] Write `test_shim.py` — verify shim imports work, basic stamp/verify roundtrip
-- [ ] Write `test_cli_smoke.py` — verify CLI `stamp` and `verify` exit codes
-- [ ] Run `python -m pytest tests/ -v` — all pass
-- [ ] Run `cd p2p && cargo test --workspace` — still all pass
+- [x](2026-05-08 11:49) Delete all 10 old test files
+- [x](2026-05-08 11:49) Write `test_shim.py` — 17 tests: shim imports, stamp/verify roundtrip (server + time_family), crypto server, JSON roundtrip, persistence
+- [x](2026-05-08 11:49) Write `test_cli_smoke.py` — 8 tests: CLI stamp, verify, integrity, serve stub exit codes
+- [x](2026-05-08 11:52) Run `python -m pytest tests/ -v` — 25 pass
+- [x](2026-05-08 11:52) Run `cd p2p && cargo test --workspace` — 229 pass
 
 ### Phase 5: Final cleanup
 
-- [ ] Remove `pyproject.toml` `[project.optional-dependencies] dev` if `pytest` no longer needed for pure Python
+- [x](2026-05-08 11:52) `pytest` is still needed for shim tests — keep `[project.optional-dependencies] dev`
 - [ ] Update `README.md` — remove pure-Python quick start, keep Rust + shim examples
 - [ ] Update `AGENTS.md` references if any point to old Python modules
-- [ ] Verify no lingering imports of removed modules anywhere in the repo
+- [x](2026-05-08 11:52) Verify no lingering imports of removed modules anywhere in the repo
 
 ---
 
