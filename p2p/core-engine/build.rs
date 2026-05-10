@@ -56,7 +56,7 @@ fn main() {
     let sources = [
         "src/version.c",
         "src/identity_ed25519.c", "src/identity_p256.c",
-        "src/signing_ed25519.c", "src/signing_p256.c", "src/signing_sphincs.c", "src/signing_dilithium.c",
+        "src/signing_ed25519.c", "src/signing_p256.c", "src/signing_sphincs.c", "src/signing_tbid.c", "src/signing_dilithium.c",
         "src/kem_mlkem.c",
         "src/hash_sha256.c", "src/hash_blake3.c",
         "src/hash_legacy_insecure_md5.c", "src/hash_legacy_insecure_sha1.c",
@@ -68,6 +68,7 @@ fn main() {
         println!("cargo:rerun-if-changed={}", core_dir.join(s).display());
     }
     println!("cargo:rerun-if-changed={}/include/foretias_core.h", core_dir.display());
+    println!("cargo:rerun-if-changed={}", core_dir.join("src/signing_tbid.c").display());
 
     let mut build = cc::Build::new();
     build.std("c11")

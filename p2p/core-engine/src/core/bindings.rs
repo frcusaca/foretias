@@ -5,15 +5,26 @@ pub const FORETIAS_CORE_VERSION_MINOR: u32 = 1;
 pub const FORETIAS_SIG_ID_ED25519: &[u8; 8] = b"Ed25519\0";
 pub const FORETIAS_SIG_ID_SPHINCS_SHA2_128S: &[u8; 26] = b"SPHINCS+-SHA2-128s-simple\0";
 pub const FORETIAS_SIG_ID_DILITHIUM3: &[u8; 11] = b"Dilithium3\0";
+pub const FORETIAS_SIG_ID_SLH_DSA_SHA2_256F: &[u8; 26] = b"SPHINCS+-SHA2-256f-simple\0";
 pub const FORETIAS_KEM_ID_NOISE_XX: &[u8; 9] = b"Noise-XX\0";
 pub const FORETIAS_KEM_ID_MLKEM_768: &[u8; 11] = b"ML-KEM-768\0";
 pub const FORETIAS_SIG_MAX_PUBKEY_BYTES: u32 = 2048;
 pub const FORETIAS_SIG_MAX_SECRET_BYTES: u32 = 4096;
-pub const FORETIAS_SIG_MAX_SIG_BYTES: u32 = 8192;
+pub const FORETIAS_SIG_MAX_SIG_BYTES: u32 = 65536;
 pub const FORETIAS_KEM_MAX_PUBKEY_BYTES: u32 = 1184;
 pub const FORETIAS_KEM_MAX_CIPHERTEXT: u32 = 1088;
 pub const FORETIAS_KEM_MAX_SECRET_BYTES: u32 = 2400;
 pub const FORETIAS_KEM_SHARED_SECRET: u32 = 32;
+pub const FORETIAS_TBID_V1_ED25519_PUB_BYTES: u32 = 32;
+pub const FORETIAS_TBID_V1_SLH_DSA_PUB_BYTES: u32 = 64;
+pub const FORETIAS_TBID_V1_PUB_BYTES: u32 = 96;
+pub const FORETIAS_TBID_V1_ED25519_SK_BYTES: u32 = 32;
+pub const FORETIAS_TBID_V1_SLH_DSA_SK_BYTES: u32 = 128;
+pub const FORETIAS_TBID_V1_SECRET_BYTES: u32 = 160;
+pub const FORETIAS_TBID_V1_ED25519_SIG_BYTES: u32 = 64;
+pub const FORETIAS_TBID_V1_SLH_DSA_SIG_BYTES: u32 = 49856;
+pub const FORETIAS_TBID_V1_SIG_BYTES: u32 = 49920;
+pub const FORETIAS_TBID_V1_VERSION: u32 = 1;
 pub const FORETIAS_NOISE_MAX_MSG: u32 = 65535;
 pub const FORETIAS_MERKLE_MAX_DEPTH: u32 = 32;
 #[repr(C)]
@@ -55,6 +66,7 @@ pub type ForetiasCurve = ::std::os::raw::c_uint;
 pub const ForetiasSignatureAlgorithm_FORETIAS_SIG_ED25519: ForetiasSignatureAlgorithm = 1;
 pub const ForetiasSignatureAlgorithm_FORETIAS_SIG_SPHINCS_SHA2_128S: ForetiasSignatureAlgorithm = 2;
 pub const ForetiasSignatureAlgorithm_FORETIAS_SIG_DILITHIUM3: ForetiasSignatureAlgorithm = 3;
+pub const ForetiasSignatureAlgorithm_FORETIAS_SIG_SLH_DSA_SHA2_256F: ForetiasSignatureAlgorithm = 4;
 pub type ForetiasSignatureAlgorithm = ::std::os::raw::c_uint;
 pub const ForetiasKemAlgorithm_FORETIAS_KEM_NOISE_XX: ForetiasKemAlgorithm = 1;
 pub const ForetiasKemAlgorithm_FORETIAS_KEM_MLKEM_768: ForetiasKemAlgorithm = 2;
@@ -212,17 +224,17 @@ const _: () = {
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct ForetiasSigVar {
-    pub bytes: [u8; 8192usize],
+    pub bytes: [u8; 65536usize],
     pub len: usize,
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
-    ["Size of ForetiasSigVar"][::std::mem::size_of::<ForetiasSigVar>() - 8200usize];
+    ["Size of ForetiasSigVar"][::std::mem::size_of::<ForetiasSigVar>() - 65544usize];
     ["Alignment of ForetiasSigVar"][::std::mem::align_of::<ForetiasSigVar>() - 8usize];
     ["Offset of field: ForetiasSigVar::bytes"]
         [::std::mem::offset_of!(ForetiasSigVar, bytes) - 0usize];
     ["Offset of field: ForetiasSigVar::len"]
-        [::std::mem::offset_of!(ForetiasSigVar, len) - 8192usize];
+        [::std::mem::offset_of!(ForetiasSigVar, len) - 65536usize];
 };
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -269,6 +281,56 @@ const _: () = {
         [::std::mem::offset_of!(ForetiasKemCiphertext, bytes) - 0usize];
     ["Offset of field: ForetiasKemCiphertext::len"]
         [::std::mem::offset_of!(ForetiasKemCiphertext, len) - 1088usize];
+};
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ForetiasTbidV1PubKey {
+    pub ed25519_pub: ForetiasPubKey32,
+    pub slh_dsa_pub: [u8; 64usize],
+}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of ForetiasTbidV1PubKey"][::std::mem::size_of::<ForetiasTbidV1PubKey>() - 96usize];
+    ["Alignment of ForetiasTbidV1PubKey"][::std::mem::align_of::<ForetiasTbidV1PubKey>() - 1usize];
+    ["Offset of field: ForetiasTbidV1PubKey::ed25519_pub"]
+        [::std::mem::offset_of!(ForetiasTbidV1PubKey, ed25519_pub) - 0usize];
+    ["Offset of field: ForetiasTbidV1PubKey::slh_dsa_pub"]
+        [::std::mem::offset_of!(ForetiasTbidV1PubKey, slh_dsa_pub) - 32usize];
+};
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ForetiasTbidV1SecretKey {
+    pub ed25519_sk: ForetiasPrivKey32,
+    pub slh_dsa_sk: [u8; 128usize],
+    pub slh_dsa_sk_len: usize,
+}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of ForetiasTbidV1SecretKey"]
+        [::std::mem::size_of::<ForetiasTbidV1SecretKey>() - 168usize];
+    ["Alignment of ForetiasTbidV1SecretKey"]
+        [::std::mem::align_of::<ForetiasTbidV1SecretKey>() - 8usize];
+    ["Offset of field: ForetiasTbidV1SecretKey::ed25519_sk"]
+        [::std::mem::offset_of!(ForetiasTbidV1SecretKey, ed25519_sk) - 0usize];
+    ["Offset of field: ForetiasTbidV1SecretKey::slh_dsa_sk"]
+        [::std::mem::offset_of!(ForetiasTbidV1SecretKey, slh_dsa_sk) - 32usize];
+    ["Offset of field: ForetiasTbidV1SecretKey::slh_dsa_sk_len"]
+        [::std::mem::offset_of!(ForetiasTbidV1SecretKey, slh_dsa_sk_len) - 160usize];
+};
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ForetiasTbidV1Sig {
+    pub bytes: [u8; 49920usize],
+    pub len: usize,
+}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of ForetiasTbidV1Sig"][::std::mem::size_of::<ForetiasTbidV1Sig>() - 49928usize];
+    ["Alignment of ForetiasTbidV1Sig"][::std::mem::align_of::<ForetiasTbidV1Sig>() - 8usize];
+    ["Offset of field: ForetiasTbidV1Sig::bytes"]
+        [::std::mem::offset_of!(ForetiasTbidV1Sig, bytes) - 0usize];
+    ["Offset of field: ForetiasTbidV1Sig::len"]
+        [::std::mem::offset_of!(ForetiasTbidV1Sig, len) - 49920usize];
 };
 extern "C" {
     #[link_name = "foretias_sig_algorithm_id"]
@@ -552,6 +614,18 @@ extern "C" {
     pub fn foretias_sphincs_sha2_128s_verify(        public_key: *const ForetiasPubKeyVar,        msg: *const u8,        msg_len: usize,        sig: *const ForetiasSigVar,    ) -> ForetiasResult;
 }
 extern "C" {
+    #[link_name = "foretias_sphincs_sha2_256f_keypair"]
+    pub fn foretias_sphincs_sha2_256f_keypair(        secret_out: *mut ForetiasSecretKeyVar,        public_out: *mut ForetiasPubKeyVar,    ) -> ForetiasResult;
+}
+extern "C" {
+    #[link_name = "foretias_sphincs_sha2_256f_sign"]
+    pub fn foretias_sphincs_sha2_256f_sign(        secret: *const ForetiasSecretKeyVar,        msg: *const u8,        msg_len: usize,        sig_out: *mut ForetiasSigVar,    ) -> ForetiasResult;
+}
+extern "C" {
+    #[link_name = "foretias_sphincs_sha2_256f_verify"]
+    pub fn foretias_sphincs_sha2_256f_verify(        public_key: *const ForetiasPubKeyVar,        msg: *const u8,        msg_len: usize,        sig: *const ForetiasSigVar,    ) -> ForetiasResult;
+}
+extern "C" {
     #[link_name = "foretias_dilithium3_keypair"]
     pub fn foretias_dilithium3_keypair(        secret_out: *mut ForetiasSecretKeyVar,        public_out: *mut ForetiasPubKeyVar,    ) -> ForetiasResult;
 }
@@ -574,4 +648,20 @@ extern "C" {
 extern "C" {
     #[link_name = "foretias_mlkem_768_decapsulate"]
     pub fn foretias_mlkem_768_decapsulate(        secret: *const ForetiasKemSecretKey,        ciphertext: *const ForetiasKemCiphertext,        shared_secret_out: *mut u8,    ) -> ForetiasResult;
+}
+extern "C" {
+    #[link_name = "foretias_tbid_v1_keypair"]
+    pub fn foretias_tbid_v1_keypair(        secret_out: *mut ForetiasTbidV1SecretKey,        public_out: *mut ForetiasTbidV1PubKey,    ) -> ForetiasResult;
+}
+extern "C" {
+    #[link_name = "foretias_tbid_v1_sign"]
+    pub fn foretias_tbid_v1_sign(        secret: *const ForetiasTbidV1SecretKey,        msg: *const u8,        msg_len: usize,        sig_out: *mut ForetiasTbidV1Sig,    ) -> ForetiasResult;
+}
+extern "C" {
+    #[link_name = "foretias_tbid_v1_verify"]
+    pub fn foretias_tbid_v1_verify(        public_key: *const ForetiasTbidV1PubKey,        msg: *const u8,        msg_len: usize,        sig: *const ForetiasTbidV1Sig,    ) -> ForetiasResult;
+}
+extern "C" {
+    #[link_name = "foretias_tbid_v1_secret_zeroize"]
+    pub fn foretias_tbid_v1_secret_zeroize(secret: *mut ForetiasTbidV1SecretKey);
 }
