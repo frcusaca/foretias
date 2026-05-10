@@ -102,7 +102,7 @@ public final class Crypto {
     // ── TBID generation ─────────────────────────────────────────
 
     public static byte[] generateTbid() {
-        return randomBytes(16);
+        return randomBytes(96);
     }
 
     // ── Foretis stamp ───────────────────────────────────────────

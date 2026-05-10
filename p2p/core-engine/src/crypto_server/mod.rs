@@ -139,6 +139,7 @@ pub trait CryptoServer: Send + Sync {
 
 pub mod software;
 pub mod signing_sphincs;
+pub mod signing_tbid;
 pub mod kem_mlkem;
 pub mod signing_dilithium;
 

@@ -12,13 +12,14 @@ use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
 
 use crate::crypto_server::{self, CryptoServer};
+use crate::crypto_server::signing_tbid;
 use crate::core::identity::PrivKeyHandle;
 use crate::error::NodeError;
 use crate::clock::Clock;
 use crate::foretias::{auto_attestation_blob_with_count, Foretis, TickRecord};
 use crate::foretias::tick::CalendarLookup;
 use crate::foretias::callbacks::{TickObserver, AutoAttestObserver};
-use crate::foretias::types::{Tbid, TickNumber};
+use crate::foretias::types::{Tbid, TbidSecret, TickNumber};
 
 struct TickKeyPair {
     pub_key: [u8; 32],
@@ -27,6 +28,8 @@ struct TickKeyPair {
 
 pub struct Chronomatter {
     tbid: Tbid,
+    /// Dual-key TBID secret — used for genesis tick signing and Ed25519 tick key derivation.
+    tbid_secret: Option<TbidSecret>,
     tbn: String,
     current_tick: AtomicU64,
     keypairs: RwLock<Vec<TickKeyPair>>,
@@ -44,16 +47,17 @@ pub struct Chronomatter {
 
 impl Chronomatter {
     pub fn new(chronon_ns: u64, tick_observer: Arc<dyn TickObserver>) -> Result<Self, NodeError> {
-        let crypto = Arc::from(crypto_server::new_software(
+        let crypto: Arc<dyn CryptoServer> = Arc::from(crypto_server::new_software(
             crypto_server::ForetiasCurve::Ed25519,
         )?);
 
-        let uuid = uuid::Uuid::new_v4();
-        let tbid = *uuid.as_bytes();
-        let tbn = format!("tf-{}", hex::encode(&tbid[..8]));
+        let (tbid, tbid_secret) = TbidSecret::generate()
+            .map_err(|e| NodeError::Crypto(e))?;
+        let tbn = format!("tf-{}", &tbid.to_hex()[..16]);
 
         Ok(Self {
             tbid,
+            tbid_secret: Some(tbid_secret),
             tbn,
             current_tick: AtomicU64::new(0),
             keypairs: RwLock::new(Vec::new()),
@@ -82,12 +86,13 @@ impl Chronomatter {
         let calendar_data = Calendar::load(path)?;
         let latest_tick = CalendarLookup::latest(&calendar_data).unwrap_or(0);
 
-        let uuid = uuid::Uuid::new_v4();
-        let tbid = *uuid.as_bytes();
-        let tbn = format!("tf-{}", hex::encode(&tbid[..8]));
+        let (tbid, _tbid_secret) = TbidSecret::generate()
+            .map_err(|e| NodeError::Crypto(e))?;
+        let tbn = format!("tf-{}", &tbid.to_hex()[..16]);
 
         Ok(Self {
             tbid,
+            tbid_secret: None,
             tbn,
             current_tick: AtomicU64::new(latest_tick),
             keypairs: RwLock::new(Vec::new()),
@@ -167,7 +172,7 @@ impl Chronomatter {
     }
 
     fn build_auto_attestation(&self, tick: u64, new_pub: [u8; 32]) -> Result<(Vec<u8>, Vec<u8>, [u8; 16], u64), NodeError> {
-        let tbid_str = hex::encode(self.tbid);
+        let tbid_str = self.tbid.to_hex();
         let kp_idx = (tick - 1) as usize;
         let stamps = self.stamps_per_tick.swap(0, SeqCst);
 
@@ -201,6 +206,29 @@ impl Chronomatter {
         }
         let (forward_foretis, backward_foretis, aa_nonce, stamps) = result?;
 
+        // Sign genesis tick (tick 1) with TBID dual-key identity
+        let (genesis_signature, tb_version) = if tick == 1 {
+            match &self.tbid_secret {
+                Some(secret) => {
+                    // Build genesis blob: tbid_raw_bytes || tick_number || public_key
+                    let mut genesis_blob = Vec::with_capacity(96 + 8 + new_pub.len());
+                    genesis_blob.extend_from_slice(&self.tbid.raw_bytes());
+                    genesis_blob.extend_from_slice(&tick.to_be_bytes());
+                    genesis_blob.extend_from_slice(&new_pub);
+                    let sig = secret.sign(&genesis_blob)
+                        .map_err(|e| NodeError::Crypto(e))?;
+                    info!(genesis_blob_len = genesis_blob.len(), sig_len = sig.len(), "signed genesis tick");
+                    (sig, 1u32)
+                }
+                None => {
+                    warn!("no TBID secret available for genesis tick signing");
+                    (Vec::new(), 0u32)
+                }
+            }
+        } else {
+            (Vec::new(), 0u32)
+        };
+
         Ok(TickRecord {
             tick_number: tick,
             public_key: new_pub.to_vec(),
@@ -210,6 +238,8 @@ impl Chronomatter {
             aa_nonce,
             stamps_per_tick: stamps,
             external_attestations: Vec::new(),
+            genesis_signature,
+            tb_version,
         })
     }
 
@@ -248,8 +278,9 @@ impl Chronomatter {
         let new_pub = self.keypair_pub(kp_idx)
             .ok_or_else(|| NodeError::Internal("keypair not found after generation".into()))?;
 
-        let mut sig_input = Vec::with_capacity(16 + 8 + content.len());
-        sig_input.extend_from_slice(&tbid);
+        let raw_tbid = tbid.raw_bytes();
+        let mut sig_input = Vec::with_capacity(96 + 8 + content.len());
+        sig_input.extend_from_slice(&raw_tbid);
         sig_input.extend_from_slice(&tick.to_be_bytes());
         sig_input.extend_from_slice(&content);
 
@@ -317,16 +348,16 @@ impl Chronomatter {
             loop {
                 interval.tick().await;
                 let tick_before = this.current_tick.load(SeqCst);
-                debug!(tbid = %hex::encode(tbid), tick = tick_before, "chronomatter: heartbeat");
+                debug!(tbid = %tbid.to_hex(), tick = tick_before, "chronomatter: heartbeat");
                 if let Err(e) = this.daemon_tick() {
-                    error!(tbid = %hex::encode(tbid), "chronomatter: daemon tick failed: {}", e);
+                    error!(tbid = %tbid.to_hex(), "chronomatter: daemon tick failed: {}", e);
                 }
             }
         });
 
         let mut daemon = self.daemon_handle.lock();
         *daemon = Some(handle);
-        info!(tbid = %hex::encode(self.tbid), component = "chronomatter", "chronomatter daemon started with chronon interval: {} ms", chronon_ms);
+        info!(tbid = %self.tbid.to_hex(), component = "chronomatter", "chronomatter daemon started with chronon interval: {} ms", chronon_ms);
     }
 
     pub fn stop_daemon(&self) {
@@ -368,10 +399,10 @@ impl Chronomatter {
         start: Option<u64>,
         end: Option<u64>,
     ) -> Result<Vec<bool>, NodeError> {
-        use crate::foretias::tick::verify_pair;
+        use crate::foretias::tick::{verify_genesis_signature, verify_pair};
 
         let records = calendar.get(start.unwrap_or(0), 10_000)?;
-        if records.len() < 2 {
+        if records.len() < 1 {
             return Ok(Vec::new());
         }
 
@@ -382,16 +413,29 @@ impl Chronomatter {
             .filter(|t| t.tick_number >= start_tick && t.tick_number <= end_tick)
             .collect();
 
-        if filtered.len() < 2 {
+        if filtered.is_empty() {
             return Ok(Vec::new());
         }
 
-        let tbid_str = hex::encode(calendar.tbid());
-        let mut results = Vec::with_capacity(filtered.len() - 1);
-        for i in 0..filtered.len() - 1 {
-            let valid = verify_pair(self.crypto.as_ref(), &tbid_str, filtered[i], filtered[i + 1])?;
-            results.push(valid);
+        let mut results = Vec::with_capacity(filtered.len());
+
+        // Verify genesis signature on tick 1 if present
+        if let Some(first) = filtered.first() {
+            if first.tick_number == 1 && !first.genesis_signature.is_empty() {
+                let genesis_valid = verify_genesis_signature(&calendar.tbid(), first)?;
+                results.push(genesis_valid);
+            }
         }
+
+        // Verify auto-attestation pairs between consecutive ticks
+        if filtered.len() >= 2 {
+            let tbid_str = calendar.tbid().to_hex();
+            for i in 0..filtered.len() - 1 {
+                let valid = verify_pair(self.crypto.as_ref(), &tbid_str, filtered[i], filtered[i + 1])?;
+                results.push(valid);
+            }
+        }
+
         Ok(results)
     }
 }
@@ -417,7 +461,7 @@ mod tests {
 
     fn make_chronomatter() -> (Arc<Chronomatter>, Arc<AtomicU64Std>, Arc<RwLock<Calendar>>) {
         let last_tick = Arc::new(AtomicU64Std::new(0));
-        let calendar = Arc::new(RwLock::new(Calendar::new([0u8; 16], "test")));
+        let calendar = Arc::new(RwLock::new(Calendar::new(Tbid::from_raw([0u8; 96]), "test")));
         let observer = Arc::new(DummyObserver { last_tick: Arc::clone(&last_tick), calendar: Arc::clone(&calendar) });
         let cm = Chronomatter::new(1_000_000_000, observer)
             .expect("failed to create Chronomatter");
@@ -486,7 +530,7 @@ mod tests {
     #[test]
     fn dormant_cannot_stamp() {
         let last_tick = Arc::new(AtomicU64Std::new(0));
-        let calendar = Arc::new(RwLock::new(Calendar::new([0u8; 16], "dormant-test")));
+        let calendar = Arc::new(RwLock::new(Calendar::new(Tbid::from_raw([0u8; 96]), "dormant-test")));
         let observer = Arc::new(DummyObserver { last_tick: Arc::clone(&last_tick), calendar: Arc::clone(&calendar) });
         let crypto = Arc::from(crypto_server::new_software(
             crypto_server::ForetiasCurve::Ed25519,
@@ -522,7 +566,8 @@ mod tests {
             cm.daemon_tick().unwrap();
         }
         let results = cm.integrity_check(&*calendar.read(), None, None).unwrap();
-        assert_eq!(results.len(), 2);
+        // 1 genesis check (tick 1) + 2 pair checks (1→2, 2→3) = 3
+        assert_eq!(results.len(), 3);
         assert!(results.iter().all(|&v| v));
     }
 }

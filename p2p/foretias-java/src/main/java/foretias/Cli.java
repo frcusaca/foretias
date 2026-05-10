@@ -328,7 +328,7 @@ public class Cli {
                   -m, --message <str>       Message to stamp
                   -M, --message-file <path> Read message from file
                   --privkey <hex>           32-byte Ed25519 private key (hex)
-                  --tbid <hex>              16-byte TBID (hex)
+                  --tbid <hex>              96-byte TBID (hex)
                   --tick <n>                Tick number (default: 0)
                   --echo <str>              Echo string
                   --tbn <str>               Time branch name

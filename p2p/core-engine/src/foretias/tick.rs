@@ -6,6 +6,7 @@ use crate::clock::Clock;
 use crate::crypto_server::CryptoServer;
 use crate::core::rng::random_bytes;
 use crate::error::NodeError;
+use super::types::Tbid;
 
 /// A single entry in the Calendar, linking consecutive ticks via Foretis attestations.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,6 +32,13 @@ pub struct TickRecord {
     /// External attestations from other Time Families.
     #[serde(default)]
     pub external_attestations: Vec<super::external_attestation::ExternalAttestation>,
+    /// Dual-key (Ed25519 + SLH-DSA-SHA2-256f) signature over the genesis blob.
+    /// Present only on tick 1 when the node supports TBID V1 dual-key identity.
+    #[serde(default)]
+    pub genesis_signature: Vec<u8>,
+    /// TBID protocol version: 0 = legacy (16-byte UUID), 1 = dual-key (96-byte).
+    #[serde(default = "default_tb_version")]
+    pub tb_version: u32,
 }
 
 impl TickRecord {
@@ -62,6 +70,8 @@ impl TickRecord {
             aa_nonce,
             stamps_per_tick,
             external_attestations: Vec::new(),
+            genesis_signature: Vec::new(),
+            tb_version: 0,
         })
     }
 }
@@ -78,7 +88,7 @@ pub struct Foretis {
     /// Plain-text algorithm identifier (e.g. "SPHINCS+-SHA2-128s-simple").
     pub signature_algorithm: String,
     /// TimeBeing identifier of the signing node.
-    pub tbid: [u8; 16],
+    pub tbid: Tbid,
     /// Echo string identifying the tick (e.g. `"tick-42"`).
     pub echo: String,
     /// TimeBeing name (human-readable identifier).
@@ -97,7 +107,7 @@ impl Foretis {
         content_hash: [u8; 32],
         signature: Vec<u8>,
         signature_algorithm: String,
-        tbid: [u8; 16],
+        tbid: Tbid,
         echo: String,
         tbn: String,
         time_being_reference_time: String,
@@ -131,7 +141,7 @@ pub trait CalendarLookup: Send + Sync {
     /// Returns the tick number of the most recent record, if any.
     fn latest(&self) -> Option<u64>;
     /// Returns the TBID of this calendar's owner.
-    fn tbid(&self) -> [u8; 16];
+    fn tbid(&self) -> Tbid;
     /// Returns the TimeBeing name.
     fn tbn(&self) -> &str;
 }
@@ -140,14 +150,15 @@ pub trait CalendarLookup: Send + Sync {
 pub fn stamp(
     server: &dyn CryptoServer,
     clock: &dyn Clock,
-    tbid: &[u8; 16],
+    tbid: &Tbid,
     tick_number: u64,
     content: &[u8],
     echo: &str,
     tbn: &str,
 ) -> Result<Foretis, NodeError> {
-    let mut sig_input = Vec::with_capacity(16 + 8 + content.len());
-    sig_input.extend_from_slice(tbid);
+    let raw_tbid = tbid.raw_bytes();
+    let mut sig_input = Vec::with_capacity(96 + 8 + content.len());
+    sig_input.extend_from_slice(&raw_tbid);
     sig_input.extend_from_slice(&tick_number.to_be_bytes());
     sig_input.extend_from_slice(content);
 
@@ -186,9 +197,17 @@ pub fn verify(
     let records = calendar.get(foretis.tick_number, 1)?;
     let rec = records.first().ok_or(NodeError::NotFound("tick"))?;
 
+    // On tick 1, verify the genesis signature first
+    if foretis.tick_number == 1 && !rec.genesis_signature.is_empty() {
+        let genesis_valid = verify_genesis_signature(&foretis.tbid, rec)?;
+        if !genesis_valid {
+            return Ok(false);
+        }
+    }
+
     // Use the algorithm declared in the Foretis itself for verification
     let mut sig_input = Vec::new();
-    sig_input.extend_from_slice(&foretis.tbid);
+    sig_input.extend_from_slice(&foretis.tbid.raw_bytes());
     sig_input.extend_from_slice(&foretis.tick_number.to_be_bytes());
     sig_input.extend_from_slice(content);
 
@@ -281,8 +300,50 @@ pub fn verify_pair(
     Ok(forward_valid && backward_valid)
 }
 
+/// Verify the genesis signature on tick 1.
+///
+/// Rebuilds the genesis blob from the tick record (tbid_raw || tick_number || public_key),
+/// then verifies both Ed25519 and SLH-DSA signatures against the TBID public key.
+///
+/// Returns `Ok(true)` if the genesis signature is valid.
+/// Returns `Ok(false)` if the signature is empty (legacy tick) or invalid.
+/// Returns `Err` only on internal/crypto errors.
+pub fn verify_genesis_signature(
+    tbid: &Tbid,
+    record: &TickRecord,
+) -> Result<bool, NodeError> {
+    if record.tick_number != 1 {
+        return Ok(false);
+    }
+    if record.genesis_signature.is_empty() {
+        return Ok(false);
+    }
+    if record.tb_version != 1 {
+        return Ok(false);
+    }
+
+    let mut genesis_blob = Vec::with_capacity(96 + 8 + record.public_key.len());
+    genesis_blob.extend_from_slice(&tbid.raw_bytes());
+    genesis_blob.extend_from_slice(&record.tick_number.to_be_bytes());
+    genesis_blob.extend_from_slice(&record.public_key);
+
+    let pub_bytes = crate::foretias::types::SignatureBytes::from(tbid.raw_bytes());
+    let sig_valid = crate::crypto_server::signing_tbid::tbid_verify(
+        &pub_bytes,
+        &genesis_blob,
+        &record.genesis_signature,
+    )
+    .map_err(|e| NodeError::Crypto(e))?;
+
+    Ok(sig_valid)
+}
+
 fn default_sig_algorithm() -> String {
     "Ed25519".to_string()
+}
+
+fn default_tb_version() -> u32 {
+    1
 }
 
 #[cfg(test)]
@@ -302,7 +363,7 @@ mod tests {
     }
 
     fn make_cal(server: &dyn CryptoServer) -> Calendar {
-        let tbid: [u8; 16] = [0xAA; 16];
+        let tbid = Tbid::from_raw([0xAA; 96]);
         let mut cal = Calendar::new(tbid, "test-cal");
         let tick_number = 1;
         let content = b"init";
@@ -321,6 +382,8 @@ mod tests {
             aa_nonce: [0u8; 16],
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
+            genesis_signature: Vec::new(),
+            tb_version: 0,
         }).unwrap();
         cal
     }
@@ -328,7 +391,7 @@ mod tests {
     #[test]
     fn stamp_creates_valid_foretis() {
         let server = make_server();
-        let tbid: [u8; 16] = [1u8; 16];
+        let tbid = Tbid::from_raw([1u8; 96]);
         let foretis = stamp(server.as_ref(), &SystemClock, &tbid, 42, b"hello", "echo-42", "tbn")
             .expect("stamp should succeed");
         assert_eq!(foretis.tick_number, 42);
@@ -342,7 +405,7 @@ mod tests {
     #[test]
     fn stamp_different_content_different_hash() {
         let server = make_server();
-        let tbid: [u8; 16] = [2u8; 16];
+        let tbid = Tbid::from_raw([2u8; 96]);
         let f1 = stamp(server.as_ref(), &SystemClock, &tbid, 1, b"aaa", "e", "t").unwrap();
         let f2 = stamp(server.as_ref(), &SystemClock, &tbid, 1, b"bbb", "e", "t").unwrap();
         assert_ne!(f1.content_hash, f2.content_hash);
@@ -351,7 +414,7 @@ mod tests {
     #[test]
     fn stamp_empty_content_produces_valid_stamp() {
         let server = make_server();
-        let tbid: [u8; 16] = [3u8; 16];
+        let tbid = Tbid::from_raw([3u8; 96]);
         let foretis = stamp(server.as_ref(), &SystemClock, &tbid, 1, b"", "empty", "t").unwrap();
         assert_eq!(foretis.tick_number, 1);
         assert!(!foretis.signature.is_empty());
@@ -361,7 +424,7 @@ mod tests {
     fn verify_succeeds_with_correct_content() {
         let server = make_server();
         let cal = make_cal(server.as_ref());
-        let tbid: [u8; 16] = [0xAA; 16];
+        let tbid = Tbid::from_raw([0xAA; 96]);
         let content = b"init";
         let foretis = stamp(server.as_ref(), &SystemClock, &tbid, 1, content, "init", "test-cal")
             .expect("stamp");
@@ -374,7 +437,7 @@ mod tests {
     fn verify_fails_with_wrong_content() {
         let server = make_server();
         let cal = make_cal(server.as_ref());
-        let tbid: [u8; 16] = [0xAA; 16];
+        let tbid = Tbid::from_raw([0xAA; 96]);
         let content = b"init";
         let foretis = stamp(server.as_ref(), &SystemClock, &tbid, 1, content, "init", "test-cal")
             .expect("stamp");
@@ -386,7 +449,7 @@ mod tests {
     #[test]
     fn verify_fails_with_wrong_public_key() {
         let server = make_server();
-        let tbid: [u8; 16] = [0xBB; 16];
+        let tbid = Tbid::from_raw([0xBB; 96]);
         let mut cal = Calendar::new(tbid, "bad-cal");
         cal.append(TickRecord {
             tick_number: 1,
@@ -397,6 +460,8 @@ mod tests {
             aa_nonce: [0u8; 16],
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
+            genesis_signature: Vec::new(),
+            tb_version: 0,
         }).unwrap();
         let content = b"test";
         let foretis = stamp(server.as_ref(), &SystemClock, &tbid, 1, content, "e", "bad-cal")
@@ -410,8 +475,8 @@ mod tests {
     #[test]
     fn verify_pair_valid_returns_true() {
         let server = make_server();
-        let tbid: [u8; 16] = [0xCC; 16];
-        let tbid_str = hex::encode(tbid);
+        let tbid = Tbid::from_raw([0xCC; 96]);
+        let tbid_str = tbid.to_hex();
         let pub_key = match server.public_key() {
             crate::crypto_server::PublicKeyBytes::Ed25519(pk) => pk.bytes,
             crate::crypto_server::PublicKeyBytes::P256Compressed(pk) => pk.bytes[..32].try_into().unwrap(),
@@ -432,6 +497,8 @@ mod tests {
             aa_nonce: [0u8; 16],
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
+            genesis_signature: Vec::new(),
+            tb_version: 0,
         };
         let curr = TickRecord {
             tick_number: 2,
@@ -442,6 +509,8 @@ mod tests {
             aa_nonce: nonce,
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
+            genesis_signature: Vec::new(),
+            tb_version: 0,
         };
 
         let valid = verify_pair(server.as_ref(), &tbid_str, &prev, &curr).unwrap();
@@ -451,8 +520,8 @@ mod tests {
     #[test]
     fn verify_pair_tampered_returns_false() {
         let server = make_server();
-        let tbid: [u8; 16] = [0xDD; 16];
-        let tbid_str = hex::encode(tbid);
+        let tbid = Tbid::from_raw([0xDD; 96]);
+        let tbid_str = tbid.to_hex();
         let pub_key = match server.public_key() {
             crate::crypto_server::PublicKeyBytes::Ed25519(pk) => pk.bytes,
             crate::crypto_server::PublicKeyBytes::P256Compressed(pk) => pk.bytes[..32].try_into().unwrap(),
@@ -472,6 +541,8 @@ mod tests {
             aa_nonce: [0u8; 16],
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
+            genesis_signature: Vec::new(),
+            tb_version: 0,
         };
         let curr = TickRecord {
             tick_number: 2,
@@ -482,6 +553,8 @@ mod tests {
             aa_nonce: nonce,
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
+            genesis_signature: Vec::new(),
+            tb_version: 0,
         };
 
         assert!(verify_pair(server.as_ref(), &tbid_str, &prev, &curr).unwrap());
@@ -496,6 +569,8 @@ mod tests {
             aa_nonce: nonce,
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
+            genesis_signature: Vec::new(),
+            tb_version: 0,
         };
 
 let valid = verify_pair(server.as_ref(), &tbid_str, &prev, &curr_tampered).unwrap();
@@ -504,8 +579,8 @@ let valid = verify_pair(server.as_ref(), &tbid_str, &prev, &curr_tampered).unwra
 
     #[test]
     fn auto_attestation_blob_nonce_is_unique() {
-        let tbid: [u8; 16] = [0x12; 16];
-        let tbid_str = hex::encode(tbid);
+        let tbid = Tbid::from_raw([0x12; 96]);
+        let tbid_str = tbid.to_hex();
         let pk = [0xABu8; 32];
 
         let (blob1, nonce1) = auto_attestation_blob(&tbid_str, 1, &pk, 2, &pk).unwrap();
@@ -518,8 +593,8 @@ let valid = verify_pair(server.as_ref(), &tbid_str, &prev, &curr_tampered).unwra
 
     #[test]
     fn auto_attestation_blob_nonce_is_present() {
-        let tbid: [u8; 16] = [0x34; 16];
-        let tbid_str = hex::encode(tbid);
+        let tbid = Tbid::from_raw([0x34; 96]);
+        let tbid_str = tbid.to_hex();
         let pk = [0xCDu8; 32];
 
         let (blob, nonce) = auto_attestation_blob(&tbid_str, 5, &pk, 6, &pk).unwrap();

@@ -358,6 +358,10 @@ mod full_integration {
                             let pk = signer.dilithium_pub_key.as_ref().unwrap().clone();
                             verifier.verify_with(&pk, "Dilithium3", msg, &sig).unwrap()
                         }
+                        SignatureAlgorithm::SLH_DSA_SHA2_256F => {
+                            let pk = signer.sphincs_sha2_256f_pub_key.as_ref().unwrap().clone();
+                            verifier.verify_with(&pk, "SPHINCS+-SHA2-256f-simple", msg, &sig).unwrap()
+                        }
                     };
                     assert!(valid,
                         "Server {} should verify server {}'s {} signature", j, i, alg);

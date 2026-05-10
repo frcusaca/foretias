@@ -1,7 +1,9 @@
 #include "platform.h"
 #include "foretias_core.h"
+#include <oqs/oqs.h>
 #include <string.h>
 
+#ifdef OQS_ENABLE_SIG_sphincs_sha2_256f_simple
 ForetiasResult foretias_tbid_v1_keypair(
     ForetiasTbidV1SecretKey* secret_out,
     ForetiasTbidV1PubKey*    public_out)
@@ -117,3 +119,5 @@ void foretias_tbid_v1_secret_zeroize(ForetiasTbidV1SecretKey* secret) {
     foretias_memzero(secret->slh_dsa_sk, secret->slh_dsa_sk_len);
     secret->slh_dsa_sk_len = 0;
 }
+
+#endif

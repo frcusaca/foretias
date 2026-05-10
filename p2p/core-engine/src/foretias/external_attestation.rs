@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::tick::TickRecord;
+use super::types::Tbid;
 
 /// An external attestation from another Time Family.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,6 +33,8 @@ mod tests {
             aa_nonce: [0u8; 16],
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
+            genesis_signature: Vec::new(),
+            tb_version: 0,
         }
     }
 
@@ -42,7 +45,7 @@ mod tests {
             content_hash: [1u8; 32],
             signature: vec![2u8; 64],
             signature_algorithm: "Ed25519".to_string(),
-            tbid: [3u8; 16],
+            tbid: Tbid::from_raw([3u8; 96]),
             echo: "test".to_string(),
             tbn: "test".to_string(),
             time_being_reference_time: "UE+123ns".to_string(),

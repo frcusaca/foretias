@@ -51,7 +51,7 @@ typedef enum {
     FORETIAS_SIG_ED25519              = 1,   // Legacy, retained
     FORETIAS_SIG_SPHINCS_SHA2_128S    = 2,   // Default PQ signing
     FORETIAS_SIG_DILITHIUM3           = 3,   // Optional PQ signing
-    FORETIAS_SIG_SLH_DSA_SHA2_256F    = 4,   // TBID V1 PQ signing
+    FORETIAS_SIG_SLH_DSA_SHA2_256F    = 4,   // NIST Level 5 PQ signing
 } ForetiasSignatureAlgorithm;
 
 /* ── KEM algorithm selector ───────────────────────── */
@@ -64,6 +64,7 @@ typedef enum {
 #define FORETIAS_SIG_ID_ED25519           "Ed25519"
 #define FORETIAS_SIG_ID_SPHINCS_SHA2_128S "SPHINCS+-SHA2-128s-simple"
 #define FORETIAS_SIG_ID_DILITHIUM3        "Dilithium3"
+#define FORETIAS_SIG_ID_SLH_DSA_SHA2_256F "SPHINCS+-SHA2-256f-simple"
 #define FORETIAS_KEM_ID_NOISE_XX          "Noise-XX"
 #define FORETIAS_KEM_ID_MLKEM_768         "ML-KEM-768"
 #define FORETIAS_SIG_ID_SLH_DSA_SHA2_256F "SPHINCS+-SHA2-256f-simple"
@@ -71,7 +72,7 @@ typedef enum {
 /* ── Maximum PQC sizes ────────────────────────────── */
 #define FORETIAS_SIG_MAX_PUBKEY_BYTES   2048   // Dilithium3 pubkey (1952)
 #define FORETIAS_SIG_MAX_SECRET_BYTES   4096   // Dilithium3 secret (4000)
-#define FORETIAS_SIG_MAX_SIG_BYTES      65536  // SLH-DSA-SHA2-256f signature (49856)
+#define FORETIAS_SIG_MAX_SIG_BYTES      65536   // SLH-DSA-SHA2-256f signature (49,856)
 #define FORETIAS_KEM_MAX_PUBKEY_BYTES   1184   // ML-KEM-768
 #define FORETIAS_KEM_MAX_CIPHERTEXT     1088   // ML-KEM-768
 #define FORETIAS_KEM_MAX_SECRET_BYTES   2400   // ML-KEM-768
@@ -80,13 +81,13 @@ typedef enum {
 /* ── TBID V1 size constants (single source of truth, imported by Rust via bindgen) ── */
 #define FORETIAS_TBID_V1_ED25519_PUB_BYTES  32
 #define FORETIAS_TBID_V1_SLH_DSA_PUB_BYTES  64
-#define FORETIAS_TBID_V1_PUB_BYTES          96
+#define FORETIAS_TBID_V1_PUB_BYTES          96     /* 32 + 64 */
 #define FORETIAS_TBID_V1_ED25519_SK_BYTES   32
 #define FORETIAS_TBID_V1_SLH_DSA_SK_BYTES   128
-#define FORETIAS_TBID_V1_SECRET_BYTES       160
+#define FORETIAS_TBID_V1_SECRET_BYTES       160    /* 32 + 128 */
 #define FORETIAS_TBID_V1_ED25519_SIG_BYTES  64
 #define FORETIAS_TBID_V1_SLH_DSA_SIG_BYTES  49856
-#define FORETIAS_TBID_V1_SIG_BYTES          49920
+#define FORETIAS_TBID_V1_SIG_BYTES          49920  /* 64 + 49856 */
 #define FORETIAS_TBID_V1_VERSION            1
 
 /* ── Key / signature types ──────────────────────── */
@@ -136,6 +137,25 @@ typedef struct {
     uint8_t bytes[FORETIAS_KEM_MAX_CIPHERTEXT];
     size_t  len;
 } ForetiasKemCiphertext;
+
+/* ── TBID V1 types ─────────────────────────────────── */
+typedef struct {
+    ForetiasPubKey32 ed25519_pub;    /* first 32 bytes */
+    uint8_t          slh_dsa_pub[FORETIAS_TBID_V1_SLH_DSA_PUB_BYTES]; /* next 64 bytes */
+} ForetiasTbidV1PubKey;
+
+typedef struct {
+    ForetiasPrivKey32 ed25519_sk;    /* 32 bytes */
+    uint8_t           slh_dsa_sk[FORETIAS_TBID_V1_SLH_DSA_SK_BYTES];  /* 128 bytes */
+    size_t            slh_dsa_sk_len; /* actual length for zeroing */
+} ForetiasTbidV1SecretKey;
+
+typedef struct {
+    uint8_t bytes[FORETIAS_TBID_V1_SIG_BYTES];
+    size_t  len;
+} ForetiasTbidV1Sig;
+
+_Static_assert(sizeof(ForetiasTbidV1PubKey) == FORETIAS_TBID_V1_PUB_BYTES, "ForetiasTbidV1PubKey");
 
 /* ── Algorithm helpers ───────────────────────────── */
 const char* foretias_sig_algorithm_id(ForetiasSignatureAlgorithm alg);
@@ -362,26 +382,6 @@ ForetiasResult foretias_rng_bytes(uint8_t* buf, size_t len);
 /* ── Secure zero ────────────────────────────────── */
 void foretias_memzero(void* ptr, size_t len);
 
-/* ── TBID V1 — Dual-key identity (Ed25519 + SLH-DSA-SHA2-256f) ── */
-typedef struct {
-    ForetiasPubKey32 ed25519_pub;     /* first 32 bytes */
-    uint8_t          slh_dsa_pub[64]; /* next 64 bytes */
-} ForetiasTbidV1PubKey;
-
-typedef struct {
-    ForetiasPrivKey32 ed25519_sk;     /* 32 bytes */
-    uint8_t           slh_dsa_sk[128];/* 128 bytes */
-    size_t            slh_dsa_sk_len; /* actual length for zeroing */
-} ForetiasTbidV1SecretKey;
-
-typedef struct {
-    uint8_t bytes[FORETIAS_TBID_V1_SIG_BYTES];
-    size_t  len;
-} ForetiasTbidV1Sig;
-
-_Static_assert(sizeof(ForetiasTbidV1PubKey)     == 96,  "ForetiasTbidV1PubKey");
-_Static_assert(sizeof(ForetiasTbidV1SecretKey)  == 168, "ForetiasTbidV1SecretKey");
-
 /* ── Opaque Private Key Handle ──────────────────── */
 /* C11 Secret Containment: private key bytes never cross
    the C↔Rust boundary as raw bytes. The handle is an
@@ -466,6 +466,24 @@ ForetiasResult foretias_sphincs_sha2_128s_verify(
     const ForetiasSigVar*     sig
 );
 
+/* ── SPHINCS+ (SHA2-256f-simple) ──────────────────── */
+ForetiasResult foretias_sphincs_sha2_256f_keypair(
+    ForetiasSecretKeyVar* secret_out,
+    ForetiasPubKeyVar*    public_out
+);
+ForetiasResult foretias_sphincs_sha2_256f_sign(
+    const ForetiasSecretKeyVar* secret,
+    const uint8_t*            msg,
+    size_t                    msg_len,
+    ForetiasSigVar*            sig_out
+);
+ForetiasResult foretias_sphincs_sha2_256f_verify(
+    const ForetiasPubKeyVar*  public_key,
+    const uint8_t*            msg,
+    size_t                    msg_len,
+    const ForetiasSigVar*     sig
+);
+
 /* ── Dilithium3 ───────────────────────────────────── */
 ForetiasResult foretias_dilithium3_keypair(
     ForetiasSecretKeyVar* secret_out,
@@ -500,7 +518,7 @@ ForetiasResult foretias_mlkem_768_decapsulate(
     uint8_t*                    shared_secret_out   /* 32 bytes */
 );
 
-/* ── TBID V1 — Dual-key combiner ── */
+/* ── TBID V1 Combiner ─────────────────────────────── */
 ForetiasResult foretias_tbid_v1_keypair(
     ForetiasTbidV1SecretKey* secret_out,
     ForetiasTbidV1PubKey*    public_out
@@ -513,9 +531,9 @@ ForetiasResult foretias_tbid_v1_sign(
 );
 ForetiasResult foretias_tbid_v1_verify(
     const ForetiasTbidV1PubKey*  public_key,
-    const uint8_t*              msg,
-    size_t                      msg_len,
-    const ForetiasTbidV1Sig*    sig
+    const uint8_t*               msg,
+    size_t                       msg_len,
+    const ForetiasTbidV1Sig*     sig
 );
 void foretias_tbid_v1_secret_zeroize(ForetiasTbidV1SecretKey* secret);
 

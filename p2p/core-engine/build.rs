@@ -68,6 +68,7 @@ fn main() {
         println!("cargo:rerun-if-changed={}", core_dir.join(s).display());
     }
     println!("cargo:rerun-if-changed={}/include/foretias_core.h", core_dir.display());
+    println!("cargo:rerun-if-changed={}", core_dir.join("src/signing_tbid.c").display());
 
     let mut build = cc::Build::new();
     build.std("c11")

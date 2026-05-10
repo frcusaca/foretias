@@ -20,6 +20,7 @@ use foretias_core::crypto_server::{CryptoServer, new_software, ForetiasCurve};
 use foretias_core::error::NodeError;
 use foretias_core::foretias::callbacks::{CommunityQuery, CommunityResponse, PeerAddr as CorePeerAddr, PeerMessenger, TransportError as CoreTransportError};
 use foretias_core::foretias::tick::{Foretis, TickRecord};
+use foretias_core::foretias::types::Tbid;
 
 use self::json_rpc_transport::JsonRpcTransport;
 use self::peer_pool::PeerPool;
@@ -485,7 +486,7 @@ impl Communerd {
         &self,
         known_servers: Vec<String>,
         namespace: &str,
-        tbid: [u8; 16],
+        tbid: Tbid,
         chronon_ns: u64,
         json_rpc_addr: &str,
         _max_peers: usize,
@@ -536,7 +537,7 @@ impl Communerd {
         let key = kad::RecordKey::new(&format!("/foretias/{}/peers/v1", namespace));
         let peer_record = PeerRegistrationRecord {
             peer_id: peer_id.to_string(),
-            tbid: hex::encode(tbid),
+            tbid: tbid.to_hex(),
             multiaddr: my_multiaddr.to_string(),
             json_rpc: json_rpc_addr.to_string(),
             chronon_ns,
@@ -556,7 +557,7 @@ impl Communerd {
         let _ = cmd_tx.send(SwarmCommand::PutRecord { key: key.clone(), record });
         tracing::info!(component = "communerd", peer = %peer_id, "communerd: self-registration initiated");
 
-        let tbid_hex = hex::encode(tbid);
+        let tbid_hex = tbid.to_hex();
         let tbid_key = kad::RecordKey::new(&format!("/foretias/{}/tbid/{}/v1", namespace, tbid_hex));
         let tbid_record = kad::Record {
             key: tbid_key.clone(),
@@ -595,7 +596,7 @@ impl Communerd {
     async fn refresh_self_registration(
         cmd_tx: tokio::sync::mpsc::UnboundedSender<SwarmCommand>,
         namespace: Arc<std::sync::Mutex<String>>,
-        tbid: [u8; 16],
+        tbid: Tbid,
         chronon_ns: u64,
         json_rpc_addr: &str,
         local_multiaddr: Arc<std::sync::Mutex<Option<libp2p::Multiaddr>>>,
@@ -609,7 +610,7 @@ impl Communerd {
         };
         let peer_record = PeerRegistrationRecord {
             peer_id: peer_id.to_string(),
-            tbid: hex::encode(tbid),
+            tbid: tbid.to_hex(),
             multiaddr: ma,
             json_rpc: json_rpc_addr.to_string(),
             chronon_ns,
@@ -632,7 +633,7 @@ impl Communerd {
             }
         };
         let _ = cmd_tx.send(SwarmCommand::PutRecord { key, record });
-        let tbid_hex = hex::encode(tbid);
+        let tbid_hex = tbid.to_hex();
         let tbid_key = kad::RecordKey::new(&format!("/foretias/{}/tbid/{}/v1", ns, tbid_hex));
         let tbid_record = kad::Record {
             key: tbid_key.clone(),

@@ -69,8 +69,8 @@ impl TbidHandshake {
             .unwrap()
             .as_secs();
 
-        let mut signed_payload = Vec::with_capacity(16 + 64 + 32 + 8);
-        signed_payload.extend_from_slice(&tbid);
+        let mut signed_payload = Vec::with_capacity(96 + 64 + 32 + 8);
+        signed_payload.extend_from_slice(&tbid.raw_bytes());
         signed_payload.extend_from_slice(&peer_id.to_bytes());
         signed_payload.extend_from_slice(&request.nonce);
         signed_payload.extend_from_slice(&timestamp.to_be_bytes());
@@ -111,7 +111,7 @@ impl TbidHandshake {
             };
         }
 
-        let nonce_offset = 16 + peer_id.to_bytes().len();
+        let nonce_offset = 96 + peer_id.to_bytes().len();
         let payload_nonce: [u8; 32] = response.signed_payload[nonce_offset..nonce_offset + 32]
             .try_into()
             .unwrap();
@@ -141,7 +141,7 @@ mod tests {
 
     fn test_handshake() -> (TbidHandshake, Tbid) {
         let crypto = test_crypto();
-        let tbid: Tbid = [0xAB; 16];
+        let tbid = Tbid::from_raw([0xAB; 96]);
         (TbidHandshake::new(crypto, tbid), tbid)
     }
 
@@ -149,7 +149,7 @@ mod tests {
     async fn tbid_proof_create_and_verify() {
         let (h1, _tbid) = test_handshake();
         let crypto2 = test_crypto();
-        let h2 = TbidHandshake::new(crypto2, [0xCD; 16]);
+        let h2 = TbidHandshake::new(crypto2, Tbid::from_raw([0xCD; 96]));
 
         let request = h1.generate_request();
         let keypair = libp2p::identity::Keypair::generate_ed25519();
@@ -165,7 +165,7 @@ mod tests {
     async fn tbid_proof_rejects_wrong_nonce() {
         let (h1, _tbid) = test_handshake();
         let crypto2 = test_crypto();
-        let h2 = TbidHandshake::new(crypto2, [0xCD; 16]);
+        let h2 = TbidHandshake::new(crypto2, Tbid::from_raw([0xCD; 96]));
 
         let request = h1.generate_request();
         let peer_id = libp2p::identity::Keypair::generate_ed25519().public().to_peer_id();
@@ -181,7 +181,7 @@ mod tests {
     async fn tbid_proof_rejects_tampered_payload() {
         let (h1, _tbid) = test_handshake();
         let crypto2 = test_crypto();
-        let h2 = TbidHandshake::new(crypto2, [0xCD; 16]);
+        let h2 = TbidHandshake::new(crypto2, Tbid::from_raw([0xCD; 96]));
 
         let request = h1.generate_request();
         let peer_id = libp2p::identity::Keypair::generate_ed25519().public().to_peer_id();

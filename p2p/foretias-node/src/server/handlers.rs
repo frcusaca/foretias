@@ -101,7 +101,7 @@ pub fn handle_route_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcRe
         .unwrap_or("")
         .to_string();
 
-    let my_tbid_hex = hex::encode(server.get_tbid());
+    let my_tbid_hex = server.get_tbid().to_hex();
     if target_tbid == my_tbid_hex {
         return handle_stamp(server, params);
     }
@@ -173,7 +173,7 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
         return resp_success(server, id, serde_json::json!({"valid": false, "method": "local", "note": "foretis.tbid not found in local calendar"}));
     }
 
-    let foretis_tbid_hex = hex::encode(foretis.tbid);
+    let foretis_tbid_hex = foretis.tbid.to_hex();
     if foretis.tbid == server.get_tbid() {
         return resp_success(server, id, serde_json::json!({"valid": false, "method": "local", "note": "own TBID but calendar miss"}));
     }
@@ -223,7 +223,7 @@ async fn cross_node_verify(
     // Rebuild signature input and verify
     let cm = server.chronomatter();
     let mut sig_input = Vec::new();
-    sig_input.extend_from_slice(&foretis.tbid);
+    sig_input.extend_from_slice(&foretis.tbid.raw_bytes());
     sig_input.extend_from_slice(&foretis.tick_number.to_be_bytes());
     sig_input.extend_from_slice(content);
 
@@ -763,7 +763,7 @@ mod tests {
         assert!(resp.error.is_none());
         let result = resp.result.unwrap();
         assert_eq!(result.get("all_valid").and_then(|v| v.as_bool()), Some(true));
-        assert_eq!(result.get("pairs_checked").and_then(|v| v.as_u64()), Some(2));
+        assert_eq!(result.get("pairs_checked").and_then(|v| v.as_u64()), Some(3));
     }
 
     #[test]
@@ -781,7 +781,7 @@ mod tests {
         assert!(resp.error.is_none());
         let result = resp.result.unwrap();
         assert_eq!(result.get("all_valid").and_then(|v| v.as_bool()), Some(true));
-        assert_eq!(result.get("pairs_checked").and_then(|v| v.as_u64()), Some(2));
+        assert_eq!(result.get("pairs_checked").and_then(|v| v.as_u64()), Some(3));
     }
 
     #[test]

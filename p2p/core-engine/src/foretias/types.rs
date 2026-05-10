@@ -4,9 +4,158 @@
 //! They make signatures self-documenting and prevent mixing up byte arrays.
 
 use serde::{Deserialize, Serialize};
+use zeroize::Zeroizing;
 
-/// Time Being ID — 16-byte unique identifier for a time being.
-pub type Tbid = [u8; 16];
+/// Time Being ID — dual-key identity for tb_version 1.0.
+/// Layout: Ed25519_PK(32) ‖ SLH-DSA-SHA2-256f_PK(64) = 96 bytes total.
+///
+/// The `‖` operator denotes byte-level concatenation (NOT bitwise OR).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Tbid {
+    /// Ed25519 public key — fast verification (32 bytes).
+    pub ed25519_pub: [u8; 32],
+    /// SLH-DSA-SHA2-256f public key — quantum-resistant verification (64 bytes).
+    pub slh_dsa_pub: [u8; 64],
+}
+
+impl Serialize for Tbid {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where S: serde::Serializer {
+        // Serialize as a 96-byte array via a helper struct to work around
+        // serde's 32-element array limit on default derives.
+        let raw = self.raw_bytes();
+        serializer.serialize_newtype_struct("Tbid", &raw[..])
+    }
+}
+
+impl<'de> Deserialize<'de> for Tbid {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where D: serde::Deserializer<'de> {
+        let bytes: Vec<u8> = serde::Deserialize::deserialize(deserializer)?;
+        if bytes.len() != 96 {
+            return Err(serde::de::Error::invalid_length(
+                bytes.len(),
+                &"a 96-byte TBID",
+            ));
+        }
+        let mut arr = [0u8; 96];
+        arr.copy_from_slice(&bytes);
+        Ok(Tbid::from_raw(arr))
+    }
+}
+
+impl Default for Tbid {
+    fn default() -> Self {
+        Self { ed25519_pub: [0u8; 32], slh_dsa_pub: [0u8; 64] }
+    }
+}
+
+impl Tbid {
+    /// Raw 96-byte representation for wire format / storage.
+    pub fn raw_bytes(&self) -> [u8; 96] {
+        let mut out = [0u8; 96];
+        out[..32].copy_from_slice(&self.ed25519_pub);
+        out[32..].copy_from_slice(&self.slh_dsa_pub);
+        out
+    }
+
+    /// Parse from raw 96-byte representation (ed25519 first, then slh_dsa).
+    pub fn from_raw(bytes: [u8; 96]) -> Self {
+        let mut ed25519_pub = [0u8; 32];
+        let mut slh_dsa_pub = [0u8; 64];
+        ed25519_pub.copy_from_slice(&bytes[..32]);
+        slh_dsa_pub.copy_from_slice(&bytes[32..]);
+        Self { ed25519_pub, slh_dsa_pub }
+    }
+
+    /// Parse from a 96-byte slice.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, crate::error::CryptoError> {
+        if bytes.len() != 96 {
+            return Err(crate::error::CryptoError::BadInput("TBID public key must be 96 bytes"));
+        }
+        let mut raw = [0u8; 96];
+        raw.copy_from_slice(bytes);
+        Ok(Self::from_raw(raw))
+    }
+
+    /// Ed25519 public key for Ed25519-specific verification.
+    pub fn ed25519_public_key(&self) -> &[u8; 32] { &self.ed25519_pub }
+
+    /// SLH-DSA-SHA2-256f public key for SLH-DSA-specific verification.
+    pub fn slh_dsa_public_key(&self) -> &[u8; 64] { &self.slh_dsa_pub }
+
+    /// Hex-encoded representation for DHT keys and logging.
+    pub fn to_hex(&self) -> String {
+        hex::encode(self.raw_bytes())
+    }
+
+    /// Create a test TBID with all bytes set to the given value.
+    #[cfg(test)]
+    pub fn test() -> Self {
+        Self { ed25519_pub: [0xAB; 32], slh_dsa_pub: [0xAB; 64] }
+    }
+}
+
+/// Secret key material for a TBID (tb_version 1.0).
+/// Both private keys are held together; zeroized on drop.
+///
+/// Layout: Ed25519_SK(32) ‖ SLH-DSA-SHA2-256f_SK(128) = 160 bytes total.
+pub struct TbidSecret {
+    /// Ed25519 secret key — fast signing (32 bytes).
+    ed25519_sk: Zeroizing<[u8; 32]>,
+    /// SLH-DSA-SHA2-256f secret key — quantum-resistant signing (128 bytes).
+    slh_dsa_sk: Zeroizing<Vec<u8>>,
+}
+
+impl TbidSecret {
+    /// Generate a fresh TBID keypair (both Ed25519 and SLH-DSA).
+    ///
+    /// Returns the public key (`Tbid`) and the secret key (`TbidSecret`).
+    pub fn generate() -> Result<(Tbid, Self), crate::error::CryptoError> {
+        use crate::crypto_server::signing_tbid;
+        let (pub_bytes, sec_bytes) = signing_tbid::tbid_keypair()?;
+        let tbid = Tbid::from_bytes(&pub_bytes)?;
+        let secret = Self::from_bytes(&sec_bytes)?;
+        Ok((tbid, secret))
+    }
+
+    /// Sign a message with both algorithms.
+    /// Returns Ed25519_SIG(64) ‖ SLH-DSA_SIG(49856) = 49,920 bytes.
+    pub fn sign(&self, message: &[u8]) -> Result<Vec<u8>, crate::error::CryptoError> {
+        use crate::crypto_server::signing_tbid;
+        let mut secret_bytes = Vec::with_capacity(160);
+        secret_bytes.extend_from_slice(&self.ed25519_sk[..]);
+        secret_bytes.extend_from_slice(&self.slh_dsa_sk);
+        // Safe: we always generate exactly 160 bytes
+        let secret_array: [u8; 160] = secret_bytes.try_into()
+            .map_err(|_| crate::error::CryptoError::BadInput("secret key length mismatch"))?;
+        signing_tbid::tbid_sign(&SignatureBytes::from(secret_array), message)
+    }
+
+    /// Ed25519 secret key for Ed25519-specific operations.
+    pub fn ed25519_secret_key(&self) -> &[u8; 32] {
+        &self.ed25519_sk
+    }
+
+    /// SLH-DSA-SHA2-256f secret key for SLH-DSA-specific operations.
+    pub fn slh_dsa_secret_key(&self) -> &[u8] {
+        &self.slh_dsa_sk
+    }
+
+    /// Construct from flat 160-byte secret key material.
+    fn from_bytes(bytes: &[u8]) -> Result<Self, crate::error::CryptoError> {
+        if bytes.len() != 160 {
+            return Err(crate::error::CryptoError::BadInput("TBID secret must be 160 bytes"));
+        }
+        let mut ed25519_sk = [0u8; 32];
+        ed25519_sk.copy_from_slice(&bytes[..32]);
+        let slh_dsa_sk = bytes[32..160].to_vec();
+        Ok(Self {
+            ed25519_sk: Zeroizing::new(ed25519_sk),
+            slh_dsa_sk: Zeroizing::new(slh_dsa_sk),
+        })
+    }
+}
 
 /// Public key bytes — variable length per algorithm (32 for Ed25519, 7856 for SPHINCS+, etc).
 pub type PublicKeyBytes = Vec<u8>;
@@ -49,6 +198,8 @@ pub enum SignatureAlgorithm {
     SPHINCS_SHA2_128S,
     /// Dilithium3 — optional post-quantum signing (NIST Level 3).
     Dilithium3,
+    /// SLH-DSA-SHA2-256f-simple — NIST Level 5 post-quantum signing.
+    SLH_DSA_SHA2_256F,
 }
 
 impl SignatureAlgorithm {
@@ -58,6 +209,7 @@ impl SignatureAlgorithm {
             Self::Ed25519         => "Ed25519",
             Self::SPHINCS_SHA2_128S => "SPHINCS+-SHA2-128s-simple",
             Self::Dilithium3      => "Dilithium3",
+            Self::SLH_DSA_SHA2_256F => "SPHINCS+-SHA2-256f-simple",
         }
     }
 
@@ -67,6 +219,7 @@ impl SignatureAlgorithm {
             "Ed25519"                => Ok(Self::Ed25519),
             "SPHINCS+-SHA2-128s-simple" => Ok(Self::SPHINCS_SHA2_128S),
             "Dilithium3"             => Ok(Self::Dilithium3),
+            "SPHINCS+-SHA2-256f-simple" => Ok(Self::SLH_DSA_SHA2_256F),
             _ => Err(crate::error::CryptoError::UnknownAlgorithm(id.to_string())),
         }
     }
@@ -77,6 +230,7 @@ impl SignatureAlgorithm {
             Self::Ed25519         => 32,
             Self::SPHINCS_SHA2_128S => 32,
             Self::Dilithium3      => 1952,
+            Self::SLH_DSA_SHA2_256F => 64,
         }
     }
 
@@ -86,6 +240,7 @@ impl SignatureAlgorithm {
             Self::Ed25519         => 64,
             Self::SPHINCS_SHA2_128S => 7856,
             Self::Dilithium3      => 3309,
+            Self::SLH_DSA_SHA2_256F => 49_856,
         }
     }
 }

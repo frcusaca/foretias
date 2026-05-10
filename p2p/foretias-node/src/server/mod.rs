@@ -5,13 +5,13 @@ use axum::extract::State;
 use axum::routing::post;
 use axum::Json;
 use tokio::net::TcpListener;
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt};
 
 use foretias_core::chronomatter::Chronomatter;
 use foretias_core::config::{NodeConfig, TimeFamilyConfig};
 use foretias_core::core::identity::{generate_ed25519_keypair, derive_ed25519_peer_id};
 use foretias_core::foretias::callbacks::{TickObserver, AutoAttestObserver};
-use foretias_core::foretias::{TickRecord, types::TickNumber};
+use foretias_core::foretias::{TickRecord, types::{TickNumber, Tbid}};
 use foretias_core::error::NodeError;
 use foretias_core::noise;
 
@@ -60,7 +60,7 @@ impl TimeFamilyServer {
         config: Option<NodeConfig>,
     ) -> Result<Self, NodeError> {
         let metrics = Arc::new(NodeMetrics::new());
-        let calendar = Arc::new(Calendar::new([0u8; 16], "init"));
+        let calendar = Arc::new(Calendar::new(Tbid::default(), "init"));
         let mut cm = Chronomatter::new(chronon_ns, Arc::clone(&calendar) as Arc<dyn TickObserver>)?;
         cm.set_auto_attest_observer(Arc::clone(&metrics) as Arc<dyn AutoAttestObserver>);
         let (tbid, tbn) = (cm.get_tbid(), cm.get_tbn().to_string());
@@ -117,7 +117,7 @@ impl TimeFamilyServer {
         self
     }
 
-    pub fn get_tbid(&self) -> [u8; 16] {
+    pub fn get_tbid(&self) -> Tbid {
         self.chronomatter.get_tbid()
     }
 
@@ -163,7 +163,7 @@ impl TimeFamilyServer {
 
     pub fn save(&self) -> Result<(), NodeError> {
         if let Some(ref p) = self.persist_path {
-            let json_path = p.join(format!("{}.json", hex::encode(self.get_tbid())));
+            let json_path = p.join(format!("{}.json", self.get_tbid().to_hex()));
             std::fs::create_dir_all(p)?;
             self.calendar.save(json_path.to_str().ok_or(NodeError::Internal("persist path contains invalid UTF-8".into()))?)?;
             self.metrics.inc(MetricField::CalendarFlushCount);
@@ -266,12 +266,12 @@ async fn handle_connection(
     let (mut session, stream) = match noise::noise_handshake(stream, &static_priv, None, false).await {
         Ok(res) => res,
         Err(e) => {
-            tracing::warn!(component = "server", tbid = %hex::encode(server.get_tbid()), "noise handshake failed: {}", e);
+            tracing::warn!(component = "server", tbid = %server.get_tbid().to_hex(), "noise handshake failed: {}", e);
             return Err(NodeError::Internal("noise handshake failed".into()));
         }
     };
     let peer_addr = stream.peer_addr().ok().map(|a| a.to_string());
-    tracing::info!(component = "server", tbid = %hex::encode(server.get_tbid()), peer = %peer_addr.as_deref().unwrap_or("unknown"), "noise handshake: success");
+    tracing::info!(component = "server", tbid = %server.get_tbid().to_hex(), peer = %peer_addr.as_deref().unwrap_or("unknown"), "noise handshake: success");
 
     let (reader, writer) = stream.into_split();
     let mut reader = tokio::io::BufReader::new(reader);

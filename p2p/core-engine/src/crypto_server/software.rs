@@ -38,6 +38,8 @@ pub struct SoftwareCryptoServer {
     sphincs_secret_key: Option<zeroize::Zeroizing<SignatureBytes>>,
     pub dilithium_pub_key: Option<SignatureBytes>,
     dilithium_secret_key: Option<zeroize::Zeroizing<SignatureBytes>>,
+    pub sphincs_sha2_256f_pub_key: Option<SignatureBytes>,
+    sphincs_sha2_256f_secret_key: Option<zeroize::Zeroizing<SignatureBytes>>,
     pub mlkem_pub_key: Option<SignatureBytes>,
     mlkem_secret_key: Option<zeroize::Zeroizing<SignatureBytes>>,
 }
@@ -59,6 +61,9 @@ impl SoftwareCryptoServer {
                 let dilithium_keys = signing_dilithium::dilithium3_keypair()?;
                 let dilithium_pub = dilithium_keys.0;
                 let dilithium_secret = dilithium_keys.1;
+                let sphincs_256f_keys = signing_sphincs::sphincs_sha2_256f_keypair()?;
+                let sphincs_256f_pub = sphincs_256f_keys.0;
+                let sphincs_256f_secret = sphincs_256f_keys.1;
                 let mlkem_keys = kem_mlkem::mlkem_768_keypair()?;
                 let mlkem_pub = mlkem_keys.0;
                 let mlkem_secret = mlkem_keys.1;
@@ -74,6 +79,8 @@ impl SoftwareCryptoServer {
                     sphincs_secret_key: Some(Zeroizing::new(sphincs_secret)),
                     dilithium_pub_key: Some(dilithium_pub),
                     dilithium_secret_key: Some(Zeroizing::new(dilithium_secret)),
+                    sphincs_sha2_256f_pub_key: Some(sphincs_256f_pub),
+                    sphincs_sha2_256f_secret_key: Some(Zeroizing::new(sphincs_256f_secret)),
                     mlkem_pub_key: Some(mlkem_pub),
                     mlkem_secret_key: Some(Zeroizing::new(mlkem_secret)),
                 })
@@ -97,6 +104,9 @@ impl SoftwareCryptoServer {
         let dilithium_keys = signing_dilithium::dilithium3_keypair()?;
         let dilithium_pub = dilithium_keys.0;
         let dilithium_secret = dilithium_keys.1;
+        let sphincs_256f_keys = signing_sphincs::sphincs_sha2_256f_keypair()?;
+        let sphincs_256f_pub = sphincs_256f_keys.0;
+        let sphincs_256f_secret = sphincs_256f_keys.1;
         let mlkem_keys = kem_mlkem::mlkem_768_keypair()?;
         let mlkem_pub = mlkem_keys.0;
         let mlkem_secret = mlkem_keys.1;
@@ -112,6 +122,8 @@ impl SoftwareCryptoServer {
             sphincs_secret_key: Some(Zeroizing::new(sphincs_secret)),
             dilithium_pub_key: Some(dilithium_pub),
             dilithium_secret_key: Some(Zeroizing::new(dilithium_secret)),
+            sphincs_sha2_256f_pub_key: Some(sphincs_256f_pub),
+            sphincs_sha2_256f_secret_key: Some(Zeroizing::new(sphincs_256f_secret)),
             mlkem_pub_key: Some(mlkem_pub),
             mlkem_secret_key: Some(Zeroizing::new(mlkem_secret)),
         })
@@ -241,6 +253,9 @@ impl CryptoServer for SoftwareCryptoServer {
                     .ok_or(CryptoError::BadKey)?;
                 signing_dilithium::dilithium3_sign(secret, msg)
             }
+            SignatureAlgorithm::SLH_DSA_SHA2_256F => {
+                Err(CryptoError::Unsupported("SLH_DSA_SHA2_256F signing not yet implemented"))
+            }
         }
     }
 
@@ -258,6 +273,9 @@ impl CryptoServer for SoftwareCryptoServer {
             }
             SignatureAlgorithm::Dilithium3 => {
                 signing_dilithium::dilithium3_verify(pub_key, msg, sig)
+            }
+            SignatureAlgorithm::SLH_DSA_SHA2_256F => {
+                Err(CryptoError::Unsupported("SLH_DSA_SHA2_256F verification not yet implemented"))
             }
         }
     }
