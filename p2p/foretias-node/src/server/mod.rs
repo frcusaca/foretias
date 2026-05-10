@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -17,6 +18,8 @@ use foretias_core::noise;
 
 use super::calendar::{Calendar, MirrorStore};
 use super::communerd::Communerd;
+use super::communerd::p2p::swarm::CommunerdRpcHandler;
+use super::communerd::transport::TransportError;
 use super::metrics::{NodeMetrics, MetricField};
 use self::jsonrpc::JsonRpcResponse;
 
@@ -242,6 +245,30 @@ impl TimeFamilyServer {
     }
 }
 
+#[async_trait]
+impl CommunerdRpcHandler for TimeFamilyServer {
+    async fn handle(
+        &self,
+        method: &str,
+        params: serde_json::Value,
+    ) -> Result<serde_json::Value, TransportError> {
+        let mut jsonrpc_request_envelope = serde_json::Map::new();
+        jsonrpc_request_envelope.insert("jsonrpc".into(), serde_json::Value::String("2.0".into()));
+        jsonrpc_request_envelope.insert("method".into(), serde_json::Value::String(method.to_string()));
+        jsonrpc_request_envelope.insert("params".into(), params);
+        let req_val = serde_json::Value::Object(jsonrpc_request_envelope);
+
+        match process_request_from_value(self, req_val) {
+            Ok(resp) => Ok(serde_json::to_value(&resp)
+                .map_err(|e| TransportError::Decode(e.to_string()))?),
+            Err(e) => Err(TransportError::Rpc {
+                code: jsonrpc::INTERNAL_ERROR,
+                message: e.to_string(),
+            }),
+        }
+    }
+}
+
 async fn jsonrpc_handler(
     State(server): State<Arc<TimeFamilyServer>>,
     Json(req): Json<serde_json::Value>,
@@ -359,7 +386,7 @@ async fn write_length_prefixed(
     Ok(())
 }
 
-fn process_request_from_value(server: &TimeFamilyServer, req: serde_json::Value) -> Result<JsonRpcResponse, NodeError> {
+pub(crate) fn process_request_from_value(server: &TimeFamilyServer, req: serde_json::Value) -> Result<JsonRpcResponse, NodeError> {
     let jsonrpc = req.get("jsonrpc")
         .and_then(|v| v.as_str())
         .ok_or_else(|| NodeError::Internal("missing jsonrpc field".into()))?;

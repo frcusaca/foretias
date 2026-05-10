@@ -370,11 +370,11 @@ async fn two_swarms_connect_and_identify() {
     let ma_a: libp2p::Multiaddr = format!("/ip4/127.0.0.1/tcp/{}", port_a).parse().unwrap();
     let ma_b: libp2p::Multiaddr = format!("/ip4/127.0.0.1/tcp/{}", port_b).parse().unwrap();
 
-    let mut handle_a = build_and_spawn_swarm(Some(ma_a.clone()), vec![], "mainnet", None).await.unwrap();
+    let mut handle_a = build_and_spawn_swarm(Some(ma_a.clone()), vec![], "mainnet", None, None).await.unwrap();
     let peer_id_a = handle_a.local_peer_id.clone();
 
     let dial_a: libp2p::Multiaddr = format!("{}/p2p/{}", ma_a, peer_id_a).parse().unwrap();
-    let mut handle_b = build_and_spawn_swarm(Some(ma_b), vec![dial_a], "mainnet", None).await.unwrap();
+    let mut handle_b = build_and_spawn_swarm(Some(ma_b), vec![dial_a], "mainnet", None, None).await.unwrap();
 
     let mut a_connected = false;
     let mut b_connected = false;
@@ -437,13 +437,13 @@ async fn dht_discovery_three_nodes() {
 
     let namespace = "dht-test";
 
-    let mut handle_a = build_and_spawn_swarm(Some(ma_a.clone()), vec![], namespace, None).await.unwrap();
+    let mut handle_a = build_and_spawn_swarm(Some(ma_a.clone()), vec![], namespace, None, None).await.unwrap();
     let peer_id_a = handle_a.local_peer_id;
 
-    let mut handle_b = build_and_spawn_swarm(Some(ma_b.clone()), vec![], namespace, None).await.unwrap();
+    let mut handle_b = build_and_spawn_swarm(Some(ma_b.clone()), vec![], namespace, None, None).await.unwrap();
     let peer_id_b = handle_b.local_peer_id;
 
-    let mut handle_c = build_and_spawn_swarm(Some(ma_c.clone()), vec![], namespace, None).await.unwrap();
+    let mut handle_c = build_and_spawn_swarm(Some(ma_c.clone()), vec![], namespace, None, None).await.unwrap();
     let peer_id_c = handle_c.local_peer_id;
 
     // Wait for all swarms to bind
@@ -588,11 +588,11 @@ async fn gossip_probity_propagation() {
 
     let namespace = "testnet";
 
-    let mut handle_a = build_and_spawn_swarm(Some(ma_a.clone()), vec![], namespace, None).await.unwrap();
+    let mut handle_a = build_and_spawn_swarm(Some(ma_a.clone()), vec![], namespace, None, None).await.unwrap();
     let peer_id_a = handle_a.local_peer_id;
 
     let dial_a: libp2p::Multiaddr = format!("{}/p2p/{}", ma_a, peer_id_a).parse().unwrap();
-    let mut handle_b = build_and_spawn_swarm(Some(ma_b), vec![dial_a], namespace, None).await.unwrap();
+    let mut handle_b = build_and_spawn_swarm(Some(ma_b), vec![dial_a], namespace, None, None).await.unwrap();
     let peer_id_b = handle_b.local_peer_id;
 
     let deadline = std::time::Instant::now() + Duration::from_secs(15);
@@ -671,3 +671,152 @@ async fn gossip_probity_propagation() {
     handle_b.task.abort();
 }
 
+// ── libp2p direct RPC test ─────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_libp2p_direct_rpc() {
+    use foretias_node::communerd::p2p::swarm::{build_and_spawn_swarm, CommunerdRpcHandler, SwarmCommand};
+    use foretias_node::communerd::p2p::events::NetworkEvent;
+    use foretias_node::communerd::transport::TransportError;
+
+    struct EchoRpcHandler;
+
+    #[async_trait::async_trait]
+    impl CommunerdRpcHandler for EchoRpcHandler {
+        async fn handle(
+            &self,
+            method: &str,
+            params: serde_json::Value,
+        ) -> Result<serde_json::Value, TransportError> {
+            Ok(serde_json::json!({
+                "jsonrpc": "2.0",
+                "result": { "method": method, "params": params },
+                "id": 1,
+            }))
+        }
+    }
+
+    let port_a = find_available_port();
+    let port_b = find_available_port();
+    let ma_a: libp2p::Multiaddr = format!("/ip4/127.0.0.1/tcp/{}", port_a).parse().unwrap();
+    let ma_b: libp2p::Multiaddr = format!("/ip4/127.0.0.1/tcp/{}", port_b).parse().unwrap();
+
+    let handler_a = std::sync::Arc::new(EchoRpcHandler);
+    let mut handle_a = build_and_spawn_swarm(
+        Some(ma_a.clone()),
+        vec![],
+        "libp2p-rpc-test",
+        None,
+        Some(handler_a),
+    )
+    .await
+    .unwrap();
+    let peer_id_a = handle_a.local_peer_id.clone();
+
+    let handler_b = std::sync::Arc::new(EchoRpcHandler);
+    let dial_a: libp2p::Multiaddr = format!("{}/p2p/{}", ma_a, peer_id_a).parse().unwrap();
+    let mut handle_b = build_and_spawn_swarm(
+        Some(ma_b),
+        vec![dial_a.clone()],
+        "libp2p-rpc-test",
+        None,
+        Some(handler_b),
+    )
+    .await
+    .unwrap();
+
+    let deadline = std::time::Instant::now() + Duration::from_secs(15);
+    let mut a_connected = false;
+    let mut b_connected = false;
+    let mut a_identified = false;
+    let mut b_identified = false;
+
+    while std::time::Instant::now() < deadline {
+        while let Ok(Some(event)) = tokio::time::timeout(
+            Duration::from_millis(100),
+            handle_a.events.recv(),
+        )
+        .await
+        {
+            match event {
+                NetworkEvent::Connected { .. } => a_connected = true,
+                NetworkEvent::Identified { .. } => a_identified = true,
+                _ => {}
+            }
+        }
+        while let Ok(Some(event)) = tokio::time::timeout(
+            Duration::from_millis(100),
+            handle_b.events.recv(),
+        )
+        .await
+        {
+            match event {
+                NetworkEvent::Connected { .. } => b_connected = true,
+                NetworkEvent::Identified { .. } => b_identified = true,
+                _ => {}
+            }
+        }
+        if a_connected && b_connected && a_identified && b_identified {
+            break;
+        }
+    }
+
+    assert!(a_connected, "A never connected to B");
+    assert!(b_connected, "B never connected to A");
+    assert!(a_identified, "A never identified B");
+    assert!(b_identified, "B never identified A");
+
+    let request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "ping",
+        "params": { "from": "peer_b" },
+        "id": 1,
+    });
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    handle_b
+        .cmd_tx
+        .send(SwarmCommand::RequestResponse {
+            peer_id: peer_id_a,
+            request,
+            reply: tx,
+        })
+        .unwrap();
+
+    let response = tokio::time::timeout(Duration::from_secs(10), rx)
+        .await
+        .expect("RPC timed out")
+        .expect("RPC channel failed")
+        .expect("RPC request failed");
+    let resp_val: serde_json::Value = response;
+    assert_eq!(resp_val["method"], "ping");
+    assert_eq!(resp_val["params"]["from"], "peer_b");
+
+    let peer_id_b = handle_b.local_peer_id.clone();
+    let request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "echo",
+        "params": { "message": "hello_from_a" },
+        "id": 2,
+    });
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    handle_a
+        .cmd_tx
+        .send(SwarmCommand::RequestResponse {
+            peer_id: peer_id_b,
+            request,
+            reply: tx,
+        })
+        .unwrap();
+
+    let response = tokio::time::timeout(Duration::from_secs(10), rx)
+        .await
+        .expect("RPC timed out")
+        .expect("RPC channel failed")
+        .expect("RPC request failed");
+    let resp_val: serde_json::Value = response;
+    assert_eq!(resp_val["method"], "echo");
+    assert_eq!(resp_val["params"]["message"], "hello_from_a");
+
+    handle_a.task.abort();
+    handle_b.task.abort();
+}

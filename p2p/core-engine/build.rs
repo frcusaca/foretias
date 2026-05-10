@@ -43,8 +43,13 @@ fn main() {
         .status()
         .expect("cmake configure failed");
 
+    let parallel_jobs = env::var("CMAKE_BUILD_PARALLEL_LEVEL")
+        .ok()
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or_else(|| std::thread::available_parallelism().map(|n| n.get() as u32).unwrap_or(1));
+
     Command::new("cmake")
-        .args(&["--build", liboqs_build_dir.to_str().unwrap(), "--config", "Release"])
+        .args(&["--build", liboqs_build_dir.to_str().unwrap(), "--config", "Release", "--parallel", &parallel_jobs.to_string()])
         .status()
         .expect("cmake build failed");
 

@@ -203,6 +203,14 @@ Both CLIs provide stamp, verify, and server commands. The Rust binary is the ful
  └─────────────────┘
 ```
 
+### Peer Transport Comparison
+
+| Layer | Protocol | Encryption | Purpose |
+|-------|----------|-----------|---------|
+| libp2p Direct (new) | libp2p request_response over yamux | libp2p-noise (C11 deviation) | Stamp, verify, calendar replication, ping (preferred) |
+| Noise_XX TCP (custom) | Direct TCP + Noise_XX + JSON-RPC | C11 Noise_XX | Stamp, verify, calendar replication, ping (fallback) |
+| libp2p swarm | Kademlia DHT + GossipSub | libp2p-noise | Peer discovery, DHT, probity gossip, heartbeat |
+
 ---
 
 ## BUILD, TEST, RUN COMMANDS

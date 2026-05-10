@@ -13,6 +13,7 @@ use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberI
 use foretias_core::config::{NodeConfig, TimeFamilyConfig};
 use foretias_core::core::identity::generate_ed25519_keypair;
 use foretias_core::crypto_server;
+use foretias_node::communerd::p2p::swarm::CommunerdRpcHandler;
 use foretias_core::foretias::tick::{TickRecord, CalendarLookup};
 use foretias_core::noise;
 
@@ -371,7 +372,8 @@ async fn cmd_serve(
 
     if let Some(listen_ma) = &p2p_listen_addr {
         if let Some(communerd) = server.communerd() {
-            communerd.enable_p2p(Some(listen_ma.clone()), dials.clone(), &dht_namespace, Some(&addr)).await
+            let handler: Arc<dyn CommunerdRpcHandler> = server.clone();
+            communerd.enable_p2p(Some(listen_ma.clone()), dials.clone(), &dht_namespace, Some(&addr), Some(handler)).await
                 .map_err(|e| format!("failed to start libp2p swarm: {}", e))?;
         }
     }
