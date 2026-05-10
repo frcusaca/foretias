@@ -8,7 +8,7 @@ use foretias_core::foretias::TickRecord;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
-use super::p2p::swarm::{SwarmCommand, RpcProtocolFactory};
+use super::p2p::swarm::SwarmCommand;
 use super::transport::{PeerAddr, PeerTransport, TransportError};
 
 /// RPC transport that sends JSON-RPC over libp2p request_response streams.

@@ -1,7 +1,7 @@
 //! Foretias libp2p network behaviour.
 
-use libp2p::{identify, ping, kad, gossipsub, request_response, swarm::NetworkBehaviour};
-use super::rpc_protocol::ForetiasRpcProtocol;
+use libp2p::{identify, ping, kad, gossipsub, request_response, swarm::NetworkBehaviour, StreamProtocol};
+use std::iter;
 use std::sync::Arc;
 
 #[derive(NetworkBehaviour)]
@@ -10,7 +10,7 @@ pub struct ForetiasBehaviour {
     pub ping:              ping::Behaviour,
     pub kad:               kad::Behaviour<kad::store::MemoryStore>,
     pub gossip:            gossipsub::Behaviour,
-    pub request_response:  request_response::Behaviour<ForetiasRpcProtocol>,
+    pub request_response:  request_response::Behaviour<super::rpc_protocol::ForetiasRpcCodec>,
 }
 
 impl ForetiasBehaviour {
@@ -46,9 +46,14 @@ impl ForetiasBehaviour {
             gossip_cfg,
         ).expect("gossipsub init");
 
-        let rpc_protocol = ForetiasRpcProtocol::new(namespace);
-        let request_response = request_response::Behaviour::new(
-            rpc_protocol.clone(),
+        let protocols = iter::once((
+            StreamProtocol::try_from_owned(format!("/foretias/{}/rpc/1.0.0", namespace))
+                .expect("valid protocol string"),
+            request_response::ProtocolSupport::Full,
+        ));
+        let request_response = request_response::Behaviour::with_codec(
+            super::rpc_protocol::ForetiasRpcCodec,
+            protocols,
             request_response::Config::default(),
         );
 
@@ -65,7 +70,8 @@ impl ForetiasBehaviour {
     }
 }
 
-/// Shared namespace holder for constructing ForetiasRpcProtocol instances.
+/// Shared namespace holder for creating protocol names for direct RPC requests.
+#[derive(Clone, Debug)]
 pub struct RpcProtocolFactory {
     namespace: Arc<String>,
 }
@@ -77,21 +83,8 @@ impl RpcProtocolFactory {
         }
     }
 
-    pub fn create_protocol(&self) -> ForetiasRpcProtocol {
-        ForetiasRpcProtocol::new(&self.namespace)
-    }
-}
-
-impl Clone for RpcProtocolFactory {
-    fn clone(&self) -> Self {
-        Self {
-            namespace: Arc::clone(&self.namespace),
-        }
-    }
-}
-
-impl std::fmt::Debug for RpcProtocolFactory {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RpcProtocolFactory").field("namespace", &self.namespace).finish()
+    pub fn create_protocol(&self) -> StreamProtocol {
+        StreamProtocol::try_from_owned(format!("/foretias/{}/rpc/1.0.0", self.namespace))
+            .expect("valid protocol string")
     }
 }

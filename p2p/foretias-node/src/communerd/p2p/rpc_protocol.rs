@@ -1,70 +1,92 @@
-//! libp2p request_response protocol for Foretias JSON-RPC over multiplexed streams.
+//! libp2p request_response codec for Foretias JSON-RPC over multiplexed streams.
 //!
-//! Implements `libp2p::request_response::Protocol` so the swarm can send/receive
+//! Implements `libp2p::request_response::Codec` so the swarm can send/receive
 //! JSON-RPC 2.0 requests over existing yamux/mplex streams.
+//!
+//! Framing: 4-byte big-endian length prefix + raw JSON-RPC 2.0 bytes.
 
-use libp2p::request_response::{Protocol, Protocols};
-use std::time::Duration;
+use async_trait::async_trait;
+use futures::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use libp2p::request_response::Codec;
+use libp2p::StreamProtocol;
+use std::io;
 
-/// Foretias RPC protocol over libp2p request_response.
-///
-/// Protocol name: `/foretias/{namespace}/rpc/1.0.0`
-/// Payload: raw JSON-RPC 2.0 bytes (serde_json handles serialization).
-pub struct ForetiasRpcProtocol {
-    /// Namespace derived protocol list, e.g. `/foretias/mainnet/rpc/1.0.0`
-    protocols: Protocols,
-    /// Request timeout (default 5s).
-    timeout: Duration,
-}
+#[derive(Clone, Debug)]
+pub struct ForetiasRpcCodec;
 
-impl ForetiasRpcProtocol {
-    pub fn new(namespace: &str) -> Self {
-        let protocol_string = format!("/foretias/{}/rpc/1.0.0", namespace);
-        Self {
-            protocols: Protocols::new(protocol_string),
-            timeout: Duration::from_secs(5),
-        }
-    }
-
-    pub fn with_timeout(namespace: &str, timeout: Duration) -> Self {
-        let protocol_string = format!("/foretias/{}/rpc/1.0.0", namespace);
-        Self {
-            protocols: Protocols::new(protocol_string),
-            timeout,
-        }
-    }
-}
-
-impl Protocol for ForetiasRpcProtocol {
-    type Protocol = Self;
+#[async_trait]
+impl Codec for ForetiasRpcCodec {
+    type Protocol = StreamProtocol;
     type Request = Vec<u8>;
     type Response = Vec<u8>;
 
-    fn inbound_protocol(&self) -> Self {
-        Self {
-            protocols: self.protocols.clone(),
-            timeout: self.timeout,
-        }
+    async fn read_request<T>(
+        &mut self,
+        _protocol: &Self::Protocol,
+        io: &mut T,
+    ) -> io::Result<Self::Request>
+    where
+        T: AsyncRead + Unpin + Send,
+    {
+        read_length_prefixed(io).await
     }
 
-    fn outbound_protocol(&self) -> Self {
-        Self {
-            protocols: self.protocols.clone(),
-            timeout: self.timeout,
-        }
+    async fn read_response<T>(
+        &mut self,
+        _protocol: &Self::Protocol,
+        io: &mut T,
+    ) -> io::Result<Self::Response>
+    where
+        T: AsyncRead + Unpin + Send,
+    {
+        read_length_prefixed(io).await
     }
 
-    fn inbound_timeout(&self) -> Duration {
-        self.timeout
+    async fn write_request<T>(
+        &mut self,
+        _protocol: &Self::Protocol,
+        io: &mut T,
+        req: Self::Request,
+    ) -> io::Result<()>
+    where
+        T: AsyncWrite + Unpin + Send,
+    {
+        write_length_prefixed(io, &req).await
     }
 
-    fn outbound_timeout(&self) -> Duration {
-        self.timeout
+    async fn write_response<T>(
+        &mut self,
+        _protocol: &Self::Protocol,
+        io: &mut T,
+        res: Self::Response,
+    ) -> io::Result<()>
+    where
+        T: AsyncWrite + Unpin + Send,
+    {
+        write_length_prefixed(io, &res).await
     }
 }
 
-impl Default for ForetiasRpcProtocol {
-    fn default() -> Self {
-        Self::new("mainnet")
-    }
+async fn read_length_prefixed<T>(io: &mut T) -> io::Result<Vec<u8>>
+where
+    T: AsyncRead + Unpin,
+{
+    let len = {
+        let mut buf = [0u8; 4];
+        io.read_exact(&mut buf).await?;
+        u32::from_be_bytes(buf) as usize
+    };
+    let mut payload = vec![0u8; len];
+    io.read_exact(&mut payload).await?;
+    Ok(payload)
+}
+
+async fn write_length_prefixed<T>(io: &mut T, data: &[u8]) -> io::Result<()>
+where
+    T: AsyncWrite + Unpin,
+{
+    let len = (data.len() as u32).to_be_bytes();
+    io.write_all(&len).await?;
+    io.write_all(data).await?;
+    Ok(())
 }

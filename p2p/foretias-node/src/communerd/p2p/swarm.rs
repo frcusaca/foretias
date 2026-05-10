@@ -151,10 +151,29 @@ async fn swarm_loop(
         request_response::OutboundRequestId,
         tokio::sync::oneshot::Sender<Result<serde_json::Value, TransportError>>,
     > = HashMap::new();
+    let mut pending_inbound: HashMap<
+        request_response::InboundRequestId,
+        (
+            request_response::ResponseChannel<Vec<u8>>,
+            libp2p::PeerId,
+        ),
+    > = HashMap::new();
+    let (inbound_res_tx, mut inbound_res_rx) = tokio::sync::mpsc::unbounded_channel::<(
+        request_response::InboundRequestId,
+        Vec<u8>,
+    )>();
 
     loop {
         tokio::select! {
             biased;
+            inbound_res = inbound_res_rx.recv() => {
+                if let Some((request_id, bytes)) = inbound_res {
+                    if let Some((channel, peer)) = pending_inbound.remove(&request_id) {
+                        let _ = swarm.behaviour_mut().request_response.send_response(channel, bytes);
+                        tracing::debug!(peer = %peer, "libp2p RPC response sent");
+                    }
+                }
+            }
             cmd = cmd_rx.recv() => {
                 match cmd {
                     Some(SwarmCommand::Bootstrap) => {
@@ -260,17 +279,10 @@ async fn swarm_loop(
                                 continue;
                             }
                         };
-                        let protocol = rpc_factory.create_protocol();
-                        match swarm.behaviour_mut().request_response.send_request(&peer_id, bytes, protocol) {
-                            Ok(request_id) => {
-                                pending_rpc.insert(request_id, reply);
-                                tracing::debug!(peer = %peer_id, "libp2p RPC request sent");
-                            }
-                            Err(e) => {
-                                tracing::warn!(peer = %peer_id, ?e, "libp2p RPC send failed");
-                                let _ = reply.send(Err(TransportError::Connect(e.to_string())));
-                            }
-                        }
+                        let _ = rpc_factory.create_protocol();
+                        let request_id = swarm.behaviour_mut().request_response.send_request(&peer_id, bytes);
+                        pending_rpc.insert(request_id, reply);
+                        tracing::debug!(peer = %peer_id, "libp2p RPC request sent");
                     }
                     None => break,
                 }
@@ -386,84 +398,86 @@ async fn swarm_loop(
                              _ => {}
                          }
                      }
-                     SwarmEvent::Behaviour(ForetiasBehaviourEvent::RequestResponse(event)) => {
-                         match event {
-                             request_response::Event::Message { peer, message, .. } => {
-                                 match message {
-                                     request_response::Message::Request { request, channel, .. } => {
-                                         let req_val: serde_json::Value = match serde_json::from_slice(&request) {
-                                             Ok(v) => v,
-                                             Err(e) => {
-                                                 tracing::warn!(peer = %peer, ?e, "libp2p RPC: invalid JSON");
-                                                 continue;
-                                             }
-                                         };
-                                         let method = req_val.get("method")
-                                             .and_then(|m| m.as_str())
-                                             .unwrap_or("");
-                                         let params = req_val.get("params").cloned().unwrap_or(serde_json::Value::Null);
-                                         match &rpc_handler {
-                                             Some(handler) => {
-                                                 let h = Arc::clone(handler);
-                                                 let peer_id = peer;
-                                                 tokio::spawn(async move {
-                                                     match h.handle(method, params).await {
-                                                         Ok(result) => {
-                                                             let bytes = match serde_json::to_vec(&result) {
-                                                                 Ok(b) => b,
-                                                                 Err(e) => {
-                                                                     tracing::warn!(peer = %peer_id, ?e, "libp2p RPC: serialize response failed");
-                                                                     Vec::new()
-                                                                 }
-                                                             };
-                                                             let _ = channel.send(bytes);
-                                                         }
-                                                         Err(e) => {
-                                                             tracing::warn!(peer = %peer_id, ?e, "libp2p RPC: handler error");
-                                                             let _ = channel.send(Vec::new());
-                                                         }
-                                                     }
-                                                 });
-                                             }
-                                             None => {
-                                                 tracing::warn!(peer = %peer, method, "libp2p RPC: no handler configured");
-                                             }
-                                         }
-                                     }
-                                 }
-                             }
-                             request_response::Event::OutboundFailure { request_id, error, peer, .. } => {
-                                 if let Some(sender) = pending_rpc.remove(&request_id) {
-                                     let _ = sender.send(Err(TransportError::Connect(error.to_string())));
-                                     tracing::warn!(peer = %peer, ?error, "libp2p RPC outbound failure");
-                                 }
-                             }
-                             request_response::Event::Response { request_id, response, peer, .. } => {
-                                 if let Some(sender) = pending_rpc.remove(&request_id) {
-                                     let result: Result<serde_json::Value, TransportError> = match serde_json::from_slice(&response) {
-                                         Ok(v) => {
-                                             if let Some(err) = v.get("error") {
-                                                 let code = err.get("code").and_then(|c| c.as_i64()).unwrap_or(-1) as i32;
-                                                 let message = err.get("message").and_then(|m| m.as_str()).unwrap_or("unknown").to_string();
-                                                 Err(TransportError::Rpc { code, message })
-                                             } else {
-                                                 Ok(v.get("result").cloned().unwrap_or(serde_json::Value::Null))
-                                             }
-                                         }
-                                         Err(e) => Err(TransportError::Decode(e.to_string())),
-                                     };
-                                     let _ = sender.send(result);
-                                 }
-                             }
-                             request_response::Event::OutboundRequestTimeout { request_id, peer, .. } => {
-                                 if let Some(sender) = pending_rpc.remove(&request_id) {
-                                     let _ = sender.send(Err(TransportError::Timeout));
-                                     tracing::warn!(peer = %peer, "libp2p RPC timeout");
-                                 }
-                             }
-                             _ => {}
-                         }
-                     }
+                      SwarmEvent::Behaviour(ForetiasBehaviourEvent::RequestResponse(event)) => {
+                          match event {
+                              request_response::Event::Message { peer, message, .. } => {
+                                  match message {
+                                      request_response::Message::Request { request_id, request, channel } => {
+                                          let req_val: serde_json::Value = match serde_json::from_slice(&request) {
+                                              Ok(v) => v,
+                                              Err(e) => {
+                                                  tracing::warn!(peer = %peer, ?e, "libp2p RPC: invalid JSON");
+                                                  continue;
+                                              }
+                                          };
+                                          let method = req_val.get("method")
+                                              .and_then(|m| m.as_str())
+                                              .unwrap_or("")
+                                              .to_string();
+                                          let params = req_val.get("params").cloned().unwrap_or(serde_json::Value::Null);
+                                          match &rpc_handler {
+                                              Some(handler) => {
+                                                  let h = Arc::clone(handler);
+                                                  let tx = inbound_res_tx.clone();
+                                                  pending_inbound.insert(request_id, (channel, peer));
+                                                  tokio::spawn(async move {
+                                                          let bytes = match h.handle(&method, params).await {
+                                                          Ok(result) => match serde_json::to_vec(&result) {
+                                                              Ok(b) => b,
+                                                              Err(e) => {
+                                                                  tracing::warn!(peer = %peer, ?e, "libp2p RPC: serialize response failed");
+                                                                  Vec::new()
+                                                              }
+                                                          },
+                                                          Err(e) => {
+                                                              tracing::warn!(peer = %peer, ?e, "libp2p RPC: handler error");
+                                                              Vec::new()
+                                                          }
+                                                      };
+                                                      let _ = tx.send((request_id, bytes));
+                                                  });
+                                              }
+                                              None => {
+                                                  tracing::warn!(peer = %peer, method, "libp2p RPC: no handler configured");
+                                              }
+                                          }
+                                      }
+                                      request_response::Message::Response { request_id, response } => {
+                                          if let Some(sender) = pending_rpc.remove(&request_id) {
+                                              let val: serde_json::Value = match serde_json::from_slice(&response) {
+                                                  Ok(v) => v,
+                                                  Err(e) => {
+                                                      let _ = sender.send(Err(TransportError::Decode(e.to_string())));
+                                                      continue;
+                                                  }
+                                              };
+                                              let result: Result<serde_json::Value, TransportError> = if let Some(err) = val.get("error") {
+                                                  let code = err.get("code").and_then(|c| c.as_i64()).unwrap_or(-1) as i32;
+                                                  let message = err.get("message").and_then(|m| m.as_str()).unwrap_or("unknown").to_string();
+                                                  Err(TransportError::Rpc { code, message })
+                                              } else {
+                                                  Ok(val.get("result").cloned().unwrap_or(serde_json::Value::Null))
+                                              };
+                                              let _ = sender.send(result);
+                                          }
+                                      }
+                                  }
+                              }
+                              request_response::Event::OutboundFailure { request_id, error, peer, .. } => {
+                                  if let Some(sender) = pending_rpc.remove(&request_id) {
+                                      let err = match error {
+                                          request_response::OutboundFailure::Timeout => TransportError::Timeout,
+                                          _ => TransportError::Connect(error.to_string()),
+                                      };
+                                      let _ = sender.send(Err(err));
+                                      tracing::warn!(peer = %peer, ?error, "libp2p RPC outbound failure");
+                                  }
+                              }
+                              request_response::Event::InboundFailure { .. } => {}
+                              request_response::Event::ResponseSent { .. } => {}
+                              _ => {}
+                          }
+                      }
                     SwarmEvent::Behaviour(ForetiasBehaviourEvent::Gossip(event)) => {
                         match event {
                             gossipsub::Event::Message { propagation_source, message, .. } => {
