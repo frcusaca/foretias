@@ -1,6 +1,7 @@
 //! In-memory Calendar with append-only tick records.
 
 use super::tick::{TickRecord, CalendarLookup, verify_pair};
+use super::types::Tbid;
 use crate::crypto_server::CryptoServer;
 use crate::error::NodeError;
 use serde::{Deserialize, Serialize};
@@ -9,18 +10,18 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Calendar {
     /// TimeBeing identifier of this calendar's owner.
-    pub tbid: [u8; 16],
+    pub tbid: Tbid,
     /// TimeBeing name (human-readable identifier).
     pub tbn: String,
     /// Stamp TimeBeing identifier used for attestation.
-    pub stamp_tbid: [u8; 16],
+    pub stamp_tbid: Tbid,
     /// Ordered list of tick records.
     pub ticks: Vec<TickRecord>,
 }
 
 impl Calendar {
     /// Creates a new empty calendar with the given TimeBeing ID and name.
-    pub fn new(tbid: [u8; 16], tbn: &str) -> Self {
+    pub fn new(tbid: Tbid, tbn: &str) -> Self {
         Self {
             tbid,
             tbn: tbn.to_string(),
@@ -172,7 +173,7 @@ impl CalendarLookup for Calendar {
         self.ticks.last().map(|t| t.tick_number)
     }
 
-    fn tbid(&self) -> [u8; 16] {
+    fn tbid(&self) -> Tbid {
         self.tbid
     }
 
@@ -197,19 +198,21 @@ mod tests {
             aa_nonce: [0u8; 16],
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
+            genesis_signature: Vec::new(),
+            tb_version: 0,
         }
     }
 
     #[test]
     fn append_valid_tick_succeeds() {
-        let mut cal = Calendar::new([0u8; 16], "test");
+        let mut cal = Calendar::new(Tbid::from_raw([0u8; 96]), "test");
         assert!(cal.append(make_tick(1)).is_ok());
         assert_eq!(cal.ticks.len(), 1);
     }
 
     #[test]
     fn append_duplicate_tick_returns_error() {
-        let mut cal = Calendar::new([0u8; 16], "test");
+        let mut cal = Calendar::new(Tbid::from_raw([0u8; 96]), "test");
         cal.append(make_tick(5)).unwrap();
         let result = cal.append(make_tick(5));
         assert!(result.is_err());
@@ -217,7 +220,7 @@ mod tests {
 
     #[test]
     fn append_out_of_order_tick_returns_error() {
-        let mut cal = Calendar::new([0u8; 16], "test");
+        let mut cal = Calendar::new(Tbid::from_raw([0u8; 96]), "test");
         cal.append(make_tick(10)).unwrap();
         let result = cal.append(make_tick(3));
         assert!(result.is_err());
@@ -225,7 +228,7 @@ mod tests {
 
     #[test]
     fn get_returns_correct_ticks() {
-        let mut cal = Calendar::new([0u8; 16], "test");
+        let mut cal = Calendar::new(Tbid::from_raw([0u8; 96]), "test");
         cal.append(make_tick(1)).unwrap();
         cal.append(make_tick(2)).unwrap();
         cal.append(make_tick(3)).unwrap();
@@ -238,7 +241,7 @@ mod tests {
 
     #[test]
     fn get_returns_empty_for_out_of_bounds() {
-        let mut cal = Calendar::new([0u8; 16], "test");
+        let mut cal = Calendar::new(Tbid::from_raw([0u8; 96]), "test");
         cal.append(make_tick(1)).unwrap();
         let results = cal.get(100, 10).unwrap();
         assert!(results.is_empty());
@@ -246,7 +249,7 @@ mod tests {
 
     #[test]
     fn get_respects_count_limit() {
-        let mut cal = Calendar::new([0u8; 16], "test");
+        let mut cal = Calendar::new(Tbid::from_raw([0u8; 96]), "test");
         cal.append(make_tick(1)).unwrap();
         cal.append(make_tick(2)).unwrap();
         cal.append(make_tick(3)).unwrap();
@@ -259,13 +262,13 @@ mod tests {
 
     #[test]
     fn latest_returns_none_on_empty() {
-        let cal = Calendar::new([0u8; 16], "test");
+        let cal = Calendar::new(Tbid::from_raw([0u8; 96]), "test");
         assert_eq!(cal.latest(), None);
     }
 
     #[test]
     fn latest_returns_correct_tick_number() {
-        let mut cal = Calendar::new([0u8; 16], "test");
+        let mut cal = Calendar::new(Tbid::from_raw([0u8; 96]), "test");
         cal.append(make_tick(7)).unwrap();
         cal.append(make_tick(14)).unwrap();
         assert_eq!(cal.latest(), Some(14));
@@ -273,7 +276,7 @@ mod tests {
 
     #[test]
     fn integrity_check_returns_empty_on_empty_calendar() {
-        let cal = Calendar::new([0u8; 16], "test");
+        let cal = Calendar::new(Tbid::from_raw([0u8; 96]), "test");
         let server = crypto_server::new_software(crate::crypto_server::ForetiasCurve::Ed25519).unwrap();
         let results = cal.integrity_check(server.as_ref(), "test", None, None).unwrap();
         assert!(results.is_empty());
@@ -281,7 +284,7 @@ mod tests {
 
     #[test]
     fn integrity_check_returns_empty_on_single_tick() {
-        let mut cal = Calendar::new([0u8; 16], "test");
+        let mut cal = Calendar::new(Tbid::from_raw([0u8; 96]), "test");
         cal.append(make_tick(1)).unwrap();
         let server = crypto_server::new_software(crate::crypto_server::ForetiasCurve::Ed25519).unwrap();
         let results = cal.integrity_check(server.as_ref(), "test", None, None).unwrap();
@@ -297,8 +300,8 @@ mod tests {
         use zeroize::Zeroizing;
 
         let server = crypto_server::new_software(crate::crypto_server::ForetiasCurve::Ed25519).unwrap();
-        let tbid: [u8; 16] = [0xEE; 16];
-        let tbid_str = hex::encode(tbid);
+        let tbid = Tbid::from_raw([0xEE; 96]);
+        let tbid_str = tbid.to_hex();
         let mut cal = Calendar::new(tbid, "full-chain");
 
         let mut keypairs: Vec<([u8; 32], Zeroizing<[u8; 32]>)> = Vec::new();
@@ -328,6 +331,8 @@ mod tests {
                 aa_nonce: nonce,
                 stamps_per_tick: 0,
                 external_attestations: Vec::new(),
+            genesis_signature: Vec::new(),
+            tb_version: 0,
             }).unwrap();
         }
 
@@ -345,8 +350,8 @@ mod tests {
         use zeroize::Zeroizing;
 
         let server = crypto_server::new_software(crate::crypto_server::ForetiasCurve::Ed25519).unwrap();
-        let tbid: [u8; 16] = [0xFF; 16];
-        let tbid_str = hex::encode(tbid);
+        let tbid = Tbid::from_raw([0xFF; 96]);
+        let tbid_str = tbid.to_hex();
         let mut cal = Calendar::new(tbid, "partial-range");
 
         let mut keypairs: Vec<([u8; 32], Zeroizing<[u8; 32]>)> = Vec::new();
@@ -376,6 +381,8 @@ mod tests {
                 aa_nonce: nonce,
                 stamps_per_tick: 0,
                 external_attestations: Vec::new(),
+            genesis_signature: Vec::new(),
+            tb_version: 0,
             }).unwrap();
         }
 
@@ -386,7 +393,7 @@ mod tests {
 
     #[test]
     fn latest_tick_number_via_calendar_lookup() {
-        let mut cal = Calendar::new([0u8; 16], "test");
+        let mut cal = Calendar::new(Tbid::from_raw([0u8; 96]), "test");
         cal.append(make_tick(42)).unwrap();
         assert_eq!(cal.latest(), Some(42));
     }
@@ -397,7 +404,7 @@ mod tests {
         let path = "/tmp/foretias-test-atomic-save.json";
         let tmp_path = format!("{}.tmp", path);
 
-        let mut cal = Calendar::new([0xAA; 16], "atomic-test");
+        let mut cal = Calendar::new(Tbid::from_raw([0xAA; 96]), "atomic-test");
         cal.append(make_tick(1)).unwrap();
         cal.save(path).unwrap();
 
@@ -417,11 +424,11 @@ mod tests {
         let tmp_path = format!("{}.tmp", path);
 
         // Simulate crash: main file has 1 tick, .tmp has 2 ticks (write completed, rename didn't)
-        let mut main_cal = Calendar::new([0xBB; 16], "crash-recovery");
+        let mut main_cal = Calendar::new(Tbid::from_raw([0xBB; 96]), "crash-recovery");
         main_cal.append(make_tick(1)).unwrap();
         main_cal.save(path).unwrap();
 
-        let mut new_cal = Calendar::new([0xBB; 16], "crash-recovery");
+        let mut new_cal = Calendar::new(Tbid::from_raw([0xBB; 96]), "crash-recovery");
         new_cal.append(make_tick(1)).unwrap();
         new_cal.append(make_tick(2)).unwrap();
         // Write .tmp directly (simulating crash mid-save — rename never happened)
@@ -442,13 +449,13 @@ mod tests {
         let tmp_path = format!("{}.tmp", path);
 
         // Main file has 3 ticks, .tmp has only 1 (stale/corrupt .tmp)
-        let mut main_cal = Calendar::new([0xCC; 16], "stale-tmp");
+        let mut main_cal = Calendar::new(Tbid::from_raw([0xCC; 96]), "stale-tmp");
         main_cal.append(make_tick(1)).unwrap();
         main_cal.append(make_tick(2)).unwrap();
         main_cal.append(make_tick(3)).unwrap();
         main_cal.save(path).unwrap();
 
-        let mut stale_cal = Calendar::new([0xCC; 16], "stale-tmp");
+        let mut stale_cal = Calendar::new(Tbid::from_raw([0xCC; 96]), "stale-tmp");
         stale_cal.append(make_tick(1)).unwrap();
         let data = serde_json::to_string_pretty(&stale_cal).unwrap();
         std::fs::write(&tmp_path, &data).unwrap();
@@ -467,7 +474,7 @@ mod tests {
         let tmp_path = format!("{}.tmp", path);
 
         // Main file is valid, .tmp contains garbage
-        let mut cal = Calendar::new([0xDD; 16], "corrupt-tmp");
+        let mut cal = Calendar::new(Tbid::from_raw([0xDD; 96]), "corrupt-tmp");
         cal.append(make_tick(1)).unwrap();
         cal.save(path).unwrap();
 

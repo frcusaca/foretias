@@ -400,7 +400,7 @@ async fn cmd_serve(
     println!("Foretias TimeFamilyServer starting...");
     println!("  Listen : {}", addr);
     println!("  TBN    : {}", server.get_tbn());
-    println!("  TBID   : {}", hex::encode(server.get_tbid()));
+    println!("  TBID   : {}", server.get_tbid().to_hex());
     println!("  Config : TimeFamilyConfig v{}", time_family_cfg.version);
     if start_dormant {
         println!("  Mode   : dormant (verify-only)");
@@ -730,7 +730,7 @@ impl CalendarLookup for CalendarInspect<'_> {
         self.calendar.ticks.last().map(|t| t.tick_number)
     }
 
-    fn tbid(&self) -> [u8; 16] {
+    fn tbid(&self) -> foretias_core::foretias::types::Tbid {
         self.calendar.tbid
     }
 

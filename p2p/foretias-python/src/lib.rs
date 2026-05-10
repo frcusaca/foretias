@@ -15,6 +15,7 @@ use serde::{Serialize, Deserialize};
 use foretias_core::crypto_server::{self, CryptoServer, ForetiasCurve, PublicKeyBytes, SealedBlob as SealedBlobInner};
 use foretias_core::foretias::{self, calendar::Calendar as CalendarInner, tick::TickRecord as TickRecordInner, external_attestation::ExternalAttestation as ExternalAttestationInner};
 use foretias_core::foretias::tick::{Foretis as ForetisInner, CalendarLookup};
+use foretias_core::foretias::types::Tbid;
 use foretias_core::core::bindings::{ForetiasPubKey32, ForetiasSig64};
 use foretias_core::epoch::snapshot::{PeerScore as PeerScoreInner, EpochSnapshot as EpochSnapshotInner};
 use foretias_core::config::{NodeConfig as NodeConfigInner, CollisionConfig as CollisionConfigInner};
@@ -52,7 +53,7 @@ impl From<&ForetisInner> for PyForetis {
             content_hash: f.content_hash.to_vec(),
             signature: f.signature.clone(),
             signature_algorithm: f.signature_algorithm.clone(),
-            tbid: f.tbid.to_vec(),
+            tbid: f.tbid.raw_bytes().to_vec(),
             echo: f.echo.clone(),
             tbn: f.tbn.clone(),
             time_being_reference_time: f.time_being_reference_time.clone(),
@@ -178,7 +179,7 @@ pub struct PyCalendar {
 impl From<&CalendarInner> for PyCalendar {
     fn from(c: &CalendarInner) -> Self {
         Self {
-            tbid: c.tbid.to_vec(),
+            tbid: c.tbid.raw_bytes().to_vec(),
             tbn: c.tbn.clone(),
             ticks: c.ticks.iter().map(PyTickRecord::from).collect(),
         }
@@ -302,7 +303,7 @@ pub struct PyTimeFamily {
     server: Box<dyn CryptoServer>,
     calendar: parking_lot::RwLock<CalendarInner>,
     current_tick: parking_lot::Mutex<u64>,
-    tbid: [u8; 16],
+    tbid: Tbid,
     tbn: String,
 }
 
@@ -315,11 +316,12 @@ impl PyTimeFamily {
         let server = crypto_server::new_software(ForetiasCurve::Ed25519)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
 
-        let mut tbid = [0u8; 16];
-        server.random_bytes(&mut tbid)
+        let mut raw_tbid = [0u8; 96];
+        server.random_bytes(&mut raw_tbid)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+        let tbid = Tbid::from_raw(raw_tbid);
 
-        let tbn = tbn.unwrap_or_else(|| format!("tf-{}", hex::encode(&tbid[..8])));
+        let tbn = tbn.unwrap_or_else(|| format!("tf-{}", hex::encode(&raw_tbid[..8])));
 
         let calendar = CalendarInner::new(tbid, &tbn);
 
@@ -367,6 +369,8 @@ impl PyTimeFamily {
             aa_nonce: [0u8; 16],
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
+            genesis_signature: Vec::new(),
+            tb_version: 0,
         };
 
         let mut cal = self.calendar.write();
@@ -380,8 +384,9 @@ impl PyTimeFamily {
     fn verify(&self, content: &[u8], foretis: &PyForetis) -> PyResult<bool> {
         let content_hash: [u8; 32] = foretis.content_hash[..].try_into()
             .map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("content_hash must be 32 bytes"))?;
-        let tbid: [u8; 16] = foretis.tbid[..].try_into()
-            .map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("tbid must be 16 bytes"))?;
+        let raw_tbid: [u8; 96] = foretis.tbid[..].try_into()
+            .map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("tbid must be 96 bytes"))?;
+        let tbid = Tbid::from_raw(raw_tbid);
 
         let inner_foretis = ForetisInner {
             tick_number: foretis.tick_number,
@@ -407,7 +412,7 @@ impl PyTimeFamily {
 
     /// Return the tbid as a hex string.
     fn get_tbid(&self) -> PyResult<String> {
-        Ok(hex::encode(self.tbid))
+        Ok(self.tbid.to_hex())
     }
 
     /// Return the tbn (time branch name).
@@ -442,7 +447,7 @@ impl PyTimeFamily {
         format!(
             "TimeFamily(tbn={}, tbid={}, ticks={})",
             self.tbn,
-            &hex::encode(self.tbid)[..8],
+            &self.tbid.to_hex()[..8],
             *tick
         )
     }
@@ -525,8 +530,9 @@ impl PyTimeFamilyServer {
     fn verify(&self, content: &[u8], foretis: &PyForetis) -> PyResult<bool> {
         let content_hash: [u8; 32] = foretis.content_hash[..].try_into()
             .map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("content_hash must be 32 bytes"))?;
-        let tbid: [u8; 16] = foretis.tbid[..].try_into()
-            .map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("tbid must be 16 bytes"))?;
+        let raw_tbid: [u8; 96] = foretis.tbid[..].try_into()
+            .map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("tbid must be 96 bytes"))?;
+        let tbid = Tbid::from_raw(raw_tbid);
 
         let inner_foretis = ForetisInner {
             tick_number: foretis.tick_number,
@@ -635,7 +641,7 @@ impl PyTimeFamilyServer {
 
     /// Return the TimeBeing identifier as a hex string.
     fn get_tbid(&self) -> String {
-        hex::encode(self.server.get_tbid())
+        self.server.get_tbid().to_hex()
     }
 
     /// Return the TimeBeing name.
@@ -675,7 +681,7 @@ impl PyTimeFamilyServer {
         format!(
             "TimeFamilyServer(tbn={}, tbid={}, ticks={}{})",
             self.server.get_tbn(),
-            &hex::encode(self.server.get_tbid())[..8],
+            &self.server.get_tbid().to_hex()[..8],
             tick,
             dormant
         )

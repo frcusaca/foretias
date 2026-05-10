@@ -40,6 +40,7 @@ This gives both agents and humans a clear idea of how work is progressing over t
 If a worktree branch is used for implementation, the PLAN.md **must** document the lifecycle of that worktree as explicit, separate checkbox tasks placed at appropriate points in the plan. The workpath shall always be `FULL_WORKTREE_PATH=${HOME}/tmp/foretias-worktrees/{SPEC_NAME_WITHOUT_MARKDOWN_EXTENSION}_${RANDOM}`, that random differentiator is set once while creating the plan file and stays consistent throughout the plan file.
 ```markdown
 - [ ] Create worktree `git worktree add -b ${BRANCH_NAME} ${FULL_WORKTREE_PATH}}`
+- [ ] `cd ${FULL_WORKTREE_PATH}}`; reset current session work directory to be the full worktree path.
 ...
   (implementation tasks go here)
 ...
@@ -218,11 +219,77 @@ rustup install stable  # Rust toolchain
 java -version >= 17    # For Java bindings (optional)
 ```
 
-### 1. Build Everything
+### Build Environment Variables
+
+Set these environment variables BEFORE any cargo build/check/test commands to accelerate compilation:
 
 ```bash
+# Parallel CMake builds for oqs-sys (liboqs C library) — defaults to CPU count if unset
+export CMAKE_BUILD_PARALLEL_LEVEL=10
+```
+
+This variable is consumed by `core-engine/build.rs` which passes it to `cmake --build --parallel`. Without it, CMake falls back to single-threaded compilation of the ~200 post-quantum signature scheme source files, making foretias-core builds take 15-30 minutes instead of 2-5 minutes.
+
+### Build Caching Strategies
+
+The `foretias-core` crate (oqs-sys/liboqs C library) dominates build time. The following strategies reduce repeated build costs:
+
+**1. Enable only required libp2p features** — biggest win (20-25% reduction in initial build time):
+```toml
+# In foretias-node/Cargo.toml
+libp2p = { version = "0.56", default-features = false, features = [
+    "tcp", "noise", "yamux", "gossipsub", "kad", "identify", "ping", "request-response"
+] }
+```
+libp2p has 38 feature flags, none enabled by default. Enabling only what's used avoids compiling unused protocols (QUIC, WebRTC, WebSocket, TLS, etc.).
+
+**2. Use sccache for Rust compilation** — caches external crates (libp2p, etc.) across builds:
+```bash
+cargo install sccache # should already be installed
+export RUSTC_WRAPPER=sccache
+# First build populates cache; subsequent rebuilds hit cache for unchanged deps
+sccache -s  # Check cache stats
+```
+Note: sccache cannot cache incrementally-compiled workspace members or proc-macros, but it effectively caches the libp2p dependency tree.
+
+**3. Per-worktree target directories** — DO NOT share `target/` across worktrees (cargo locking will corrupt artifacts). Use separate target dirs per worktree:
+```bash
+export CARGO_TARGET_DIR="$HOME/.cache/cargo/foretias-$WORKTREE_NAME"
+```
+The shared `CARGO_HOME` registry (`~/.cargo/registry`) is already reused across worktrees for source downloads.
+
+**4. Pre-build heavy dependencies** — warm the cache before starting work:
+```bash
+export CMAKE_BUILD_PARALLEL_LEVEL=10
+# Build foretias-core first (takes longest), then only check foretias-node
+cd p2p && cargo build -p foretias-core
+cd p2p && cargo check -p foretias-node  # Fast after core is cached
+```
+
+**5. Profile optimization for dev builds** — faster incremental compilation:
+```toml
+[profile.dev.build-override]
+opt-level = 0
+codegen-units = 256
+```
+
+**What does NOT help for local development:**
+- `cargo-chef` — designed for Docker layer caching, not local incremental builds
+- Shared target directories — unsafe (race conditions on `.rmeta`/`.rlib` files)
+- `cargo-biscuit` — not widely adopted, limited benefit over native cargo caching
+
+### 1. Build C11 dependencies
+All builds require this first step:
+```bash
+export CMAKE_BUILD_PARALLEL_LEVEL=10
 # Step 1: Build C11 core library (static lib)
 cd p2p/core && cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build
+```
+
+### 2. Build Everything
+
+```bash
+# Do step 1, then
 
 # Step 2: Build Rust workspace (core-engine, foretias-node, foretias-python, foretias-java)
 cd p2p && cargo build --workspace
@@ -234,6 +301,44 @@ cd p2p/foretias-python && maturin develop
 cd /home/hcbusy/webhash/foretias && pip install -e .
 ```
 
+### 1a. Build Individual Crates (Incremental)
+Use these when only one crate has changed — faster than rebuilding the full workspace. Always run from `p2p/`.
+
+```bash
+# Do step 1, then
+
+# Build only core-engine (safe Rust wrappers over C11 FFI)
+cd p2p && cargo build -p foretias-core
+
+# Build only foretias-node (server + CLI binary)
+cd p2p && cargo build -p foretias-node
+
+# Build only foretias-python (PyO3 bindings — produces .so)
+cd p2p && cargo build -p foretias-python
+
+# Build only foretias-java (JNI bindings — produces .so)
+cd p2p && cargo build -p foretias-java
+
+# Build a single crate in release mode
+cd p2p && cargo build -p foretias-node --release
+
+# Check a single crate without full compilation (fastest validation)
+cd p2p && cargo check -p foretias-core
+cd p2p && cargo check -p foretias-node
+```
+
+**Dependency chain** (build order when multiple crates change):
+1. C11 core (`p2p/core`) — static lib, linked by all Rust crates
+2. `foretias-core` (core-engine) — depends on C11 core via bindgen
+3. `foretias-node` — depends on core-engine
+4. `foretias-python` — depends on core-engine + foretias-node
+5. `foretias-java` — depends on core-engine
+
+If build stalls, and does not resolve after repeating an attempt, you may look at build process using verbose flag.
+This flag is very verbose, so use a subagent to run it and check on progressing output.
+```bash
+cd p2p && cargo build -vv
+```
 ### 2. Run All Tests
 
 ```bash
@@ -253,6 +358,7 @@ cd p2p/core/build && ctest --output-on-failure && cd ../.. && cargo test --works
 ### 3. Run Individual / Targeted Tests
 
 ```bash
+export CMAKE_BUILD_PARALLEL_LEVEL=10
 # --- C11 tests ---
 
 # Run a specific test file (CMake builds all into test_all, use -V to list):

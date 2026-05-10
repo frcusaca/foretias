@@ -4,6 +4,7 @@
 //! `stamp` and `verify` subcommands end-to-end.
 
 use std::io::Read;
+use foretias_core::foretias::types::Tbid;
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::thread;
@@ -307,7 +308,7 @@ fn test_crash_recovery_calendar() {
     let tmp_path = tmp_dir.join("test.json.tmp");
 
     // Create a calendar with 3 ticks
-    let mut cal = CoreCalendar::new([0u8; 16], "crash-test");
+    let mut cal = CoreCalendar::new(Tbid::default(), "crash-test");
     for i in 0..3u64 {
         let record = foretias_core::foretias::tick::TickRecord {
             tick_number: i,
@@ -318,6 +319,8 @@ fn test_crash_recovery_calendar() {
             aa_nonce: [0u8; 16],
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
+            genesis_signature: Vec::new(),
+            tb_version: 0,
         };
         cal.append(record).expect("append failed");
     }
@@ -326,7 +329,7 @@ fn test_crash_recovery_calendar() {
     cal.save(cal_path.to_str().unwrap()).expect("save failed");
 
     // Simulate crash: write a newer state to .tmp (more ticks than main)
-    let mut cal2 = CoreCalendar::new([0u8; 16], "crash-test");
+    let mut cal2 = CoreCalendar::new(Tbid::default(), "crash-test");
     for i in 0..5u64 {
         let record = foretias_core::foretias::tick::TickRecord {
             tick_number: i,
@@ -337,6 +340,8 @@ fn test_crash_recovery_calendar() {
             aa_nonce: [0u8; 16],
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
+            genesis_signature: Vec::new(),
+            tb_version: 0,
         };
         cal2.append(record).expect("append failed");
     }

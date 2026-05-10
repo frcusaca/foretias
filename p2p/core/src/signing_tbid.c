@@ -1,5 +1,6 @@
 #include "platform.h"
 #include "foretias_core.h"
+#include <oqs/oqs.h>
 #include <string.h>
 
 #ifdef OQS_ENABLE_SIG_sphincs_sha2_256f_simple
