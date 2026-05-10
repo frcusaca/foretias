@@ -56,7 +56,7 @@ fn main() {
     let sources = [
         "src/version.c",
         "src/identity_ed25519.c", "src/identity_p256.c",
-        "src/signing_ed25519.c", "src/signing_p256.c", "src/signing_sphincs.c", "src/signing_dilithium.c",
+        "src/signing_ed25519.c", "src/signing_p256.c", "src/signing_sphincs.c", "src/signing_dilithium.c", "src/signing_tbid.c",
         "src/kem_mlkem.c",
         "src/hash_sha256.c", "src/hash_blake3.c",
         "src/hash_legacy_insecure_md5.c", "src/hash_legacy_insecure_sha1.c",

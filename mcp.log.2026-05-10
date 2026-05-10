@@ -1,0 +1,14 @@
+2026-05-10T16:17:19.987091Z  INFO rust_mcp_server: Starting Rust MCP Server: Args { log_level: "info", log_file: Some("mcp.log"), disabled_tools: [], workspace: None, registry: None, generate_docs: None, no_recommendations: false }
+2026-05-10T16:17:19.987150Z  INFO rust_mcp_server: Server version: 0.3.7.
+2026-05-10T16:17:19.987160Z  INFO rust_mcp_server: RMCP crate version: unknown
+2026-05-10T16:17:19.987166Z  INFO rust_mcp_server: No workspace root specified, workspace auto-detection enabled
+2026-05-10T16:17:20.013276Z  INFO serve_inner: rmcp::service: Service initialized as server peer_info=Some(InitializeRequestParams { meta: None, protocol_version: ProtocolVersion("2025-11-25"), capabilities: ClientCapabilities { experimental: None, extensions: None, roots: None, sampling: None, elicitation: None, tasks: None }, client_info: Implementation { name: "opencode", title: None, version: "1.14.33", description: None, icons: None, website_url: None } })
+2026-05-10T16:17:20.058104Z  INFO serve_inner: rmcp::service: received notification notification=InitializedNotification(NotificationNoParam { method: InitializedNotificationMethod, extensions: Extensions })
+2026-05-10T16:17:20.058227Z  INFO serve_inner: rust_mcp_server::rmcp_server: MCP client initialized
+2026-05-10T16:17:20.058271Z  INFO serve_inner: rust_mcp_server::workspace: Checking current working directory for Cargo project: Some("/home/hcbusy/webhash/foretias")
+2026-05-10T16:17:20.058297Z  INFO serve_inner: rust_mcp_server::workspace: No Cargo.toml in CWD (/home/hcbusy/webhash/foretias), will attempt workspace detection via client roots
+2026-05-10T16:17:20.058307Z  INFO serve_inner: rust_mcp_server::workspace: Checking client roots capability: supports_roots=false
+2026-05-10T16:17:20.058316Z  WARN serve_inner: rust_mcp_server::workspace: Client does not support roots capability; cannot auto-detect workspace
+2026-05-10T16:20:31.346766Z  INFO serve_inner: rmcp::service: input stream terminated
+2026-05-10T16:20:31.346915Z  INFO serve_inner: rmcp::service: serve finished quit_reason=Closed
+2026-05-10T16:20:31.347064Z  INFO rust_mcp_server: Server closed normally

@@ -218,11 +218,28 @@ rustup install stable  # Rust toolchain
 java -version >= 17    # For Java bindings (optional)
 ```
 
-### 1. Build Everything
+### Build Environment Variables
 
+Set these environment variables BEFORE any cargo build/check/test commands to accelerate compilation:
+
+```bash
+# Parallel CMake builds for oqs-sys (liboqs C library) — defaults to CPU count if unset
+export CMAKE_BUILD_PARALLEL_LEVEL=10
+```
+
+This variable is consumed by `core-engine/build.rs` which passes it to `cmake --build --parallel`. Without it, CMake falls back to single-threaded compilation of the ~200 post-quantum signature scheme source files, making foretias-core builds take 15-30 minutes instead of 2-5 minutes.
+
+### 1. Build C11 dependencies
+All builds require this first step:
 ```bash
 # Step 1: Build C11 core library (static lib)
 cd p2p/core && cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build
+```
+
+### 2. Build Everything
+
+```bash
+# Do step 1, then
 
 # Step 2: Build Rust workspace (core-engine, foretias-node, foretias-python, foretias-java)
 cd p2p && cargo build --workspace
@@ -234,6 +251,44 @@ cd p2p/foretias-python && maturin develop
 cd /home/hcbusy/webhash/foretias && pip install -e .
 ```
 
+### 1a. Build Individual Crates (Incremental)
+Use these when only one crate has changed — faster than rebuilding the full workspace. Always run from `p2p/`.
+
+```bash
+# Do step 1, then
+
+# Build only core-engine (safe Rust wrappers over C11 FFI)
+cd p2p && cargo build -p foretias-core
+
+# Build only foretias-node (server + CLI binary)
+cd p2p && cargo build -p foretias-node
+
+# Build only foretias-python (PyO3 bindings — produces .so)
+cd p2p && cargo build -p foretias-python
+
+# Build only foretias-java (JNI bindings — produces .so)
+cd p2p && cargo build -p foretias-java
+
+# Build a single crate in release mode
+cd p2p && cargo build -p foretias-node --release
+
+# Check a single crate without full compilation (fastest validation)
+cd p2p && cargo check -p foretias-core
+cd p2p && cargo check -p foretias-node
+```
+
+**Dependency chain** (build order when multiple crates change):
+1. C11 core (`p2p/core`) — static lib, linked by all Rust crates
+2. `foretias-core` (core-engine) — depends on C11 core via bindgen
+3. `foretias-node` — depends on core-engine
+4. `foretias-python` — depends on core-engine + foretias-node
+5. `foretias-java` — depends on core-engine
+
+If build stalls, and does not resolve after repeating an attempt, you may look at build process using verbose flag.
+This flag is very verbose, so use a subagent to run it and check on progressing output.
+```bash
+cd p2p && cargo build -vv
+```
 ### 2. Run All Tests
 
 ```bash

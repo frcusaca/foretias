@@ -754,6 +754,10 @@ These are deliberately deferred but planned:
 | Combined public key in Period metadata | Populate the `metadata` field on Period with the combined public key for signature verification chains |
 | MirrorStore compaction | Merge small period files, reclaim space from pruned mirrors |
 | Mirror consistency guarantees | CRDT-style or version-vector based conflict resolution for divergent mirror histories |
+| SPHINCS+ TBID identity (SLH-DSA-256s/f) | Replace random TBID (`[u8; 16]`) with SPHINCS+ public key from **level 5 SLH-DSA-256s/f** parameter set. Public key is **64 bytes** (PK.seed \|\| PK.root, per FIPS 205 §9.1). TBID becomes a verifiable Calendar identity — every Period and tick is bound to the Calendar's SPHINCS+ key. Key generation uses `liboqs` (already in dependency chain via `core-engine`). Tbid type changes from `[u8; 16]` to `[u8; 64]`. Ripples through Foretis, TickRecord, DHT keys, mirror storage, bindings. |
+| Sporadic SPHINCS+ tick signing | Sign ticks with the Time Being's SPHINCS+ identity key — NOT every tick (SPHINCS+ signatures are ~7.8 KB), but periodically (e.g., every finalized period, or every N ticks). The signature covers the Period's checksum + metadata. Allows mirrors to verify origin authenticity without trusting the stream. Un-signed ticks rely on Period checksum + chain-of-trust via forward/backward foretis. |
+| Signed mirror agreement | The mirror relationship itself becomes a signed agreement: both parties sign a `MirrorAgreement { source_tbid, mirror_tbid, period_id, start_tick, agreed_terms }` using their SPHINCS+ keys. Provides non-repudiation — either party can prove the mirror was established and under what terms. |
+| `cancel_mirror` RPC (courtesy notice) | Mirror sends `cancel_mirror { tbid, reason, last_tick_mirrored }` to source as a courtesy notification that it has stopped mirroring. Source enqueues `FindNewMirror`. Not a teardown contract — just a courtesy so the source doesn't have to discover the loss through reconciliation. Wire format: `{"method": "cancel_mirror", "params": {"tbid": "<hex>", "reason": "...", "last_tick_mirrored": N}}`. |
 
 ---
 
