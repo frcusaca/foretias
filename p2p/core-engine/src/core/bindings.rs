@@ -8,7 +8,6 @@ pub const FORETIAS_SIG_ID_DILITHIUM3: &[u8; 11] = b"Dilithium3\0";
 pub const FORETIAS_SIG_ID_SLH_DSA_SHA2_256F: &[u8; 26] = b"SPHINCS+-SHA2-256f-simple\0";
 pub const FORETIAS_KEM_ID_NOISE_XX: &[u8; 9] = b"Noise-XX\0";
 pub const FORETIAS_KEM_ID_MLKEM_768: &[u8; 11] = b"ML-KEM-768\0";
-pub const FORETIAS_SIG_ID_SLH_DSA_SHA2_256F: &[u8; 26] = b"SPHINCS+-SHA2-256f-simple\0";
 pub const FORETIAS_SIG_MAX_PUBKEY_BYTES: u32 = 2048;
 pub const FORETIAS_SIG_MAX_SECRET_BYTES: u32 = 4096;
 pub const FORETIAS_SIG_MAX_SIG_BYTES: u32 = 65536;
@@ -561,56 +560,6 @@ extern "C" {
     #[link_name = "foretias_memzero"]
     pub fn foretias_memzero(ptr: *mut ::std::os::raw::c_void, len: usize);
 }
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct ForetiasTbidV1PubKey {
-    pub ed25519_pub: ForetiasPubKey32,
-    pub slh_dsa_pub: [u8; 64usize],
-}
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of ForetiasTbidV1PubKey"][::std::mem::size_of::<ForetiasTbidV1PubKey>() - 96usize];
-    ["Alignment of ForetiasTbidV1PubKey"][::std::mem::align_of::<ForetiasTbidV1PubKey>() - 1usize];
-    ["Offset of field: ForetiasTbidV1PubKey::ed25519_pub"]
-        [::std::mem::offset_of!(ForetiasTbidV1PubKey, ed25519_pub) - 0usize];
-    ["Offset of field: ForetiasTbidV1PubKey::slh_dsa_pub"]
-        [::std::mem::offset_of!(ForetiasTbidV1PubKey, slh_dsa_pub) - 32usize];
-};
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct ForetiasTbidV1SecretKey {
-    pub ed25519_sk: ForetiasPrivKey32,
-    pub slh_dsa_sk: [u8; 128usize],
-    pub slh_dsa_sk_len: usize,
-}
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of ForetiasTbidV1SecretKey"]
-        [::std::mem::size_of::<ForetiasTbidV1SecretKey>() - 168usize];
-    ["Alignment of ForetiasTbidV1SecretKey"]
-        [::std::mem::align_of::<ForetiasTbidV1SecretKey>() - 8usize];
-    ["Offset of field: ForetiasTbidV1SecretKey::ed25519_sk"]
-        [::std::mem::offset_of!(ForetiasTbidV1SecretKey, ed25519_sk) - 0usize];
-    ["Offset of field: ForetiasTbidV1SecretKey::slh_dsa_sk"]
-        [::std::mem::offset_of!(ForetiasTbidV1SecretKey, slh_dsa_sk) - 32usize];
-    ["Offset of field: ForetiasTbidV1SecretKey::slh_dsa_sk_len"]
-        [::std::mem::offset_of!(ForetiasTbidV1SecretKey, slh_dsa_sk_len) - 160usize];
-};
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct ForetiasTbidV1Sig {
-    pub bytes: [u8; 49920usize],
-    pub len: usize,
-}
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of ForetiasTbidV1Sig"][::std::mem::size_of::<ForetiasTbidV1Sig>() - 49928usize];
-    ["Alignment of ForetiasTbidV1Sig"][::std::mem::align_of::<ForetiasTbidV1Sig>() - 8usize];
-    ["Offset of field: ForetiasTbidV1Sig::bytes"]
-        [::std::mem::offset_of!(ForetiasTbidV1Sig, bytes) - 0usize];
-    ["Offset of field: ForetiasTbidV1Sig::len"]
-        [::std::mem::offset_of!(ForetiasTbidV1Sig, len) - 49920usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct ForetiasPrivKey {
