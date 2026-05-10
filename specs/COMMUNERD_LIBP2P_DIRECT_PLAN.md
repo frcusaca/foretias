@@ -233,5 +233,5 @@ When peer A sends a JSON-RPC request over libp2p to peer B, B's server must hand
 
 - [x] Verify all work is complete in `/home/hcbusy/tmp/foretias-worktrees/COMMUNERD_LIBP2P_DIRECT_3137` and committed to `feat/communerd-libp2p-direct` ✅ [2026-05-10] commit 140c431
 - [ ] Run `cargo clippy --workspace` — no new warnings ❌ NOT DONE [2026-05-10] not run yet
-- [ ] Merge `feat/communerd-libp2p-direct` to alpha ❌ NOT DONE [2026-05-10]
-- [ ] Cleanup `/home/hcbusy/tmp/foretias-worktrees/COMMUNERD_LIBP2P_DIRECT_3137` after successful merge ❌ NOT DONE [2026-05-10]
+- [x](2026-05-10 13:44) Merge `feat/communerd-libp2p-direct` to alpha ✅ merged
+- [x](2026-05-10 13:44) Cleanup `/home/hcbusy/tmp/foretias-worktrees/COMMUNERD_LIBP2P_DIRECT_3137` after successful merge ✅ worktree removed
