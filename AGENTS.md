@@ -230,9 +230,58 @@ export CMAKE_BUILD_PARALLEL_LEVEL=10
 
 This variable is consumed by `core-engine/build.rs` which passes it to `cmake --build --parallel`. Without it, CMake falls back to single-threaded compilation of the ~200 post-quantum signature scheme source files, making foretias-core builds take 15-30 minutes instead of 2-5 minutes.
 
+### Build Caching Strategies
+
+The `foretias-core` crate (oqs-sys/liboqs C library) dominates build time. The following strategies reduce repeated build costs:
+
+**1. Enable only required libp2p features** — biggest win (20-25% reduction in initial build time):
+```toml
+# In foretias-node/Cargo.toml
+libp2p = { version = "0.56", default-features = false, features = [
+    "tcp", "noise", "yamux", "gossipsub", "kad", "identify", "ping", "request-response"
+] }
+```
+libp2p has 38 feature flags, none enabled by default. Enabling only what's used avoids compiling unused protocols (QUIC, WebRTC, WebSocket, TLS, etc.).
+
+**2. Use sccache for Rust compilation** — caches external crates (libp2p, etc.) across builds:
+```bash
+cargo install sccache # should already be installed
+export RUSTC_WRAPPER=sccache
+# First build populates cache; subsequent rebuilds hit cache for unchanged deps
+sccache -s  # Check cache stats
+```
+Note: sccache cannot cache incrementally-compiled workspace members or proc-macros, but it effectively caches the libp2p dependency tree.
+
+**3. Per-worktree target directories** — DO NOT share `target/` across worktrees (cargo locking will corrupt artifacts). Use separate target dirs per worktree:
+```bash
+export CARGO_TARGET_DIR="$HOME/.cache/cargo/foretias-$WORKTREE_NAME"
+```
+The shared `CARGO_HOME` registry (`~/.cargo/registry`) is already reused across worktrees for source downloads.
+
+**4. Pre-build heavy dependencies** — warm the cache before starting work:
+```bash
+export CMAKE_BUILD_PARALLEL_LEVEL=10
+# Build foretias-core first (takes longest), then only check foretias-node
+cd p2p && cargo build -p foretias-core
+cd p2p && cargo check -p foretias-node  # Fast after core is cached
+```
+
+**5. Profile optimization for dev builds** — faster incremental compilation:
+```toml
+[profile.dev.build-override]
+opt-level = 0
+codegen-units = 256
+```
+
+**What does NOT help for local development:**
+- `cargo-chef` — designed for Docker layer caching, not local incremental builds
+- Shared target directories — unsafe (race conditions on `.rmeta`/`.rlib` files)
+- `cargo-biscuit` — not widely adopted, limited benefit over native cargo caching
+
 ### 1. Build C11 dependencies
 All builds require this first step:
 ```bash
+export CMAKE_BUILD_PARALLEL_LEVEL=10
 # Step 1: Build C11 core library (static lib)
 cd p2p/core && cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build
 ```
@@ -309,6 +358,7 @@ cd p2p/core/build && ctest --output-on-failure && cd ../.. && cargo test --works
 ### 3. Run Individual / Targeted Tests
 
 ```bash
+export CMAKE_BUILD_PARALLEL_LEVEL=10
 # --- C11 tests ---
 
 # Run a specific test file (CMake builds all into test_all, use -V to list):
