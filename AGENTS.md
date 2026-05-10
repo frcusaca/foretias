@@ -38,9 +38,6 @@ This gives both agents and humans a clear idea of how work is progressing over t
 
 ### Worktree Branch Tracking in PLAN.md
 If a worktree branch is used for implementation, the PLAN.md **must** document the lifecycle of that worktree as explicit, separate checkbox tasks placed at appropriate points in the plan. The workpath shall always be `FULL_WORKTREE_PATH=${HOME}/tmp/foretias-worktrees/{SPEC_NAME_WITHOUT_MARKDOWN_EXTENSION}_${RANDOM}`, that random differentiator is set once while creating the plan file and stays consistent throughout the plan file.
-
-Agent with permission to work on foretias directory also has permission to work on a worktree added from the main foretias directory. If asking for permission, ask once for the entire worktree branch: "${FULL_WORKTREE_PATH}" not a subdirectory.
-
 ```markdown
 - [ ] Create worktree `git worktree add -b ${BRANCH_NAME} ${FULL_WORKTREE_PATH}}`
 - [ ] `cd ${FULL_WORKTREE_PATH}}`; reset current session work directory to be the full worktree path.
@@ -512,52 +509,6 @@ assert client.verify("hello world", stamp)
 print(client.public_key())
 print(client.tbid())
 print(client.calendar())
-```
-
----
-
-## FOOLISH RUST BUILD COMMANDS
-
-Foolish's Rust implementation lives at `/home/hcbusy/foolish-rust/`. All commands below run from the workspace root:
-
-```bash
-cd /home/hcbusy/foolish-rust/foolish
-```
-
-### Build & Check
-
-```bash
-cargo check --workspace                          # Quick check (fastest validation)
-cargo build --workspace                          # Build everything
-cargo build --workspace --release               # Release build (LTO, stripped)
-```
-
-Binary after release: `target/release/foolish`
-
-### Unit Tests
-
-```bash
-cargo test --workspace                           # All unit tests
-cargo test -p foolish-core                       # One crate
-cargo test -p foolish-core -- brane_search       # Specific test (substring match)
-```
-
-### Approval Tests (insta snapshots)
-
-Approval tests live in `foolish-core` as `mod approval_tests` and use `insta` YAML snapshots stored in `foolish-core/src/snapshots/`.
-
-```bash
-cargo test -p foolish-core -- approval           # All approval tests
-cargo test -p foolish-core -- chainedArithmeticIsApproved  # One approval test
-INSTA_UPDATE=always cargo test -p foolish-core -- approval   # Update snapshots
-```
-
-### CLI Usage
-
-```bash
-cargo run -p foolish-cli -- run path/to/program.foo    # Evaluate a .foo file
-cargo run -p foolish-cli -- step path/to/program.foo   # Step-by-step (debug)
-cargo run -p foolish-cli -- repl                       # Interactive REPL
 ```
 
 ---
