@@ -227,6 +227,10 @@ impl Communerd {
         self.peer_pool.remove_peer(addr).await;
     }
 
+    pub async fn get_peers(&self) -> Vec<PeerAddr> {
+        self.peer_pool.get_peers().await
+    }
+
     pub fn config(&self) -> &NodeConfig {
         &self.config
     }
