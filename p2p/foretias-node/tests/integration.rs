@@ -780,10 +780,11 @@ async fn test_libp2p_direct_rpc() {
     let response = tokio::time::timeout(Duration::from_secs(10), rx)
         .await
         .expect("RPC timed out")
-        .expect("RPC failed");
+        .expect("RPC channel failed")
+        .expect("RPC request failed");
     let resp_val: serde_json::Value = response;
-    assert_eq!(resp_val["result"]["method"], "ping");
-    assert_eq!(resp_val["result"]["params"]["from"], "peer_b");
+    assert_eq!(resp_val["method"], "ping");
+    assert_eq!(resp_val["params"]["from"], "peer_b");
 
     let peer_id_b = handle_b.local_peer_id.clone();
     let request = serde_json::json!({
@@ -805,10 +806,11 @@ async fn test_libp2p_direct_rpc() {
     let response = tokio::time::timeout(Duration::from_secs(10), rx)
         .await
         .expect("RPC timed out")
-        .expect("RPC failed");
+        .expect("RPC channel failed")
+        .expect("RPC request failed");
     let resp_val: serde_json::Value = response;
-    assert_eq!(resp_val["result"]["method"], "echo");
-    assert_eq!(resp_val["result"]["params"]["message"], "hello_from_a");
+    assert_eq!(resp_val["method"], "echo");
+    assert_eq!(resp_val["params"]["message"], "hello_from_a");
 
     handle_a.task.abort();
     handle_b.task.abort();
