@@ -36,7 +36,7 @@ base64              = "0.21"
 
 chrono         = "0.4"
 libp2p = { version = "0.56", default-features = false, features = [
-    "tokio", "tcp", "noise", "yamux", "identify", "ping", "macros", "ed25519", "kad", "gossipsub",
+    "tokio", "tcp", "noise", "yamux", "identify", "ping", "macros", "ed25519", "kad", "gossipsub", "request-response",
 ]}
 multiaddr = "0.18"
 axum = "0.8.9"

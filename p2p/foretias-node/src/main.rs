@@ -371,7 +371,7 @@ async fn cmd_serve(
 
     if let Some(listen_ma) = &p2p_listen_addr {
         if let Some(communerd) = server.communerd() {
-            communerd.enable_p2p(Some(listen_ma.clone()), dials.clone(), &dht_namespace, Some(&addr)).await
+            communerd.enable_p2p(Some(listen_ma.clone()), dials.clone(), &dht_namespace, Some(&addr), Some(Arc::clone(&server))).await
                 .map_err(|e| format!("failed to start libp2p swarm: {}", e))?;
         }
     }

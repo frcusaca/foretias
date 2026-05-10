@@ -12,6 +12,7 @@
 pub mod tbid_handshake;
 pub mod swarm;
 pub mod behaviour;
+pub mod rpc_protocol;
 pub mod events;
 pub mod gossip;
 

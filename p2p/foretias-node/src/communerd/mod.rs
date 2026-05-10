@@ -5,6 +5,7 @@
 
 pub mod transport;
 pub mod json_rpc_transport;
+pub mod libp2p_transport;
 pub mod peer_pool;
 pub mod dht_peer_source;
 pub mod capabilities;
@@ -22,9 +23,10 @@ use foretias_core::foretias::callbacks::{CommunityQuery, CommunityResponse, Peer
 use foretias_core::foretias::tick::{Foretis, TickRecord};
 
 use self::json_rpc_transport::JsonRpcTransport;
+use self::libp2p_transport::Libp2pTransport;
 use self::peer_pool::PeerPool;
 use self::p2p::events::NetworkEvent;
-use self::p2p::swarm::{build_and_spawn_swarm, SwarmCommand};
+use self::p2p::swarm::{build_and_spawn_swarm, CommunerdRpcHandler, SwarmCommand};
 use self::transport::{PeerAddr, PeerTransport, TransportError};
 use self::capabilities::PeerCapability;
 use crate::probity::{ProbityReport, ProbityStore, handle_gossip_message};
@@ -54,6 +56,7 @@ fn default_capabilities() -> Vec<PeerCapability> {
 /// Communerd knows nothing about Foretias semantics — it's a transparent RPC relay.
 pub struct Communerd {
     transport: Arc<dyn PeerTransport>,
+    libp2p_transport: Arc<Libp2pTransport>,
     peer_pool: PeerPool,
     config: NodeConfig,
     local_peer_id: Arc<OnceLock<libp2p::PeerId>>,
@@ -68,9 +71,7 @@ pub struct Communerd {
     collision_task: Arc<OnceLock<tokio::task::JoinHandle<()>>>,
     heartbeat_task: Arc<OnceLock<tokio::task::JoinHandle<()>>>,
     _local_multiaddr_arc: Arc<std::sync::Mutex<Option<libp2p::Multiaddr>>>,
-    /// In-memory cache of TBID → PeerRegistrationRecord, populated by DHT TBID index records.
     tbid_index: Arc<std::sync::RwLock<HashMap<String, PeerRegistrationRecord>>>,
-    /// Pending DHT lookups waiting for callback resolution (key → oneshot sender).
     pending_lookups: Arc<std::sync::Mutex<HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<PeerRegistrationRecord>>>>>,
 }
 
@@ -78,6 +79,7 @@ impl Clone for Communerd {
     fn clone(&self) -> Self {
         Self {
             transport: Arc::clone(&self.transport),
+            libp2p_transport: Arc::clone(&self.libp2p_transport),
             peer_pool: self.peer_pool.clone(),
             config: self.config.clone(),
             local_peer_id: Arc::clone(&self.local_peer_id),
@@ -103,6 +105,9 @@ impl Communerd {
         let transport: Arc<dyn PeerTransport> = Arc::new(JsonRpcTransport::new(
             config.request_timeout_secs.max(1),
         ));
+        let libp2p_transport = Arc::new(Libp2pTransport::new(
+            config.request_timeout_secs.max(1),
+        ));
         let peers: Vec<PeerAddr> = config.peers.iter()
             .map(|p| PeerAddr { json_rpc: p.clone(), peer_id: None, last_seen_ns: 0 })
             .collect();
@@ -110,6 +115,7 @@ impl Communerd {
         let crypto = Arc::from(new_software(ForetiasCurve::Ed25519).expect("libsodium must be available at runtime"));
         Self {
             transport,
+            libp2p_transport,
             peer_pool,
             config,
             local_peer_id: Arc::new(OnceLock::new()),
@@ -142,7 +148,20 @@ impl Communerd {
         content_hex: &str,
         echo: &str,
     ) -> Result<Foretis, TransportError> {
-        let result = self.transport.stamp(peer, content_hex, echo).await?;
+        let result = if peer.peer_id.is_some() && self.p2p_cmd_tx.get().is_some() {
+            match self.libp2p_transport.stamp(peer, content_hex, echo).await {
+                Ok(r) => {
+                    tracing::debug!(peer = %peer, transport = "libp2p-direct", "communerd: stamp succeeded");
+                    r
+                }
+                Err(e) => {
+                    tracing::debug!(peer = %peer, ?e, transport = "libp2p-direct", "communerd: stamp via libp2p failed, falling back");
+                    self.transport.stamp(peer, content_hex, echo).await?
+                }
+            }
+        } else {
+            self.transport.stamp(peer, content_hex, echo).await?
+        };
         let foretis: Foretis = serde_json::from_value(result)
             .map_err(|e| TransportError::Decode(e.to_string()))?;
         Ok(foretis)
@@ -161,7 +180,20 @@ impl Communerd {
             peer_id: owner.peer_id.parse().ok(),
             last_seen_ns: 0,
         };
-        let result = self.transport.route_stamp(&peer, target_tbid, content_hex, echo).await?;
+        let result = if peer.peer_id.is_some() && self.p2p_cmd_tx.get().is_some() {
+            match self.libp2p_transport.route_stamp(&peer, target_tbid, content_hex, echo).await {
+                Ok(r) => {
+                    tracing::debug!(peer = %peer, transport = "libp2p-direct", "communerd: route_stamp succeeded");
+                    r
+                }
+                Err(e) => {
+                    tracing::debug!(peer = %peer, ?e, transport = "libp2p-direct", "communerd: route_stamp via libp2p failed, falling back");
+                    self.transport.route_stamp(&peer, target_tbid, content_hex, echo).await?
+                }
+            }
+        } else {
+            self.transport.route_stamp(&peer, target_tbid, content_hex, echo).await?
+        };
         let foretis: Foretis = serde_json::from_value(result)
             .map_err(|e| TransportError::Decode(e.to_string()))?;
         Ok(foretis)
@@ -173,11 +205,18 @@ impl Communerd {
         tick_start: u64,
         count: u64,
     ) -> Result<Vec<TickRecord>, TransportError> {
+        if peer.peer_id.is_some() && self.p2p_cmd_tx.get().is_some() {
+            match self.libp2p_transport.get_calendar_slice(peer, tick_start, count).await {
+                Ok(r) => {
+                    tracing::debug!(peer = %peer, transport = "libp2p-direct", "communerd: get_calendar_slice succeeded");
+                    return Ok(r);
+                }
+                Err(e) => {
+                    tracing::debug!(peer = %peer, ?e, transport = "libp2p-direct", "communerd: get_calendar_slice via libp2p failed, falling back");
+                }
+            }
+        }
         self.transport.get_calendar_slice(peer, tick_start, count).await
-    }
-
-    pub async fn get_peers(&self) -> Vec<PeerAddr> {
-        self.peer_pool.get_peers().await
     }
 
     pub async fn add_peer(&self, addr: PeerAddr) {
@@ -222,6 +261,7 @@ impl Communerd {
         dials: Vec<libp2p::Multiaddr>,
         namespace: &str,
         json_rpc_addr: Option<&str>,
+        rpc_handler: Option<Arc<dyn CommunerdRpcHandler>>,
     ) -> Result<(), NodeError> {
         if self.local_peer_id.get().is_some() {
             return Ok(());
@@ -229,12 +269,13 @@ impl Communerd {
 
         *self.namespace.lock().unwrap() = namespace.to_string();
 
-        let handle = build_and_spawn_swarm(listen, dials, namespace, json_rpc_addr).await?;
+        let handle = build_and_spawn_swarm(listen, dials, namespace, json_rpc_addr, rpc_handler).await?;
 
         let peer_id = handle.local_peer_id;
         let _ = self.local_peer_id.set(peer_id);
         let _ = self.p2p_task.set(handle.task);
-        let _ = self.p2p_cmd_tx.set(handle.cmd_tx);
+        let _ = self.p2p_cmd_tx.set(handle.cmd_tx.clone());
+        let _ = self.libp2p_transport.set_cmd_tx(handle.cmd_tx);
         *self._local_multiaddr_arc.lock().unwrap() = handle.local_multiaddr.lock().unwrap().clone();
 
         tracing::info!(component = "communerd", peer = %peer_id, "communerd: libp2p swarm started");
