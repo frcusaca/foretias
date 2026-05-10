@@ -58,3 +58,9 @@ src/fortias/_version.py
 .venv
 .remember
 uv.lock
+
+# Rust build artifacts
+p2p/target/
+p2p/Cargo.lock
+p2p/core/build_test/
+mcp.*

@@ -1,0 +1,185 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - alpha
+      - mvp
+  pull_request:
+    branches:
+      - alpha
+      - mvp
+
+permissions:
+  contents: read
+
+jobs:
+  ##########################
+  # C11 Core Tests
+  ##########################
+  c11-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache C11 build
+        uses: actions/cache@v4
+        with:
+          path: p2p/core/build
+          key: c11-build-${{ runner.os }}-${{ hashFiles('p2p/core/**') }}
+          restore-keys: |
+            c11-build-${{ runner.os }}-
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake clang libsodium-dev libssl-dev
+
+      - name: Build C11 core
+        working-directory: p2p/core
+        run: make
+
+      - name: Run C11 tests
+        working-directory: p2p/core
+        run: make test
+
+  ##########################
+  # Rust Workspace Tests
+  ##########################
+  rust-tests:
+    runs-on: ubuntu-latest
+    needs: c11-tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache C11 build (for Rust FFI linkage)
+        uses: actions/cache@v4
+        with:
+          path: p2p/core/build
+          key: c11-build-${{ runner.os }}-${{ hashFiles('p2p/core/**') }}
+          restore-keys: |
+            c11-build-${{ runner.os }}-
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake clang libsodium-dev libssl-dev
+
+      - name: Build C11 core (required for bindgen in core-engine)
+        working-directory: p2p/core
+        run: make
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "p2p -> p2p/target"
+
+      - name: Run Rust workspace tests
+        working-directory: p2p
+        run: cargo test --workspace
+
+      - name: Run Clippy (deny warnings)
+        working-directory: p2p
+        run: cargo clippy --workspace -- -D warnings
+
+  ##########################
+  # Python Shim Tests
+  ##########################
+  python-tests:
+    runs-on: ubuntu-latest
+    needs: rust-tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache C11 build (for PyO3 linkage)
+        uses: actions/cache@v4
+        with:
+          path: p2p/core/build
+          key: c11-build-${{ runner.os }}-${{ hashFiles('p2p/core/**') }}
+          restore-keys: |
+            c11-build-${{ runner.os }}-
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake clang libsodium-dev libssl-dev
+
+      - name: Build C11 core (required for PyO3 linkage)
+        working-directory: p2p/core
+        run: make
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "p2p -> p2p/target"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: uv pip install maturin pytest
+
+      - name: Build C11 core (ensure available for maturin)
+        working-directory: p2p/core
+        run: make
+
+      - name: Build Rust workspace (ensure foretias-python compiles)
+        working-directory: p2p
+        run: cargo build --workspace
+
+      - name: Build & install foretias-p2p PyO3 bindings
+        working-directory: p2p/foretias-python
+        run: maturin develop
+
+      - name: Install foretias shim package
+        run: uv pip install -e .
+
+      - name: Run Python shim tests
+        run: python -m pytest tests/ -v
+
+  ##########################
+  # Format & Lint Gate
+  ##########################
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Check Rust formatting
+        working-directory: p2p
+        run: cargo fmt --workspace -- --check
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff (if available) or skip
+        run: |
+          uv pip install ruff || true
+
+      - name: Check Python formatting
+        run: |
+          ruff check src/ tests/ || true
+          ruff format --check src/ tests/ || true

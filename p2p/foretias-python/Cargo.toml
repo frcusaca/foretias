@@ -1,0 +1,18 @@
+[package]
+name    = "foretias-python"
+version = "0.2.0"
+edition = "2021"
+
+[lib]
+name        = "foretias_p2p"
+crate-type  = ["cdylib"]
+
+[dependencies]
+foretias-core = { version = "0.3", path = "../core-engine" }
+foretias-node = { version = "0.4", path = "../foretias-node" }
+
+pyo3         = { version = "0.21", features = ["extension-module", "abi3-py37"] }
+serde        = { version = "1", features = ["derive"] }
+serde_json   = "1"
+hex          = "0.4"
+parking_lot  = "0.12"

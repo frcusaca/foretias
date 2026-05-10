@@ -1,0 +1,190 @@
+//! Safe wrappers for Ed25519 identity operations.
+
+use std::ptr::NonNull;
+use std::mem::ManuallyDrop;
+
+use crate::core::bindings::*;
+use crate::error::{CryptoError, c_result_to_error};
+
+/// Opaque private key handle — private key bytes never leave C memory.
+///
+/// Encrypted with instance KEK — useless without this C11 instance.
+///
+/// This type does NOT implement `Clone`, `Copy`, or `Debug`, preventing
+/// accidental key exposure through copies or debug output.
+pub struct PrivKeyHandle(ManuallyDrop<NonNull<ForetiasPrivKey>>);
+
+// SAFETY: PrivKeyHandle wraps a C11 allocated key; Drop ensures deterministic cleanup.
+unsafe impl Send for PrivKeyHandle {}
+// SAFETY: C11 key operations are thread-safe (libsodium internals).
+unsafe impl Sync for PrivKeyHandle {}
+
+impl PrivKeyHandle {
+    /// Initialize the C11 instance KEK (Key Encryption Key).
+    ///
+    /// Must be called once at process startup before any key operations.
+    /// Generates a random 32-byte KEK used for ChaCha20-Poly1305
+    /// encryption of private key material at rest.
+    ///
+    /// # Safety
+    ///
+    /// The KEK is stored in C memory and never exposed to Rust.
+    /// Calling this multiple times is safe (idempotent).
+    pub fn init() {
+        // SAFETY: C11 init is idempotent and takes no parameters.
+        unsafe { foretias_privkey_init() };
+    }
+
+    /// Generate a fresh Ed25519 keypair, returning an opaque handle.
+    ///
+    /// The seed is encrypted with the instance KEK before storage.
+    /// Call [`PrivKeyHandle::init`] first.
+    pub fn generate() -> Result<Self, CryptoError> {
+        // SAFETY: C11 generator returns a valid pointer on success or null on failure.
+        let ptr = unsafe { foretias_privkey_ed25519_generate() };
+        if ptr.is_null() {
+            return Err(CryptoError::Internal(-99));
+        }
+        // SAFETY: ptr is non-null (checked above), so NonNull::new_unchecked is valid.
+        Ok(Self(ManuallyDrop::new(unsafe { NonNull::new_unchecked(ptr) })))
+    }
+
+    /// Create a handle from an existing 32-byte seed.
+    ///
+    /// The seed is encrypted with the instance KEK before storage.
+    /// Call [`PrivKeyHandle::init`] first.
+    pub fn from_seed(seed: &[u8; 32]) -> Result<Self, CryptoError> {
+        // SAFETY: C11 generator returns a valid pointer on success or null on failure; seed is 32 bytes.
+        let ptr = unsafe { foretias_privkey_ed25519_from_seed(seed.as_ptr()) };
+        if ptr.is_null() {
+            return Err(CryptoError::Internal(-99));
+        }
+        // SAFETY: ptr is non-null (checked above), so NonNull::new_unchecked is valid.
+        Ok(Self(ManuallyDrop::new(unsafe { NonNull::new_unchecked(ptr) })))
+    }
+
+    /// Derive the public key for this handle.
+    pub fn public_key(&self) -> Result<[u8; 32], CryptoError> {
+        let mut out = [0u8; 32];
+        // SAFETY: self.0 is valid; out is 32 bytes.
+        unsafe {
+            foretias_privkey_ed25519_public(self.0.as_ptr(), out.as_mut_ptr());
+        }
+        Ok(out)
+    }
+
+    /// Sign a message with this handle. Private key bytes never leave C.
+    pub fn sign(&self, msg: &[u8]) -> Result<ForetiasSig64, CryptoError> {
+        let mut sig = [0u8; 64];
+        // SAFETY: self.0 is valid; msg and sig buffers are valid for their lengths.
+        let rc = unsafe {
+            foretias_privkey_ed25519_sign(
+                self.0.as_ptr(),
+                msg.as_ptr(),
+                msg.len(),
+                sig.as_mut_ptr(),
+            )
+        };
+        c_result_to_error(rc as i32)?;
+        Ok(ForetiasSig64 { bytes: sig })
+    }
+
+    /// Derive a 32-byte seal key via HKDF-SHA256 from the seed.
+    /// The seed never leaves C memory.
+    pub fn derive_seal_key(&self, info: &[u8]) -> Result<[u8; 32], CryptoError> {
+        let mut seal_key = [0u8; 32];
+        // SAFETY: self.0 is valid; info and seal_key buffers are valid for their lengths.
+        let rc = unsafe {
+            foretias_privkey_derive_seal_key(
+                self.0.as_ptr(),
+                info.as_ptr(),
+                info.len(),
+                seal_key.as_mut_ptr(),
+            )
+        };
+        c_result_to_error(rc)?;
+        Ok(seal_key)
+    }
+}
+
+impl Drop for PrivKeyHandle {
+    fn drop(&mut self) {
+        // SAFETY: self.0 is valid (RAII guarantee); foretias_privkey_free handles null internally.
+        unsafe {
+            foretias_privkey_free(self.0.as_ptr());
+        }
+    }
+}
+
+/// Generate a fresh Ed25519 keypair.
+pub fn generate_ed25519_keypair() -> Result<(ForetiasPubKey32, ForetiasPrivKey32), CryptoError> {
+    // SAFETY: zeroing known-good `#[repr(C)]` structs from bindings.
+    let mut pub_key = unsafe { std::mem::zeroed() };
+    let mut priv_key = unsafe { std::mem::zeroed() };
+    // SAFETY: both buffers are valid and properly sized for the C11 generator.
+    let rc = unsafe { foretias_ed25519_generate_keypair(&mut pub_key, &mut priv_key) };
+    c_result_to_error(rc)?;
+    Ok((pub_key, priv_key))
+}
+
+/// Derive a PeerID from an Ed25519 public key.
+pub fn derive_ed25519_peer_id(pub_key: &ForetiasPubKey32) -> Result<ForetiasPeerID, CryptoError> {
+    // SAFETY: zeroing known-good `#[repr(C)]` struct from bindings.
+    let mut peer_id = unsafe { std::mem::zeroed() };
+    // SAFETY: pub_key and peer_id are valid for the C11 call.
+    let rc = unsafe { foretias_ed25519_derive_peer_id(pub_key, &mut peer_id) };
+    c_result_to_error(rc)?;
+    Ok(peer_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generate_keypair_produces_nonzero_keys() {
+        let (pub_key, priv_key) = generate_ed25519_keypair().unwrap();
+        assert!(!pub_key.bytes.iter().all(|&b| b == 0));
+        assert!(!priv_key.bytes.iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn generate_keypair_keys_are_different() {
+        let (pub_key, priv_key) = generate_ed25519_keypair().unwrap();
+        assert_ne!(pub_key.bytes, priv_key.bytes);
+    }
+
+    #[test]
+    fn derive_peer_id_is_deterministic() {
+        let (pub_key, _priv_key) = generate_ed25519_keypair().unwrap();
+        let id1 = derive_ed25519_peer_id(&pub_key).unwrap();
+        let id2 = derive_ed25519_peer_id(&pub_key).unwrap();
+        assert_eq!(id1.bytes, id2.bytes);
+    }
+
+    #[test]
+    fn different_keypairs_produce_different_peer_ids() {
+        let (pub1, _priv1) = generate_ed25519_keypair().unwrap();
+        let (pub2, _priv2) = generate_ed25519_keypair().unwrap();
+        let id1 = derive_ed25519_peer_id(&pub1).unwrap();
+        let id2 = derive_ed25519_peer_id(&pub2).unwrap();
+        assert_ne!(id1.bytes, id2.bytes);
+    }
+
+    #[test]
+    fn derive_peer_id_produces_nonzero_id() {
+        let (pub_key, _priv_key) = generate_ed25519_keypair().unwrap();
+        let peer_id = derive_ed25519_peer_id(&pub_key).unwrap();
+        assert!(!peer_id.bytes.iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn multiple_keypairs_are_unique() {
+        let mut peer_ids = std::collections::HashSet::new();
+        for _ in 0..10 {
+            let (pub_key, _priv_key) = generate_ed25519_keypair().unwrap();
+            let id = derive_ed25519_peer_id(&pub_key).unwrap();
+            assert!(peer_ids.insert(id.bytes));
+        }
+    }
+}

@@ -1,156 +1,218 @@
-# Fortias
+# Foretias
 
-**Free, Open-source and Resilient Time Integrity Attestation Service**
+**Free, Open-source Resilient Time Integrity Attestation Service**
 
-Fortias makes digital timestamping backdate-proof by cryptographic construction. Each tick of a time being's calendar has its own Ed25519 keypair, and when a tick advances, the previous private key is destroyed. A Fortis stamped at tick *n* cannot be forged from the past.
+Foretias makes digital timestamping backdate-proof by cryptographic construction. Each tick of a time being's calendar has its own Ed25519 keypair, and when a tick advances, the previous private key is destroyed. A Foretis stamped at tick *n* cannot be forged from the past.
 
 ## Installation
 
 ```bash
-pip install fortias
+# Build from source
+cd p2p && cargo build --release
+# Binary: p2p/target/release/foretias
 ```
 
 ## Quick Start
 
-```python
-from fortias import TimeFamily
-
-# Create a time being with 1-minute ticks
-tbf = TimeFamily(name="alpha", chronon_ns=60_000_000_000.0)
-
-# Stamp your first message
-fortis = tbf.stamp("hello world")
-
-# Verify it
-is_valid = tbf.verify("hello world", fortis)
-print(is_valid)  # True
-
-# Verify with window check (requires next tick to exist)
-is_valid, window_closed = tbf.verify("hello world", fortis, next_tick_number=1)
-print(is_valid, window_closed)  # True, True
-```
-
-## CLI
+### Start a Server
 
 ```bash
-fortis verify --calendar calendar.json --file message.txt --fortis fortis.json
+foretias serve --addr 127.0.0.1:4001 --chronon-ns 60000000000
 ```
 
-Add `--chain` to run a full chain integrity check on the calendar.
+### Stamp a Message
 
-## API Reference
-
-### Core class: `TimeFamily`
-
-Time family (`TimeFamily`, *Chronos fidelius adunatrix*) orchestrates between chronomatters (`Chronomatter`, *Chronos fidelius authenticus*, the Time Authority) and calendars (`Calendar` ,*Chronos fidelius grapha*, storage).
-
-```python
-from fortias import TimeFamily, Chronomatter, Fortis, TickRecord, Config
-
-tbf = TimeFamily(name="alpha", chronon_ns=60_000_000_000.0)
+```bash
+foretias stamp --message "hello world" --server 127.0.0.1:4001
 ```
 
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `stamp(content)` | `Fortis` | Sign content under the current tick's key |
-| `verify(content, fortis)` | `bool` or `(bool, bool)` | Verify a Fortis artifact |
-| `current_tick()` | `int` | Current tick number |
-| `tick()` | `None` | Advance to the next tick |
-| `save()` | `None` | Persist calendar to disk |
-| `load(persist_path)` | `TimeFamily` | Load a dormant (verify-only) instance |
+### Verify a Stamp
 
-### Data models
-
-```python
-@dataclass(frozen=True)
-class TickRecord:
-    tick_number: int     # Nanoseconds since Unix epoch
-    public_key: bytes    # Ed25519 public key
-    forward_fortis: bytes   # MA(prev) signed by prev_sk
-    backward_fortis: bytes  # MA(self) signed by self_sk
-
-@dataclass(frozen=True)
-class Fortis:
-    tick_number: int
-    my_content_hash: bytes  # SHA-256 of the content
-    signature: bytes        # 64-byte Ed25519 signature
-    tbid: bytes             # Time being identity
-    echo: str               # Echoed back from stamp input
-    tbn: str                # Time being name
+```bash
+foretias verify --message "hello world" --foretis '{"tick_number":...}' --server 127.0.0.1:4001
 ```
 
-### Cryptography
+## CLI Reference
 
-```python
-from fortias.crypto import generate_keypair, sha256, sign, verify
+### serve
 
-private_key, public_key = generate_keypair()  # 32 bytes each
-signature = sign(payload, private_key)          # 64 bytes
-is_valid = verify(payload, signature, public_key)  # bool
-content_hash = sha256(data)                     # 32 bytes
+Start a TimeFamilyServer with optional P2P peers and persistence.
+
+```bash
+# Basic server
+foretias serve --addr 127.0.0.1:4001 --chronon-ns 60000000000
+
+# With P2P peers and DHT discovery
+foretias serve --addr 127.0.0.1:4001 \
+  --known-servers 127.0.0.1:4002 \
+  --dht-namespace mainnet \
+  --p2p-listen /ip4/0.0.0.0/tcp/9901
+
+# With persistence
+foretias serve --addr 127.0.0.1:4001 --persist-path /tmp/cal
+
+# Dormant (verify-only) mode
+foretias serve --addr 127.0.0.1:4001 --start-dormant --persist-path /tmp/cal
 ```
 
-### Config
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--addr`, `-a` | `127.0.0.1:4001` | Listen address |
+| `--chronon-ns`, `-c` | `60000000000` | Chronon period in nanoseconds (60s) |
+| `--persist-path` | — | Persist calendar to directory |
+| `--start-dormant` | — | Start in verify-only mode (requires `--persist-path`) |
+| `--peer` | — | Peer address for auto-attestation (repeatable) |
+| `--auto-attest-every-chronons` | `1` | Mutual attestation frequency in chronons |
+| `--request-timeout-secs` | `5` | RPC request timeout in seconds |
+| `--p2p-listen` | — | libp2p listen multiaddr (e.g. `/ip4/0.0.0.0/tcp/9901`) |
+| `--p2p-port-range` | `9900..9999` | Port range for auto-selection when `--p2p-listen` omitted |
+| `--p2p-dial` | — | libp2p peer multiaddr to dial (repeatable) |
+| `--known-servers`, `-k` | — | Known server for DHT self-registration (repeatable) |
+| `--dht-namespace` | `mainnet` | DHT namespace for Kademlia protocol isolation |
+| `--dht-bootstrap` | — | DHT bootstrap peer multiaddr (repeatable, legacy) |
+| `--max-discovered-peers` | `13` | Maximum peers to auto-discover from DHT |
 
-```python
-from fortias.config import Config
+### stamp
 
-cfg = Config.resolve(persist_path="/custom/path")  # arg > $FORTIAS_HOME > ~/.fortias/
+Stamp content against a running server.
+
+```bash
+# Inline message
+foretias stamp --message "hello world" --server 127.0.0.1:4001
+
+# From file, write output to file
+foretias stamp --message-file myfile.txt --stamp-output stamp.json --server 127.0.0.1:4001
 ```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--message`, `-m` | — | Message to stamp |
+| `--message-file`, `-M` | — | Read message from file |
+| `--stamp-output`, `-o` | stdout | Write stamp output to file |
+| `--server`, `-s` | `127.0.0.1:4001` | Server address |
+
+### verify
+
+Verify content against a Foretis (server-side verification).
+
+```bash
+foretias verify --message "hello world" --foretis '{"tick_number":...}' --server 127.0.0.1:4001
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--message`, `-m` | — | Message to verify |
+| `--message-file`, `-M` | — | Read message from file |
+| `--foretis`, `-f` | — | Foretis JSON inline |
+| `--foretis-file`, `-F` | — | Read Foretis from file |
+| `--verify-output`, `-o` | stdout | Write verify output to file |
+| `--server`, `-s` | `127.0.0.1:4001` | Server address |
+
+### prove-verification
+
+Fetch a calendar slice from a remote TimeBeing and verify locally (client-side proof).
+
+```bash
+foretias prove-verification --message "hello world" --foretis '{"tick_number":...}' --server 127.0.0.1:4001
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--message`, `-m` | — | Message to verify |
+| `--message-file`, `-M` | — | Read message from file |
+| `--foretis`, `-f` | — | Foretis JSON inline |
+| `--foretis-file`, `-F` | — | Read Foretis from file |
+| `--proof-output`, `-o` | stdout | Write proof output to file |
+| `--server`, `-s` | `127.0.0.1:4001` | Remote TimeBeing server address |
+
+### inspect-attestations
+
+Offline verification of external attestations in a persisted calendar. Re-runs signature, hash, and echo verification on every `ExternalAttestation`. Exits 0 if all valid, 1 if any invalid.
+
+```bash
+foretias inspect-attestations --calendar /tmp/cal/calendar.json
+```
+
+| Flag | Description |
+|------|-------------|
+| `--calendar`, `-c` | Path to calendar JSON file |
+
+## Architecture
+
+Foretias decomposes into three time beings coordinated by an orchestrator:
+
+| Component | Role |
+|-----------|------|
+| **Chronomatter** (*Chronos fidelius authenticus*) | Autonomous ticking, stamping, verification |
+| **Calendar** (*Chronos fidelius grapha*) | Calendar data, persistence, mutual attestation scheduling |
+| **Communerd** (*Chronos fidelius locutus*) | All P2P communication — DHT, gossipsub, peer discovery |
+
+Intra-family communication uses direct method calls. Only Communerd communicates with extra-family peers.
+
+The `TimeFamilyServer` holds `Arc<Chronomatter>`, `Arc<Calendar>`, and `Option<Arc<Communerd>>`, exposing JSON-RPC and HTTP endpoints for stamp, verify, and calendar queries.
+
+## Tech Stack
+
+- **C11 core** — Verified cryptographic primitives (Ed25519 via libsodium, SHA-256, BLAKE3, Noise protocol, Merkle trees, FROST)
+- **foretias-core** — Rust safe wrappers over C11 FFI (bindgen), domain types, CryptoServer trait
+- **foretias-node** — Server, CLI binary, Communerd (libp2p), calendar store, metrics
+- **foretias-python** — PyO3 Python bindings (produces `foretias-p2p` pip package)
+- **foretias-java** — JNI bindings for Java
+
+## Current Features
+
+- **v0.1** — Local server with JSON-RPC stamp/verify (C11 core + Rust + PyO3)
+- **v0.2** — P2P mutual attestation between statically configured peers
+- **v0.3** — DHT peer discovery via Kademlia with private namespace
 
 ## Development
 
 ### Build
 
 ```bash
+# C11 core
+cd p2p/core && cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build
+
+# Rust workspace
+cd p2p && cargo build --workspace
+
+# Python bindings
+cd p2p/foretias-python && maturin develop
+
+# Python shim package
 pip install -e .
 ```
 
 ### Test
 
 ```bash
+# C11 core tests
+cd p2p/core/build && ctest --output-on-failure
+
+# Rust workspace tests
+cd p2p && cargo test --workspace
+
+# Python shim tests
 python -m pytest tests/ -v
 ```
 
-### Coverage
-
-```bash
-pip install pytest-cov
-python -m pytest tests/ --cov=fortias --cov-report=term-missing
-```
-
-## Tests
-
-The test suite is organized into two tiers — **functional** (fast, deterministic) and **aggressive** (slow, destructive, edge-case coverage).
-
-| File | Layer | Coverage |
-|------|-------|----------|
-| `test_functional.py` | Core | Pure functions in `_timebeing` — stamp, tick, verify-pair, verify-chain, verify |
-| `test_calendar.py` | Component | Calendar append, get, latest, save/load, integrity-check |
-| `test_timebeing.py` | Component | Timebeing base class, Calendar MVP, ChronomatterV1/V1Serial, Inquirer |
-| `test_timebeing_aggressively.py` | Defensive | Calendar/Chronomatter/Inquirer edge cases: tampered loads, concurrent shutdown, chronon boundaries |
-| `test_timefamily.py` | Integration | TimeFamily orchestration: stamp, verify, tick, persistence, interface accessors |
-| `test_timefamily_aggressively.py` | Defensive | TimeFamily persistence roundtrips, stress (100+ ticks), shutdown safety, concurrent stamps |
-| `test_crypto.py` | Unit | SHA-256, keypair generation, sign/verify |
-| `test_models.py` | Unit | Frozen dataclass invariants — TickRecord, Fortis |
-| `test_config.py` | Unit | Config resolution (arg > env > default), frozen dataclass |
-| `test_cli.py` | Functional | CLI `fortis verify` — valid, tampered, no-command |
-
-The `_timebeing` module (prefixed with `_`) is the project's internal backbone. Its static methods are deliberately accessible to all other modules — this is an intentional exception to the single-underscore convention.
-
 The project uses the `alpha` branch as the center of development.
-# Appendix
-The classification for time beings belong to this branch of the **Artificalia** domain.
+
+## Appendix
+
+The classification for time beings belongs to this branch of the **Artificialia** domain.
+
 - Family: **Chronosidae**
 - Subfamily: **Chronosinae**
 - Tribe: **Chronosini**
 - Subtribe: **Chronosina**
 - Genus: **Chronos**
-- Spieces: **Chronos fidelius**
+- Species: **Chronos fidelius**
 - Subspecies:
   - Chronomatter: **Chronos fidelius authenticus**
   - Calendar: **Chronos fidelius grapha**
   - Time Family: **Chronos fidelius adunatrix**
+  - Communerd: **Chronos fidelius locutus**
   - Inquirer: TBD
 
 ## License
