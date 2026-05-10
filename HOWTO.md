@@ -14,21 +14,19 @@ This document shows you **three escalating demos** that prove foretias is:
 
 ## Prerequisites
 
-You need the `foretias` binary. If you haven't built it yet:
+See [README.md](README.md) for full installation and build instructions. In short, you need the `foretias` binary:
 
 ```bash
-# Install system dependencies
-sudo apt install build-essential cmake clang libsodium-dev libssl-dev
-
-# Build foretias
 cd p2p && cargo build
 ```
 
-The binary lives at `p2p/target/debug/foretias`. For faster execution, use `cargo build --release`.
+The binary lives at `p2p/target/debug/foretias` (or `p2p/target/release/foretias` for a release build).
 
 ---
 
 ## Section 1: Quick Start — Single Server
+
+> **Before you begin:** See [README.md](README.md) for full installation and build instructions. You need the `foretias` binary (`p2p/target/debug/foretias` or `p2p/target/release/foretias`).
 
 This section takes **under 2 minutes**.
 

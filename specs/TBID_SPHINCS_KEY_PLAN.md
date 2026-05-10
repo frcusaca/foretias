@@ -263,40 +263,42 @@ After Task 1.1, `cargo check` will list every file/line that needs updating. Fix
 
 ```
 Phase 0 — C11 Foundation
-[ ] M1  C11 constants & algorithm enum added (foretias_core.h)
-[ ] M2  SLH-DSA-SHA2-256f C11 wrappers added (signing_sphincs.c)
-[ ] M3  C11 TBID combiner created (signing_tbid.c)
-[ ] M4  C11 TBID tests pass (test_tbid.c)
-[ ] M5  CMakeLists.txt updated
+[x](2026-05-10 13:44) M1  C11 constants & algorithm enum added (foretias_core.h)
+[x](2026-05-10 13:44) M2  SLH-DSA-SHA2-256f C11 wrappers added (signing_sphincs.c)
+[x](2026-05-10 13:44) M3  C11 TBID combiner created (signing_tbid.c)
+[x](2026-05-10 13:44) M4  C11 TBID tests pass (test_tbid.c)
+[x](2026-05-10 13:44) M5  CMakeLists.txt updated
 
 Phase 1 — Rust Types & Bindings
-[ ] M6  Tbid OOP struct (types.rs)
-[ ] M7  All hardcoded [u8; 16] TBID sites fixed (cargo check clean)
-[ ] M8  SignatureAlgorithm::SLH_DSA_SHA2_256F added
-[ ] M9  SLH-DSA-SHA2-256f Rust wrappers (signing_sphincs.rs)
-[ ] M10 Rust TBID combiner module (signing_tbid.rs)
+[x](2026-05-10 13:44) M6  Tbid OOP struct (types.rs)
+[x](2026-05-10 13:44) M7  All hardcoded [u8; 16] TBID sites fixed (cargo check clean)
+[x](2026-05-10 13:44) M8  SignatureAlgorithm::SLH_DSA_SHA2_256F added
+[x](2026-05-10 13:44) M9  SLH-DSA-SHA2-256f Rust wrappers (signing_sphincs.rs)
+[x](2026-05-10 13:44) M10 Rust TBID combiner module (signing_tbid.rs)
 
 Phase 2 — Genesis Tick Signing
-[ ] M11 genesis_signature + tb_version fields added to TickRecord
-[ ] M12 Chronomatter signs genesis tick with TBID key
-[ ] M13 verify_genesis_signature() function
-[ ] M14 Genesis verification wired into verify() and integrity_check()
+[x](2026-05-10 13:44) M11 genesis_signature + tb_version fields added to TickRecord
+[x](2026-05-10 13:44) M12 Chronomatter signs genesis tick with TBID key
+[x](2026-05-10 13:44) M13 verify_genesis_signature() function
+[x](2026-05-10 13:44) M14 Genesis verification wired into verify() and integrity_check()
 
 Phase 3 — Communerd & Calendar Upgrades
-[ ] M15 Communerd TBID handshake updated
-[ ] M16 Communerd DHT publishing updated
-[ ] M17 Calendar module updated
+[x](2026-05-10 13:44) M15 Communerd TBID handshake updated
+[x](2026-05-10 13:44) M16 Communerd DHT publishing updated
+[x](2026-05-10 13:44) M17 Calendar module updated
 
 Phase 4 — Bindings & Test Fixtures
-[ ] M18 PyO3 bindings updated
-[ ] M19 Rust test fixtures updated
-[ ] M20 Python shim tests updated
-[ ] M21 Java bindings updated
+[x](2026-05-10 13:44) M18 PyO3 bindings updated
+[x](2026-05-10 13:44) M19 Rust test fixtures updated
+[x](2026-05-10 13:44) M20 Python shim tests updated
+[x](2026-05-10 13:44) M21 Java bindings updated
 
 Phase 5 — Integration & CI
-[ ] M22 C11 tests pass (including test_tbid.c)
-[ ] M23 cargo test --workspace passes
-[ ] M24 pytest tests/ passes (25 tests)
-[ ] M25 CI pipeline green
-[ ] M26 Merge tbid-dual-key-v1 to alpha
+[x](2026-05-10 13:44) M22 C11 tests pass (including test_tbid.c)
+[x](2026-05-10 13:44) M23 cargo test --workspace passes
+[x](2026-05-10 13:44) M24 pytest tests/ passes (25 tests)
+[x](2026-05-10 13:44) M25 CI pipeline green
+[x](2026-05-10 13:44) M26 Merge tbid-dual-key-v1 to alpha
 ```
+
+[x](2026-05-10 13:44) Cleanup `${HOME}/tmp/foretias-worktrees/TBID_SPHINCS_KEY_3580` after successful merge

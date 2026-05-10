@@ -12,7 +12,20 @@ Two deliverables to demonstrate Foretias ease-of-use and network resilience:
 ## Deliverable 1: HOWTO.md
 
 ### Purpose
-Persuade casual readers that foretias is **EASY** to use and **SUPER RELIABLE** through three escalating demos.
+HOWTO.md is **promotional documentation** designed to persuade casual perusers that foretias is:
+
+1. **Easy to use** — a user can start a server, stamp a message, and verify it in under 5 minutes with zero configuration beyond building the binary
+2. **Safe** — tamper detection is demonstrated explicitly: a single-byte change to a stamped message causes verification to fail
+3. **Reliable** — even after killing 50% of a 100-node network, previously-stamped attestations remain verifiable on surviving peers
+
+HOWTO.md is not a technical manual. It is a guided demonstration that combines live CLI commands with narrative framing to build confidence. The actual HOWTO.md document implements this specification by providing copy-paste runnable commands and expected outputs.
+
+### Design Goals
+- Target audience: engineers who have never used foretias
+- Tone: enthusiastic, confidence-building, not dry technical manual
+- Commands must be copy-paste runnable
+- Each section should be completable in under 5 minutes
+- Each section must include both a success case and a failure case (e.g., verification with correct vs. tampered content)
 
 ### Location
 `/home/hcbusy/webhash/foretias/HOWTO.md`
@@ -36,7 +49,7 @@ Persuade casual readers that foretias is **EASY** to use and **SUPER RELIABLE** 
 - Demonstrates verification STILL succeeds against remaining peers
 - Proves network resilience to massive node failure
 
-### Design Constraints
+### Section Requirements
 - Target audience: engineers who have never used foretias
 - Tone: enthusiastic, confidence-building, not dry technical manual
 - Commands must be copy-paste runnable

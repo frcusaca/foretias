@@ -52,7 +52,7 @@ These tasks ensure the worktree lifecycle is tracked alongside the implementatio
 
 ---
 
-### Sub tasks
+### Sub-Tasks
 If scoping was incorrect for any task, and and it became many tasks, It is possible to write additional sub-tasks. These are indented in markdown
 ```markdown
 ...
@@ -62,7 +62,10 @@ If scoping was incorrect for any task, and and it became many tasks, It is possi
   - [ ] Update ${BRANCH_NAME} to use new API call convention
   - [x](2026-05-06 14:31) Merged breaking alpha # Again, this is needed to document a clear need for more work as subtasks
   - [ ] Repair ALL tests in alpha
-  - [ ] Cleanup ${FULL_WORKTREE_PATH} after successful merge
+  - [ ] Cleanup ${FULL_WORKTREE_PATH}
+    - [ ] Check that _PLAN.md has all but Cleanup checkboxes completed
+    - [ ] Remove "${FULL_WORKTREE_PATH}"
+    - [ ] This is the last checkbox to be checked in my _PLAN.md
 ```
 This example also illustrates that because foolish uses git merge and not rebase this situation where a fix to merge on alpha may be required.
 
