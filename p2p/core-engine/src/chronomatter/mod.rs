@@ -16,6 +16,7 @@ use crate::core::identity::PrivKeyHandle;
 use crate::error::NodeError;
 use crate::clock::Clock;
 use crate::foretias::{auto_attestation_blob_with_count, Foretis, TickRecord};
+use crate::foretias::encoding::FTByteVector;
 use crate::foretias::tick::CalendarLookup;
 use crate::foretias::callbacks::{TickObserver, AutoAttestObserver};
 use crate::foretias::types::{Tbid, TbidSecret, TickNumber};
@@ -230,14 +231,14 @@ impl Chronomatter {
 
         Ok(TickRecord {
             tick_number: tick,
-            public_key: new_pub.to_vec(),
+            public_key: new_pub.to_vec().into(),
             signature_algorithm: crate::foretias::types::SignatureAlgorithm::Ed25519.to_id_string().to_string(),
-            forward_foretis,
-            backward_foretis,
-            aa_nonce,
+            forward_foretis: forward_foretis.into(),
+            backward_foretis: backward_foretis.into(),
+            aa_nonce: aa_nonce.into(),
             stamps_per_tick: stamps,
             external_attestations: Vec::new(),
-            genesis_signature,
+            genesis_signature: genesis_signature.into(),
             tb_version,
         })
     }
@@ -299,8 +300,8 @@ impl Chronomatter {
 
         let foretis = Foretis {
             tick_number: tick,
-            content_hash: content_hash.bytes,
-            signature: sig.bytes.to_vec(),
+            content_hash: content_hash.bytes.into(),
+            signature: FTByteVector::from(sig.bytes.to_vec()),
             signature_algorithm: crate::foretias::types::SignatureAlgorithm::Ed25519.to_id_string().to_string(),
             tbid,
             echo,

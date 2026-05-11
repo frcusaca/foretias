@@ -48,7 +48,7 @@ impl CollisionDetector {
             return None;
         }
 
-        let is_known_nonce = self.my_nonces.lock().iter().any(|n| *n == hb.nonce);
+        let is_known_nonce = self.my_nonces.lock().iter().any(|n| *n == *hb.nonce);
         if is_known_nonce {
             return None;
         }

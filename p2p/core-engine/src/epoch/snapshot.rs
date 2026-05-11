@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::foretias::encoding::FTByteVector;
+
 /// A peer's probity score at a point in time.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PeerScore {
@@ -22,9 +24,9 @@ pub struct EpochSnapshot {
     /// Signing threshold k (k-of-n).
     pub threshold:        u32,
     /// Aggregate FROST-Ed25519 signature over canonical_bytes().
-    pub frost_signature:  Vec<u8>,
+    pub frost_signature:  FTByteVector,
     /// FROST group public key for this committee.
-    pub committee_pubkey: Vec<u8>,
+    pub committee_pubkey: FTByteVector,
 }
 
 impl EpochSnapshot {

@@ -6,66 +6,33 @@
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
+use super::encoding::FTByteArray;
+
 /// Time Being ID — dual-key identity for tb_version 1.0.
 /// Layout: Ed25519_PK(32) ‖ SLH-DSA-SHA2-256f_PK(64) = 96 bytes total.
 ///
 /// The `‖` operator denotes byte-level concatenation (NOT bitwise OR).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Tbid {
-    /// Ed25519 public key — fast verification (32 bytes).
-    pub ed25519_pub: [u8; 32],
-    /// SLH-DSA-SHA2-256f public key — quantum-resistant verification (64 bytes).
-    pub slh_dsa_pub: [u8; 64],
-}
-
-impl Serialize for Tbid {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where S: serde::Serializer {
-        // Serialize as a 96-byte array via a helper struct to work around
-        // serde's 32-element array limit on default derives.
-        let raw = self.raw_bytes();
-        serializer.serialize_newtype_struct("Tbid", &raw[..])
-    }
-}
-
-impl<'de> Deserialize<'de> for Tbid {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where D: serde::Deserializer<'de> {
-        let bytes: Vec<u8> = serde::Deserialize::deserialize(deserializer)?;
-        if bytes.len() != 96 {
-            return Err(serde::de::Error::invalid_length(
-                bytes.len(),
-                &"a 96-byte TBID",
-            ));
-        }
-        let mut arr = [0u8; 96];
-        arr.copy_from_slice(&bytes);
-        Ok(Tbid::from_raw(arr))
-    }
+    /// Flat 96-byte representation: Ed25519_PK(32) ‖ SLH-DSA_PK(64).
+    pub inner: FTByteArray<96>,
 }
 
 impl Default for Tbid {
     fn default() -> Self {
-        Self { ed25519_pub: [0u8; 32], slh_dsa_pub: [0u8; 64] }
+        Self { inner: FTByteArray::zeros() }
     }
 }
 
 impl Tbid {
     /// Raw 96-byte representation for wire format / storage.
     pub fn raw_bytes(&self) -> [u8; 96] {
-        let mut out = [0u8; 96];
-        out[..32].copy_from_slice(&self.ed25519_pub);
-        out[32..].copy_from_slice(&self.slh_dsa_pub);
-        out
+        *self.inner
     }
 
     /// Parse from raw 96-byte representation (ed25519 first, then slh_dsa).
     pub fn from_raw(bytes: [u8; 96]) -> Self {
-        let mut ed25519_pub = [0u8; 32];
-        let mut slh_dsa_pub = [0u8; 64];
-        ed25519_pub.copy_from_slice(&bytes[..32]);
-        slh_dsa_pub.copy_from_slice(&bytes[32..]);
-        Self { ed25519_pub, slh_dsa_pub }
+        Self { inner: FTByteArray::new(bytes) }
     }
 
     /// Parse from a 96-byte slice.
@@ -78,21 +45,25 @@ impl Tbid {
         Ok(Self::from_raw(raw))
     }
 
-    /// Ed25519 public key for Ed25519-specific verification.
-    pub fn ed25519_public_key(&self) -> &[u8; 32] { &self.ed25519_pub }
+    /// Ed25519 public key for Ed25519-specific verification (first 32 bytes).
+    pub fn ed25519_public_key(&self) -> [u8; 32] {
+        self.inner[..32].try_into().unwrap()
+    }
 
-    /// SLH-DSA-SHA2-256f public key for SLH-DSA-specific verification.
-    pub fn slh_dsa_public_key(&self) -> &[u8; 64] { &self.slh_dsa_pub }
+    /// SLH-DSA-SHA2-256f public key for SLH-DSA-specific verification (last 64 bytes).
+    pub fn slh_dsa_public_key(&self) -> [u8; 64] {
+        self.inner[32..].try_into().unwrap()
+    }
 
     /// Hex-encoded representation for DHT keys and logging.
     pub fn to_hex(&self) -> String {
-        hex::encode(self.raw_bytes())
+        hex::encode(&self.inner[..])
     }
 
     /// Create a test TBID with all bytes set to the given value.
     #[cfg(test)]
     pub fn test() -> Self {
-        Self { ed25519_pub: [0xAB; 32], slh_dsa_pub: [0xAB; 64] }
+        Self { inner: FTByteArray::new([0xAB; 96]) }
     }
 }
 

@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::bindings::*;
 use crate::error::CryptoError;
+use crate::foretias::encoding::FTByteVector;
 use crate::foretias::types::{SignatureAlgorithm, SignatureBytes};
 
 /// Supported elliptic curve types for signing and key exchange.
@@ -47,9 +48,9 @@ impl Drop for SharedSecret {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SealedBlob {
     /// The 12-byte nonce used for ChaCha20-Poly1305 encryption.
-    pub nonce: Vec<u8>,
+    pub nonce: FTByteVector,
     /// The encrypted payload (plaintext length + 16-byte AEAD tag).
-    pub ciphertext: Vec<u8>,
+    pub ciphertext: FTByteVector,
 }
 
 /// Describes the capabilities and performance characteristics of a crypto backend.

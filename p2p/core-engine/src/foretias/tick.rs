@@ -6,6 +6,7 @@ use crate::clock::Clock;
 use crate::crypto_server::CryptoServer;
 use crate::core::rng::random_bytes;
 use crate::error::NodeError;
+use super::encoding::{FTByteVector, FTByteArray};
 use super::types::Tbid;
 
 /// A single entry in the Calendar, linking consecutive ticks via Foretis attestations.
@@ -14,17 +15,17 @@ pub struct TickRecord {
     /// The monotonically increasing tick index.
     pub tick_number: u64,
     /// The public key active at this tick.
-    pub public_key: Vec<u8>,
+    pub public_key: FTByteVector,
     /// Plain-text algorithm identifier for this tick's key.
     #[serde(default = "default_sig_algorithm")]
     pub signature_algorithm: String,
     /// Serialized Foretis attesting forward to the next tick.
-    pub forward_foretis: Vec<u8>,
+    pub forward_foretis: FTByteVector,
     /// Serialized Foretis attesting backward to the previous tick.
-    pub backward_foretis: Vec<u8>,
+    pub backward_foretis: FTByteVector,
     /// Cryptographic nonce (16 bytes) used in the auto-attestation blob for this tick pair.
     /// This prevents replay attacks by ensuring each blob is unique even if the tick data repeats.
-    pub aa_nonce: [u8; 16],
+    pub aa_nonce: FTByteArray<16>,
     /// Number of user-initiated stamps during this tick (excluding auto-attestation itself,
     /// but including mutual attestations). Persisted for blob reconstruction during verify_pair.
     #[serde(default)]
@@ -35,7 +36,7 @@ pub struct TickRecord {
     /// Dual-key (Ed25519 + SLH-DSA-SHA2-256f) signature over the genesis blob.
     /// Present only on tick 1 when the node supports TBID V1 dual-key identity.
     #[serde(default)]
-    pub genesis_signature: Vec<u8>,
+    pub genesis_signature: FTByteVector,
     /// TBID protocol version: 0 = legacy (16-byte UUID), 1 = dual-key (96-byte).
     #[serde(default = "default_tb_version")]
     pub tb_version: u32,
@@ -48,11 +49,11 @@ impl TickRecord {
     /// Returns `NodeError::InvalidInput` if `tick_number` is 0 or `public_key` is empty.
     pub fn new(
         tick_number: u64,
-        public_key: Vec<u8>,
+        public_key: FTByteVector,
         signature_algorithm: String,
-        forward_foretis: Vec<u8>,
-        backward_foretis: Vec<u8>,
-        aa_nonce: [u8; 16],
+        forward_foretis: FTByteVector,
+        backward_foretis: FTByteVector,
+        aa_nonce: FTByteArray<16>,
         stamps_per_tick: u64,
     ) -> Result<Self, NodeError> {
         if tick_number == 0 {
@@ -70,7 +71,7 @@ impl TickRecord {
             aa_nonce,
             stamps_per_tick,
             external_attestations: Vec::new(),
-            genesis_signature: Vec::new(),
+            genesis_signature: FTByteVector::new(),
             tb_version: 0,
         })
     }
@@ -82,9 +83,9 @@ pub struct Foretis {
     /// The tick number at which this attestation was created.
     pub tick_number: u64,
     /// SHA-256 hash of the attested content.
-    pub content_hash: [u8; 32],
+    pub content_hash: FTByteArray<32>,
     /// Ed25519 signature over the content and tick metadata.
-    pub signature: Vec<u8>,
+    pub signature: FTByteVector,
     /// Plain-text algorithm identifier (e.g. "SPHINCS+-SHA2-128s-simple").
     pub signature_algorithm: String,
     /// TimeBeing identifier of the signing node.
@@ -104,8 +105,8 @@ impl Foretis {
     /// Returns `NodeError::InvalidInput` if `tick_number` is 0 or `signature` is empty.
     pub fn new(
         tick_number: u64,
-        content_hash: [u8; 32],
-        signature: Vec<u8>,
+        content_hash: FTByteArray<32>,
+        signature: FTByteVector,
         signature_algorithm: String,
         tbid: Tbid,
         echo: String,
@@ -172,8 +173,8 @@ pub fn stamp(
 
     Ok(Foretis {
         tick_number,
-        content_hash: content_hash.bytes,
-        signature: signature.bytes.to_vec(),
+        content_hash: content_hash.bytes.into(),
+        signature: FTByteVector::from(signature.bytes.to_vec()),
         signature_algorithm: sig_alg,
         tbid: *tbid,
         echo: echo.to_string(),
@@ -190,7 +191,7 @@ pub fn verify(
     calendar: &dyn CalendarLookup,
 ) -> Result<bool, NodeError> {
     let recomputed = server.sha256(content)?;
-    if recomputed.bytes != foretis.content_hash {
+    if recomputed.bytes != *foretis.content_hash {
         return Ok(false);
     }
 
@@ -280,7 +281,7 @@ pub fn verify_pair(
     ma_blob.extend_from_slice(&curr.public_key);
     // Backward compat: pre-v0.9 TickRecords have stamps_per_tick=0 (serde default)
     ma_blob.extend_from_slice(&stamps.to_be_bytes());
-    ma_blob.extend_from_slice(&nonce);
+    ma_blob.extend_from_slice(&nonce[..]);
 
     let forward_valid = crypto.verify_with(
         &prev.public_key,

@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::epoch::snapshot::{EpochSnapshot, PeerScore};
 use crate::error::NodeError;
+use crate::foretias::encoding::FTByteVector;
 
 /// Messages exchanged during a FROST signing round.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -11,12 +12,12 @@ pub enum FrostMsg {
     /// First round: a peer's commitment to its nonces.
     Commitment {
         from: String,
-        commitment: Vec<u8>,
+        commitment: FTByteVector,
     },
     /// Second round: a peer's signed share of the message.
     Share {
         from: String,
-        share: Vec<u8>,
+        share: FTByteVector,
     },
 }
 
@@ -39,8 +40,8 @@ pub async fn run_frost_round(
         peer_scores: vec![],
         committee: committee.to_vec(),
         threshold: threshold_k,
-        frost_signature: vec![0x00; 64],
-        committee_pubkey: vec![0x00; 32],
+        frost_signature: vec![0x00; 64].into(),
+        committee_pubkey: vec![0x00; 32].into(),
     })
 }
 
@@ -59,8 +60,8 @@ pub async fn run_frost_round_stub(
 
     // Stub: produce a dummy FROST signature (64 bytes of 0xAB)
     // Real implementation uses frost_ed25519.c via CryptoServer trait
-    let frost_signature = vec![0xAB; 64];
-    let committee_pubkey = vec![0xCD; 32];
+    let frost_signature: FTByteVector = vec![0xAB; 64].into();
+    let committee_pubkey: FTByteVector = vec![0xCD; 32].into();
 
     Ok(EpochSnapshot {
         epoch_number: epoch_num,

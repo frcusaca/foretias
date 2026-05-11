@@ -203,7 +203,7 @@ impl CryptoServer for SoftwareCryptoServer {
             data.as_ref(),
         )
             .map_err(|_| CryptoError::Internal(1))?;
-        Ok(SealedBlob { ciphertext: ct, nonce: nonce.to_vec() })
+        Ok(SealedBlob { ciphertext: ct.into(), nonce: nonce.to_vec().into() })
     }
 
     fn unseal_for_self(&self, blob: &SealedBlob) -> Result<Vec<u8>, CryptoError> {
