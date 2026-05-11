@@ -107,6 +107,9 @@ enum Commands {
         /// Write verify output to file (default: stdout)
         #[arg(short = 'o', long = "verify-output")]
         verify_output: Option<String>,
+        /// Disable DHT cross-node lookup; only check the local calendar on the target server
+        #[arg(long = "local-only")]
+        local_only: bool,
         /// Server address
         #[arg(short, long, default_value = "127.0.0.1:4001")]
         server: String,
@@ -494,6 +497,7 @@ async fn cmd_verify(
     foretis: Option<String>,
     foretis_file: Option<String>,
     verify_output: Option<String>,
+    local_only: bool,
     server_addr: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let content = read_message(message, message_file)?;
@@ -504,7 +508,7 @@ async fn cmd_verify(
     let result = json_rpc_call(
         &server_addr,
         "verify",
-        serde_json::json!({"content": content_hex, "foretis": foretis_value, "cross_node": true}),
+        serde_json::json!({"content": content_hex, "foretis": foretis_value, "cross_node": !local_only}),
     )
     .await?;
 
@@ -803,8 +807,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Stamp { message, message_file, stamp_output, server } => {
             cmd_stamp(message, message_file, stamp_output, server).await
         }
-        Commands::Verify { message, message_file, foretis, foretis_file, verify_output, server } => {
-            cmd_verify(message, message_file, foretis, foretis_file, verify_output, server).await
+        Commands::Verify { message, message_file, foretis, foretis_file, verify_output, local_only, server } => {
+            cmd_verify(message, message_file, foretis, foretis_file, verify_output, local_only, server).await
         }
         Commands::ProveVerification { message, message_file, foretis, foretis_file, proof_output, server } => {
             cmd_prove_verification(message, message_file, foretis, foretis_file, proof_output, server).await
