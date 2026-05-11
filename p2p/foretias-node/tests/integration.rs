@@ -187,7 +187,6 @@ fn test_stamp_and_verify_e2e() {
 // ── In-process integration tests ─────────────────────────────────────────────
 
 #[tokio::test]
-#[allow(deprecated)]
 async fn test_two_nodes_auto_attest() {
     use foretias_node::server::TimeFamilyServer;
 
@@ -201,17 +200,18 @@ async fn test_two_nodes_auto_attest() {
             .expect("failed to create server B"),
     );
 
-    let config = foretias_core::config::NodeConfig {
-        listen_addr: addr_b.clone(),
-        peers: vec![addr_b.clone()],
-        auto_attest_every_n: 1,
-        request_timeout_secs: 5,
+    let config = foretias_core::config::CommunerdConfig {
+        auto_attest: foretias_core::config::AutoAttestConfig {
+            peers: vec![addr_b.clone()],
+            every_n_chronons: 1,
+            request_timeout_secs: 5,
+        },
         ..Default::default()
     };
     let server_a: Arc<TimeFamilyServer> = Arc::new(
         TimeFamilyServer::new(&addr_a, 100_000_000)
             .expect("failed to create server A")
-            .with_config(config),
+            .with_communerd(config),
     );
 
     server_a.start_daemon_arc();
@@ -258,19 +258,19 @@ async fn test_peer_unreachable_does_not_crash() {
     let port = find_available_port();
     let addr = format!("127.0.0.1:{}", port);
 
-    #[allow(deprecated)]
-    let config = foretias_core::config::NodeConfig {
-        listen_addr: addr.clone(),
-        peers: vec!["127.0.0.1:59999".to_string()],
-        auto_attest_every_n: 1,
-        request_timeout_secs: 1,
+    let config = foretias_core::config::CommunerdConfig {
+        auto_attest: foretias_core::config::AutoAttestConfig {
+            peers: vec!["127.0.0.1:59999".to_string()],
+            every_n_chronons: 1,
+            request_timeout_secs: 1,
+        },
         ..Default::default()
     };
 
     let server: Arc<TimeFamilyServer> = Arc::new(
         TimeFamilyServer::new(&addr, 1_000_000_000)
             .expect("failed to create server")
-            .with_config(config),
+            .with_communerd(config),
     );
 
     let handle = server.clone().start().expect("failed to start server");

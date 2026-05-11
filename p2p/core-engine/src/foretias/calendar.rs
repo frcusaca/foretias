@@ -292,12 +292,11 @@ mod tests {
     }
 
     #[test]
-    #[allow(deprecated)]
     fn integrity_check_full_chain() {
         use crate::core::identity::generate_ed25519_keypair;
         use crate::core::signing::ed25519_sign;
         use crate::core::bindings::ForetiasPrivKey32;
-        use crate::foretias::tick::auto_attestation_blob;
+        use crate::foretias::tick::auto_attestation_blob_with_count;
         use zeroize::Zeroizing;
 
         let server = crypto_server::new_software(crate::crypto_server::ForetiasCurve::Ed25519).unwrap();
@@ -313,11 +312,11 @@ mod tests {
 
         for i in 0..5u64 {
             let (forward_foretis, backward_foretis, nonce) = if i == 0 {
-                let (ma_blob, nonce) = auto_attestation_blob(&tbid_str, i, &keypairs[0].0, i, &keypairs[0].0).unwrap();
+                let (ma_blob, nonce) = auto_attestation_blob_with_count(&tbid_str, i, &keypairs[0].0, i, &keypairs[0].0, 0).unwrap();
                 let sig = ed25519_sign(&ForetiasPrivKey32 { bytes: *keypairs[0].1 }, &ma_blob).unwrap();
                 (sig.bytes.to_vec(), sig.bytes.to_vec(), nonce)
             } else {
-                let (ma_blob, nonce) = auto_attestation_blob(&tbid_str, i - 1, &keypairs[(i-1) as usize].0, i, &keypairs[i as usize].0).unwrap();
+                let (ma_blob, nonce) = auto_attestation_blob_with_count(&tbid_str, i - 1, &keypairs[(i-1) as usize].0, i, &keypairs[i as usize].0, 0).unwrap();
                 let fwd = ed25519_sign(&ForetiasPrivKey32 { bytes: *keypairs[(i-1) as usize].1 }, &ma_blob).unwrap();
                 let bwd = ed25519_sign(&ForetiasPrivKey32 { bytes: *keypairs[i as usize].1 }, &ma_blob).unwrap();
                 (fwd.bytes.to_vec(), bwd.bytes.to_vec(), nonce)
@@ -343,13 +342,11 @@ mod tests {
     }
 
     #[test]
-    #[allow(deprecated)]
     fn integrity_check_partial_range() {
         use crate::core::identity::generate_ed25519_keypair;
         use crate::core::signing::ed25519_sign;
         use crate::core::bindings::ForetiasPrivKey32;
-        #[allow(deprecated)]
-        use crate::foretias::tick::auto_attestation_blob;
+        use crate::foretias::tick::auto_attestation_blob_with_count;
         use zeroize::Zeroizing;
 
         let server = crypto_server::new_software(crate::crypto_server::ForetiasCurve::Ed25519).unwrap();
@@ -365,11 +362,11 @@ mod tests {
 
         for i in 0..5u64 {
             let (forward_foretis, backward_foretis, nonce) = if i == 0 {
-                let (ma_blob, nonce) = auto_attestation_blob(&tbid_str, i, &keypairs[0].0, i, &keypairs[0].0).unwrap();
+                let (ma_blob, nonce) = auto_attestation_blob_with_count(&tbid_str, i, &keypairs[0].0, i, &keypairs[0].0, 0).unwrap();
                 let sig = ed25519_sign(&ForetiasPrivKey32 { bytes: *keypairs[0].1 }, &ma_blob).unwrap();
                 (sig.bytes.to_vec(), sig.bytes.to_vec(), nonce)
             } else {
-                let (ma_blob, nonce) = auto_attestation_blob(&tbid_str, i - 1, &keypairs[(i-1) as usize].0, i, &keypairs[i as usize].0).unwrap();
+                let (ma_blob, nonce) = auto_attestation_blob_with_count(&tbid_str, i - 1, &keypairs[(i-1) as usize].0, i, &keypairs[i as usize].0, 0).unwrap();
                 let fwd = ed25519_sign(&ForetiasPrivKey32 { bytes: *keypairs[(i-1) as usize].1 }, &ma_blob).unwrap();
                 let bwd = ed25519_sign(&ForetiasPrivKey32 { bytes: *keypairs[i as usize].1 }, &ma_blob).unwrap();
                 (fwd.bytes.to_vec(), bwd.bytes.to_vec(), nonce)
