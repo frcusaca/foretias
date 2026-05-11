@@ -1,4 +1,3 @@
-#![allow(deprecated)]
 //! Communerd — orchestrator for all extra-family P2P communication.
 //!
 //! A Communerd is a communard of a time family commune where timing information
@@ -15,7 +14,7 @@ pub mod p2p;
 use std::sync::{Arc, OnceLock};
 use rand::seq::SliceRandom;
 
-use foretias_core::config::NodeConfig;
+use foretias_core::config::CommunerdConfig;
 use foretias_core::collision::{CollisionDetector, CollisionEvent};
 use foretias_core::core::bindings::ForetiasPubKey32;
 use foretias_core::crypto_server::{CryptoServer, new_software, ForetiasCurve};
@@ -56,12 +55,11 @@ fn default_capabilities() -> Vec<PeerCapability> {
 ///
 /// Calendar calls Communerd for all extra-family communication.
 /// Communerd knows nothing about Foretias semantics — it's a transparent RPC relay.
-#[allow(deprecated)]
 pub struct Communerd {
     transport: Arc<dyn PeerTransport>,
     libp2p_transport: Arc<Libp2pTransport>,
     peer_pool: PeerPool,
-    config: NodeConfig,
+    config: CommunerdConfig,
     local_peer_id: Arc<OnceLock<libp2p::PeerId>>,
     p2p_events: Arc<OnceLock<tokio::sync::mpsc::UnboundedReceiver<NetworkEvent>>>,
     p2p_task: Arc<OnceLock<tokio::task::JoinHandle<()>>>,
@@ -103,16 +101,15 @@ impl Clone for Communerd {
     }
 }
 
-#[allow(deprecated)]
 impl Communerd {
-    pub fn new(config: NodeConfig) -> Self {
+    pub fn new(config: CommunerdConfig) -> Self {
         let transport: Arc<dyn PeerTransport> = Arc::new(JsonRpcTransport::new(
-            config.request_timeout_secs.max(1),
+            config.auto_attest.request_timeout_secs.max(1),
         ));
         let libp2p_transport = Arc::new(Libp2pTransport::new(
-            config.request_timeout_secs.max(1),
+            config.auto_attest.request_timeout_secs.max(1),
         ));
-        let peers: Vec<PeerAddr> = config.peers.iter()
+        let peers: Vec<PeerAddr> = config.auto_attest.peers.iter()
             .map(|p| PeerAddr { json_rpc: p.clone(), peer_id: None, last_seen_ns: 0 })
             .collect();
         let peer_pool = PeerPool::new(peers, Arc::clone(&transport), 30);
@@ -140,7 +137,7 @@ impl Communerd {
     }
 
     pub fn start_liveness_pings(&self) {
-        if !self.config.peers.is_empty() {
+        if !self.config.auto_attest.peers.is_empty() {
             let pool = self.peer_pool.clone();
             tokio::spawn(async move { pool.start_liveness_pings().await });
         }
@@ -235,7 +232,7 @@ impl Communerd {
         self.peer_pool.get_peers().await
     }
 
-    pub fn config(&self) -> &NodeConfig {
+    pub fn config(&self) -> &CommunerdConfig {
         &self.config
     }
 
@@ -805,13 +802,15 @@ impl PeerMessenger for Communerd {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use foretias_core::config::AutoAttestConfig;
 
-    fn make_config() -> NodeConfig {
-        NodeConfig {
-            listen_addr: "127.0.0.1:0".into(),
-            peers: vec!["127.0.0.1:4002".into()],
-            auto_attest_every_n: 1,
-            request_timeout_secs: 5,
+    fn make_config() -> CommunerdConfig {
+        CommunerdConfig {
+            auto_attest: AutoAttestConfig {
+                peers: vec!["127.0.0.1:4002".into()],
+                every_n_chronons: 1,
+                request_timeout_secs: 5,
+            },
             ..Default::default()
         }
     }
@@ -865,8 +864,8 @@ mod tests {
     fn communerd_config_access() {
         let config = make_config();
         let communerd = Communerd::new(config.clone());
-        assert_eq!(communerd.config().peers, config.peers);
-        assert_eq!(communerd.config().auto_attest_every_n, 1);
+        assert_eq!(communerd.config().auto_attest.peers, config.auto_attest.peers);
+        assert_eq!(communerd.config().auto_attest.every_n_chronons, 1);
     }
 
     #[test]

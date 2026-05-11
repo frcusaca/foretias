@@ -1,20 +1,35 @@
-//! P2P, DHT, and collision detection configuration.
+//! P2P, DHT, collision detection, and auto-attestation configuration.
 
 use serde::{Deserialize, Serialize};
 
-/// P2P networking configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct P2PConfig {
-    /// Address the node listens on for incoming connections (default: `127.0.0.1:4001`).
-    #[serde(default = "default_listen_addr")]
-    pub listen_addr: String,
+/// Auto-attestation configuration.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AutoAttestConfig {
+    /// Mutual attestation frequency in chronons (default 1 = every tick).
+    #[serde(default = "default_auto_attest_every_n")]
+    pub every_n_chronons: u64,
 
-    /// libp2p listen address as a multiaddr string (e.g. "/ip4/0.0.0.0/tcp/9901").
+    /// RPC request timeout in seconds (default 5).
+    #[serde(default = "default_request_timeout_secs")]
+    pub request_timeout_secs: u64,
+
+    /// Peer addresses for auto attestation (e.g., "host:port").
+    #[serde(default)]
+    pub peers: Vec<String>,
+}
+
+/// Communerd configuration — P2P networking, auto-attestation, DHT, and collision.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CommunerdConfig {
+    /// Auto-attestation configuration.
+    #[serde(default)]
+    pub auto_attest: AutoAttestConfig,
+
+    /// libp2p listen address as a multiaddr string.
     #[serde(default)]
     pub p2p_listen: Option<String>,
 
     /// Port range for auto-selection when --p2p-listen is omitted.
-    /// Format: [start, end] (inclusive start, exclusive end). Default: [9900, 9999].
     #[serde(default = "default_p2p_port_range")]
     pub p2p_port_range: [u16; 2],
 
@@ -22,11 +37,11 @@ pub struct P2PConfig {
     #[serde(default)]
     pub p2p_dial: Vec<String>,
 
-    /// Known server addresses for auto-registration, format "host:port".
+    /// Known server addresses for auto-registration.
     #[serde(default)]
     pub known_servers: Vec<String>,
 
-    /// Maximum number of peers to auto-discover from DHT (default: 13).
+    /// Maximum number of peers to auto-discover from DHT.
     #[serde(default = "default_max_discovered_peers")]
     pub max_discovered_peers: usize,
 
@@ -69,10 +84,6 @@ pub struct CollisionConfig {
 
 // ── Defaults ──
 
-fn default_listen_addr() -> String {
-    "127.0.0.1:4001".to_string()
-}
-
 fn default_p2p_port_range() -> [u16; 2] {
     [9900, 9999]
 }
@@ -97,17 +108,10 @@ fn default_liege_wait_secs() -> u64 {
     30
 }
 
-impl Default for P2PConfig {
-    fn default() -> Self {
-        Self {
-            listen_addr: default_listen_addr(),
-            p2p_listen: None,
-            p2p_port_range: default_p2p_port_range(),
-            p2p_dial: Vec::new(),
-            known_servers: Vec::new(),
-            max_discovered_peers: default_max_discovered_peers(),
-            dht: DHTConfig::default(),
-            collision: CollisionConfig::default(),
-        }
-    }
+fn default_auto_attest_every_n() -> u64 {
+    1
+}
+
+fn default_request_timeout_secs() -> u64 {
+    5
 }

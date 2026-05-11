@@ -1,4 +1,4 @@
-//! Chronomatter configuration: chronon timing, signing, key exchange, and attestation.
+//! Chronomatter configuration: chronon timing, signing, and key rotation.
 
 use crate::foretias::types::{KemAlgorithm, SignatureAlgorithm};
 use serde::{Deserialize, Serialize};
@@ -26,29 +26,9 @@ pub struct ChronomatterConfig {
     #[serde(default = "default_kem_algorithm")]
     pub kem_algorithm: KemAlgorithm,
 
-    /// Auto-attestation configuration.
-    #[serde(default)]
-    pub auto_attest: AutoAttestConfig,
-
     /// Key rotation configuration.
     #[serde(default)]
     pub key_rotation: KeyRotationConfig,
-}
-
-/// Auto-attestation configuration.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct AutoAttestConfig {
-    /// Mutual attestation frequency in chronons (default 1 = every tick).
-    #[serde(default = "default_auto_attest_every_n")]
-    pub every_n_chronons: u64,
-
-    /// RPC request timeout in seconds (default 5).
-    #[serde(default = "default_request_timeout_secs")]
-    pub request_timeout_secs: u64,
-
-    /// Peer addresses for auto attestation (e.g., "host:port").
-    #[serde(default)]
-    pub peers: Vec<String>,
 }
 
 /// Key rotation configuration.
@@ -84,14 +64,6 @@ fn default_tbn() -> String {
     "Default".to_string()
 }
 
-fn default_auto_attest_every_n() -> u64 {
-    1
-}
-
-fn default_request_timeout_secs() -> u64 {
-    5
-}
-
 impl Default for ChronomatterConfig {
     fn default() -> Self {
         Self {
@@ -100,7 +72,6 @@ impl Default for ChronomatterConfig {
             dormant: false,
             signature_algorithm: default_signature_algorithm(),
             kem_algorithm: default_kem_algorithm(),
-            auto_attest: AutoAttestConfig::default(),
             key_rotation: KeyRotationConfig::default(),
         }
     }

@@ -1,4 +1,3 @@
-#![allow(deprecated)]
 use async_trait::async_trait;
 use std::sync::Arc;
 
@@ -8,7 +7,7 @@ use axum::Json;
 use tokio::net::TcpListener;
 
 use foretias_core::chronomatter::Chronomatter;
-use foretias_core::config::NodeConfig;
+use foretias_core::config::CommunerdConfig;
 use foretias_core::core::identity::generate_ed25519_keypair;
 use foretias_core::foretias::callbacks::{TickObserver, AutoAttestObserver};
 use foretias_core::foretias::{TickRecord, types::{TickNumber, Tbid}};
@@ -42,7 +41,6 @@ pub struct TimeFamilyServer {
     noise_static_pub: [u8; 32],
 }
 
-#[allow(deprecated)]
 impl TimeFamilyServer {
     pub fn new(listen_addr: &str, chronon_ns: u64) -> Result<Self, NodeError> {
         Self::new_with_config(listen_addr, chronon_ns, None, None)
@@ -60,7 +58,7 @@ impl TimeFamilyServer {
         listen_addr: &str,
         chronon_ns: u64,
         persist_path: Option<std::path::PathBuf>,
-        config: Option<NodeConfig>,
+        config: Option<CommunerdConfig>,
     ) -> Result<Self, NodeError> {
         let metrics = Arc::new(NodeMetrics::new());
         let calendar = Arc::new(Calendar::new(Tbid::default(), "init"));
@@ -115,8 +113,7 @@ impl TimeFamilyServer {
         })
     }
 
-    #[allow(deprecated)]
-    pub fn with_config(mut self, config: NodeConfig) -> Self {
+    pub fn with_communerd(mut self, config: CommunerdConfig) -> Self {
         self.communerd = Some(Arc::new(Communerd::new(config)));
         self
     }

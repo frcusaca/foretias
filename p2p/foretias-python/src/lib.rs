@@ -18,8 +18,7 @@ use foretias_core::foretias::tick::{Foretis as ForetisInner, CalendarLookup};
 use foretias_core::foretias::types::Tbid;
 use foretias_core::core::bindings::{ForetiasPubKey32, ForetiasSig64};
 use foretias_core::epoch::snapshot::{PeerScore as PeerScoreInner, EpochSnapshot as EpochSnapshotInner};
-#[allow(deprecated)]
-use foretias_core::config::{NodeConfig as NodeConfigInner, CollisionConfig as CollisionConfigInner};
+use foretias_core::config::{TimeFamilyConfig as TimeFamilyConfigInner, CollisionConfig as CollisionConfigInner};
 use foretias_core::collision::heartbeat::Heartbeat as HeartbeatInner;
 use foretias_node::probity::report::ProbityReport as ProbityReportInner;
 use foretias_node::server::jsonrpc::JsonRpcError as JsonRpcErrorInner;
@@ -918,23 +917,22 @@ pub struct PyNodeConfig {
     pub collision: PyCollisionConfig,
 }
 
-#[allow(deprecated)]
-impl From<&NodeConfigInner> for PyNodeConfig {
-    fn from(c: &NodeConfigInner) -> Self {
+impl From<&TimeFamilyConfigInner> for PyNodeConfig {
+    fn from(c: &TimeFamilyConfigInner) -> Self {
         Self {
             listen_addr: c.listen_addr.clone(),
             version: c.version.clone(),
-            calendar_path: c.calendar_path.to_string_lossy().to_string(),
-            chronon_ns: c.chronon_ns,
-            serialized: c.serialized,
-            peers: c.peers.clone(),
-            auto_attest_every_n: c.auto_attest_every_n,
-            request_timeout_secs: c.request_timeout_secs,
-            p2p_listen: c.p2p_listen.clone(),
-            p2p_dial: c.p2p_dial.clone(),
-            dht_namespace: c.dht_namespace.clone(),
-            dht_bootstrap: c.dht_bootstrap.clone(),
-            collision: PyCollisionConfig::from(&c.collision),
+            calendar_path: c.calendars[0].persist_path.to_string_lossy().to_string(),
+            chronon_ns: c.chronomatter.chronon_ns,
+            serialized: false,
+            peers: c.communerd.auto_attest.peers.clone(),
+            auto_attest_every_n: c.communerd.auto_attest.every_n_chronons,
+            request_timeout_secs: c.communerd.auto_attest.request_timeout_secs,
+            p2p_listen: c.communerd.p2p_listen.clone(),
+            p2p_dial: c.communerd.p2p_dial.clone(),
+            dht_namespace: c.communerd.dht.namespace.clone(),
+            dht_bootstrap: c.communerd.dht.bootstrap.clone(),
+            collision: PyCollisionConfig::from(&c.communerd.collision),
         }
     }
 }

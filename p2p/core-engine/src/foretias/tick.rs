@@ -250,7 +250,6 @@ pub fn auto_attestation_blob_with_count(
 ///
 /// Returns the signed blob and the 16-byte nonce for storage in TickRecord.
 /// The nonce ensures each blob is unique, preventing replay attacks.
-#[deprecated(since = "0.9.0", note = "Use auto_attestation_blob_with_count instead to include stamps_per_tick")]
 pub fn auto_attestation_blob(
     tbid: &str,
     a_tick: u64,
@@ -478,8 +477,7 @@ mod tests {
             crate::crypto_server::PublicKeyBytes::P256Compressed(pk) => pk.bytes[..32].try_into().unwrap(),
         };
 
-        #[allow(deprecated)]
-        let (ma_blob, nonce) = auto_attestation_blob(&tbid_str, 1, &pub_key, 2, &pub_key).unwrap();
+        let (ma_blob, nonce) = auto_attestation_blob_with_count(&tbid_str, 1, &pub_key, 2, &pub_key, 0).unwrap();
         let sig = server.sign(&ma_blob).unwrap();
         let sig_bytes = sig.bytes.to_vec();
 
@@ -524,8 +522,7 @@ mod tests {
             crate::crypto_server::PublicKeyBytes::P256Compressed(pk) => pk.bytes[..32].try_into().unwrap(),
         };
 
-        #[allow(deprecated)]
-        let (ma_blob, nonce) = auto_attestation_blob(&tbid_str, 1, &pub_key, 2, &pub_key).unwrap();
+        let (ma_blob, nonce) = auto_attestation_blob_with_count(&tbid_str, 1, &pub_key, 2, &pub_key, 0).unwrap();
         let sig = server.sign(&ma_blob).unwrap();
         let mut sig_bytes = sig.bytes.to_vec();
         let sig_alg = "Ed25519".to_string();
@@ -576,14 +573,13 @@ let valid = verify_pair(server.as_ref(), &tbid_str, &prev, &curr_tampered).unwra
     }
 
     #[test]
-    #[allow(deprecated)]
     fn auto_attestation_blob_nonce_is_unique() {
         let tbid = Tbid::from_raw([0x12; 96]);
         let tbid_str = tbid.to_hex();
         let pk = [0xABu8; 32];
 
-        let (blob1, nonce1) = auto_attestation_blob(&tbid_str, 1, &pk, 2, &pk).unwrap();
-        let (blob2, nonce2) = auto_attestation_blob(&tbid_str, 1, &pk, 2, &pk).unwrap();
+        let (blob1, nonce1) = auto_attestation_blob_with_count(&tbid_str, 1, &pk, 2, &pk, 0).unwrap();
+        let (blob2, nonce2) = auto_attestation_blob_with_count(&tbid_str, 1, &pk, 2, &pk, 0).unwrap();
 
         assert_ne!(nonce1, nonce2, "nonces must be unique");
         assert_eq!(blob1.len(), tbid_str.len() + 8 + 32 + 8 + 32 + 8 + 16);
@@ -591,13 +587,12 @@ let valid = verify_pair(server.as_ref(), &tbid_str, &prev, &curr_tampered).unwra
     }
 
     #[test]
-    #[allow(deprecated)]
     fn auto_attestation_blob_nonce_is_present() {
         let tbid = Tbid::from_raw([0x34; 96]);
         let tbid_str = tbid.to_hex();
         let pk = [0xCDu8; 32];
 
-        let (blob, nonce) = auto_attestation_blob(&tbid_str, 5, &pk, 6, &pk).unwrap();
+        let (blob, nonce) = auto_attestation_blob_with_count(&tbid_str, 5, &pk, 6, &pk, 0).unwrap();
         let nonce_pos = blob.len() - 16;
         assert_eq!(&blob[nonce_pos..], &nonce, "nonce must be appended to blob");
     }

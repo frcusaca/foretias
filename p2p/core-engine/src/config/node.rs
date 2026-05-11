@@ -7,7 +7,6 @@ use std::path::PathBuf;
 use super::p2p::CollisionConfig;
 
 /// Runtime configuration for a Foretias P2P node, loaded from a JSON file.
-#[deprecated(since = "0.5.0", note = "Use TimeFamilyConfig instead")]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeConfig {
     /// Address the node listens on for incoming connections (default: `127.0.0.1:4001`).
@@ -84,7 +83,6 @@ fn default_kem_algorithm() -> KemAlgorithm { KemAlgorithm::NoiseXX }
 fn default_p2p_port_range() -> [u16; 2] { [9900, 9999] }
 fn default_max_discovered_peers() -> usize { 13 }
 
-#[allow(deprecated)]
 impl Default for NodeConfig {
     fn default() -> Self {
         Self {
@@ -110,7 +108,6 @@ impl Default for NodeConfig {
     }
 }
 
-#[allow(deprecated)]
 impl NodeConfig {
     /// Loads configuration from a JSON file at the given path; returns defaults on any error.
     pub fn load(path: &str) -> Self {

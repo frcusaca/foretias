@@ -1,4 +1,3 @@
-#![allow(deprecated)]
 //! Foretias CLI — command-line interface for TimeFamilyServer.
 #![cfg_attr(debug_assertions, allow(rustdoc::all))]
 
@@ -11,7 +10,7 @@ use tokio::io::{AsyncWriteExt};
 use tracing_appender::rolling;
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
-use foretias_core::config::{NodeConfig, TimeFamilyConfig};
+use foretias_core::config::TimeFamilyConfig;
 use foretias_core::core::identity::generate_ed25519_keypair;
 use foretias_core::crypto_server;
 use foretias_node::communerd::p2p::swarm::CommunerdRpcHandler;
@@ -270,7 +269,6 @@ fn client_echo() -> String {
 
 // ── Subcommands ─────────────────────────────────────────────────────────────
 
-#[allow(deprecated)]
 async fn cmd_serve(
     addr: String,
     chronon_ns: u64,
@@ -339,17 +337,7 @@ async fn cmd_serve(
     };
 
     let server = if !peers.is_empty() {
-        #[allow(deprecated)]
-        let node_config = NodeConfig {
-            listen_addr: addr.clone(),
-            peers,
-            auto_attest_every_n: auto_attest_every_chronons,
-            request_timeout_secs,
-            dht_namespace: dht_namespace.clone(),
-            max_discovered_peers,
-            ..Default::default()
-        };
-        Arc::new(server.with_config(node_config))
+        Arc::new(server.with_communerd(time_family_cfg.communerd.clone()))
     } else {
         Arc::new(server)
     };
@@ -423,10 +411,9 @@ async fn cmd_serve(
     if !known_servers.is_empty() {
         println!("  Known Servers : {}", known_servers.join(", "));
     }
-    #[allow(deprecated)]
     if let Some(c) = server.communerd() {
-        println!("  Peers  : {}", c.config().peers.join(", "));
-        println!("  Auto Attest Every: {} chronons", c.config().auto_attest_every_n);
+        println!("  Peers  : {}", c.config().auto_attest.peers.join(", "));
+        println!("  Auto Attest Every: {} chronons", c.config().auto_attest.every_n_chronons);
     }
 
     let handle = server.clone().start()?;
