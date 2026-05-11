@@ -320,8 +320,8 @@ mod tests {
 
     #[test]
     fn noise_session_init_and_complete() {
-        let (alice_pub, alice_priv) = crate::core::identity::generate_ed25519_keypair().unwrap();
-        let (bob_pub, bob_priv) = crate::core::identity::generate_ed25519_keypair().unwrap();
+        let (_alice_pub, alice_priv) = crate::core::identity::generate_ed25519_keypair().unwrap();
+        let (_bob_pub, bob_priv) = crate::core::identity::generate_ed25519_keypair().unwrap();
 
         // Convert Ed25519 keys to raw bytes for Noise
         let alice_priv_bytes: [u8; 32] = alice_priv.bytes;
@@ -357,8 +357,8 @@ mod tests {
 
     #[test]
     fn noise_session_encrypt_decrypt_roundtrip() {
-        let (alice_pub, alice_priv) = crate::core::identity::generate_ed25519_keypair().unwrap();
-        let (bob_pub, bob_priv) = crate::core::identity::generate_ed25519_keypair().unwrap();
+        let (_alice_pub, alice_priv) = crate::core::identity::generate_ed25519_keypair().unwrap();
+        let (_bob_pub, bob_priv) = crate::core::identity::generate_ed25519_keypair().unwrap();
 
         let alice_priv_bytes: [u8; 32] = alice_priv.bytes;
         let bob_priv_bytes: [u8; 32] = bob_priv.bytes;

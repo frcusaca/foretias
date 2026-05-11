@@ -84,6 +84,7 @@ fn default_kem_algorithm() -> KemAlgorithm { KemAlgorithm::NoiseXX }
 fn default_p2p_port_range() -> [u16; 2] { [9900, 9999] }
 fn default_max_discovered_peers() -> usize { 13 }
 
+#[allow(deprecated)]
 impl Default for NodeConfig {
     fn default() -> Self {
         Self {
@@ -109,6 +110,7 @@ impl Default for NodeConfig {
     }
 }
 
+#[allow(deprecated)]
 impl NodeConfig {
     /// Loads configuration from a JSON file at the given path; returns defaults on any error.
     pub fn load(path: &str) -> Self {

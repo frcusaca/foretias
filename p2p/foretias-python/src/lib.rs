@@ -18,6 +18,7 @@ use foretias_core::foretias::tick::{Foretis as ForetisInner, CalendarLookup};
 use foretias_core::foretias::types::Tbid;
 use foretias_core::core::bindings::{ForetiasPubKey32, ForetiasSig64};
 use foretias_core::epoch::snapshot::{PeerScore as PeerScoreInner, EpochSnapshot as EpochSnapshotInner};
+#[allow(deprecated)]
 use foretias_core::config::{NodeConfig as NodeConfigInner, CollisionConfig as CollisionConfigInner};
 use foretias_core::collision::heartbeat::Heartbeat as HeartbeatInner;
 use foretias_node::probity::report::ProbityReport as ProbityReportInner;
@@ -917,6 +918,7 @@ pub struct PyNodeConfig {
     pub collision: PyCollisionConfig,
 }
 
+#[allow(deprecated)]
 impl From<&NodeConfigInner> for PyNodeConfig {
     fn from(c: &NodeConfigInner) -> Self {
         Self {

@@ -12,7 +12,6 @@ use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
 
 use crate::crypto_server::{self, CryptoServer};
-use crate::crypto_server::signing_tbid;
 use crate::core::identity::PrivKeyHandle;
 use crate::error::NodeError;
 use crate::clock::Clock;

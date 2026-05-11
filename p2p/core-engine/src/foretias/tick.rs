@@ -358,6 +358,7 @@ mod tests {
             .expect("failed to create software crypto server")
     }
 
+    #[allow(dead_code)]
     fn make_clock() -> Box<dyn Clock> {
         Box::new(SystemClock)
     }
@@ -482,6 +483,7 @@ mod tests {
             crate::crypto_server::PublicKeyBytes::P256Compressed(pk) => pk.bytes[..32].try_into().unwrap(),
         };
 
+        #[allow(deprecated)]
         let (ma_blob, nonce) = auto_attestation_blob(&tbid_str, 1, &pub_key, 2, &pub_key).unwrap();
         let sig = server.sign(&ma_blob).unwrap();
         let sig_bytes = sig.bytes.to_vec();
@@ -527,6 +529,7 @@ mod tests {
             crate::crypto_server::PublicKeyBytes::P256Compressed(pk) => pk.bytes[..32].try_into().unwrap(),
         };
 
+        #[allow(deprecated)]
         let (ma_blob, nonce) = auto_attestation_blob(&tbid_str, 1, &pub_key, 2, &pub_key).unwrap();
         let sig = server.sign(&ma_blob).unwrap();
         let mut sig_bytes = sig.bytes.to_vec();
@@ -578,6 +581,7 @@ let valid = verify_pair(server.as_ref(), &tbid_str, &prev, &curr_tampered).unwra
     }
 
     #[test]
+    #[allow(deprecated)]
     fn auto_attestation_blob_nonce_is_unique() {
         let tbid = Tbid::from_raw([0x12; 96]);
         let tbid_str = tbid.to_hex();
@@ -592,6 +596,7 @@ let valid = verify_pair(server.as_ref(), &tbid_str, &prev, &curr_tampered).unwra
     }
 
     #[test]
+    #[allow(deprecated)]
     fn auto_attestation_blob_nonce_is_present() {
         let tbid = Tbid::from_raw([0x34; 96]);
         let tbid_str = tbid.to_hex();

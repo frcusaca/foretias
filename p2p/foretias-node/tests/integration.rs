@@ -187,6 +187,7 @@ fn test_stamp_and_verify_e2e() {
 // ── In-process integration tests ─────────────────────────────────────────────
 
 #[tokio::test]
+#[allow(deprecated)]
 async fn test_two_nodes_auto_attest() {
     use foretias_node::server::TimeFamilyServer;
 
@@ -252,13 +253,13 @@ async fn test_two_nodes_auto_attest() {
 
 #[tokio::test]
 async fn test_peer_unreachable_does_not_crash() {
-    use foretias_core::config::NodeConfig;
     use foretias_node::server::TimeFamilyServer;
 
     let port = find_available_port();
     let addr = format!("127.0.0.1:{}", port);
 
-    let config = NodeConfig {
+    #[allow(deprecated)]
+    let config = foretias_core::config::NodeConfig {
         listen_addr: addr.clone(),
         peers: vec!["127.0.0.1:59999".to_string()],
         auto_attest_every_n: 1,

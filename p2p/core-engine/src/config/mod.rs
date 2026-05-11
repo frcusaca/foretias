@@ -12,4 +12,5 @@ pub use chronomatter::{ChronomatterConfig, AutoAttestConfig, KeyRotationConfig};
 pub use calendar::{CalendarConfig, EncryptionConfig};
 pub use time_family::TimeFamilyConfig;
 pub use calendar_persist::{PersistedCalendar, CalendarMetadata};
+#[allow(deprecated)]
 pub use node::{NodeConfig, FORETIAS_MUTUAL_ATTESTATION_MINIMUM, compute_attestation_interval};

@@ -103,7 +103,7 @@ impl JsonRpcTransport {
             let (mut session, stream) = noise::noise_handshake(stream, &priv_key.bytes, None, true).await
                 .map_err(|e| TransportError::Connect(e.to_string()))?;
 
-            let (mut reader, mut writer) = stream.into_split();
+            let (reader, mut writer) = stream.into_split();
             let mut reader = tokio::io::BufReader::new(reader);
 
             let ct = session.send(&request_bytes)

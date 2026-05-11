@@ -475,7 +475,6 @@ async fn swarm_loop(
                               }
                               request_response::Event::InboundFailure { .. } => {}
                               request_response::Event::ResponseSent { .. } => {}
-                              _ => {}
                           }
                       }
                     SwarmEvent::Behaviour(ForetiasBehaviourEvent::Gossip(event)) => {

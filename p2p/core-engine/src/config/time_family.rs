@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use super::p2p::{P2PConfig, DHTConfig};
 use super::chronomatter::{ChronomatterConfig, AutoAttestConfig, KeyRotationConfig};
 use super::calendar::{CalendarConfig, EncryptionConfig};
+#[allow(deprecated)]
 use super::node::NodeConfig;
 
 /// Logging configuration for the TimeFamily logger.
@@ -177,13 +178,9 @@ impl TimeFamilyConfig {
     }
 }
 
+#[allow(deprecated)]
 impl From<NodeConfig> for TimeFamilyConfig {
     fn from(node: NodeConfig) -> Self {
-        let persist_path = if node.calendar_path != std::path::PathBuf::from(".foretias/calendars") {
-            Some(node.calendar_path.clone())
-        } else {
-            None
-        };
         Self {
             version: node.version,
             chronomatter: ChronomatterConfig {

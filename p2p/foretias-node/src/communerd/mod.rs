@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 //! Communerd — orchestrator for all extra-family P2P communication.
 //!
 //! A Communerd is a communard of a time family commune where timing information
@@ -55,6 +56,7 @@ fn default_capabilities() -> Vec<PeerCapability> {
 ///
 /// Calendar calls Communerd for all extra-family communication.
 /// Communerd knows nothing about Foretias semantics — it's a transparent RPC relay.
+#[allow(deprecated)]
 pub struct Communerd {
     transport: Arc<dyn PeerTransport>,
     libp2p_transport: Arc<Libp2pTransport>,
@@ -101,6 +103,7 @@ impl Clone for Communerd {
     }
 }
 
+#[allow(deprecated)]
 impl Communerd {
     pub fn new(config: NodeConfig) -> Self {
         let transport: Arc<dyn PeerTransport> = Arc::new(JsonRpcTransport::new(

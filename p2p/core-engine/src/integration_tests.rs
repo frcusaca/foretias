@@ -1,8 +1,6 @@
 //! Integration sanity tests for multi-algorithm PQC support.
 
 use crate::crypto_server::{CryptoServer, ForetiasCurve, software::SoftwareCryptoServer};
-use crate::crypto_server::signing_sphincs;
-use crate::crypto_server::signing_dilithium;
 use crate::crypto_server::kem_mlkem;
 use crate::foretias::types::{SignatureAlgorithm, KemAlgorithm};
 
@@ -294,7 +292,7 @@ mod handshake_mismatch {
 
     #[test]
     fn mlkem_wrong_ciphertext_fails() {
-        let (pk, sk1) = kem_mlkem::mlkem_768_keypair().unwrap();
+        let (pk, _sk1) = kem_mlkem::mlkem_768_keypair().unwrap();
         let (_pk2, sk2) = kem_mlkem::mlkem_768_keypair().unwrap();
 
         let (_ct, ss1) = kem_mlkem::mlkem_768_encapsulate(&pk).unwrap();

@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 //! Foretias CLI — command-line interface for TimeFamilyServer.
 #![cfg_attr(debug_assertions, allow(rustdoc::all))]
 
@@ -269,6 +270,7 @@ fn client_echo() -> String {
 
 // ── Subcommands ─────────────────────────────────────────────────────────────
 
+#[allow(deprecated)]
 async fn cmd_serve(
     addr: String,
     chronon_ns: u64,
@@ -337,6 +339,7 @@ async fn cmd_serve(
     };
 
     let server = if !peers.is_empty() {
+        #[allow(deprecated)]
         let node_config = NodeConfig {
             listen_addr: addr.clone(),
             peers,
@@ -420,6 +423,7 @@ async fn cmd_serve(
     if !known_servers.is_empty() {
         println!("  Known Servers : {}", known_servers.join(", "));
     }
+    #[allow(deprecated)]
     if let Some(c) = server.communerd() {
         println!("  Peers  : {}", c.config().peers.join(", "));
         println!("  Auto Attest Every: {} chronons", c.config().auto_attest_every_n);
@@ -599,7 +603,7 @@ async fn json_rpc_call(
     let (mut session, stream) = noise::noise_handshake(stream, &priv_key.bytes, None, true).await
         .map_err(|e| format!("noise handshake failed: {}", e))?;
 
-    let (mut reader, mut writer) = stream.into_split();
+    let (reader, mut writer) = stream.into_split();
     let mut reader = tokio::io::BufReader::new(reader);
 
     let ct = session.send(&request_bytes)?;

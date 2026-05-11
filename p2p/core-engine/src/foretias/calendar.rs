@@ -292,6 +292,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn integrity_check_full_chain() {
         use crate::core::identity::generate_ed25519_keypair;
         use crate::core::signing::ed25519_sign;
@@ -342,10 +343,12 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn integrity_check_partial_range() {
         use crate::core::identity::generate_ed25519_keypair;
         use crate::core::signing::ed25519_sign;
         use crate::core::bindings::ForetiasPrivKey32;
+        #[allow(deprecated)]
         use crate::foretias::tick::auto_attestation_blob;
         use zeroize::Zeroizing;
 
