@@ -406,6 +406,7 @@ pub(crate) fn process_request_from_value(server: &TimeFamilyServer, req: serde_j
         "stamp" => Ok(handlers::handle_stamp(server, params)),
         "route_stamp" => Ok(handlers::handle_route_stamp(server, params)),
         "verify" => Ok(handlers::handle_verify(server, params)),
+        "status" => Ok(handlers::handle_status(server, params)),
         "get_calendar_slice" => Ok(handlers::handle_get_calendar_slice(server, params)),
         "integrity_check" => Ok(handlers::handle_integrity_check(server, params)),
         "get_peer_score" => Ok(handlers::handle_get_peer_score(server, params)),

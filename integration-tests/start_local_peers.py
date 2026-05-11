@@ -17,6 +17,8 @@ import random
 import re
 import shlex
 import signal
+import socket
+import statistics
 import subprocess
 import sys
 import threading
@@ -34,6 +36,23 @@ DEFAULT_STATS_INTERVAL = 10  # seconds between stat prints
 STATS_POLL_INTERVAL = 3  # seconds between log polling
 BATCH_SIZE = 10
 BATCH_DELAY = 0.5  # seconds between batches
+
+
+# ── Port Probe ───────────────────────────────────────────────────────────────
+
+def wait_for_server(addr, port, timeout=10):
+    """Wait up to timeout seconds for a TCP server to accept connections."""
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1)
+            sock.connect((addr, port))
+            sock.close()
+            return True
+        except (socket.error, OSError):
+            time.sleep(0.5)
+    return False
 
 
 # ── Binary Discovery ─────────────────────────────────────────────────────────
@@ -282,7 +301,7 @@ class StatsGatherer:
             msg = (
                 f"\r--- Live Stats (elapsed {int(elapsed)}s) ---\n"
                 f"  Alive: {alive}/{total}  |  Errors: {self.aggregate_errors}  |  Warnings: {self.aggregate_warnings}\n"
-                f"  Avg ticks/sec: {avg_tps:.1f}  |  Highest tick: {highest_tick} (peer #{highest_peer})"
+                f"  Avg ticks/sec: {avg_tps:.1f}  |  Highest tick: {highest_tick} (peer #{highest_peer})\n"
             )
             sys.stderr.write(msg + "\n")
             sys.stderr.flush()
@@ -393,9 +412,12 @@ def cmd_kill_tbid(peers, prefix):
 
 def cmd_stamp(binary, port, message):
     """Run foretias stamp against a peer."""
+    if not wait_for_server("127.0.0.1", int(port), timeout=10):
+        print(f"  Warning: server at 127.0.0.1:{port} not responding after 10s")
+        return ""
     cmd = [binary, "stamp", "-m", message, "-s", f"127.0.0.1:{port}"]
     print(f"  $ {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
     if result.stdout:
         print(result.stdout.rstrip())
     if result.returncode != 0 and result.stderr:
@@ -405,20 +427,122 @@ def cmd_stamp(binary, port, message):
 
 def cmd_verify(binary, port, message, stamp_file):
     """Run foretias verify against a peer."""
-    # Expand globs in stamp file path
     expanded = glob.glob(stamp_file)
     if not expanded:
         print(f"  Error: no file matches '{stamp_file}'")
         return ""
     stamp_file = expanded[0]
+    if not wait_for_server("127.0.0.1", int(port), timeout=10):
+        print(f"  Warning: server at 127.0.0.1:{port} not responding after 10s")
+        return ""
     cmd = [binary, "verify", "-m", message, "-F", stamp_file, "-s", f"127.0.0.1:{port}"]
     print(f"  $ {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
     if result.stdout:
         print(result.stdout.rstrip())
     if result.returncode != 0 and result.stderr:
         print(f"  Error: {result.stderr.strip()}")
     return result.stdout
+
+
+def cmd_demo_cli(peers):
+    """Print ready-to-use CLI examples for common operations."""
+    print("")
+    print("=== Foretias CLI Examples ===")
+    print("")
+    if peers:
+        p = peers[0]
+        print("# Start a server (already running in this demo)")
+        print(f"foretias serve --addr 127.0.0.1:{p['rpc_port']} --chronon-ns {p['chronon_ns']}")
+        print("")
+        print(f"# Stamp a message")
+        print(f'foretias stamp -m "hello world" -s 127.0.0.1:{p["rpc_port"]}')
+        print("")
+        print(f"# Verify a stamp")
+        print(f'foretias verify -m "hello world" -F /tmp/stamp.json -s 127.0.0.1:{p["rpc_port"]}')
+        print("")
+        print(f"# Prove verification")
+        print(f'foretias prove-verification -m "hello world" -F /tmp/stamp.json -s 127.0.0.1:{p["rpc_port"]}')
+    else:
+        print("foretias serve --addr 127.0.0.1:4001 --chronon-ns 1000000000")
+        print("")
+        print('foretias stamp -m "hello world" -s 127.0.0.1:4001')
+        print("")
+        print('foretias verify -m "hello world" -F /tmp/stamp.json -s 127.0.0.1:4001')
+        print("")
+        print('foretias prove-verification -m "hello world" -F /tmp/stamp.json -s 127.0.0.1:4001')
+    print("")
+    print("=== Two-Peer Cross-Verification ===")
+    print("")
+    print("# Terminal 1:")
+    print("foretias serve --addr 127.0.0.1:4001 --chronon-ns 1000000000 --peer 127.0.0.1:4002 --known-servers 127.0.0.1:4002")
+    print("")
+    print("# Terminal 2:")
+    print("foretias serve --addr 127.0.0.1:4002 --chronon-ns 1000000000 --peer 127.0.0.1:4001 --known-servers 127.0.0.1:4001")
+    print("")
+    print("# Stamp on peer 1, verify on peer 2:")
+    print('foretias stamp -m "cross-peer test" -s 127.0.0.1:4001 -o /tmp/stamp.json')
+    print("sleep 2")
+    print('foretias verify -m "cross-peer test" -F /tmp/stamp.json -s 127.0.0.1:4002')
+    print("")
+
+
+def json_rpc_call(binary, addr, method, params_dict):
+    """Make a JSON-RPC call to a foretias server and return parsed result."""
+    import urllib.request
+    payload = json.dumps({
+        "jsonrpc": "2.0",
+        "method": method,
+        "params": params_dict,
+        "id": 1,
+    }).encode()
+    req = urllib.request.Request(
+        f"http://{addr}/rpc",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return json.loads(resp.read().decode())
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def cmd_peers(peers, binary):
+    """Query all alive peers for tick and connection stats."""
+    peer_stats = []
+    for p in sorted(peers, key=lambda x: x["index"]):
+        if not p["alive"]:
+            continue
+        result = json_rpc_call(binary, f"127.0.0.1:{p['rpc_port']}", "status", {})
+        if "result" in result:
+            r = result["result"]
+            tick_count = r.get("tick_count", "?")
+            peer_count = r.get("peer_count", "?")
+            peer_stats.append((p["index"], tick_count, peer_count))
+        else:
+            peer_stats.append((p["index"], "?", "?"))
+
+    if not peer_stats:
+        print("  No alive peers to query.")
+        return
+
+    print("")
+    header = f"{'Idx':>4}  {'Ticks':>8}  {'Peer Count':>11}"
+    print(header)
+    print("-" * len(header))
+    for idx, ticks, peers_c in peer_stats:
+        print(f"{idx:>4}  {ticks:>8}  {peers_c:>11}")
+
+    tick_values = [t for _, t, _ in peer_stats if isinstance(t, (int, float))]
+    peer_counts = [p for _, _, p in peer_stats if isinstance(p, (int, float))]
+
+    if tick_values and peer_counts:
+        print("")
+        print(f"  Tick distribution:  min={min(tick_values)}  max={max(tick_values)}  mean={statistics.mean(tick_values):.1f}")
+        print(f"  Peer distribution:  min={min(peer_counts)}  max={max(peer_counts)}  mean={statistics.mean(peer_counts):.1f}")
+    print("")
 
 
 def cmd_shutdown(peers, session_start, stamps_made, verifies_done):
@@ -464,11 +588,13 @@ HELP_TEXT = """
 Commands:
   status                  Show peer status table
   stats                   Show detailed per-peer stats (errors, warnings, ticks)
+  peers                   Query all peers for connection count distribution
   sleep <seconds>         Pause for N seconds
   kill-random N|N%        Kill N random alive peers (or N% of alive)
   kill-tbid <hex-prefix>  Kill peers matching TBID prefix
   stamp <port> <message>  Stamp a message via the given peer port
   verify <port> <msg> <stamp.json>  Verify a stamp via the given peer port
+  demo-cli                Print ready-to-use CLI examples
   help                    Show this help
   shutdown / quit         Graceful shutdown and summary
 """
@@ -508,6 +634,12 @@ def repl_loop(peers, binary, stats_gatherer):
 
         elif cmd == "stats":
             cmd_stats(peers, stats_gatherer)
+
+        elif cmd == "peers":
+            cmd_peers(peers, binary)
+
+        elif cmd == "demo-cli":
+            cmd_demo_cli(peers)
 
         elif cmd == "kill-random":
             cmd_kill_random(peers, args_str.strip())

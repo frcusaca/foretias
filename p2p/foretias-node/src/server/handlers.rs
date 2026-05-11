@@ -284,6 +284,23 @@ pub fn handle_integrity_check(server: &TimeFamilyServer, params: Value) -> JsonR
     }
 }
 
+pub fn handle_status(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    let id = params.get("id").cloned();
+    let peer_count = server.communerd()
+        .map(|c| {
+            tokio::runtime::Handle::current()
+                .block_on(async { c.get_peers().await.len() })
+        })
+        .unwrap_or(0);
+    resp_success(server, id, serde_json::json!({
+        "tbid": server.get_tbid().to_hex(),
+        "tbn": server.get_tbn(),
+        "tick_count": server.current_tick(),
+        "peer_count": peer_count,
+        "dormant": server.is_dormant(),
+    }))
+}
+
 pub fn handle_collision_status(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
     let id = params.get("id").cloned();
     let metrics = server.metrics();
