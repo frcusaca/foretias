@@ -1,7 +1,5 @@
 # Foretias HOWTO
 
-> Prove it works. Prove it survives. Prove it's trivial to use.
-
 Foretias is a **decentralized time-integrity attestation service**. In plain terms: it cryptographically proves that a message existed at a specific tick in a specific calendar — and that calendar is replicated, verified, and signed by an entire network of peers.
 
 This document shows you **three escalating demos** that prove foretias is:
@@ -55,15 +53,15 @@ The server is now ticking — creating new calendar entries every second. Leave 
 Open a **second terminal** and stamp a message:
 
 ```bash
-p2p/target/debug/foretias stamp -m "hello world" -s 127.0.0.1:4001 -o stamp.json
+p2p/target/debug/foretias stamp -m "hello world" -s 127.0.0.1:4001 -o /tmp/hello_world_stamp.json
 ```
 
 This connects to the server over an encrypted Noise_XX channel, submits your message, and receives a **Foretis** — a cryptographically signed attestation containing the message hash, tick number, signature, and the server's unique TBID (Time-Being ID).
 
-The stamp is saved to `stamp.json`. Inspect it:
+The stamp is saved to `hello_world_stamp.json`. Inspect it:
 
 ```bash
-cat stamp.json
+cat /tmp/hello_world_stamp.json
 ```
 
 You'll see the tick number, content hash, Ed25519 signature, and the server's TBID — all in one self-contained JSON object.
@@ -73,10 +71,11 @@ You'll see the tick number, content hash, Ed25519 signature, and the server's TB
 Verify the stamp against the **same** server:
 
 ```bash
-p2p/target/debug/foretias verify -m "hello world" -F stamp.json -s 127.0.0.1:4001
+p2p/target/debug/foretias verify -m "hello world" -F /tmp/hello_world_stamp.json -s 127.0.0.1:4001
+p2p/target/debug/foretias verify -m "hello world" -f "$(cat /tmp/hello_world_stamp.json)" -s 127.0.0.1:4001
 ```
 
-Expected output:
+Expected outputs should be:
 
 ```json
 {
@@ -92,10 +91,11 @@ Expected output:
 Now try with the **wrong content**:
 
 ```bash
-p2p/target/debug/foretias verify -m "tampered message" -F stamp.json -s 127.0.0.1:4001
+p2p/target/debug/foretias verify -m "tampered message" -F /tmp/hello_world_stamp.json -s 127.0.0.1:4001
+p2p/target/debug/foretias verify -m "hello world" -f "$(sed 's/0/2/g' /tmp/hello_world_stamp.json)" -s 127.0.0.1:4001
 ```
 
-Expected output:
+Expected outputs should both be:
 
 ```json
 {
