@@ -3,6 +3,7 @@
 **Plan: Dead Code Removal, Deprecation Cleanup, Full Config Migration**
 **Paired Spec: CLEANUP_REPAIRS_SPEC.md**
 **Date: 2026-05-11**
+**Revised: 2026-05-11 (CommunerdConfig design per time-being pattern)**
 **FULL_WORKTREE_PATH=/home/hcbusy/tmp/foretias-worktrees/CLEANUP_REPAIRS_32410**
 **BRANCH_NAME=cleanup/repairs**
 
@@ -29,15 +30,14 @@
 - [ ] Remove `#[allow(dead_code)]` from struct `SoftwareCryptoServer` declaration in `p2p/core-engine/src/crypto_server/software.rs` (~line 24)
 - [ ] Add `#[allow(dead_code)]` only to `sphincs_sha2_256f_secret_key` and `mlkem_secret_key` fields
 - [ ] `cargo build -p foretias-core` — verify zero dead_code warnings
-- [ ] If other fields trigger warnings, investigate whether they're actually unused or false positives
 
 ---
 
-## Phase 2: Remove Premature Deprecations (strip, don't migrate yet)
+## Phase 2: Remove Premature Deprecations (strip markers only)
 
 ### 2a. Remove `#[deprecated]` from `NodeConfig`
 
-- [ ] Remove `#[deprecated(since = "0.5.0", note = "Use TimeFamilyConfig instead")]` from `NodeConfig` struct in `p2p/core-engine/src/config/node.rs`
+- [ ] Remove `#[deprecated(...)]` from `NodeConfig` struct in `p2p/core-engine/src/config/node.rs`
 - [ ] Remove `#[allow(deprecated)]` from `p2p/core-engine/src/config/mod.rs` (re-export line)
 - [ ] Remove `#[allow(deprecated)]` from `p2p/core-engine/src/config/time_family.rs` (use import + From impl)
 - [ ] Remove `#![allow(deprecated)]` from `p2p/foretias-node/src/main.rs` (module-level)
@@ -50,7 +50,7 @@
 
 ### 2b. Remove `#[deprecated]` from `auto_attestation_blob`
 
-- [ ] Remove `#[deprecated(since = "0.9.0", ...)]` from `auto_attestation_blob` function in `p2p/core-engine/src/foretias/tick.rs`
+- [ ] Remove `#[deprecated(...)]` from `auto_attestation_blob` function in `p2p/core-engine/src/foretias/tick.rs`
 - [ ] Remove `#[allow(deprecated)]` from `p2p/core-engine/src/foretias/mod.rs` (re-export line)
 - [ ] Remove all `#[allow(deprecated)]` from test functions in `p2p/core-engine/src/foretias/tick.rs`
 - [ ] Remove all `#[allow(deprecated)]` from test functions in `p2p/core-engine/src/foretias/calendar.rs`
@@ -63,109 +63,134 @@
 
 ---
 
-## Phase 3: Full Config Migration (NodeConfig → TimeFamilyConfig)
+## Phase 3: Config Restructuring (Create CommunerdConfig, Eliminate P2PConfig)
 
-### 3a. Refactor Communerd to accept sub-configs instead of NodeConfig
+### 3a. Create `CommunerdConfig` and move `AutoAttestConfig` (p2p.rs)
 
-- [ ] Change `Communerd` struct field from `config: NodeConfig` to:
-  ```rust
-  auto_attest: AutoAttestConfig,
-  collision: CollisionConfig,
-  ```
-- [ ] Change `Communerd::new(config: NodeConfig)` to:
-  ```rust
-  pub fn new(auto_attest: AutoAttestConfig, collision: CollisionConfig) -> Self
-  ```
-- [ ] Update `new()` internals to use `self.auto_attest` and `self.collision` instead of `self.config.xxx`
-  - `request_timeout_secs` → `auto_attest.request_timeout_secs`
-  - `peers` → `auto_attest.peers`
-  - `collision.nonce_window` → `collision.nonce_window`
-  - `collision.heartbeat_interval_secs` → `collision.heartbeat_interval_secs`
-- [ ] Replace `pub fn config(&self) -> &NodeConfig` with:
-  ```rust
-  pub fn peers(&self) -> &[String] { &self.auto_attest.peers }
-  pub fn auto_attest_config(&self) -> &AutoAttestConfig { &self.auto_attest }
-  ```
-- [ ] Update `Clone` impl to clone new fields
-- [ ] Update test helper `make_config()` → construct sub-configs directly
-- [ ] Remove `use foretias_core::config::NodeConfig` import (if no longer needed)
+- [ ] Add `CommunerdConfig` struct to `p2p/core-engine/src/config/p2p.rs` with fields:
+  - `auto_attest: AutoAttestConfig` (moved from chronomatter.rs)
+  - `p2p_listen: Option<String>` (from P2PConfig)
+  - `p2p_port_range: [u16; 2]` (from P2PConfig)
+  - `p2p_dial: Vec<String>` (from P2PConfig)
+  - `known_servers: Vec<String>` (from P2PConfig)
+  - `max_discovered_peers: usize` (from P2PConfig)
+  - `dht: DHTConfig` (from P2PConfig)
+  - `collision: CollisionConfig` (from P2PConfig)
+- [ ] Add `#[derive(Debug, Clone, Serialize, Deserialize)]` with serde defaults
+- [ ] Implement `Default` for `CommunerdConfig`
+- [ ] Move `AutoAttestConfig` struct definition from `chronomatter.rs` to `p2p.rs`
+- [ ] Move `AutoAttestConfig` default functions to `p2p.rs`
+- [ ] Update `config/mod.rs` re-exports: add `CommunerdConfig`, `AutoAttestConfig` from p2p; keep `DHTConfig`, `CollisionConfig`
+
+### 3b. Update `ChronomatterConfig` (chronomatter.rs)
+
+- [ ] Remove `auto_attest: AutoAttestConfig` field from `ChronomatterConfig`
+- [ ] Remove `AutoAttestConfig` from `pub use` exports in `chronomatter.rs`
+- [ ] Update `ChronomatterConfig::default()` — remove auto_attest initialization
+- [ ] `cargo build -p foretias-core` — verify
+
+### 3c. Update `TimeFamilyConfig` (time_family.rs)
+
+- [ ] Replace `pub p2p: P2PConfig` with `pub communerd: CommunerdConfig`
+- [ ] Update `Default` impl: `communerd: CommunerdConfig::default()`
+- [ ] Update `from_cli_and_file()` — route P2P/attestation fields to `communerd`; `listen_addr` stays at top level:
+  - `listen_addr` → `self.listen_addr` (top-level, unchanged)
+  - `peers` → `communerd.auto_attest.peers`
+  - `auto_attest_every_n` → `communerd.auto_attest.every_n_chronons`
+  - `request_timeout_secs` → `communerd.auto_attest.request_timeout_secs`
+  - `p2p_listen` → `communerd.p2p_listen`
+  - `p2p_port_range` → `communerd.p2p_port_range`
+  - `p2p_dial` → `communerd.p2p_dial`
+  - `known_servers` → `communerd.known_servers`
+  - `max_discovered_peers` → `communerd.max_discovered_peers`
+  - `dht_namespace` → `communerd.dht.namespace`
+  - `dht_bootstrap` → `communerd.dht.bootstrap`
+- [ ] Update accessor methods (`peers()`, `auto_attest_every_n()`, `request_timeout_secs()`) to use `self.communerd`
+- [ ] Update `From<NodeConfig> for TimeFamilyConfig` — populate `communerd` instead of `p2p`
+- [ ] Update imports: remove `P2PConfig`, `DHTConfig`; add `CommunerdConfig`, `AutoAttestConfig`
+- [ ] `cargo build -p foretias-core` — verify
+
+### 3d. Eliminate `P2PConfig`
+
+- [ ] Remove `P2PConfig` struct from `p2p.rs` (all fields absorbed into CommunerdConfig)
+- [ ] Remove `P2PConfig` default functions from `p2p.rs` (merge into CommunerdConfig defaults)
+- [ ] Remove `P2PConfig` from `config/mod.rs` re-exports
+- [ ] Grep for remaining `P2PConfig` references in core-engine — eliminate all
+- [ ] `cargo build -p foretias-core` — verify
+
+### 3e. Checkpoint
+
+- [ ] `cargo build -p foretias-core` — zero warnings
+- [ ] **Checkpoint commit**: "Config: create CommunerdConfig, eliminate P2PConfig, move AutoAttestConfig to Communerd domain"
+
+---
+
+## Phase 4: Migrate All Callers from NodeConfig to CommunerdConfig
+
+### 4a. Communerd::new accepts CommunerdConfig (communerd/mod.rs)
+
+- [ ] Change `Communerd` struct field from `config: NodeConfig` to `config: CommunerdConfig`
+- [ ] Change `Communerd::new(config: NodeConfig)` to `Communerd::new(config: CommunerdConfig)`
+- [ ] Update `new()` internals:
+  - `config.request_timeout_secs` → `config.auto_attest.request_timeout_secs`
+  - `config.peers` → `config.auto_attest.peers`
+  - `config.collision.nonce_window` → `config.collision.nonce_window`
+  - `config.collision.heartbeat_interval_secs` → `config.collision.heartbeat_interval_secs`
+  - `config.peers.is_empty()` → `config.auto_attest.peers.is_empty()`
+- [ ] Update accessor `pub fn config(&self) -> &CommunerdConfig`
+- [ ] Update `Clone` impl (field name unchanged, type changed — no code change needed)
+- [ ] Update test helper `make_config()` — construct `CommunerdConfig` directly
+- [ ] Update import: `use foretias_core::config::CommunerdConfig` (remove NodeConfig)
 - [ ] `cargo build -p foretias-node` — verify
 
-### 3b. Refactor TimeFamilyServer to accept sub-configs
+### 4b. TimeFamilyServer (server/mod.rs)
 
-- [ ] Change `fn new_with_config(..., config: Option<NodeConfig>)` to:
-  ```rust
-  fn new_with_config(
-      ...,
-      config: Option<(AutoAttestConfig, CollisionConfig)>,
-  )
-  ```
-- [ ] Change `pub fn with_config(mut self, config: NodeConfig) -> Self` to:
-  ```rust
-  pub fn with_config(
-      mut self,
-      auto_attest: AutoAttestConfig,
-      collision: CollisionConfig,
-  ) -> Self
-  ```
-- [ ] Update `with_config` to pass sub-configs to `Communerd::new()`
-- [ ] Remove `use foretias_core::config::NodeConfig` import
+- [ ] Change `fn new_with_config(..., config: Option<NodeConfig>)` to `fn new_with_config(..., config: Option<CommunerdConfig>)`
+- [ ] Change `pub fn with_config(mut self, config: NodeConfig) -> Self` to `pub fn with_communerd(mut self, config: CommunerdConfig) -> Self`
+- [ ] Update internal `Communerd::new()` calls
+- [ ] Update import: `use foretias_core::config::CommunerdConfig` (remove NodeConfig)
 - [ ] `cargo build -p foretias-node` — verify
 
-### 3c. Migrate main.rs (cmd_serve)
+### 4c. main.rs (cmd_serve)
 
-- [ ] Replace `NodeConfig` struct literal with sub-config extraction from `time_family_cfg`:
-  ```rust
-  let server = if !peers.is_empty() {
-      let auto_attest = time_family_cfg.chronomatter.auto_attest.clone();
-      let collision = time_family_cfg.p2p.collision.clone();
-      Arc::new(server.with_config(auto_attest, collision))
-  } else {
-      Arc::new(server)
-  };
-  ```
-- [ ] Update peer display code:
-  ```rust
-  if let Some(c) = server.communerd() {
-      println!("  Peers  : {}", c.peers().join(", "));
-      println!("  Auto Attest Every: {} chronons", c.auto_attest_config().every_n_chronons);
-  }
-  ```
-- [ ] Remove `use foretias_core::config::NodeConfig` import from main.rs
+- [ ] Replace `NodeConfig` struct literal (lines ~340-350) with `time_family_cfg.communerd.clone()`
+- [ ] Update call from `server.with_config(node_config)` to `server.with_communerd(time_family_cfg.communerd.clone())`
+- [ ] Update peer display code (lines ~424-425):
+  - `c.config().peers` → `c.config().auto_attest.peers`
+  - `c.config().auto_attest_every_n` → `c.config().auto_attest.every_n_chronons`
+- [ ] Remove `NodeConfig` from import: `use foretias_core::config::TimeFamilyConfig;` (remove NodeConfig)
 - [ ] `cargo build -p foretias-node` — verify
 
-### 3d. Migrate integration tests
+### 4d. Integration tests (tests/integration.rs)
 
-- [ ] Update `test_two_nodes_auto_attest` in `p2p/foretias-node/tests/integration.rs`:
-  - Replace `NodeConfig { ... }` with `(AutoAttestConfig { ... }, CollisionConfig::default())`
-  - Update `server.with_config(config)` call
-- [ ] Update `test_peer_unreachable_does_not_crash` in `p2p/foretias-node/tests/integration.rs`:
-  - Same pattern
-- [ ] Remove `use foretias_core::config::NodeConfig` imports
+- [ ] Update `test_two_nodes_auto_attest`:
+  - Replace `NodeConfig { ... }` with `CommunerdConfig { listen_addr: addr_b.clone(), auto_attest: AutoAttestConfig { peers: vec![addr_b.clone()], every_n_chronons: 1, request_timeout_secs: 5 }, ..Default::default() }`
+  - Update `server.with_config(config)` to `server.with_communerd(config)`
+- [ ] Update `test_peer_unreachable_does_not_crash`:
+  - Same pattern: construct `CommunerdConfig`, call `with_communerd`
+- [ ] Update imports: `use foretias_core::config::{CommunerdConfig, AutoAttestConfig};` (remove NodeConfig)
 - [ ] `cargo test -p foretias-node` — verify
 
-### 3e. Migrate foretias-python PyNodeConfig
+### 4e. foretias-python PyNodeConfig (lib.rs)
 
-- [ ] Change `PyNodeConfig` — keep Python-facing API flat (Option B from spec)
-- [ ] Change `impl From<&NodeConfigInner> for PyNodeConfig` to `impl From<&TimeFamilyConfigInner> for PyNodeConfig`:
-  - Map `listen_addr` → `p2p.listen_addr`
-  - Map `version` → `version`
-  - Map `calendar_path` → `calendars[0].persist_path`
-  - Map `chronon_ns` → `chronomatter.chronon_ns`
-  - Map `serialized` → (dropped, no equivalent)
-  - Map `peers` → `chronomatter.auto_attest.peers`
-  - Map `auto_attest_every_n` → `chronomatter.auto_attest.every_n_chronons`
-  - Map `request_timeout_secs` → `chronomatter.auto_attest.request_timeout_secs`
-  - Map `p2p_listen` → `p2p.p2p_listen`
-  - Map `p2p_dial` → `p2p.p2p_dial`
-  - Map `dht_namespace` → `p2p.dht.namespace`
-  - Map `dht_bootstrap` → `p2p.dht.bootstrap`
-  - Map `collision` → `p2p.collision`
-- [ ] Update import: `use foretias_core::config::{TimeFamilyConfig as TimeFamilyConfigInner, CollisionConfig as CollisionConfigInner};`
-- [ ] Remove `NodeConfig` import from foretias-python
+- [ ] Change import: `use foretias_core::config::{TimeFamilyConfig as TimeFamilyConfigInner, CollisionConfig as CollisionConfigInner};` (remove NodeConfig)
+- [ ] Update `impl From<&TimeFamilyConfigInner> for PyNodeConfig`:
+  - `listen_addr` → `c.listen_addr.clone()` (top-level, not inside communerd)
+  - `version` → `c.version.clone()`
+  - `calendar_path` → `c.calendars[0].persist_path.to_string_lossy().to_string()`
+  - `chronon_ns` → `c.chronomatter.chronon_ns`
+  - `serialized` → `false` (dropped, no equivalent)
+  - `peers` → `c.communerd.auto_attest.peers.clone()`
+  - `auto_attest_every_n` → `c.communerd.auto_attest.every_n_chronons`
+  - `request_timeout_secs` → `c.communerd.auto_attest.request_timeout_secs`
+  - `p2p_listen` → `c.communerd.p2p_listen.clone()`
+  - `p2p_dial` → `c.communerd.p2p_dial.clone()`
+  - `dht_namespace` → `c.communerd.dht.namespace.clone()`
+  - `dht_bootstrap` → `c.communerd.dht.bootstrap.clone()`
+  - `collision` → `PyCollisionConfig::from(&c.communerd.collision)`
 - [ ] `cargo build -p foretias-python` — verify
 
-### 3f. Verify NodeConfig is fully isolated
+### 4f. Verify NodeConfig is fully isolated
 
 - [ ] Grep for `NodeConfig` across workspace — should only appear in:
   - `config/node.rs` (definition + impl + Default)
@@ -174,13 +199,13 @@
   - **Nowhere else**
 - [ ] `cargo build --workspace` — zero warnings
 - [ ] `cargo test --workspace` — all tests pass
-- [ ] **Checkpoint commit**: "Migration: replace NodeConfig runtime API with TimeFamilyConfig sub-configs"
+- [ ] **Checkpoint commit**: "Migration: replace all NodeConfig callers with CommunerdConfig, update server/communerd/main/tests/python"
 
 ---
 
-## Phase 4: auto_attestation_blob Test Migration
+## Phase 5: auto_attestation_blob Test Migration
 
-### 4a. Migrate tick.rs tests
+### 5a. Migrate tick.rs tests
 
 - [ ] Replace `auto_attestation_blob(...)` with `auto_attestation_blob_with_count(..., 0)` in:
   - `verify_pair_valid_returns_true` (~line 487)
@@ -189,7 +214,7 @@
   - `auto_attestation_blob_nonce_is_present` (~line 605)
 - [ ] `cargo test -p foretias-core -- auto_attestation` — verify
 
-### 4b. Migrate calendar.rs tests
+### 5b. Migrate calendar.rs tests
 
 - [ ] Replace `auto_attestation_blob(...)` with `auto_attestation_blob_with_count(..., 0)` in:
   - `integrity_check_full_chain` (~line 316, 320)
@@ -197,26 +222,31 @@
 - [ ] Update imports: `use crate::foretias::tick::auto_attestation_blob_with_count;`
 - [ ] `cargo test -p foretias-core -- integrity_check` — verify
 
-### 4c. Keep deprecated wrapper (no deprecation marker)
+### 5c. Keep wrapper (no deprecation marker)
 
-- [ ] `auto_attestation_blob` remains as a thin wrapper (no `#[deprecated]`, no warnings)
-- [ ] Re-export in `foretias/mod.rs` remains (no `#[allow(deprecated)]` needed)
-
-### 4d. Final verification
-
-- [ ] `cargo build --workspace` — zero warnings
-- [ ] `cargo test --workspace` — zero warnings, all tests pass
-- [ ] Grep for `#\[allow(` across workspace — should be **zero** (except bindgen injection in build.rs)
-- [ ] Grep for `deprecated` across workspace — should be **zero** (both markers removed)
+- [ ] `auto_attestation_blob` remains as a thin wrapper (no `#[deprecated]`)
+- [ ] **Checkpoint commit**: "Migration: tests use auto_attestation_blob_with_count"
 
 ---
 
-## Phase 5: Merge & Cleanup
+## Phase 6: Final Verification & Merge
+
+### 6a. Final verification
+
+- [ ] `cargo build --workspace` — zero warnings
+- [ ] `cargo test --workspace` — zero warnings, all tests pass
+- [ ] Grep for `#\[allow(` across workspace — zero matches (except bindgen in build.rs)
+- [ ] Grep for `deprecated` across workspace — zero matches
+- [ ] Grep for `P2PConfig` across workspace — zero matches
+- [ ] Grep for `NodeConfig` across workspace — only in config/node.rs, config/time_family.rs, config/mod.rs
+- [ ] Verify each time being has exactly one config: `ChronomatterConfig`, `CommunerdConfig`, `CalendarConfig`
+
+### 6b. Merge
 
 - [ ] Verify all work is complete in `/home/hcbusy/tmp/foretias-worktrees/CLEANUP_REPAIRS_32410` and committed to `cleanup/repairs`
-- [ ] Merge `cleanup/repairs` to alpha
+- [ ] Merge `cleanup/repairs` to alpha:
   - [ ] `cd /home/hcbusy/webhash/foretias && git merge cleanup/repairs --no-ff -m "Major: Cleanup Repairs, Phase: Complete...opencode 1.14.39, Qwen3.6-27B-AWQ-BF16-INT4"`
-- [ ] Final workspace verification:
+- [ ] Final workspace verification on alpha:
   - [ ] `cargo build --workspace` — zero warnings
   - [ ] `cargo test --workspace` — all pass, zero warnings
 - [ ] Cleanup `/home/hcbusy/tmp/foretias-worktrees/CLEANUP_REPAIRS_32410`
