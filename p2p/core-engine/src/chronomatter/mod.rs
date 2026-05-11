@@ -386,6 +386,7 @@ impl Chronomatter {
 
         let record = self.build_tick_record(tick, new_pub)?;
         self.notify_observer(tick, &new_pub, &record);
+        info!(tick = tick, "Tick #{}", tick);
 
         Ok(())
     }
