@@ -21,7 +21,6 @@ fn derive_seal_key(handle: &PrivKeyHandle) -> Result<[u8; 32], CryptoError> {
 }
 
 /// Software-based crypto server backed by libsodium and ChaCha20-Poly1305.
-#[allow(dead_code)]
 pub struct SoftwareCryptoServer {
     /// The curve this server operates on.
     curve: ForetiasCurve,
@@ -40,8 +39,10 @@ pub struct SoftwareCryptoServer {
     pub dilithium_pub_key: Option<SignatureBytes>,
     dilithium_secret_key: Option<zeroize::Zeroizing<SignatureBytes>>,
     pub sphincs_sha2_256f_pub_key: Option<SignatureBytes>,
+    #[allow(dead_code)]
     sphincs_sha2_256f_secret_key: Option<zeroize::Zeroizing<SignatureBytes>>,
     pub mlkem_pub_key: Option<SignatureBytes>,
+    #[allow(dead_code)]
     mlkem_secret_key: Option<zeroize::Zeroizing<SignatureBytes>>,
 }
 

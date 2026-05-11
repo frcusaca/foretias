@@ -350,17 +350,12 @@ fn default_tb_version() -> u32 {
 mod tests {
     use super::*;
     use crate::crypto_server;
-    use crate::clock::{Clock, SystemClock};
+    use crate::clock::SystemClock;
     use crate::foretias::calendar::Calendar;
 
     fn make_server() -> Box<dyn CryptoServer> {
         crypto_server::new_software(crate::crypto_server::ForetiasCurve::Ed25519)
             .expect("failed to create software crypto server")
-    }
-
-    #[allow(dead_code)]
-    fn make_clock() -> Box<dyn Clock> {
-        Box::new(SystemClock)
     }
 
     fn make_cal(server: &dyn CryptoServer) -> Calendar {
