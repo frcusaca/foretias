@@ -371,14 +371,14 @@ mod tests {
         };
         cal.append(TickRecord {
             tick_number,
-            public_key,
+            public_key: public_key.into(),
             signature_algorithm: "Ed25519".to_string(),
-            forward_foretis: serde_json::to_vec(&foretis).unwrap(),
-            backward_foretis: vec![],
-            aa_nonce: [0u8; 16],
+            forward_foretis: serde_json::to_vec(&foretis).unwrap().into(),
+            backward_foretis: vec![].into(),
+            aa_nonce: [0u8; 16].into(),
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
-            genesis_signature: Vec::new(),
+            genesis_signature: vec![].into(),
             tb_version: 0,
         }).unwrap();
         cal
@@ -449,14 +449,14 @@ mod tests {
         let mut cal = Calendar::new(tbid, "bad-cal");
         cal.append(TickRecord {
             tick_number: 1,
-            public_key: vec![0u8; 32],
+            public_key: vec![0u8; 32].into(),
             signature_algorithm: "Ed25519".to_string(),
-            forward_foretis: vec![],
-            backward_foretis: vec![],
-            aa_nonce: [0u8; 16],
+            forward_foretis: vec![].into(),
+            backward_foretis: vec![].into(),
+            aa_nonce: [0u8; 16].into(),
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
-            genesis_signature: Vec::new(),
+            genesis_signature: vec![].into(),
             tb_version: 0,
         }).unwrap();
         let content = b"test";
@@ -486,26 +486,26 @@ mod tests {
 
         let prev = TickRecord {
             tick_number: 1,
-            public_key: pub_key.to_vec(),
+            public_key: pub_key.to_vec().into(),
             signature_algorithm: sig_alg.clone(),
-            forward_foretis: vec![],
-            backward_foretis: vec![],
-            aa_nonce: [0u8; 16],
+            forward_foretis: vec![].into(),
+            backward_foretis: vec![].into(),
+            aa_nonce: [0u8; 16].into(),
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
-            genesis_signature: Vec::new(),
+            genesis_signature: vec![].into(),
             tb_version: 0,
         };
         let curr = TickRecord {
             tick_number: 2,
-            public_key: pub_key.to_vec(),
+            public_key: pub_key.to_vec().into(),
             signature_algorithm: sig_alg.clone(),
-            forward_foretis: sig_bytes.clone(),
-            backward_foretis: sig_bytes,
-            aa_nonce: nonce,
+            forward_foretis: FTByteVector::from(sig_bytes.clone()),
+            backward_foretis: FTByteVector::from(sig_bytes),
+            aa_nonce: FTByteArray::from(nonce),
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
-            genesis_signature: Vec::new(),
+            genesis_signature: vec![].into(),
             tb_version: 0,
         };
 
@@ -530,26 +530,26 @@ mod tests {
 
         let prev = TickRecord {
             tick_number: 1,
-            public_key: pub_key.to_vec(),
+            public_key: pub_key.to_vec().into(),
             signature_algorithm: sig_alg.clone(),
-            forward_foretis: vec![],
-            backward_foretis: vec![],
-            aa_nonce: [0u8; 16],
+            forward_foretis: vec![].into(),
+            backward_foretis: vec![].into(),
+            aa_nonce: [0u8; 16].into(),
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
-            genesis_signature: Vec::new(),
+            genesis_signature: vec![].into(),
             tb_version: 0,
         };
         let curr = TickRecord {
             tick_number: 2,
-            public_key: pub_key.to_vec(),
+            public_key: pub_key.to_vec().into(),
             signature_algorithm: sig_alg.clone(),
-            forward_foretis: sig_bytes.clone(),
-            backward_foretis: sig_bytes.clone(),
-            aa_nonce: nonce,
+            forward_foretis: FTByteVector::from(sig_bytes.clone()),
+            backward_foretis: FTByteVector::from(sig_bytes.clone()),
+            aa_nonce: FTByteArray::from(nonce),
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
-            genesis_signature: Vec::new(),
+            genesis_signature: vec![].into(),
             tb_version: 0,
         };
 
@@ -558,14 +558,14 @@ mod tests {
         sig_bytes[0] ^= 0xFF;
         let curr_tampered = TickRecord {
             tick_number: 2,
-            public_key: pub_key.to_vec(),
+            public_key: pub_key.to_vec().into(),
             signature_algorithm: sig_alg,
-            forward_foretis: sig_bytes,
-            backward_foretis: vec![0u8; 64],
-            aa_nonce: nonce,
+            forward_foretis: FTByteVector::from(sig_bytes),
+            backward_foretis: vec![0u8; 64].into(),
+            aa_nonce: FTByteArray::from(nonce),
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
-            genesis_signature: Vec::new(),
+            genesis_signature: vec![].into(),
             tb_version: 0,
         };
 

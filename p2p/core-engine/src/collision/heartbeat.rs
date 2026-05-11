@@ -38,9 +38,9 @@ mod tests {
         let hb = Heartbeat {
             peer_id: "test-peer".to_string(),
             timestamp_ns: 1234567890,
-            nonce: [0xAB; 16],
+            nonce: [0xAB; 16].into(),
             curve: 1,
-            signature: vec![0xFF; 64],
+            signature: vec![0xFF; 64].into(),
         };
         let canon = hb.canonical();
         // len2+peer_id + timestamp(8) + nonce(16) + curve(1)
@@ -57,9 +57,9 @@ mod tests {
         let hb = Heartbeat {
             peer_id: "peer-abc".to_string(),
             timestamp_ns: 999,
-            nonce: [0x42; 16],
+            nonce: [0x42; 16].into(),
             curve: 2,
-            signature: vec![0x11; 64],
+            signature: vec![0x11; 64].into(),
         };
         let json = serde_json::to_string(&hb).unwrap();
         let parsed: Heartbeat = serde_json::from_str(&json).unwrap();

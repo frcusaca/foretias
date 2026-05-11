@@ -54,8 +54,8 @@ mod tests {
             peer_scores: vec![],
             committee: vec!["peer-1".into()],
             threshold: 2,
-            frost_signature: vec![0xAB; 64],
-            committee_pubkey: vec![0xCD; 32],
+            frost_signature: vec![0xAB; 64].into(),
+            committee_pubkey: vec![0xCD; 32].into(),
         }).unwrap()
     }
 

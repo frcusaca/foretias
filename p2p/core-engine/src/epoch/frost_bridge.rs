@@ -82,14 +82,14 @@ mod tests {
     fn make_commitment_msg() -> FrostMsg {
         FrostMsg::Commitment {
             from: "peer-1".into(),
-            commitment: vec![0x01; 32],
+            commitment: vec![0x01; 32].into(),
         }
     }
 
     fn make_share_msg() -> FrostMsg {
         FrostMsg::Share {
             from: "peer-1".into(),
-            share: vec![0x02; 64],
+            share: vec![0x02; 64].into(),
         }
     }
 

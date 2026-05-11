@@ -191,14 +191,14 @@ mod tests {
     fn make_tick(tick_number: u64) -> TickRecord {
         TickRecord {
             tick_number,
-            public_key: vec![0u8; 32],
+            public_key: vec![0u8; 32].into(),
             signature_algorithm: "Ed25519".to_string(),
-            forward_foretis: vec![],
-            backward_foretis: vec![],
-            aa_nonce: [0u8; 16],
+            forward_foretis: vec![].into(),
+            backward_foretis: vec![].into(),
+            aa_nonce: [0u8; 16].into(),
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
-            genesis_signature: Vec::new(),
+            genesis_signature: vec![].into(),
             tb_version: 0,
         }
     }
@@ -324,14 +324,14 @@ mod tests {
 
             cal.append(TickRecord {
                 tick_number: i,
-                public_key: keypairs[i as usize].0.to_vec(),
+                public_key: keypairs[i as usize].0.to_vec().into(),
                 signature_algorithm: "Ed25519".to_string(),
-                forward_foretis,
-                backward_foretis,
-                aa_nonce: nonce,
+                forward_foretis: forward_foretis.into(),
+                backward_foretis: backward_foretis.into(),
+                aa_nonce: nonce.into(),
                 stamps_per_tick: 0,
                 external_attestations: Vec::new(),
-            genesis_signature: Vec::new(),
+            genesis_signature: vec![].into(),
             tb_version: 0,
             }).unwrap();
         }
@@ -374,14 +374,14 @@ mod tests {
 
             cal.append(TickRecord {
                 tick_number: i,
-                public_key: keypairs[i as usize].0.to_vec(),
+                public_key: keypairs[i as usize].0.to_vec().into(),
                 signature_algorithm: "Ed25519".to_string(),
-                forward_foretis,
-                backward_foretis,
-                aa_nonce: nonce,
+                forward_foretis: forward_foretis.into(),
+                backward_foretis: backward_foretis.into(),
+                aa_nonce: nonce.into(),
                 stamps_per_tick: 0,
                 external_attestations: Vec::new(),
-            genesis_signature: Vec::new(),
+            genesis_signature: vec![].into(),
             tb_version: 0,
             }).unwrap();
         }

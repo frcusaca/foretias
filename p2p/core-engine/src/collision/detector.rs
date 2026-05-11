@@ -83,12 +83,12 @@ mod tests {
         let mut hb = Heartbeat {
             peer_id: peer_id.to_string(),
             timestamp_ns,
-            nonce,
+            nonce: nonce.into(),
             curve: 1,
-            signature: vec![],
+            signature: vec![].into(),
         };
         let sig = server.sign(&hb.canonical()).unwrap();
-        hb.signature = sig.bytes.to_vec();
+        *hb.signature = sig.bytes.to_vec();
         hb
     }
 
@@ -147,22 +147,22 @@ mod tests {
         let mut hb = Heartbeat {
             peer_id: "my-peer".to_string(),
             timestamp_ns: 12345,
-            nonce,
+            nonce: nonce.into(),
             curve: 1,
-            signature: vec![],
+            signature: vec![].into(),
         };
         let _sig_bytes: [u8; 32] = priv_key.bytes;
         let sig = crate::core::signing::ed25519_sign(
             &crate::core::bindings::ForetiasPrivKey32 { bytes: priv_key.bytes },
             &hb.canonical(),
         ).unwrap();
-        hb.signature = sig.bytes.to_vec();
+        *hb.signature = sig.bytes.to_vec();
 
         let result = detector.on_heartbeat(&hb, server.as_ref());
         assert!(result.is_some());
         if let Some(CollisionEvent::Confirmed { foreign_heartbeat }) = result {
             assert_eq!(foreign_heartbeat.peer_id, "my-peer");
-            assert_eq!(foreign_heartbeat.nonce, nonce);
+            assert_eq!(*foreign_heartbeat.nonce, nonce);
         }
     }
 }

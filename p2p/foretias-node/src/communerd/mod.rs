@@ -366,12 +366,12 @@ impl Communerd {
             let mut hb = foretias_core::collision::Heartbeat {
                 peer_id: peer_id_str.clone(),
                 timestamp_ns,
-                nonce,
+                nonce: nonce.into(),
                 curve: 1,
-                signature: vec![],
+                signature: vec![].into(),
             };
             if let Ok(sig) = crypto.sign(&hb.canonical()) {
-                hb.signature = sig.bytes.to_vec();
+                hb.signature = sig.bytes.to_vec().into();
             }
             if let Some(ref tx) = cmd_tx {
                 let n = ns.lock().unwrap().clone();

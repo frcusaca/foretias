@@ -64,8 +64,8 @@ mod tests {
             ],
             committee: vec!["C1".into(), "C2".into()],
             threshold: 2,
-            frost_signature: vec![0xAA; 64],
-            committee_pubkey: vec![0xBB; 32],
+            frost_signature: vec![0xAA; 64].into(),
+            committee_pubkey: vec![0xBB; 32].into(),
         }
     }
 
@@ -80,7 +80,7 @@ mod tests {
     fn epoch_snapshot_canonical_excludes_signature() {
         let mut s = make_snapshot(1);
         let canon1 = s.canonical_bytes();
-        s.frost_signature = vec![0xFF; 64];
+        s.frost_signature = vec![0xFF; 64].into();
         let canon2 = s.canonical_bytes();
         assert_eq!(canon1, canon2);
     }

@@ -313,14 +313,14 @@ fn test_crash_recovery_calendar() {
     for i in 0..3u64 {
         let record = foretias_core::foretias::tick::TickRecord {
             tick_number: i,
-            public_key: vec![0u8; 32],
+            public_key: vec![0u8; 32].into(),
             signature_algorithm: "Ed25519".to_string(),
-            forward_foretis: vec![],
-            backward_foretis: vec![],
-            aa_nonce: [0u8; 16],
+            forward_foretis: vec![].into(),
+            backward_foretis: vec![].into(),
+            aa_nonce: [0u8; 16].into(),
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
-            genesis_signature: Vec::new(),
+            genesis_signature: Vec::new().into(),
             tb_version: 0,
         };
         cal.append(record).expect("append failed");
@@ -334,14 +334,14 @@ fn test_crash_recovery_calendar() {
     for i in 0..5u64 {
         let record = foretias_core::foretias::tick::TickRecord {
             tick_number: i,
-            public_key: vec![0u8; 32],
+            public_key: vec![0u8; 32].into(),
             signature_algorithm: "Ed25519".to_string(),
-            forward_foretis: vec![],
-            backward_foretis: vec![],
-            aa_nonce: [0u8; 16],
+            forward_foretis: vec![].into(),
+            backward_foretis: vec![].into(),
+            aa_nonce: [0u8; 16].into(),
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
-            genesis_signature: Vec::new(),
+            genesis_signature: Vec::new().into(),
             tb_version: 0,
         };
         cal2.append(record).expect("append failed");

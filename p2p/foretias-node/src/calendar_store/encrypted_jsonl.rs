@@ -216,14 +216,14 @@ mod tests {
     fn make_tick(tick_number: u64) -> TickRecord {
         TickRecord {
             tick_number,
-            public_key: vec![0u8; 32],
+            public_key: vec![0u8; 32].into(),
             signature_algorithm: "Ed25519".to_string(),
-            forward_foretis: vec![],
-            backward_foretis: vec![],
-            aa_nonce: [0u8; 16],
+            forward_foretis: vec![].into(),
+            backward_foretis: vec![].into(),
+            aa_nonce: [0u8; 16].into(),
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
-            genesis_signature: Vec::new(),
+            genesis_signature: Vec::new().into(),
             tb_version: 0,
         }
     }
@@ -266,28 +266,28 @@ mod tests {
         let plaintext_path = tmp_dir.join("calendar.json");
         let encrypted_path = tmp_dir.join("calendar.jsonl");
 
-        // Write a v0.1-format plaintext calendar
-        let pk: Vec<u8> = vec![0u8; 32];
-        let nonce: Vec<u8> = vec![0u8; 16];
+        let pk_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(vec![0u8; 32]);
+        let nonce_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(vec![0u8; 16]);
+        let tbid_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(vec![1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
         let cal_json = serde_json::json!({
-            "tbid": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+            "tbid": tbid_b64,
             "tbn": "legacy-cal",
-            "stamp_tbid": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+            "stamp_tbid": tbid_b64,
             "ticks": [
                 {
                     "tick_number": 1,
-                    "public_key": pk.clone(),
-                    "forward_foretis": [],
-                    "backward_foretis": [],
-                    "aa_nonce": nonce.clone(),
+                    "public_key": pk_b64,
+                    "forward_foretis": "",
+                    "backward_foretis": "",
+                    "aa_nonce": nonce_b64,
                     "external_attestations": []
                 },
                 {
                     "tick_number": 2,
-                    "public_key": pk,
-                    "forward_foretis": [],
-                    "backward_foretis": [],
-                    "aa_nonce": nonce,
+                    "public_key": pk_b64,
+                    "forward_foretis": "",
+                    "backward_foretis": "",
+                    "aa_nonce": nonce_b64,
                     "external_attestations": []
                 }
             ]

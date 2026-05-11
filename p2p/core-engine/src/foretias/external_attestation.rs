@@ -25,14 +25,14 @@ mod tests {
     fn make_dummy_tick() -> TickRecord {
         TickRecord {
             tick_number: 42,
-            public_key: vec![0u8; 32],
+            public_key: vec![0u8; 32].into(),
             signature_algorithm: "Ed25519".to_string(),
-            forward_foretis: vec![],
-            backward_foretis: vec![],
-            aa_nonce: [0u8; 16],
+            forward_foretis: vec![].into(),
+            backward_foretis: vec![].into(),
+            aa_nonce: [0u8; 16].into(),
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
-            genesis_signature: Vec::new(),
+            genesis_signature: vec![].into(),
             tb_version: 0,
         }
     }
@@ -41,8 +41,8 @@ mod tests {
     fn external_attestation_serde_roundtrip() {
         let foretis = crate::foretias::tick::Foretis {
             tick_number: 42,
-            content_hash: [1u8; 32],
-            signature: vec![2u8; 64],
+            content_hash: [1u8; 32].into(),
+            signature: vec![2u8; 64].into(),
             signature_algorithm: "Ed25519".to_string(),
             tbid: crate::foretias::types::Tbid::from_raw([3u8; 96]),
             echo: "test".to_string(),

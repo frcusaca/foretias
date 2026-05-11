@@ -12,3 +12,6 @@ pub use tick::{TickRecord, Foretis, CalendarLookup, stamp, verify, auto_attestat
 pub use calendar::Calendar;
 pub use external_attestation::ExternalAttestation;
 pub use callbacks::{TickObserver, Attester, PeerMessenger, PeerAddr, CommunityQuery, CommunityResponse, TransportError, AutoAttestObserver};
+
+#[cfg(test)]
+mod encoding_tests;
