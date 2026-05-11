@@ -14,12 +14,12 @@
 - [x](2026-05-11 14:31) Revert any C11 changes from previous attempt — N/A, clean worktree from alpha
 - [x](2026-05-11 14:31) Revert any `display.rs` from previous display-only attempt — N/A, clean worktree from alpha
 ... (implementation tasks below) ...
-- [ ] Verify all work complete in worktree and committed to `feat/custom-base64-display`
-- [ ] Merge `feat/custom-base64-display` to `alpha`
-- [ ] Cleanup worktree:
-  - [ ] Confirm all checkboxes above completed
-  - [ ] `git worktree remove /home/hcbusy/tmp/foretias-worktrees/FORETIAS_CUSTOM_BASE64_SPEC_88888`
-  - [ ] This is the last checkbox in this plan
+- [x](2026-05-11 16:20) Verify all work complete in worktree and committed to `feat/custom-base64-display`
+- [x](2026-05-11 16:20) Merge `feat/custom-base64-display` to `alpha` (fast-forward)
+- [x](2026-05-11 16:20) Cleanup worktree:
+  - [x](2026-05-11 16:20) Confirm all checkboxes above completed
+  - [x](2026-05-11 16:20) `git worktree remove /home/hcbusy/tmp/foretias-worktrees/FORETIAS_CUSTOM_BASE64_SPEC_88888`
+  - [x](2026-05-11 16:20) This is the last checkbox in this plan
 
 ---
 
@@ -167,6 +167,6 @@
 ## Phase 8: Merge
 
 **Tasks:**
-- [ ] Verify all work committed to `feat/custom-base64-display`
-- [ ] Merge `feat/custom-base64-display` to `alpha`
-- [ ] Cleanup worktree (see top of this file)
+- [x](2026-05-11 16:15) Verify all work committed to `feat/custom-base64-display`
+- [x](2026-05-11 16:15) Merge `feat/custom-base64-display` to `alpha` (fast-forward)
+- [x](2026-05-11 16:15) Cleanup worktree (see top of this file)
