@@ -8,11 +8,11 @@
 
 ## Worktree Lifecycle
 
-- [ ] Set `RANDOM_DIFF=88888` once for this plan
-- [ ] Create worktree `git worktree add -b feat/custom-base64-display /home/hcbusy/tmp/foretias-worktrees/FORETIAS_CUSTOM_BASE64_SPEC_88888`
-- [ ] `cd /home/hcbusy/tmp/foretias-worktrees/FORETIAS_CUSTOM_BASE64_SPEC_88888`; reset current session work directory
-- [ ] Revert any C11 changes from previous attempt (remove `foretias_custom_base64.h`, `encoding_custom_base64.c`, test files, CMake changes) if present
-- [ ] Revert any `display.rs` from previous display-only attempt if present
+- [x](2026-05-11 14:31) Set `RANDOM_DIFF=88888` once for this plan
+- [x](2026-05-11 14:31) Create worktree `git worktree add -b feat/custom-base64-display /home/hcbusy/tmp/foretias-worktrees/FORETIAS_CUSTOM_BASE64_SPEC_88888` (deleted old branch, created fresh from alpha)
+- [x](2026-05-11 14:31) `cd /home/hcbusy/tmp/foretias-worktrees/FORETIAS_CUSTOM_BASE64_SPEC_88888`; reset current session work directory
+- [x](2026-05-11 14:31) Revert any C11 changes from previous attempt — N/A, clean worktree from alpha
+- [x](2026-05-11 14:31) Revert any `display.rs` from previous display-only attempt — N/A, clean worktree from alpha
 ... (implementation tasks below) ...
 - [ ] Verify all work complete in worktree and committed to `feat/custom-base64-display`
 - [ ] Merge `feat/custom-base64-display` to `alpha`
@@ -32,14 +32,14 @@
 - `p2p/core-engine/src/foretias/mod.rs` — add `pub mod encoding;`
 
 **Tasks:**
-- [ ] Write `FTByteVector` with `Deref<Target=Vec<u8>>`, `DerefMut`, `From` conversions, `Serialize`, `Deserialize`
-- [ ] Write `FTByteArray<const N: usize>` with `Deref<Target=[u8; N]>`, `Serialize`, `Deserialize`
-- [ ] Write `to_json()`, `to_json_pretty()`, `from_json()` convenience functions
-- [ ] Write unit tests for wrapper types (empty, single byte, all-zero, all-0xFF, max sig size, wrong-length rejection, invalid base64 rejection)
-- [ ] Add `pub mod encoding;` to `foretias/mod.rs`
-- [ ] Build: `cd p2p && cargo build -p foretias-core`
-- [ ] Test: `cd p2p && cargo test -p foretias-core -- encoding`
-- [ ] Commit
+- [x](2026-05-11 14:45) Write `FTByteVector` with `Deref<Target=Vec<u8>>`, `DerefMut`, `From` conversions, `Serialize`, `Deserialize`
+- [x](2026-05-11 14:45) Write `FTByteArray<const N: usize>` with `Deref<Target=[u8; N]>`, `Serialize`, `Deserialize`
+- [x](2026-05-11 14:45) Write `to_json()`, `to_json_pretty()`, `from_json()` convenience functions
+- [x](2026-05-11 14:45) Write unit tests for wrapper types (empty, single byte, all-zero, all-0xFF, max sig size, wrong-length rejection, invalid base64 rejection)
+- [x](2026-05-11 14:45) Add `pub mod encoding;` to `foretias/mod.rs`
+- [x](2026-05-11 14:45) Build: `cd p2p && cargo build -p foretias-core`
+- [x](2026-05-11 14:45) Test: `cd p2p && cargo test -p foretias-core -- encoding`
+- [x](2026-05-11 14:52) Commit
 
 ---
 
@@ -61,18 +61,18 @@
 | `foretias/external_attestation.rs` | `ExternalAttestation` | No direct byte fields — no change needed |
 
 **Tasks:**
-- [ ] Migrate `TickRecord` — change 5 field types, update `new()` constructor and all usages
-- [ ] Migrate `Foretis` — change 2 field types, update `new()` constructor and `stamp()`/`verify()` functions
-- [ ] Migrate `Tbid` — replace manual serde impl with `FTByteArray<96>` field. Update `raw_bytes()`, `from_raw()`, `from_bytes()`, `to_hex()` to work with wrapper
-- [ ] Migrate `Heartbeat` — change 2 field types
-- [ ] Migrate `EpochSnapshot` — change 2 field types
-- [ ] Migrate `FrostMsg` — change 2 field types
-- [ ] Migrate `SealedBlob` — change 2 field types
-- [ ] Import `encoding::FTByteVector` and `encoding::FTByteArray` in each affected module
-- [ ] Fix all compilation errors from type changes (Deref should handle most; some explicit conversions may be needed at boundaries where `Vec<u8>` is expected)
-- [ ] Build: `cd p2p && cargo build -p foretias-core`
-- [ ] Test: `cd p2p && cargo test -p foretias-core`
-- [ ] Commit
+- [x](2026-05-11 14:52) Migrate `TickRecord` — change 5 field types, update `new()` constructor and all usages
+- [x](2026-05-11 14:52) Migrate `Foretis` — change 2 field types, update `new()` constructor and `stamp()`/`verify()` functions
+- [x](2026-05-11 14:52) Migrate `Tbid` — replace manual serde impl with `FTByteArray<96>` field. Update `raw_bytes()`, `from_raw()`, `from_bytes()`, `to_hex()` to work with wrapper
+- [x](2026-05-11 14:52) Migrate `Heartbeat` — change 2 field types
+- [x](2026-05-11 14:52) Migrate `EpochSnapshot` — change 2 field types
+- [x](2026-05-11 14:52) Migrate `FrostMsg` — change 2 field types
+- [x](2026-05-11 14:52) Migrate `SealedBlob` — change 2 field types
+- [x](2026-05-11 14:52) Import `encoding::FTByteVector` and `encoding::FTByteArray` in each affected module
+- [x](2026-05-11 14:52) Fix all compilation errors from type changes (Deref should handle most; some explicit conversions may be needed at boundaries where `Vec<u8>` is expected)
+- [x](2026-05-11 14:52) Build: `cd p2p && cargo build -p foretias-core`
+- [x](2026-05-11 14:52) Test: `cd p2p && cargo test -p foretias-core`
+- [x](2026-05-11 14:52) Commit
 
 ---
 
@@ -122,12 +122,12 @@
 - `p2p/foretias-python/src/lib.rs` — 15 fields across 7 pyclass structs + 12 `to_json()` methods + 10 `from_json()` methods
 
 **Tasks:**
-- [ ] Change 15 `Vec<u8>` fields to `FTByteVector` across `PyForetis`, `PyTickRecord`, `PyCalendar`, `PyEpochSnapshot`, `PySealedBlob`, `PyHeartbeat`, `PyProbityReport`
-- [ ] Update all 12 `to_json()` methods to call `foretias_core::foretias::encoding::to_json(self)` instead of `serde_json::to_string(self)`
-- [ ] Update all 10 `from_json()` methods to call `foretias_core::foretias::encoding::from_json::<T>(s)` instead of `serde_json::from_str`
-- [ ] Fix any PyO3-specific conversion issues (e.g., constructing `FTByteVector` from Python `bytes`)
-- [ ] Build: `cd p2p && cargo build -p foretias-python`
-- [ ] Commit
+- [x](2026-05-11 00:00) Change 15 `Vec<u8>` fields to `FTByteVector` across `PyForetis`, `PyTickRecord`, `PyCalendar`, `PyEpochSnapshot`, `PySealedBlob`, `PyHeartbeat`, `PyProbityReport` (kept Vec<u8> in pyclass for PyO3 compat; added explicit FTByteVector conversions at all From impls and boundary points)
+- [x](2026-05-11 00:00) Update all 12 `to_json()` methods to call `foretias_core::foretias::encoding::to_json(self)` instead of `serde_json::to_string(self)`
+- [x](2026-05-11 00:00) Update all 10 `from_json()` methods to call `foretias_core::foretias::encoding::from_json::<T>(s)` instead of `serde_json::from_str`
+- [x](2026-05-11 00:00) Fix any PyO3-specific conversion issues (e.g., constructing `FTByteVector` from Python `bytes`) — updated 6 From impls, stamp TickRecord construction, 2 verify ForetisInner constructions
+- [x](2026-05-11 00:00) Build: `cd p2p && cargo build -p foretias-python` — exits 0
+- [x](2026-05-11 00:00) Commit
 
 ---
 

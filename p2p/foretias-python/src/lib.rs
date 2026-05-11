@@ -16,6 +16,7 @@ use foretias_core::crypto_server::{self, CryptoServer, ForetiasCurve, PublicKeyB
 use foretias_core::foretias::{self, calendar::Calendar as CalendarInner, tick::TickRecord as TickRecordInner, external_attestation::ExternalAttestation as ExternalAttestationInner};
 use foretias_core::foretias::tick::{Foretis as ForetisInner, CalendarLookup};
 use foretias_core::foretias::types::Tbid;
+use foretias_core::foretias::encoding::{FTByteVector, FTByteArray, to_json, from_json};
 use foretias_core::core::bindings::{ForetiasPubKey32, ForetiasSig64};
 use foretias_core::epoch::snapshot::{PeerScore as PeerScoreInner, EpochSnapshot as EpochSnapshotInner};
 use foretias_core::config::{TimeFamilyConfig as TimeFamilyConfigInner, CollisionConfig as CollisionConfigInner};
@@ -50,8 +51,8 @@ impl From<&ForetisInner> for PyForetis {
     fn from(f: &ForetisInner) -> Self {
         Self {
             tick_number: f.tick_number,
-            content_hash: f.content_hash.to_vec(),
-            signature: f.signature.clone(),
+            content_hash: f.content_hash.as_slice().to_vec(),
+            signature: FTByteVector::into(f.signature.clone()),
             signature_algorithm: f.signature_algorithm.clone(),
             tbid: f.tbid.raw_bytes().to_vec(),
             echo: f.echo.clone(),
@@ -81,7 +82,7 @@ impl PyForetis {
     /// Construct a PyForetis from a JSON string.
     #[classmethod]
     fn from_json(_cls: &Bound<'_, PyType>, json_str: &str) -> PyResult<Self> {
-        serde_json::from_str(json_str)
+        from_json(json_str)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
     }
 
@@ -93,7 +94,7 @@ impl PyForetis {
     }
 
     fn to_json(&self) -> String {
-        serde_json::to_string(self).unwrap_or_else(|_| "{}".to_string())
+        to_json(self).unwrap_or_else(|_| "{}".to_string())
     }
 }
 
@@ -144,10 +145,10 @@ impl From<&TickRecordInner> for PyTickRecord {
     fn from(t: &TickRecordInner) -> Self {
         Self {
             tick_number: t.tick_number,
-            public_key: t.public_key.clone(),
-            forward_foretis: t.forward_foretis.clone(),
-            backward_foretis: t.backward_foretis.clone(),
-            aa_nonce: t.aa_nonce.to_vec(),
+            public_key: FTByteVector::into(t.public_key.clone()),
+            forward_foretis: FTByteVector::into(t.forward_foretis.clone()),
+            backward_foretis: FTByteVector::into(t.backward_foretis.clone()),
+            aa_nonce: t.aa_nonce.as_slice().to_vec(),
             external_attestations: t.external_attestations.iter().map(PyExternalAttestation::from).collect(),
         }
     }
@@ -160,7 +161,7 @@ impl PyTickRecord {
     }
 
     fn to_json(&self) -> String {
-        serde_json::to_string(self).unwrap_or_else(|_| "{}".to_string())
+        to_json(self).unwrap_or_else(|_| "{}".to_string())
     }
 }
 
@@ -197,7 +198,7 @@ impl PyCalendar {
     }
 
     fn to_json(&self) -> String {
-        serde_json::to_string(self).unwrap_or_else(|_| "{}".to_string())
+        to_json(self).unwrap_or_else(|_| "{}".to_string())
     }
 
     fn latest_tick(&self) -> Option<u64> {
@@ -362,14 +363,14 @@ impl PyTimeFamily {
         let pub_key_bytes = pubkey_to_vec(self.server.public_key());
         let record = TickRecordInner {
             tick_number,
-            public_key: pub_key_bytes,
+            public_key: pub_key_bytes.into(),
             signature_algorithm: sig_alg,
-            forward_foretis: vec![],
-            backward_foretis: vec![],
-            aa_nonce: [0u8; 16],
+            forward_foretis: FTByteVector::new(),
+            backward_foretis: FTByteVector::new(),
+            aa_nonce: FTByteArray::zeros(),
             stamps_per_tick: 0,
             external_attestations: Vec::new(),
-            genesis_signature: Vec::new(),
+            genesis_signature: FTByteVector::new(),
             tb_version: 0,
         };
 
@@ -390,8 +391,8 @@ impl PyTimeFamily {
 
         let inner_foretis = ForetisInner {
             tick_number: foretis.tick_number,
-            content_hash,
-            signature: foretis.signature.clone(),
+            content_hash: FTByteArray::new(content_hash),
+            signature: foretis.signature.clone().into(),
             signature_algorithm: foretis.signature_algorithm.clone(),
             tbid,
             echo: foretis.echo.clone(),
@@ -536,8 +537,8 @@ impl PyTimeFamilyServer {
 
         let inner_foretis = ForetisInner {
             tick_number: foretis.tick_number,
-            content_hash,
-            signature: foretis.signature.clone(),
+            content_hash: FTByteArray::new(content_hash),
+            signature: foretis.signature.clone().into(),
             signature_algorithm: foretis.signature_algorithm.clone(),
             tbid,
             echo: foretis.echo.clone(),
@@ -713,7 +714,7 @@ impl PyPeerScore {
 
     #[classmethod]
     fn from_json(_cls: &Bound<'_, PyType>, json_str: &str) -> PyResult<Self> {
-        serde_json::from_str(json_str)
+        from_json(json_str)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
     }
 
@@ -722,7 +723,7 @@ impl PyPeerScore {
     }
 
     fn to_json(&self) -> String {
-        serde_json::to_string(self).unwrap_or_else(|_| "{}".to_string())
+        to_json(self).unwrap_or_else(|_| "{}".to_string())
     }
 }
 
@@ -757,8 +758,8 @@ impl From<&EpochSnapshotInner> for PyEpochSnapshot {
             peer_scores: e.peer_scores.iter().map(PyPeerScore::from).collect(),
             committee: e.committee.clone(),
             threshold: e.threshold,
-            frost_signature: e.frost_signature.clone(),
-            committee_pubkey: e.committee_pubkey.clone(),
+            frost_signature: FTByteVector::into(e.frost_signature.clone()),
+            committee_pubkey: FTByteVector::into(e.committee_pubkey.clone()),
         }
     }
 }
@@ -781,7 +782,7 @@ impl PyEpochSnapshot {
 
     #[classmethod]
     fn from_json(_cls: &Bound<'_, PyType>, json_str: &str) -> PyResult<Self> {
-        serde_json::from_str(json_str)
+        from_json(json_str)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
     }
 
@@ -793,7 +794,7 @@ impl PyEpochSnapshot {
     }
 
     fn to_json(&self) -> String {
-        serde_json::to_string(self).unwrap_or_else(|_| "{}".to_string())
+        to_json(self).unwrap_or_else(|_| "{}".to_string())
     }
 }
 
@@ -809,7 +810,7 @@ pub struct PySealedBlob {
 
 impl From<&SealedBlobInner> for PySealedBlob {
     fn from(s: &SealedBlobInner) -> Self {
-        Self { nonce: s.nonce.clone(), ciphertext: s.ciphertext.clone() }
+        Self { nonce: FTByteVector::into(s.nonce.clone()), ciphertext: FTByteVector::into(s.ciphertext.clone()) }
     }
 }
 
@@ -822,7 +823,7 @@ impl PySealedBlob {
 
     #[classmethod]
     fn from_json(_cls: &Bound<'_, PyType>, json_str: &str) -> PyResult<Self> {
-        serde_json::from_str(json_str)
+        from_json(json_str)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
     }
 
@@ -834,7 +835,7 @@ impl PySealedBlob {
     }
 
     fn to_json(&self) -> String {
-        serde_json::to_string(self).unwrap_or_else(|_| "{}".to_string())
+        to_json(self).unwrap_or_else(|_| "{}".to_string())
     }
 }
 
@@ -869,7 +870,7 @@ impl PyCollisionConfig {
 
     #[classmethod]
     fn from_json(_cls: &Bound<'_, PyType>, json_str: &str) -> PyResult<Self> {
-        serde_json::from_str(json_str)
+        from_json(json_str)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
     }
 
@@ -881,7 +882,7 @@ impl PyCollisionConfig {
     }
 
     fn to_json(&self) -> String {
-        serde_json::to_string(self).unwrap_or_else(|_| "{}".to_string())
+        to_json(self).unwrap_or_else(|_| "{}".to_string())
     }
 }
 
@@ -960,7 +961,7 @@ impl PyNodeConfig {
 
     #[classmethod]
     fn from_json(_cls: &Bound<'_, PyType>, json_str: &str) -> PyResult<Self> {
-        serde_json::from_str(json_str)
+        from_json(json_str)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
     }
 
@@ -972,7 +973,7 @@ impl PyNodeConfig {
     }
 
     fn to_json(&self) -> String {
-        serde_json::to_string(self).unwrap_or_else(|_| "{}".to_string())
+        to_json(self).unwrap_or_else(|_| "{}".to_string())
     }
 }
 
@@ -997,9 +998,9 @@ impl From<&HeartbeatInner> for PyHeartbeat {
         Self {
             peer_id: h.peer_id.clone(),
             timestamp_ns: h.timestamp_ns,
-            nonce: h.nonce.to_vec(),
+            nonce: h.nonce.as_slice().to_vec(),
             curve: h.curve,
-            signature: h.signature.clone(),
+            signature: FTByteVector::into(h.signature.clone()),
         }
     }
 }
@@ -1019,7 +1020,7 @@ impl PyHeartbeat {
 
     #[classmethod]
     fn from_json(_cls: &Bound<'_, PyType>, json_str: &str) -> PyResult<Self> {
-        serde_json::from_str(json_str)
+        from_json(json_str)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
     }
 
@@ -1031,7 +1032,7 @@ impl PyHeartbeat {
     }
 
     fn to_json(&self) -> String {
-        serde_json::to_string(self).unwrap_or_else(|_| "{}".to_string())
+        to_json(self).unwrap_or_else(|_| "{}".to_string())
     }
 }
 
@@ -1086,7 +1087,7 @@ impl PyProbityReport {
 
     #[classmethod]
     fn from_json(_cls: &Bound<'_, PyType>, json_str: &str) -> PyResult<Self> {
-        serde_json::from_str(json_str)
+        from_json(json_str)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
     }
 
@@ -1098,7 +1099,7 @@ impl PyProbityReport {
     }
 
     fn to_json(&self) -> String {
-        serde_json::to_string(self).unwrap_or_else(|_| "{}".to_string())
+        to_json(self).unwrap_or_else(|_| "{}".to_string())
     }
 }
 
@@ -1127,7 +1128,7 @@ impl PyJsonRpcError {
 
     #[classmethod]
     fn from_json(_cls: &Bound<'_, PyType>, json_str: &str) -> PyResult<Self> {
-        serde_json::from_str(json_str)
+        from_json(json_str)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
     }
 
@@ -1136,7 +1137,7 @@ impl PyJsonRpcError {
     }
 
     fn to_json(&self) -> String {
-        serde_json::to_string(self).unwrap_or_else(|_| "{}".to_string())
+        to_json(self).unwrap_or_else(|_| "{}".to_string())
     }
 }
 
@@ -1171,7 +1172,7 @@ impl PyCalendarBlock {
 
     #[classmethod]
     fn from_json(_cls: &Bound<'_, PyType>, json_str: &str) -> PyResult<Self> {
-        serde_json::from_str(json_str)
+        from_json(json_str)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
     }
 
@@ -1183,7 +1184,7 @@ impl PyCalendarBlock {
     }
 
     fn to_json(&self) -> String {
-        serde_json::to_string(self).unwrap_or_else(|_| "{}".to_string())
+        to_json(self).unwrap_or_else(|_| "{}".to_string())
     }
 }
 
