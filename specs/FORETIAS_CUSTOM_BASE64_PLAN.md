@@ -1,16 +1,16 @@
 # Centralized Base64 JSON Serialization — Implementation Plan
 
 **Paired with:** `FORETIAS_CUSTOM_BASE64_SPEC.md`
-**Worktree path:** `FULL_WORKTREE_PATH=/home/hcbusy/tmp/foretias-worktrees/FORETIAS_CUSTOM_BASE64_SPEC_${RANDOM}`
+**Worktree path:** `FULL_WORKTREE_PATH=/home/hcbusy/tmp/foretias-worktrees/FORETIAS_CUSTOM_BASE64_SPEC_88888`
 **Branch:** `feat/custom-base64-display`
 
 **Design:** Two newtype wrappers (`FTByteVector`, `FTByteArray<N>`) with built-in serde. Applied at the field level via type change. No per-struct methods. No C11 code.
 
 ## Worktree Lifecycle
 
-- [ ] Set `RANDOM_DIFF=${RANDOM}` once for this plan
-- [ ] Create worktree `git worktree add -b feat/custom-base64-display /home/hcbusy/tmp/foretias-worktrees/FORETIAS_CUSTOM_BASE64_SPEC_${RANDOM_DIFF}`
-- [ ] `cd /home/hcbusy/tmp/foretias-worktrees/FORETIAS_CUSTOM_BASE64_SPEC_${RANDOM_DIFF}`; reset current session work directory
+- [ ] Set `RANDOM_DIFF=88888` once for this plan
+- [ ] Create worktree `git worktree add -b feat/custom-base64-display /home/hcbusy/tmp/foretias-worktrees/FORETIAS_CUSTOM_BASE64_SPEC_88888`
+- [ ] `cd /home/hcbusy/tmp/foretias-worktrees/FORETIAS_CUSTOM_BASE64_SPEC_88888`; reset current session work directory
 - [ ] Revert any C11 changes from previous attempt (remove `foretias_custom_base64.h`, `encoding_custom_base64.c`, test files, CMake changes) if present
 - [ ] Revert any `display.rs` from previous display-only attempt if present
 ... (implementation tasks below) ...
@@ -18,7 +18,7 @@
 - [ ] Merge `feat/custom-base64-display` to `alpha`
 - [ ] Cleanup worktree:
   - [ ] Confirm all checkboxes above completed
-  - [ ] `git worktree remove /home/hcbusy/tmp/foretias-worktrees/FORETIAS_CUSTOM_BASE64_SPEC_${RANDOM_DIFF}`
+  - [ ] `git worktree remove /home/hcbusy/tmp/foretias-worktrees/FORETIAS_CUSTOM_BASE64_SPEC_88888`
   - [ ] This is the last checkbox in this plan
 
 ---
