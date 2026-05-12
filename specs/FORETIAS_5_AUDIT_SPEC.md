@@ -171,7 +171,7 @@ The foretis-audit library must handle five distinct ordering cases, each with di
 - **Scenario**: A is attested by C, and B is also attested by C. We know "A existed during C's chronon X" and "B existed during C's chronon Y."
 - **What we know**: If X < Y, then A preceded B (relative to C's timeline). If X and Y overlap, A and B are concurrent.
 - **Limitation**: No transitivity guarantee. A attested by C and B attested by C does NOT mean A attested B.
-- **Confidence**: Scales with the quality of the shared attestor C (see Section 5 — Defensibility Scoring).
+- **Confidence**: Scales with the quality of the shared attestor C (see §5.2 — Defensibility Scoring).
 - **Algorithm**:
   1. Build attestation graph: nodes = TBIDs, edges = mutual attestations
   2. For each pair (A, B), find all shared attestors
@@ -628,7 +628,7 @@ pub struct AuditFinding {
    - For each C, compare C's chronons when attesting A vs B
    - If consistent across all shared attestors: add edge with confidence proportional to witness count and quality
 
-**Complexity**: O(V · (V + E)) for BFS-based transitive closure. Acceptable for audit-scale data (see Section 6).
+**Complexity**: O(V · (V + E)) for BFS-based transitive closure. See §9.3 for refined scaling analysis and replacement strategy.
 
 **Rust Implementation**: Build on `petgraph::stable_graph::StableDiGraph` for mutable graph with persistent node IDs. Use `petgraph::algo::toposort` for topological enumeration. Use `hasse` crate (or custom implementation) for transitive reduction.
 
@@ -682,7 +682,103 @@ pub struct AuditFinding {
 
 ---
 
-## 6. Concrete Use Case: Patent Law Firm Scenario
+## 6. Multi-Scale Use Cases & Monitoring
+
+The foretis-audit library serves five distinct operational scales, each with different priorities, visualization needs, and monitoring metrics. This section defines the use cases, key decisions, alert types, and KPIs per scale.
+
+### 6.1 Personal Scale (1 TBID)
+
+**Audience**: Individual operator running a single foretis-server.
+**Goal**: Verify own calendar integrity, monitor attestation health, detect anomalies in own chronon pattern.
+
+| Aspect | Detail |
+|--------|--------|
+| **Primary Metrics** | Calendar integrity rate, chronon regularity (CV), stamp count per chronon, direct witness count, probity score |
+| **Decisions** | "Is my server ticking correctly?" "Am I attesting peers reliably?" "Do I need more external witnesses?" |
+| **Visualization Style** | CLI/terminal: ASCII attestation graph (≤20 nodes), ploot line chart for chronon regularity, textplots bar for probity |
+| **Alert Types** | Chronon variance spike (>2× baseline), attestation gap (>24h without external witness), integrity breach (failed `verify_pair`) |
+| **Library Features** | `AuditEngine.verify_all()`, `engine.defensibility_scores()`, `engine.detect_anomalies()` |
+
+### 6.2 Small Team Scale (5–20 TBIDs)
+
+**Audience**: Legal team, research group, or small organization coordinating multiple TimeBeings.
+**Goal**: Establish cross-TBID ordering for key events, assess evidence defensibility across the team.
+
+| Aspect | Detail |
+|--------|--------|
+| **Primary Metrics** | Pairwise ordering confidence (per TBID pair), concurrent pair count, shared witness density, average defensibility, attestation coverage |
+| **Decisions** | "Can we prove Event A preceded Event B?" "Which team member's evidence is most defensible?" "Where are our attestation gaps?" |
+| **Visualization Style** | Browser: vis-network interactive graph, D3.js Hasse diagram for causal chains, polars DataFrame for timeline analysis |
+| **Alert Types** | New concurrent pair detected, shared witness offline, defensibility score drop (<0.5), attestation topology fragmentation |
+| **Library Features** | `engine.compare_foretides()`, `engine.build_partial_order()`, `poset.concurrent_pairs()`, `ActiveExplorer.find_shared_attestors()` |
+
+### 6.3 Medium Organization Scale (50–500 TBIDs)
+
+**Audience**: Law firm, regulatory body, or mid-sized enterprise with department-level TimeBeings.
+**Goal**: Monitor organizational attestation mesh health, detect departmental anomalies, generate compliance reports.
+
+| Aspect | Detail |
+|--------|--------|
+| **Primary Metrics** | Mesh connectivity (connected components), departmental probity distribution, cross-department attestation rate, anomaly rate per department, DHT health |
+| **Decisions** | "Is the attestation mesh connected?" "Which department has the weakest evidence coverage?" "Are there systemic timing anomalies?" |
+| **Visualization Style** | Dashboard: Apache ECharts multi-panel, Cytoscape.js graph with community detection, Grafana for infrastructure metrics |
+| **Alert Types** | Mesh partition detected, department probity collapse (<0.3 average), attestation rate anomaly (>3× baseline), DHT registration failure |
+| **Library Features** | Full `AuditEngine` + `ActiveExplorer`, batch `defensibility_scores()`, statistical `detect_anomalies()` with department grouping |
+
+### 6.4 Enterprise Scale (1K–10K TBIDs)
+
+**Audience**: Large enterprise or government agency with network-wide TimeBeing deployment.
+**Goal**: Real-time network monitoring, automated anomaly detection, capacity planning for calendar storage.
+
+| Aspect | Detail |
+|--------|--------|
+| **Primary Metrics** | Active TBID count, attestations/minute, average probity, calendar integrity rate, chronon regularity CV, network connectivity, stamp throughput, storage growth rate |
+| **Decisions** | "Is the network healthy?" "Where are the bottlenecks?" "Do we need to add more witness capacity?" "Is storage growing too fast?" |
+| **Visualization Style** | Ops dashboard: Grafana with Prometheus, Plotly.js for statistical analysis, ECharts for real-time graph topology (clustering enabled) |
+| **Alert Types** | Network partition (>1 connected component), attestation flood (>3× baseline), integrity breach (<90%), probity collapse (<50 average), storage threshold (>80% capacity) |
+| **Library Features** | Metrics exporter (Prometheus format), batch `AuditEngine` with time-window filtering, `ActiveExplorer` with query budget limits |
+
+### 6.5 Commercial Operations Center Scale (10K+ TBIDs)
+
+**Audience**: 24/7 operations center with wall displays, dedicated monitoring staff, automated incident response.
+**Goal**: Wall-scale visualization of global network state, automated alert routing, forensic investigation support.
+
+| Aspect | Detail |
+|--------|--------|
+| **Primary Metrics** | All enterprise metrics +: global causal chain depth, cross-region attestation latency, automated resolution rate, forensic query backlog |
+| **Decisions** | "Global network status at a glance?" "Which regions need immediate attention?" "What's the forensic investigation queue?" |
+| **Visualization Style** | Wall display: Three.js 3D network with LOD clustering, Deck.gl for data-heavy views, Kepler.gl for geographic overlay |
+| **Alert Types** | All enterprise alerts +: regional partition, automated resolution failure, forensic SLA breach, causal chain depth anomaly |
+| **Library Features** | Dedicated visualization microservice, WebSocket real-time stream, batch `AuditEngine` with hierarchical poset construction, pre-aggregated metrics |
+
+### 6.6 Common Monitoring Metrics (All Scales)
+
+The following metrics are computed at every scale, with different update frequencies and alert thresholds:
+
+| KPI | Personal | Small Team | Medium Org | Enterprise | Commercial Ops |
+|-----|----------|------------|------------|------------|----------------|
+| **Active TBID Count** | N/A (1) | Real-time | 1 min | Real-time | Real-time |
+| **Attestation Rate** | 5 min | 1 min | 30s | Real-time | Real-time |
+| **Average Probity** | 10 min | 5 min | 1 min | 30s | 10s |
+| **Calendar Integrity** | 1h | 30 min | 5 min | 1 min | 30s |
+| **Chronon Regularity (CV)** | 1h | 30 min | 5 min | 1 min | 30s |
+| **Network Connectivity** | N/A | 5 min | 1 min | 30s | 10s |
+| **Anomaly Count** | 1h | 30 min | 5 min | 1 min | 30s |
+| **Stamp Throughput** | 5 min | 1 min | 30s | Real-time | Real-time |
+| **Storage Growth** | 1d | 1h | 30 min | 5 min | 1 min |
+
+### 6.7 Alert Severity Classification
+
+| Severity | Condition Examples | Response |
+|----------|-------------------|----------|
+| **Critical** | Network partition, probity collapse (<50 avg), integrity breach (<90%) | Immediate notification, automated isolation of affected nodes |
+| **High** | Attestation flood (>3× baseline), DHT failure (latency >10s), mesh fragmentation | Investigate within 15 minutes, potential attack vector |
+| **Medium** | Anomaly spike (>10/hour), probity degradation (<70 avg), attestation gap (>12h) | Queue for analysis within 1 hour |
+| **Low** | Chronon variance increase (CV >0.2), storage growth acceleration, witness quality decline | Log and review during next scheduled check |
+
+---
+
+## 7. Concrete Use Case: Patent Law Firm Scenario
 
 ### 6.1 Scenario Description
 
@@ -784,9 +880,318 @@ Party B: No external attestations.
 
 ---
 
-## 7. API Surface (Rust)
+## 8. Visualization & Animation
 
-### 7.1 AuditEngine — Main Entry Point
+Visualization serves dual purposes: **marketing tool** (demonstrating network trust and temporal integrity to non-technical audiences) and **analytical aid** (helping auditors spot patterns, anomalies, and causal chains). This section defines what to visualize, how to animate it, and which targets map to which audience tiers.
+
+### 8.1 What to Visualize — The Data Layer
+
+| Target | Source Data | Encoding | Audience Value |
+|--------|-------------|----------|----------------|
+| **Attestation graph** | `ExternalAttestation` records | Force-directed; node size = attestation count; edge thickness = frequency | Identify central nodes, clustering, outliers |
+| **Temporal flow** | Tick timestamps + attestation timestamps | Time-series animation; edge appearance = attestation events | Reveal periodicity, activity spikes |
+| **Calendar health** | TickRecord verification status | Heatmap overlay; green = 100% integrity, red = <80% | Identify compromised/incomplete tick histories |
+| **Poset structure** | Cross-TBID ordering edges | Hasse diagram; vertical = temporal order, horizontal = causal clusters | Understand causal structure of tick sequences |
+| **Probity scores** | `DefensibilityScore.probity` | Diverging color scale (red→yellow→green) | Rapid identification of trusted vs. untrusted nodes |
+| **Stamp density** | `stamps_per_tick` per TBID per chronon | 2D heatmap; X = chronon, Y = TBID | Reveal active vs. dormant nodes |
+| **Defensibility** | `DefensibilityScore` composite | Node size + color gradient; radar chart for component breakdown | Assess node resilience against attack vectors |
+| **Anomaly flags** | `AnomalyFlag` per TBID | Pulsing highlight; pulse speed = severity | Real-time security monitoring |
+| **Causal chains** | Poset paths between foretides | Path highlighting with animated flow; arrowheads = direction | Audit trail verification |
+| **Network topology** | Peer graph + attestation edges | Force simulation with community detection coloring | Big-picture network structure |
+
+### 8.2 Animation Concepts
+
+Animation transforms static visualizations into living representations of network activity. Each concept maps to a real-time data source.
+
+#### 8.2.1 Live Attestation Flow
+**Concept**: Edges "pulse" as new attestations are exchanged, creating a sense of real-time activity.
+**Implementation**: When attestation event occurs, animate edge with traveling pulse (brightness or particle effect along edge). Pulse speed encodes attestation value.
+**Data Source**: WebSocket stream of new `ExternalAttestation` events.
+**Technical Approach**: D3.js transitions with SVG `stroke-dasharray` animation or canvas particle system.
+
+#### 8.2.2 Chronon Heartbeat
+**Concept**: Nodes pulse at their individual tick rate — their "heartbeat" — creating rhythmic visualization of temporal activity.
+**Implementation**: Each node has animation cycle matching chronon interval (fast = 10s chronon, slow = 5min chronon). Pulse = scale animation or glow effect.
+**Data Source**: `TbidIdentity.chronon_ns` per node.
+**Technical Approach**: CSS keyframe animations with dynamic duration.
+
+#### 8.2.3 Calendar Growth
+**Concept**: New ticks appear as extending chains from each node, visualizing calendar expansion over time.
+**Implementation**: When new tick created, animate new segment extending from existing calendar. Growing bar or branch in Hasse diagram.
+**Data Source**: New `TickRecord` events from live servers.
+**Technical Approach**: SVG path animation or D3.js data join.
+
+#### 8.2.4 Probity Wave
+**Concept**: Trust score changes propagate through graph like a ripple, showing cascading trust dynamics.
+**Implementation**: When node's probity changes significantly, animate color change spreading to neighbors with delay proportional to graph distance.
+**Data Source**: `DefensibilityScore` updates.
+**Technical Approach**: BFS triggers cascading color transitions with configurable delays.
+
+#### 8.2.5 Anomaly Detection in Real-Time
+**Concept**: Flashing alerts when TBID chronon pattern deviates from norms.
+**Implementation**: Affected node begins rapid color toggle (normal ↔ alert). Radar sweep effect for critical anomalies.
+**Data Source**: `AnomalyFlag` events from §5.3 statistical detection.
+**Technical Approach**: CSS animation with rapid toggle + WebSocket push.
+
+#### 8.2.6 Stamp Events
+**Concept**: Particles flow along edges when stamps are created, visualizing stamp creation and propagation.
+**Implementation**: Spawn particle at source node, travel along attestation path to target. Multiple particles = stamp value/urgency.
+**Data Source**: New `Foretis` events.
+**Technical Approach**: Canvas-based particle system with object pooling.
+
+#### 8.2.7 Causal Chain Tracing
+**Concept**: Path illumination reveals causal sequences when user selects a node.
+**Implementation**: Click node → animate causal path from origins to consequences. Sequential path lighting with flowing animation.
+**Data Source**: Poset predecessor/successor search (§9.5).
+**Technical Approach**: SVG `stroke-dashoffset` animation or canvas line drawing.
+
+### 8.3 Visualization-Analysis Feedback Loop
+
+Visualization is not purely cosmetic — it feeds analytical decisions:
+
+```
+1. User observes visualization → notices anomaly (e.g., isolated node, activity spike)
+2. User selects region/node → AuditEngine narrows scope
+3. AuditEngine computes detailed analysis (defensibility, causal chains)
+4. Results feed back into visualization with drill-down detail
+5. Repeat until audit question answered
+```
+
+This loop is implemented via the Python bindings (§3.3) where Jupyter widgets drive interactive visualization → analysis cycles.
+
+---
+
+## 9. Algorithms & Scaling
+
+This section refines the algorithmic analysis from §5 with precise scale thresholds, memory footprints, and library recommendations grounded in the actual data structures.
+
+### 9.1 Graph Scale Thresholds
+
+The foretis-audit library operates at two distinct graph scales:
+
+1. **Tick-level poset**: Nodes = `(TBID, tick_number)` pairs, edges = `ExternalAttestation` constraints. Average degree ≈ 5 (K=5 peers).
+2. **TBID-level attestation graph**: Nodes = TBIDs, edges = mutual attestations. Typically V ≤ 1000.
+
+#### Memory Footprint (Rust, 64-bit, adjacency list)
+
+| Component | Bytes | Notes |
+|---|---|---|
+| Node `(TBID_hex, tick_number)` interned | ~48 bytes | With string interning for TBID hex |
+| Edge in adjacency list | ~24 bytes | Two `NodeIndex<u32>` + weight/pointer + Vec overhead |
+| Edge with full `ExternalAttestation` payload | ~400 bytes | Only when storing EA data (not needed for pure graph ops) |
+| **Poset-only (indices + edges)** | ~128B/node + 24B/edge | For pure graph algorithms, store only indices |
+
+#### Threshold Table (32 GB RAM, 16-core machine)
+
+| (V, E) Range | Approach | Library | Memory | Time |
+|---|---|---|---|---|
+| V < 100K, E < 1M | In-core, comfortable | `petgraph` | < 2 GB | seconds |
+| V ~ 100K–500K, E ~ 1M–5M | In-core | `petgraph` (with interning) | 2–8 GB | seconds–minutes |
+| V ~ 500K–2M, E ~ 5M–20M | In-core (tight) | `igraph` (CSR) | 4–16 GB | minutes |
+| V ~ 2M–10M, E ~ 20M–100M | Out-of-core / GPU | `cuGraph`, `Gunrock` | GPU VRAM 24–80 GB | minutes |
+| V > 10M, E > 100M | Distributed | GraphX, TigerGraph | cluster | hours |
+
+**For foretis-audit specifically**: Realistic filtered scope (§7.2) is 155K–778K nodes and 800K–4M edges. This sits squarely in the **in-core** range. Distributed computation is never needed unless auditing a full year of 100+ lawyers without filtering — an anti-pattern per §7.2's aggressive filtering mandate.
+
+### 9.2 Sparse Graph Algorithm Selection
+
+All analysis assumes sparse graph with average degree ≈ 5 (K=5 peers).
+
+| Algorithm | Complexity | Practical Limit | Verdict for foretis-audit |
+|---|---|---|---|
+| **Topological sort** | O(V + E) | Any scale | ✅ Fine. V=778K → ~3.5M ops, < 1s |
+| **BFS reachability** (single-source) | O(V + E) | Any scale | ✅ Fine for any single-source query |
+| **Connected components** | O(V + E) | Any scale | ✅ Fine |
+| **Dijkstra** (shortest paths) | O(E + V log V) | V < 10M | ✅ Fine. V=778K → ~5M ops, < 1s |
+| **SCC** (Tarjan/Kosaraju) | O(V + E) | Any scale | ✅ Fine (should be empty for DAG; use as validation) |
+| **Betweenness centrality** (Brandes) | O(VE) | V < 100K for TBID-level | ⚠️ **TBID-level only** (V ≤ 1000). On tick-level: use sampling approximation |
+| **Transitive closure** | O(V · (V + E)) via BFS-from-each | V < 10K | ⚠️ **Critical bottleneck**. Do NOT compute full closure. See §9.3 |
+| **Longest path** (DAG) | O(V + E) | Any scale | ✅ Fine. This IS the causal depth computation |
+
+### 9.3 Transitive Closure — The Real Bottleneck
+
+The original §5.1 algorithm proposes "BFS from each node: O(V · (V + E))". For V=778K, E=4M that's ~3.3 trillion operations — unacceptable.
+
+**Replacement Strategy** (in order of preference):
+
+1. **Lazy BFS per query** (recommended). When an auditor asks "does A precede B?", run a single BFS/DFS from A to check if B is reachable. Cost: O(V + E) per query, not O(V · (V + E)) for all pairs.
+
+2. **Transitive reduction** (Hasse diagram construction). For DAGs: O(V · E) using the "delete edge (u,v) if path u→w→v exists" approach. Since average degree ≈ 5, reduction is cheap: ~4M edge checks × ~5 path searches each. Result: fewer edges, faster subsequent operations.
+
+3. **Bit-parallel transitive closure** (only if all-pairs reachability is genuinely needed). Using Rust's `bitvec`: O(V³ / 64). For V=10K: ~10 seconds. For V=100K: hours. Not viable beyond V=10K.
+
+**Implementation**: `petgraph::algo::hasse` for transitive reduction + lazy `petgraph::algo::dfs` for per-query reachability.
+
+### 9.4 Betweenness Centrality — TBID-Level Only
+
+All centrality metrics (degree, betweenness, eigenvector) operate on the **TBID-level attestation graph** (V ≤ 1000), not the tick-level poset. With 100 TBIDs and K=5 peers: Brandes O(VE) = 100 × 500 = 50,000 operations — trivial.
+
+**Implementation**: `petgraph::algo::centrality::brandes` for betweenness, custom power iteration for eigenvector centrality (via `ndarray`).
+
+### 9.5 Causal Analysis on Multi-Stamp Chains
+
+The foretis-audit poset **is already a causal graph**. Each `ExternalAttestation` edge represents "A.tick X was observed during B.tick Y" — a causal constraint. No external causal inference library (DoWhy, causalnex, pgmpy) is needed. Those libraries solve causal **discovery** (inferring structure from data). The structure is given; only **analysis** is needed.
+
+| Analysis Task | Algorithm | Complexity | Implementation |
+|---|---|---|---|
+| **Causal chain reconstruction** ("A→B→C path") | All paths in DAG | O(k · (V + E)), k = path count | DFS with path tracking, limit to ≤10 hops |
+| **Causal depth** (longest chain) | Longest path via topo-sort + DP | O(V + E) | Topo-sort, then relax: `dist[v] = max(dist[v], dist[u] + 1)` |
+| **Causal width** (max concurrent events) | Max antichain = min chain decomp (Dilworth) | O(V · E^(1/2)) via Hopcroft-Karp | Bipartite matching on TBID-level graph. Tick-level: report level-set sizes as approximation |
+| **Event attribution** ("first to mention concept Z") | Content-hash index + BFS | O(V + E) per concept | `HashMap<content_hash, Vec<ForetideRef>>` + reachability |
+| **Counterfactual** ("remove edge, does order change?") | Edge removal + reachability test | O(V + E) per edge | Remove (u,v), re-run BFS. If reachable via alternate path, order preserved |
+
+**Python-side tools**: `polars` for DataFrame operations, `networkx` for visualization only (not computation), `matplotlib`/`plotly` for timeline/DAG rendering.
+
+### 9.6 Graph Library Stack
+
+| Library | Purpose | Max Practical (V, E) | Recommendation |
+|---|---|---|---|
+| **`petgraph`** | Primary: poset construction, BFS, topo sort, dijkstra, SCC | ~2M nodes | **Primary choice**. Use `StableDiGraph<u32>` for tick-level poset |
+| **`igraph`** (via `igraph-rs`) | Centrality metrics on TBID-level graph | ~20M nodes | **Secondary choice**. Brandes betweenness, eigenvector centrality, community detection |
+| **`bitvec`** | Transitive reduction | N/A (bitset util) | **Use for Hasse diagram construction**. Bit-parallel reachability sets |
+| **`ndarray`** | Eigenvector centrality (power iteration) | N/A | **Use for statistical analysis**. Avoid if `petgraph` suffices |
+| **`networkx`** (Python) | Visualization only | ~100K nodes | **Python-side only**. Acceptable for Jupyter, not for core algorithms |
+| **`cuGraph`** | GPU-accelerated graph | ~1B edges | **Not needed**. Only if V > 10M after filtering |
+
+**Primary stack**: `petgraph` (poset construction, BFS, topo sort, dijkstra) + `igraph-rs` (centrality on TBID graph) + `bitvec` (transitive reduction). Three dependencies, all lightweight, all Rust-native.
+
+---
+
+## 10. Visualization Libraries
+
+The foretis-audit library produces data suitable for visualization across four tiers of audience complexity. This section recommends specific libraries per tier, their rendering capabilities, and integration points with the Rust core.
+
+### 10.1 Library Selection by Audience Tier
+
+| Tier | Audience | Node Scale | Recommended Library | Renderer | Integration |
+|------|----------|------------|---------------------|----------|-------------|
+| Personal | Individual TBID operator | 1–20 | `ploot`, `textplots` | Terminal Unicode/ASCII | Rust native, CLI |
+| Small Team | 5–20 TBIDs, analyst workstations | 20–500 | `vis-network`, `D3.js` | SVG/Canvas (browser) | Python Jupyter, HTTP export |
+| Medium Organization | 50–500 TBIDs, internal dashboard | 500–5K | `Apache ECharts`, `Cytoscape.js` | Canvas/WebGL | Web dashboard, REST API |
+| Enterprise | 1K–10K TBIDs, ops monitoring | 5K–100K | `Grafana`, `Plotly.js` | Canvas/WebGL | Prometheus + WebSocket |
+| Commercial Ops | 10K+ TBIDs, wall display | 100K+ | `Three.js`, `Deck.gl` | WebGL2/WebGPU | Dedicated viz server |
+
+### 10.2 Personal Tier — Terminal Visualization
+
+**Use Case**: Individual operator checking their own TBID's attestation graph, stamp density, and probity from a terminal.
+
+**Recommended Stack**:
+- `ploot` (Rust) — Unicode Braille plotting, line/scatter/bar/heatmap, SVG export
+- `textplots` (Rust) — Lightweight ASCII line/bar plots, minimal dependencies
+- Custom ASCII graph layout — Force-directed layout computed in Rust, rendered to Unicode box-drawing characters
+
+**Integration**: Add `ploot` as optional dependency to `audit-core`. Expose `--viz` flag on CLI to render:
+- Attestation graph (ASCII, up to ~50 nodes)
+- Chronon activity timeline (ploot line plot)
+- Stamp density heatmap (ploot heatmap)
+- Probity score gauge (textplots bar)
+
+**Performance Target**: Sub-second rendering for up to 1 year of data per TBID (~525K ticks).
+
+### 10.3 Small Team Tier — Browser-Based Analysis
+
+**Use Case**: Legal team or audit group analyzing 5–20 TBIDs in a Jupyter notebook or internal web tool.
+
+**Recommended Stack**:
+- `vis-network` — Interactive graph with physics simulation, drag/drop, zoom/pan, ~5K node capacity
+- `D3.js` — Custom visualizations (Hasse diagrams, timelines, causal chains)
+- `polars` (Python) — DataFrame filtering/aggregation before visualization
+
+**Integration**: Python bindings (`foretias_audit`) expose:
+- `engine.attestation_graph()` → JSON compatible with vis-network
+- `engine.timeline_dataframe()` → polars DataFrame
+- `engine.poset_hasse_diagram()` → node-edge JSON for D3.js rendering
+- `engine.causal_chain(source, target)` → path JSON for edge highlighting
+
+**Performance Target**: Interactive 60fps for up to 500 nodes. Above 500, enable clustering.
+
+### 10.4 Medium Organization Tier — Dashboard
+
+**Use Case**: Internal dashboard for monitoring 50–500 TBIDs across a department.
+
+**Recommended Stack**:
+- `Apache ECharts` — Multi-panel dashboard, millions of data points, real-time updates <30ms
+- `Cytoscape.js` — Graph analysis with layout algorithms, edge bundling
+
+**Integration**: REST API endpoint on `foretias-node` that streams visualization data:
+- Network topology (ECharts graph series)
+- Stamp throughput (ECharts line chart)
+- Probity distribution (ECharts histogram)
+- Defensibility radar charts (ECharts radar series)
+
+**Performance Target**: 1-second full dashboard refresh for 5K nodes. Use server-side aggregation above 1K nodes.
+
+### 10.5 Enterprise Tier — Ops Monitoring
+
+**Use Case**: 24/7 monitoring of 1K–10K TBIDs with alerting and historical trend analysis.
+
+**Recommended Stack**:
+- `Grafana` — Pre-built dashboards, Prometheus integration, alerting rules
+- `Plotly.js` — Statistical charts, 3D surface plots for temporal analysis
+
+**Integration**: Metrics exporter from `foretias-node` in Prometheus format:
+```
+foretias_active_tbids_total 847
+foretias_attestations_per_minute 1243.7
+foretias_avg_probity_score 0.82
+foretias_calendar_integrity_rate 0.987
+foretias_chronon_regularity_cv 0.12
+foretias_anomalies_per_hour 3
+```
+
+**Performance Target**: 30-second metric refresh interval. Historical data via InfluxDB or TimescaleDB.
+
+### 10.6 Commercial Operations Center — Wall Display
+
+**Use Case**: Large-scale operations center with wall displays, 10K+ TBIDs, geographic overlay.
+
+**Recommended Stack**:
+- `Three.js` — GPU-accelerated 3D network visualization, WebXR support
+- `Deck.gl` — WebGL2-powered, millions of points, geospatial layers
+- `Kepler.gl` — Geospatial overlay (if TBID locations are known)
+
+**Integration**: Dedicated visualization microservice that aggregates network state and streams to wall display. WebSocket push for real-time animation.
+
+**Performance Target**: 60fps for 100K+ nodes with level-of-detail (LOD) clustering. Nodes below threshold rendered as density heatmaps instead of individual points.
+
+### 10.7 Common Data Format for Visualization
+
+All tiers share a common JSON data format for graph state, enabling consistent rendering across tools:
+
+```json
+{
+  "nodes": [
+    {
+      "id": "tbid_hex:tick_number",
+      "tbid_hex": "...",
+      "tick_number": 42,
+      "content_hash": "...",
+      "wallclock_ns": 1747123456000000000,
+      "probity_score": 0.85,
+      "defensibility_score": 0.72,
+      "anomaly_flags": []
+    }
+  ],
+  "edges": [
+    {
+      "source": "tbid_hex_a:100",
+      "target": "tbid_hex_b:200",
+      "type": "mutual_attestation",
+      "attester_tbid": "tbid_hex_c",
+      "strength": 0.91,
+      "timestamp_ns": 1747123456000000000
+    }
+  ]
+}
+```
+
+This format is produced by `AuditEngine::export_viz_data()` and consumed by all visualization libraries above.
+
+---
+
+## 11. API Surface (Rust)
+
+### 11.1 AuditEngine — Main Entry Point
 
 ```rust
 pub struct AuditEngine {
@@ -826,10 +1231,13 @@ impl AuditEngine {
     
     /// Generate a complete audit report
     pub fn generate_report(&self, options: ReportOptions) -> Result<AuditReport, AuditError>;
+    
+    /// Export visualization data in common JSON format (§10.7)
+    pub fn export_viz_data(&self) -> Result<VizDataExport, AuditError>;
 }
 ```
 
-### 7.2 ActiveExplorer — Network Query Interface
+### 11.2 ActiveExplorer — Network Query Interface
 
 ```rust
 pub struct ActiveExplorer {
@@ -863,7 +1271,7 @@ impl ActiveExplorer {
 }
 ```
 
-### 7.3 ForetisComparator — Standalone Comparator
+### 11.3 ForetisComparator — Standalone Comparator
 
 ```rust
 pub struct ForetisComparator {
@@ -887,7 +1295,7 @@ impl ForetisComparator {
 }
 ```
 
-### 7.4 Wallclock Parsing Utility
+### 11.4 Wallclock Parsing Utility
 
 ```rust
 /// Parse "UE+<nanoseconds>ns" → u64
@@ -899,19 +1307,21 @@ pub fn format_time_being_reference_time(ns: u64) -> String;
 
 ---
 
-## 8. Dependencies
+## 12. Dependencies
 
-### 8.1 Core Dependencies (audit-core)
+### 12.1 Core Dependencies (audit-core)
 
 | Crate | Purpose | Notes |
 |-------|---------|-------|
 | `foretias-core` | Type definitions (Foretis, TickRecord, etc.) | Internal workspace dependency |
-| `petgraph` | Graph algorithms (toposort, SCC, betweenness) | Foundation for poset |
+| `petgraph` | Graph algorithms (toposort, SCC, dijkstra, dfs/bfs) | Foundation for tick-level poset (§9.6) |
+| `igraph-rs` | Centrality metrics (Brandes betweenness, eigenvector) | TBID-level graph only (§9.4) |
+| `bitvec` | Bit-parallel transitive reduction | Hasse diagram construction (§9.3) |
 | `serde` + `serde_json` | Serialization | Already in workspace |
 | `hex` | Hex encoding | Already in workspace |
 | `sha2` | SHA-256 for verification | Already in workspace |
 
-### 8.2 Statistical Analysis Dependencies (optional)
+### 12.2 Statistical Analysis Dependencies (optional)
 
 | Crate | Purpose | Notes |
 |-------|---------|-------|
@@ -919,15 +1329,28 @@ pub fn format_time_being_reference_time(ns: u64) -> String;
 | `ndarray` + `ndarray-stats` | Array computing, summary statistics | Numerical analysis |
 | `statrs` | Probability distributions | Distribution fitting |
 
-### 8.3 Visualization Dependencies (Python-side)
+### 12.3 Visualization Dependencies (Browser-side)
 
 | Crate | Purpose | Notes |
 |-------|---------|-------|
 | `polars` (Python) | DataFrame analysis, filtering, aggregation | Jupyter-friendly |
-| `plotters` (Rust) | Static chart generation | CLI output |
-| `ploot` (Rust) | Terminal plotting | CLI output |
+| `vis-network` (JS) | Interactive graph with physics | Small team tier (§10.3) |
+| `D3.js` (JS) | Custom visualizations (Hasse, causal chains) | Small team tier (§10.3) |
+| `Apache ECharts` (JS) | Multi-panel dashboard | Medium org tier (§10.4) |
+| `Cytoscape.js` (JS) | Graph analysis with layout | Medium org tier (§10.4) |
+| `Grafana` (Web) | Ops dashboards, alerting | Enterprise tier (§10.5) |
+| `Three.js` (JS) | 3D GPU visualization | Commercial ops tier (§10.6) |
+| `Deck.gl` (JS) | WebGL2 large-scale viz | Commercial ops tier (§10.6) |
 
-### 8.4 Active Mode Dependencies (optional)
+### 12.4 Terminal Visualization Dependencies (Rust)
+
+| Crate | Purpose | Notes |
+|-------|---------|-------|
+| `ploot` (Rust) | Unicode Braille terminal plots | Personal tier (§10.2), line/scatter/bar/heatmap |
+| `textplots` (Rust) | Lightweight ASCII plots | Personal tier (§10.2), minimal dependencies |
+| `plotters` (Rust) | Static chart generation | CLI output, SVG/PNG export |
+
+### 12.5 Active Mode Dependencies (optional)
 
 | Crate | Purpose | Notes |
 |-------|---------|-------|
@@ -935,7 +1358,22 @@ pub fn format_time_being_reference_time(ns: u64) -> String;
 | `jsonrpsee` | JSON-RPC client | RPC protocol |
 | `libp2p` | P2P protocol stack | Optional, for DHT discovery |
 
-### 8.5 Python Binding Dependencies
+### 12.6 Python Binding Dependencies
+
+| Crate | Purpose | Notes |
+|-------|---------|-------|
+| `pyo3` 0.21 | Python bindings | Same version as foretias-python |
+| `maturin` | Build tool | Same as foretias-python |
+
+### 12.4 Active Mode Dependencies (optional)
+
+| Crate | Purpose | Notes |
+|-------|---------|-------|
+| `reqwest` | HTTP client for JSON-RPC | Server connections |
+| `jsonrpsee` | JSON-RPC client | RPC protocol |
+| `libp2p` | P2P protocol stack | Optional, for DHT discovery |
+
+### 12.5 Python Binding Dependencies
 
 | Crate | Purpose | Notes |
 |-------|---------|-------|
@@ -944,7 +1382,7 @@ pub fn format_time_being_reference_time(ns: u64) -> String;
 
 ---
 
-## 9. Open Questions
+## 13. Open Questions
 
 1. **Sub-chronon ordering**: Can we ever establish ordering within a single chronon? Currently impossible — multiple stamps per tick share the same key and tick_number. Future work: sequence numbers within a tick?
 
@@ -964,7 +1402,7 @@ pub fn format_time_being_reference_time(ns: u64) -> String;
 
 ---
 
-## 10. Versioning & Compatibility
+## 14. Versioning & Compatibility
 
 - **Target version**: foretis-audit v0.1.0
 - **Dependency on foretias types**: Uses foretias-core types by reference (no modification to existing types)

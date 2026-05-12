@@ -32,7 +32,7 @@ The codebase and documentation contain inconsistent terminology for attestation 
 | Self-linking (same TBID) | Chronomatter | `auto_attest` | "auto-attestation" | "auto-attest" |
 | Cross-calendar (diff TBID) | Calendar | `mutual_attest` | "mutual attestation" | "mutually attest" |
 | Shared blob construction | N/A | `chronon_attest` | "chronon attestation" | "chronon-attest" |
-| Client stamp/verify | Client | (none) | "attestation" | "attest" |
+| Client stamp/verify | Client | (none) | "Fretias API calls" | "stamp", "verify", "attest"; Sometimes "Inquirer asks for verification of foretis and content." |
 
 ---
 

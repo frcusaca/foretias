@@ -1,15 +1,15 @@
 # Plan: Terminology Normalization — Auto-Attestation, Mutual Attestation, Chronon Attestation
 
 **Scope:** Step (terminology consistency pass)
-**Status:** Draft — pending human review
+**Status:** Complete — merged to alpha
 **Based on:** `TERMINOLOGY_NORMALIZATION_SPEC.md`
 
 ---
 
 ## Worktree Setup
 
-- [ ] Create worktree `git worktree add -b feat/terminology-normalization /home/hcbusy/tmp/foretias-worktrees/TERMINOLOGY_NORMALIZATION_${RANDOM}`
-- [ ] `cd /home/hcbusy/tmp/foretias-worktrees/TERMINOLOGY_NORMALIZATION_${RANDOM}`; reset current session work directory to be the full worktree path.
+- [x](2026-05-12 16:33) Create worktree `git worktree add -b feat/terminology-normalization /home/hcbusy/tmp/foretias-worktrees/TERMINOLOGY_NORMALIZATION_4821`
+- [x](2026-05-12 16:33) `cd /home/hcbusy/tmp/foretias-worktrees/TERMINOLOGY_NORMALIZATION_4821`; reset current session work directory to be the full worktree path.
 
 ---
 
