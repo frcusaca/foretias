@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::p2p::{CommunerdConfig, DHTConfig, AutoAttestConfig};
+use super::p2p::{CommunerdConfig, DHTConfig, MutualAttestConfig};
 use super::chronomatter::{ChronomatterConfig, KeyRotationConfig};
 use super::calendar::{CalendarConfig, EncryptionConfig};
 use super::node::NodeConfig;
@@ -144,9 +144,9 @@ impl TimeFamilyConfig {
 
         cfg.listen_addr = listen_addr.to_string();
 
-        cfg.communerd.auto_attest.peers = peers;
-        cfg.communerd.auto_attest.every_n_chronons = auto_attest_every_n;
-        cfg.communerd.auto_attest.request_timeout_secs = request_timeout_secs;
+        cfg.communerd.mutual_attest.peers = peers;
+        cfg.communerd.mutual_attest.every_n_chronons = auto_attest_every_n;
+        cfg.communerd.mutual_attest.request_timeout_secs = request_timeout_secs;
 
         cfg.communerd.p2p_listen = p2p_listen;
         cfg.communerd.p2p_port_range = p2p_port_range;
@@ -171,19 +171,19 @@ impl TimeFamilyConfig {
         self.calendars.first().map(|c| c.persist_path.clone())
     }
 
-    /// Get the peers list from auto_attest config.
-    pub fn peers(&self) -> Vec<String> {
-        self.communerd.auto_attest.peers.clone()
+    /// Get the peers list from mutual_attest config.
+    pub fn mutual_attest_peers(&self) -> Vec<String> {
+        self.communerd.mutual_attest.peers.clone()
     }
 
-    /// Get the auto-attest frequency.
-    pub fn auto_attest_every_n(&self) -> u64 {
-        self.communerd.auto_attest.every_n_chronons
+    /// Get the mutual-attest frequency.
+    pub fn mutual_attest_every_n(&self) -> u64 {
+        self.communerd.mutual_attest.every_n_chronons
     }
 
-    /// Get the request timeout.
-    pub fn request_timeout_secs(&self) -> u64 {
-        self.communerd.auto_attest.request_timeout_secs
+    /// Get the mutual-attest request timeout.
+    pub fn mutual_attest_request_timeout_secs(&self) -> u64 {
+        self.communerd.mutual_attest.request_timeout_secs
     }
 }
 
@@ -205,7 +205,7 @@ impl From<NodeConfig> for TimeFamilyConfig {
                 encryption: EncryptionConfig::default(),
             }],
             communerd: CommunerdConfig {
-                auto_attest: AutoAttestConfig {
+                mutual_attest: MutualAttestConfig {
                     every_n_chronons: node.auto_attest_every_n,
                     request_timeout_secs: node.request_timeout_secs,
                     peers: node.peers,

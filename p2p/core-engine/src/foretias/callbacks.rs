@@ -65,12 +65,12 @@ pub trait PeerMessenger: Send + Sync {
         -> Result<CommunityResponse, TransportError>;
 }
 
-/// Observer for auto-attestation lifecycle events.
+/// Observer for mutual-attestation lifecycle events.
 ///
-/// Called by Chronomatter before/after each auto-attestation attempt
+/// Called by Chronomatter before/after each mutual-attestation attempt
 /// so metrics can be recorded.
-pub trait AutoAttestObserver: Send + Sync {
-    fn on_auto_attest_sent(&self);
-    fn on_auto_attest_ok(&self);
-    fn on_auto_attest_failed(&self);
+pub trait MutualAttestObserver: Send + Sync {
+    fn on_mutual_attest_sent(&self);
+    fn on_mutual_attest_ok(&self);
+    fn on_mutual_attest_failed(&self);
 }

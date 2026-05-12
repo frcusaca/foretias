@@ -61,8 +61,8 @@ foretias serve [options]
 
 | Short | Long | Default | Description |
 |-------|------|---------|-------------|
-| | `--peer` | *(none, repeatable)* | Static peer address for auto attestation (host:port). Can specify multiple times |
-| | `--auto-attest-every-chronons` | `1` | Mutual attestation frequency in chronons |
+| | `--peer` | *(none, repeatable)* | Static peer address for mutual attestation (host:port). Can specify multiple times |
+| | `--mutually-attest-every-chronons` | `1` | Mutual attestation frequency in chronons |
 | | `--request-timeout-secs` | `5` | RPC request timeout in seconds |
 
 #### 3.1.4 P2P & DHT Options
@@ -83,7 +83,7 @@ When `--known-servers` is provided:
 4. Self-register: `PUT /foretias/{namespace}/peers/v1` with `{ TBID, PeerId, multiaddr, json_rpc, chronon_ns }`
 5. Discover peers: `GET /foretias/{namespace}/peers/v1` from DHT
 6. Dial discovered peers (up to `--max-discovered-peers`)
-7. Add discovered peers to PeerPool for auto-attestation
+7. Add discovered peers to PeerPool for mutual attestation
 
 **Attestation Interval for Discovered Peers:**
 ```
@@ -266,7 +266,7 @@ CLI flags **override** config file values. Config file provides defaults.
   "max_discovered_peers": 13,
   "dht_namespace": "mainnet",
   "request_timeout_secs": 5,
-  "auto_attest_every_n": 1
+  "mutual_attest_every_n": 1
 }
 ```
 
@@ -307,7 +307,7 @@ Each language implementation (Rust, Python, Java) must:
 | Library | `clap` (derive mode) |
 | Location | `p2p/foretias-node/src/main.rs` |
 | Status | Partial — CLI flags exist but not all wired to `cmd_serve` |
-| Current Flags | `--addr`, `--p2p-listen`, `--p2p-port-range`, `--p2p-dial`, `--known-servers`, `--max-discovered-peers`, `--dht-namespace`, `--dht-bootstrap`, `--auto-attest-every-chronons`, `--request-timeout-secs`, `--persist-path`, `--start-dormant`, `--peer` |
+| Current Flags | `--addr`, `--p2p-listen`, `--p2p-port-range`, `--p2p-dial`, `--known-servers`, `--max-discovered-peers`, `--dht-namespace`, `--dht-bootstrap`, `--mutually-attest-every-chronons`, `--request-timeout-secs`, `--persist-path`, `--start-dormant`, `--peer` |
 | Missing Wiring | `cmd_serve()` signature (line 268) doesn't accept `p2p_port_range`, `known_servers`, `max_discovered_peers`. LSP error on line 637 confirms missing destructuring. |
 | Self-Registration | Not implemented. `Communerd` needs `register_and_discover()` method. |
 | Auto-Port Selection | Not implemented. `build_and_spawn_swarm()` takes `Multiaddr`, needs `Option<Multiaddr>`. |
@@ -346,7 +346,7 @@ Serve {
     persist_path: Option<String>,           // --persist-path
     start_dormant: bool,                    // --start-dormant
     peer: Vec<String>,                      // --peer (repeatable)
-    auto_attest_every_chronons: u64,        // --auto-attest-every-chronons, default 1
+    auto_attest_every_chronons: u64,        // --mutually-attest-every-chronons, default 1
     request_timeout_secs: u64,              // --request-timeout-secs, default 5
     p2p_listen: Option<String>,             // --p2p-listen
     p2p_port_range: String,                 // --p2p-port-range, default "9900..9999"
@@ -390,7 +390,7 @@ Missing: `ListenReady { multiaddr: Multiaddr }`, `RecordRetrieved { key: kad::Re
 
 **File:** `p2p/core-engine/src/config.rs`
 
-Current fields (line 8-54): `listen_addr`, `version`, `calendar_path`, `chronon_ns`, `serialized`, `peers`, `auto_attest_every_n`, `request_timeout_secs`, `p2p_listen`, `p2p_dial`, `dht_namespace`, `dht_bootstrap`, `collision`, `signature_algorithm`, `kem_algorithm`.
+Current fields (line 8-54): `listen_addr`, `version`, `calendar_path`, `chronon_ns`, `serialized`, `peers`, `mutually_attest_every_n`, `request_timeout_secs`, `p2p_listen`, `p2p_dial`, `dht_namespace`, `dht_bootstrap`, `collision`, `signature_algorithm`, `kem_algorithm`.
 
 Missing: `p2p_port_range: Option<[u16; 2]>`, `known_servers: Vec<String>`, `max_discovered_peers: usize`.
 
@@ -419,7 +419,7 @@ Missing: `p2p_port_range: Option<[u16; 2]>`, `known_servers: Vec<String>`, `max_
 ### Phase 3 — Peer Attestation
 
 - [ ] Wire `DhtPeerDiscovered` into `PeerPool.add_peer()` in gossip loop
-- [ ] Implement attestation interval formula in auto-attestation scheduler
+- [ ] Implement attestation interval formula in mutual attestation scheduler
 - [ ] Print P2P startup info (actual port, TBID, PeerId, multiaddr)
 
 ### Phase 4 — Multi-Language

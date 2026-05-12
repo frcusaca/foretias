@@ -1,29 +1,29 @@
-//! P2P, DHT, collision detection, and auto-attestation configuration.
+//! P2P, DHT, collision detection, and mutual-attestation configuration.
 
 use serde::{Deserialize, Serialize};
 
-/// Auto-attestation configuration.
+/// Mutual-attestation configuration.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct AutoAttestConfig {
+pub struct MutualAttestConfig {
     /// Mutual attestation frequency in chronons (default 1 = every tick).
-    #[serde(default = "default_auto_attest_every_n")]
+    #[serde(default = "default_mutual_attest_every_n")]
     pub every_n_chronons: u64,
 
     /// RPC request timeout in seconds (default 5).
     #[serde(default = "default_request_timeout_secs")]
     pub request_timeout_secs: u64,
 
-    /// Peer addresses for auto attestation (e.g., "host:port").
+    /// Peer addresses for mutual attestation (e.g., "host:port").
     #[serde(default)]
     pub peers: Vec<String>,
 }
 
-/// Communerd configuration — P2P networking, auto-attestation, DHT, and collision.
+/// Communerd configuration — P2P networking, mutual-attestation, DHT, and collision.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CommunerdConfig {
-    /// Auto-attestation configuration.
+    /// Mutual-attestation configuration.
     #[serde(default)]
-    pub auto_attest: AutoAttestConfig,
+    pub mutual_attest: MutualAttestConfig,
 
     /// libp2p listen address as a multiaddr string.
     #[serde(default)]
@@ -108,7 +108,7 @@ fn default_liege_wait_secs() -> u64 {
     30
 }
 
-fn default_auto_attest_every_n() -> u64 {
+fn default_mutual_attest_every_n() -> u64 {
     1
 }
 

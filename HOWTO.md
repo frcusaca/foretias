@@ -5,7 +5,7 @@ Foretias is a **decentralized time-integrity attestation service**. In plain ter
 This document shows you **three escalating demos** that prove foretias is:
 
 1. **EASY** — start, stamp, verify in under 5 minutes
-2. **PEERABLE** — hundreds of nodes, all auto-discovering and auto-attesting
+2. **PEERABLE** — hundreds of nodes, all auto-discovering and mutually attesting
 3. **RESILIENT** — kill half the network and verification still works
 
 ---
@@ -112,7 +112,7 @@ The content hash doesn't match. The stamp is immutable. Foretias caught the tamp
 
 ## Section 2: Peering — Hundreds of Nodes
 
-A single server is fine for local demos. But foretias is designed for **networks**. This section shows how to spin up hundreds of peers, all auto-discovering and auto-attesting each other.
+A single server is fine for local demos. But foretias is designed for **networks**. This section shows how to spin up hundreds of peers, all auto-discovering and mutually attesting each other.
 
 ### Step 1: Start the peer manager
 
@@ -200,9 +200,9 @@ foretias> sleep 5
 foretias> verify 5050 "this is a network test" /tmp/foretias_stamp_*.json
 ```
 
-When peers auto-attest each other, their calendars cross-reference. A stamp from one peer becomes verifiable from another. This is the foundation of decentralized trust.
+When peers mutually attest each other, their calendars cross-reference. A stamp from one peer becomes verifiable from another. This is the foundation of decentralized trust.
 
-> **Peering complete.** 100 nodes, zero configuration, auto-discovery, auto-attestation. Try scaling to 200 with `--peers 200`.
+> **Peering complete.** 100 nodes, zero configuration, auto-discovery, mutual attestation. Try scaling to 200 with `--peers 200`.
 
 ---
 
@@ -223,7 +223,7 @@ foretias> stamp 5000 "resilience test message"
 foretias> sleep 5
 ```
 
-Wait for the stamp to propagate via auto-attestation.
+Wait for the stamp to propagate via mutual attestation.
 
 ### Step 3: Kill half the network
 
@@ -255,7 +255,7 @@ Verification against a **surviving** peer succeeds:
 }
 ```
 
-The stamp was created on peer #0. Peer #0 may have been killed. But the attestation was replicated to peer #20 (and others) via auto-attestation. **The calendar survives because it's decentralized.**
+The stamp was created on peer #0. Peer #0 may have been killed. But the attestation was replicated to peer #20 (and others) via mutual attestation. **The calendar survives because it's decentralized.**
 
 ### Step 5: Kill more — prove the limit
 

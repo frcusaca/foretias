@@ -82,7 +82,7 @@ Configuration for the ticking engine. Controls time progression, key rotation, a
   "dormant": false,
   "signature_algorithm": "SPHINCS+-SHA2-128s-simple",
   "kem_algorithm": "Noise-XX",
-  "auto_attest": {
+  "mutual_attest": {
     "every_n_chronons": 1,
     "request_timeout_secs": 5,
     "peers": []
@@ -112,18 +112,18 @@ pub struct ChronomatterConfig {
     /// KEM algorithm for key exchange
     #[serde(default = "default_kem_algorithm")]
     pub kem_algorithm: KemAlgorithm,
-    /// Auto-attestation settings
+    /// Mutual attestation settings
     #[serde(default)]
-    pub auto_attest: AutoAttestConfig,
+    pub mutual_attest: MutualAttestConfig,
     /// Key rotation settings
     #[serde(default)]
     pub key_rotation: KeyRotationConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AutoAttestConfig {
+pub struct MutualAttestConfig {
     /// Attest every N chronons (default: 1)
-    #[serde(default = "default_auto_attest_every_n")]
+    #[serde(default = "default_mutual_attest_every_n")]
     pub every_n_chronons: u64,
     /// RPC request timeout in seconds (default: 5)
     #[serde(default = "default_request_timeout_secs")]
@@ -269,7 +269,7 @@ impl From<LegacyNodeConfig> for TimeFamilyConfig {
                 dormant: false,
                 signature_algorithm: legacy.signature_algorithm,
                 kem_algorithm: legacy.kem_algorithm,
-                auto_attest: AutoAttestConfig {
+                mutual_attest: MutualAttestConfig {
                     every_n_chronons: legacy.auto_attest_every_n,
                     request_timeout_secs: legacy.request_timeout_secs,
                     peers: legacy.peers,
@@ -366,7 +366,7 @@ pub struct CalendarMetadata {
 | `CalendarConfig` | `core-engine/src/config/calendar.rs` | Calendar persistence config |
 | `P2PConfig` | `core-engine/src/config/p2p.rs` | Networking config (extracted from NodeConfig) |
 | `DHTConfig` | `core-engine/src/config/p2p.rs` | DHT sub-config |
-| `AutoAttestConfig` | `core-engine/src/config/chronomatter.rs` | Attestation sub-config |
+| `MutualAttestConfig` | `core-engine/src/config/p2p.rs` | Attestation sub-config |
 | `KeyRotationConfig` | `core-engine/src/config/chronomatter.rs` | Key rotation sub-config |
 | `EncryptionConfig` | `core-engine/src/config/calendar.rs` | Encryption sub-config |
 | `CollisionConfig` | `core-engine/src/config/p2p.rs` | Stays in P2P domain |
@@ -390,7 +390,7 @@ pub struct CalendarMetadata {
     "dormant": false,
     "signature_algorithm": "SPHINCS+-SHA2-128s-simple",
     "kem_algorithm": "Noise-XX",
-    "auto_attest": {
+                "mutual_attest": {
       "every_n_chronons": 1,
       "request_timeout_secs": 5,
       "peers": []
@@ -445,9 +445,9 @@ CLI flags map to the hierarchy:
 | `--dht-namespace` | `p2p.dht.namespace` |
 | `--dht-bootstrap` | `p2p.dht.bootstrap` |
 | `--chronon-ns` | `chronomatter.chronon_ns` |
-| `--peer` | `chronomatter.auto_attest.peers` |
-| `--auto-attest-every-chronons` | `chronomatter.auto_attest.every_n_chronons` |
-| `--request-timeout-secs` | `chronomatter.auto_attest.request_timeout_secs` |
+| `--peer` | `communerd.mutual_attest.peers` |
+| `--mutually-attest-every-chronons` | `communerd.mutual_attest.every_n_chronons` |
+| `--request-timeout-secs` | `communerd.mutual_attest.request_timeout_secs` |
 | `--persist-path` | `calendars[0].persist_path` |
 | `--dormant` | `chronomatter.dormant` |
 
@@ -456,7 +456,7 @@ CLI flags map to the hierarchy:
 ## 8. Migration Steps
 
 ### Step 1: Create new config structs
-Create `ChronomatterConfig`, `CalendarConfig`, `P2PConfig`, `DHTConfig`, `AutoAttestConfig`, `KeyRotationConfig`, `EncryptionConfig` in `core-engine/src/config/`.
+Create `ChronomatterConfig`, `CalendarConfig`, `P2PConfig`, `DHTConfig`, `MutualAttestConfig`, `KeyRotationConfig`, `EncryptionConfig` in `core-engine/src/config/`.
 
 ### Step 2: Create `TimeFamilyConfig`
 Create the top-level config struct with the three sub-configs.

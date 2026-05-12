@@ -18,7 +18,7 @@ use crate::clock::Clock;
 use crate::foretias::{auto_attestation_blob_with_count, Foretis, TickRecord};
 use crate::foretias::encoding::FTByteVector;
 use crate::foretias::tick::CalendarLookup;
-use crate::foretias::callbacks::{TickObserver, AutoAttestObserver};
+use crate::foretias::callbacks::{TickObserver, MutualAttestObserver};
 use crate::foretias::types::{Tbid, TbidSecret, TickNumber};
 
 struct TickKeyPair {
@@ -36,7 +36,7 @@ pub struct Chronomatter {
     crypto: Arc<dyn CryptoServer>,
     clock: Arc<dyn Clock>,
     tick_observer: Arc<dyn TickObserver>,
-    auto_attest_observer: Option<Arc<dyn AutoAttestObserver>>,
+    mutual_attest_observer: Option<Arc<dyn MutualAttestObserver>>,
     chronon_ns: u64,
     daemon_handle: Mutex<Option<JoinHandle<()>>>,
     is_dormant: AtomicBool,
@@ -64,7 +64,7 @@ impl Chronomatter {
             crypto,
             clock: Arc::new(crate::clock::SystemClock),
             tick_observer,
-            auto_attest_observer: None,
+            mutual_attest_observer: None,
             chronon_ns,
             daemon_handle: Mutex::new(None),
             is_dormant: AtomicBool::new(false),
@@ -99,7 +99,7 @@ impl Chronomatter {
             crypto,
             clock: Arc::new(crate::clock::SystemClock),
             tick_observer,
-            auto_attest_observer: None,
+            mutual_attest_observer: None,
             chronon_ns: 0,
             daemon_handle: Mutex::new(None),
             is_dormant: AtomicBool::new(true),
@@ -141,9 +141,9 @@ impl Chronomatter {
         self.keypairs.read().last().map(|kp| kp.pub_key)
     }
 
-    /// Set the auto-attestation observer (for metrics).
-    pub fn set_auto_attest_observer(&mut self, observer: Arc<dyn AutoAttestObserver>) {
-        self.auto_attest_observer = Some(observer);
+    /// Set the mutual-attestation observer (for metrics).
+    pub fn set_mutual_attest_observer(&mut self, observer: Arc<dyn MutualAttestObserver>) {
+        self.mutual_attest_observer = Some(observer);
     }
 
     fn generate_and_store_keypair(&self) -> Result<usize, NodeError> {
@@ -177,8 +177,8 @@ impl Chronomatter {
         let stamps = self.stamps_per_tick.swap(0, SeqCst);
 
         if tick == 1 {
-            let (ma_blob, nonce) = auto_attestation_blob_with_count(&tbid_str, tick, &new_pub, tick, &new_pub, stamps)?;
-            let sig = self.sign_with_keypair(kp_idx, &ma_blob)?;
+            let (attest_blob, nonce) = auto_attestation_blob_with_count(&tbid_str, tick, &new_pub, tick, &new_pub, stamps)?;
+            let sig = self.sign_with_keypair(kp_idx, &attest_blob)?;
             Ok((sig.clone(), sig, nonce, stamps))
         } else {
             let prev_tick = tick - 1;
@@ -186,22 +186,22 @@ impl Chronomatter {
             let prev_pub = self.keypair_pub(prev_kp_idx)
                 .ok_or_else(|| NodeError::Internal("missing previous keypair".into()))?;
 
-            let (ma_blob, nonce) = auto_attestation_blob_with_count(&tbid_str, prev_tick, &prev_pub, tick, &new_pub, stamps)?;
-            let forward_sig = self.sign_with_keypair(prev_kp_idx, &ma_blob)?;
-            let backward_sig = self.sign_with_keypair(kp_idx, &ma_blob)?;
+            let (attest_blob, nonce) = auto_attestation_blob_with_count(&tbid_str, prev_tick, &prev_pub, tick, &new_pub, stamps)?;
+            let forward_sig = self.sign_with_keypair(prev_kp_idx, &attest_blob)?;
+            let backward_sig = self.sign_with_keypair(kp_idx, &attest_blob)?;
             Ok((forward_sig, backward_sig, nonce, stamps))
         }
     }
 
     fn build_tick_record(&self, tick: u64, new_pub: [u8; 32]) -> Result<TickRecord, NodeError> {
-        if let Some(ref obs) = self.auto_attest_observer {
-            obs.on_auto_attest_sent();
+        if let Some(ref obs) = self.mutual_attest_observer {
+            obs.on_mutual_attest_sent();
         }
         let result = self.build_auto_attestation(tick, new_pub);
-        if let Some(ref obs) = self.auto_attest_observer {
+        if let Some(ref obs) = self.mutual_attest_observer {
             match &result {
-                Ok(_) => obs.on_auto_attest_ok(),
-                Err(_) => obs.on_auto_attest_failed(),
+                Ok(_) => obs.on_mutual_attest_ok(),
+                Err(_) => obs.on_mutual_attest_failed(),
             }
         }
         let (forward_foretis, backward_foretis, aa_nonce, stamps) = result?;

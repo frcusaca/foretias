@@ -471,7 +471,7 @@ target/release/foretias serve --addr 127.0.0.1:4001 --persist-path /tmp/cal
 target/release/foretias serve --addr 127.0.0.1:4001 --start-dormant --persist-path /tmp/cal
 
 # Start server with P2P peers:
-target/release/foretias serve --addr 127.0.0.1:4001 --peer 127.0.0.1:4002 --auto_attest_every_chronons 10
+target/release/foretias serve --addr 127.0.0.1:4001 --peer 127.0.0.1:4002 --mutually_attest_every_chronons 10
 
 # Stamp a message (sends to running server via Noise+JSON-RPC):
 target/release/foretias stamp --message "hello world" --server 127.0.0.1:4001

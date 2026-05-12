@@ -25,10 +25,10 @@
 |------|---------|
 | **Chronon** | One time interval in a Time Being's life. Has its own Ed25519 keypair. Previously called a "tick" (noun). |
 | **ChrononChainRecord** | The Rust type for one entry in the Chrononchain. Previously `TickRecord`. Contains `chronon_number`, `public_key`, `forward_foretis`, `backward_foretis`, `nonce`. |
-| **Chrononchain** | The append-only, tamper-evident chain of all ChrononChainRecords, each linked to its predecessor by mutual auto-attestation. |
+| **Chrononchain** | The append-only, tamper-evident chain of all ChrononChainRecords, each linked to its predecessor by auto-attestation. |
 | **Calendar** | The storage and serving layer that contains the Chrononchain. Kept as-is — Calendar is a broader concept. |
 | **to tick** | The verb describing the transition from one chronon to the next. *"The Time Being ticked to chronon 42."* Kept as-is. |
-| **Foretis / forward_foretis / backward_foretis** | A Foretis is a stamp — a signed attestation of content at a chronon. `forward_foretis` and `backward_foretis` are the mutual auto-attestation stamps that link consecutive chronons. These names correctly describe what they are and are not changed. |
+| **Foretis / forward_foretis / backward_foretis** | A Foretis is a stamp — a signed attestation of content at a chronon. `forward_foretis` and `backward_foretis` are the auto-attestation stamps that link consecutive chronons. These names correctly describe what they are and are not changed. |
 
 ---
 

@@ -41,7 +41,7 @@ HOWTO.md is not a technical manual. It is a guided demonstration that combines l
 - Point user to `integration-tests/start_local_peers.py`
 - User runs script to start N peers (default 50)
 - Shows `foretias stamp` against any peer's listen address
-- Shows `foretias verify` against a **different** peer — proof of auto-attestation replication
+- Shows `foretias verify` against a **different** peer — proof of mutual attestation replication
 
 ### Section 3: Resilience (Kill 50%)
 - Same setup as Section 2

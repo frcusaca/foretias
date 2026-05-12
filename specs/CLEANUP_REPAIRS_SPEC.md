@@ -16,7 +16,7 @@ The workspace currently carries three categories of technical debt that produce 
 3. **Incomplete config migration** — `TimeFamilyConfig` is the intended replacement for `NodeConfig`. The `TimeFamilyConfig` struct, sub-configs, and `From<NodeConfig>` bridge exist. Production code (`TimeFamilyConfig::from_cli_and_file`) builds the new config but **never passes it to consumers**. `Communerd`, `TimeFamilyServer::with_config`, and Python bindings still accept `NodeConfig`.
 
 Additionally, the current config hierarchy violates the established **one-config-per-time-being** pattern:
-- `AutoAttestConfig` lives inside `ChronomatterConfig` but governs Communerd behavior
+- `MutualAttestConfig` lives inside `ChronomatterConfig` but governs Communerd behavior
 - `P2PConfig` is a standalone struct but Communerd has no `CommunerdConfig`
 - `listen_addr` lives in `P2PConfig` but is a server-level concern
 
@@ -72,7 +72,7 @@ ChronomatterConfig          (ticking engine)
 └── (no auto_attest — that's Communerd's domain)
 
 CommunerdConfig             (P2P networking)
-├── auto_attest: AutoAttestConfig
+├── mutual_attest: MutualAttestConfig
 │   ├── peers
 │   ├── every_n_chronons
 │   └── request_timeout_secs
@@ -115,8 +115,8 @@ pub struct TimeFamilyConfig {
 
 ```rust
 pub struct CommunerdConfig {
-    /// Auto-attestation configuration.
-    pub auto_attest: AutoAttestConfig,
+    /// Mutual attestation configuration.
+    pub mutual_attest: MutualAttestConfig,
 
     /// libp2p listen address as a multiaddr string.
     pub p2p_listen: Option<String>,

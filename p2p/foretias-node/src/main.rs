@@ -48,7 +48,7 @@ enum Commands {
         peer: Vec<String>,
         /// Mutual attestation frequency in chronons (default: 1 = every tick)
         #[arg(long, default_value_t = 1)]
-        auto_attest_every_chronons: u64,
+        mutually_attest_every_chronons: u64,
         /// RPC request timeout in seconds (default: 5)
         #[arg(long, default_value_t = 5)]
         request_timeout_secs: u64,
@@ -278,7 +278,7 @@ async fn cmd_serve(
     persist_path: Option<String>,
     start_dormant: bool,
     peers: Vec<String>,
-    auto_attest_every_chronons: u64,
+    mutually_attest_every_chronons: u64,
     request_timeout_secs: u64,
     p2p_listen: Option<String>,
     p2p_port_range: String,
@@ -312,7 +312,7 @@ async fn cmd_serve(
         persist_path.clone().map(PathBuf::from),
         start_dormant,
         peers.clone(),
-        auto_attest_every_chronons,
+        mutually_attest_every_chronons,
         request_timeout_secs,
         p2p_listen.clone(),
         {
@@ -415,8 +415,8 @@ async fn cmd_serve(
         println!("  Known Servers : {}", known_servers.join(", "));
     }
     if let Some(c) = server.communerd() {
-        println!("  Peers  : {}", c.config().auto_attest.peers.join(", "));
-        println!("  Auto Attest Every: {} chronons", c.config().auto_attest.every_n_chronons);
+        println!("  Peers  : {}", c.config().mutual_attest.peers.join(", "));
+        println!("  Mutual Attest Every: {} chronons", c.config().mutual_attest.every_n_chronons);
     }
 
     let handle = server.clone().start()?;
@@ -788,8 +788,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     match cli.command {
-        Commands::Serve { addr, chronon_ns, persist_path, start_dormant, peer, auto_attest_every_chronons, request_timeout_secs, p2p_listen, p2p_port_range, p2p_dial, known_servers, dht_namespace, dht_bootstrap, max_discovered_peers } => {
-            cmd_serve(addr, chronon_ns, persist_path, start_dormant, peer, auto_attest_every_chronons, request_timeout_secs, p2p_listen, p2p_port_range, p2p_dial, known_servers, dht_namespace, dht_bootstrap, max_discovered_peers).await
+        Commands::Serve { addr, chronon_ns, persist_path, start_dormant, peer, mutually_attest_every_chronons, request_timeout_secs, p2p_listen, p2p_port_range, p2p_dial, known_servers, dht_namespace, dht_bootstrap, max_discovered_peers } => {
+            cmd_serve(addr, chronon_ns, persist_path, start_dormant, peer, mutually_attest_every_chronons, request_timeout_secs, p2p_listen, p2p_port_range, p2p_dial, known_servers, dht_namespace, dht_bootstrap, max_discovered_peers).await
         }
         Commands::Stamp { message, message_file, stamp_output, server } => {
             cmd_stamp(message, message_file, stamp_output, server).await
