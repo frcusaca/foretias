@@ -36,6 +36,7 @@ DEFAULT_STATS_INTERVAL = 10  # seconds between stat prints
 STATS_POLL_INTERVAL = 3  # seconds between log polling
 BATCH_SIZE = 10
 BATCH_DELAY = 0.5  # seconds between batches
+DEFAULT_PERSIST_BASE = "/tmp/foretias-local-peers-{pid}"
 
 
 # ── Port Probe ───────────────────────────────────────────────────────────────
@@ -57,8 +58,21 @@ def wait_for_server(addr, port, timeout=10):
 
 # ── Binary Discovery ─────────────────────────────────────────────────────────
 
+def _binary_supports_flag(path, flag):
+    """Check if a binary supports a given flag via --help output."""
+    try:
+        result = subprocess.run(
+            [path, "serve", "--help"], capture_output=True, text=True, timeout=5
+        )
+        return flag in result.stdout or flag in result.stderr
+    except Exception:
+        return False
+
+
 def find_foretias_binary(binary_path):
-    """Find the foretias binary, preferring release over debug."""
+    """Find the foretias binary, preferring release over debug.
+    Falls back to debug if release lacks required flags (stale build)."""
+    REQUIRED_FLAG = "--p2p-port-range"
     if binary_path and os.path.isfile(binary_path):
         return binary_path
 
@@ -71,11 +85,17 @@ def find_foretias_binary(binary_path):
     ]
 
     for path in candidates:
-        if os.path.isfile(path) and os.access(path, os.X_OK):
+        if not (os.path.isfile(path) and os.access(path, os.X_OK)):
+            continue
+        if _binary_supports_flag(path, REQUIRED_FLAG):
             return path
+        print(
+            f"  (skipping {path} — stale build, missing '{REQUIRED_FLAG}')",
+            file=sys.stderr,
+        )
 
     print(
-        f"ERROR: foretias binary not found.\n"
+        f"ERROR: foretias binary not found or all binaries are stale.\n"
         f"  Searched: {', '.join(candidates)}\n"
         f"  Run: cd {p2p_dir} && cargo build\n"
         f"  Or specify: --binary /path/to/foretias",
@@ -89,9 +109,11 @@ def find_foretias_binary(binary_path):
 def spawn_peers(args, binary):
     """Spawn N peer processes and return tracking list."""
     peers = []
-    persist_base = args.persist_dir or (
-        subprocess.check_output(["mktemp", "-d"]).decode().strip()
-    )
+    if args.persist_dir:
+        persist_base = args.persist_dir
+    else:
+        persist_base = DEFAULT_PERSIST_BASE.format(pid=os.getpid())
+    os.makedirs(persist_base, exist_ok=True)
 
     # Build address list for --known-servers
     addr_list = [f"127.0.0.1:{args.port_base + i}" for i in range(args.peers)]
@@ -162,6 +184,14 @@ def spawn_peers(args, binary):
         f"  Spawned {len(peers)} peers, {alive_count} alive.",
         file=sys.stderr,
     )
+    if peers:
+        print(
+            f"  Persist base : {persist_base}",
+            f"\n  First peer log: {peers[0]['log_path']}",
+            f"\n  First peer   : {peers[0]['persist_path']}",
+            f"\n  File logs    : ~/.local/share/foretias/log/ (tracing file layer)",
+            file=sys.stderr,
+        )
     return peers
 
 
