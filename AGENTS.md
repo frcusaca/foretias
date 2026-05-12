@@ -67,7 +67,7 @@ If scoping was incorrect for any task, and and it became many tasks, It is possi
     - [ ] Remove "${FULL_WORKTREE_PATH}"
     - [ ] This is the last checkbox to be checked in my _PLAN.md
 ```
-This example also illustrates that because foolish uses git merge and not rebase this situation where a fix to merge on alpha may be required.
+This example also illustrates that because foretias uses git merge and not rebase this situation where a fix to merge on alpha may be required.
 
 ## PROJECT STRUCTURE (Permanent Reference — Do Not Rescan)
 
@@ -676,8 +676,6 @@ Avoid stringly-typed errors for core logic.
 
 Error messages may be human-readable, but program logic should not depend on parsing error strings.
 
-For Foolish diagnostics, distinguish internal errors from user-facing language errors. A syntax error in user code is not a Rust panic.
-
 ### Enum Dispatch
 
 Matching on enums is acceptable and often preferred.
@@ -930,41 +928,7 @@ let raw = RawMessage::decode(bytes)?;
 let message = raw.validate()?;
 ```
 
-For Foolish, parser code should preserve source spans. Diagnostics should point to source locations wherever possible.
-
 For Foretias, decoded wire messages must not become trusted domain objects until validation succeeds.
-
-### Foolish Compiler and Interpreter Code
-
-Keep language phases distinct.
-
-Prefer separate types for:
-
-* Tokens.
-* Parsed AST.
-* Desugared AST.
-* Typed AST.
-* Intermediate representation.
-* Runtime values.
-* Bytecode or lowered forms, if applicable.
-* Diagnostics.
-
-Avoid using one loose enum for every phase unless the project has deliberately chosen that architecture.
-
-Compiler transformations should be explicit:
-
-```rust
-let tokens = lexer.lex(source)?;
-let ast = parser.parse(tokens)?;
-let typed = type_checker.check(ast)?;
-let lowered = lowerer.lower(typed)?;
-```
-
-Each phase should be independently testable.
-
-Interpreter behavior should be deterministic unless nondeterminism is a deliberate language feature.
-
-Avoid mixing user-language errors with Rust implementation errors. User programs should not crash the interpreter through ordinary invalid input.
 
 ### Modules and File Organization
 
@@ -972,8 +936,6 @@ Organize code by responsibility, not by vague utility.
 
 Good module names:
 
-* `parser`
-* `lexer`
 * `diagnostics`
 * `attestation`
 * `verification`
@@ -1004,17 +966,6 @@ For Foretias, include tests for:
 * Serialization round trips.
 * FFI boundary failures.
 * Shutdown and cancellation paths where applicable.
-
-For Foolish, include tests for:
-
-* Lexing.
-* Parsing precedence and associativity.
-* Syntax errors with spans.
-* Type checking success and failure.
-* Interpreter semantics.
-* Compiler lowering.
-* Regression cases.
-* Invalid programs that should produce diagnostics, not panics.
 
 Use property tests or fuzz tests where useful, especially for parsers, decoders, serialization, and protocol messages.
 
@@ -1053,7 +1004,7 @@ Log:
 * Peer connection changes.
 * Retry exhaustion.
 * Storage failures.
-* Compiler phase failures when debugging Foolish.
+* Compiler phase failures when debugging Foretias.
 
 Do not log:
 
@@ -1144,8 +1095,32 @@ Before finishing Rust changes, check:
 
 If a change affects security, protocol compatibility, storage compatibility, language semantics, or public bindings, treat it as high-risk and document the reasoning in the code, tests, or commit notes.
 
-### Final Rule
+### Final Rules
+#### Embedded Communications
+If any file, other than this example in the AGENTS.md, contain a parenthetical comment, anywhere, it is a request for agent to comment based on the context surrounding that comment.
+```markdown
+Blah blah, some texxt (@Agent, do you think that word is mispelled?)
+```
 
+or
+```python
+def fibonacii(x):
+	# @agents, errrr, terminal case? spelling? did you even run this?
+	return fibonacii(x-1) + fibonacii(x-2)
+```
+
+or even not in a comment
+```python
+def add (x):
+@AGENT, this is just plain wrong!
+	return x+y;
+```
+The expectation is for agent to consider, discuss, and resolve the concern
+that follows various capitalizations of `@agent` or `@agents`. Resolution, once achieved, also means the parenthetical comment can be completely removed.
+
+If this form of embedded communication is discussed while performing another task, determin if it is relevant or interferes with current task. In some cases, this causes an immediately actionable response, other times, the encounterance results in an extra '[ ] TODO:human concern at file FILENAME line LINE_NUMBER' added to current task list to investigate. In some cases, if it is clear that the situation is too complex or require too much context, it may become a "[ ] TODO: write a specification and plan to address human concern at file FILENAME line LINE_NUMBER"
+
+#### When in Doubt
 When uncertain, choose the design that is easiest to prove correct, easiest to test, and easiest for the next human to understand.
 
 Correctness first. Then readability and maintainability. Then efficiency. Then principles and asethetics.
