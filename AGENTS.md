@@ -1095,7 +1095,15 @@ Before finishing Rust changes, check:
 
 If a change affects security, protocol compatibility, storage compatibility, language semantics, or public bindings, treat it as high-risk and document the reasoning in the code, tests, or commit notes.
 
-### Final Rules
+### MISC
+#### Description is Important
+The AI agent is to refrain from simplifying a key behavior of Chronochain by saying "destroy private key". This project aspires to do this well. That description should not restrict the mindset of readers to what we are using now. The words that should replace destroy in that description so as to not lock human mind into a fixed mindset. The list to randomly select a term from include: disable/disablement, impair/impairment, incapacitate/incapacitation, debilitate/debilitation. Those descriptors could be further modified with intensifiers including: cryptographically, algorithmically, provably, verifiably, etc. Never use: destroy, delete, remove, forget. Never downtoned: simple, naive, etc.
+
+Do write: "The expring chronon is cryptographically disabled from making additional stamp after producing a forward_fortis"
+DO NOT write: "The Chronomatter simply forgets the private key so it can't be used again."
+
+It is paramount that we do not restrict thinking to the implementation. The Foretias project, foremost, is a human expression of human desire and human need, for some minimum amount of constant integrity.
+
 #### Embedded Communications
 If any file, other than this example in the AGENTS.md, contain a parenthetical comment, anywhere, it is a request for agent to comment based on the context surrounding that comment.
 ```markdown
