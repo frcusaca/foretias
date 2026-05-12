@@ -62,12 +62,13 @@ If scoping was incorrect for any task, and and it became many tasks, It is possi
   - [ ] Update ${BRANCH_NAME} to use new API call convention
   - [x](2026-05-06 14:31) Merged breaking alpha # Again, this is needed to document a clear need for more work as subtasks
   - [ ] Repair ALL tests in alpha
-  - [ ] Cleanup ${FULL_WORKTREE_PATH}
+  - [ ] Finalize:
+    - [ ] cleanup ${FULL_WORKTREE_PATH}
     - [ ] Check that _PLAN.md has all but Cleanup checkboxes completed
     - [ ] Remove "${FULL_WORKTREE_PATH}"
     - [ ] This is the last checkbox to be checked in my _PLAN.md
 ```
-This example also illustrates that because foretias uses git merge and not rebase this situation where a fix to merge on alpha may be required.
+This example also illustrates that because foretias uses git merge and not rebase this situation where a fix to merge on alpha may be required. The final stage, to finalize, means to cleanup the work path and just sanity check everything before completely wiping the work directory and marking the plan complete.
 
 ## PROJECT STRUCTURE (Permanent Reference — Do Not Rescan)
 
