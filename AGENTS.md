@@ -36,6 +36,15 @@ Checkboxes in PLAN.md files track progress. When an item is checked off, **alway
 
 This gives both agents and humans a clear idea of how work is progressing over time.
 
+### Backburnered PLAN.md
+When a specification is considered VERY important but interfering with current highest priorities, it is marked with `[x] backburnered`. To be revived by removing the `[x] backburnered` marker. These plans are to be excluded when agent or human asks for plans that are: ready, pending, iterating, in progress, developing, active, etc. backburnered plans can only be found and addressed directly by using the words "backburnered plan(s)".
+```markdown
+- [x] backburnered
+- [ ] Do this or system will break
+- [ ] And fix that bug
+- [ ] ...
+```
+
 ### Worktree Branch Tracking in PLAN.md
 If a worktree branch is used for implementation, the PLAN.md **must** document the lifecycle of that worktree as explicit, separate checkbox tasks placed at appropriate points in the plan. The workpath shall always be `FULL_WORKTREE_PATH=${HOME}/tmp/foretias-worktrees/{SPEC_NAME_WITHOUT_MARKDOWN_EXTENSION}_${RANDOM}`, that random differentiator is set once while creating the plan file and stays consistent throughout the plan file.
 ```markdown
