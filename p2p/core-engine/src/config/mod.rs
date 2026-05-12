@@ -7,7 +7,7 @@ pub mod time_family;
 pub mod calendar_persist;
 pub mod node;
 
-pub use p2p::{DHTConfig, CollisionConfig, CommunerdConfig, AutoAttestConfig};
+pub use p2p::{DHTConfig, CollisionConfig, CommunerdConfig, MutualAttestConfig};
 pub use chronomatter::{ChronomatterConfig, KeyRotationConfig};
 pub use calendar::{CalendarConfig, EncryptionConfig};
 pub use time_family::TimeFamilyConfig;

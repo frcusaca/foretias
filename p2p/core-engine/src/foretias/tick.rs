@@ -273,27 +273,27 @@ pub fn verify_pair(
 ) -> Result<bool, NodeError> {
     let nonce = curr.aa_nonce;
     let stamps = curr.stamps_per_tick;
-    let mut ma_blob = Vec::with_capacity(tbid_str.len() + 8 + prev.public_key.len() + 8 + curr.public_key.len() + 8 + 16);
-    ma_blob.extend_from_slice(tbid_str.as_bytes());
-    ma_blob.extend_from_slice(&prev.tick_number.to_be_bytes());
-    ma_blob.extend_from_slice(&prev.public_key);
-    ma_blob.extend_from_slice(&curr.tick_number.to_be_bytes());
-    ma_blob.extend_from_slice(&curr.public_key);
+    let mut attest_blob = Vec::with_capacity(tbid_str.len() + 8 + prev.public_key.len() + 8 + curr.public_key.len() + 8 + 16);
+    attest_blob.extend_from_slice(tbid_str.as_bytes());
+    attest_blob.extend_from_slice(&prev.tick_number.to_be_bytes());
+    attest_blob.extend_from_slice(&prev.public_key);
+    attest_blob.extend_from_slice(&curr.tick_number.to_be_bytes());
+    attest_blob.extend_from_slice(&curr.public_key);
     // Backward compat: pre-v0.9 TickRecords have stamps_per_tick=0 (serde default)
-    ma_blob.extend_from_slice(&stamps.to_be_bytes());
-    ma_blob.extend_from_slice(&nonce[..]);
+    attest_blob.extend_from_slice(&stamps.to_be_bytes());
+    attest_blob.extend_from_slice(&nonce[..]);
 
     let forward_valid = crypto.verify_with(
         &prev.public_key,
         &curr.signature_algorithm,
-        &ma_blob,
+        &attest_blob,
         &curr.forward_foretis,
     )?;
 
     let backward_valid = crypto.verify_with(
         &curr.public_key,
         &curr.signature_algorithm,
-        &ma_blob,
+        &attest_blob,
         &curr.backward_foretis,
     )?;
 
@@ -478,8 +478,8 @@ mod tests {
             crate::crypto_server::PublicKeyBytes::P256Compressed(pk) => pk.bytes[..32].try_into().unwrap(),
         };
 
-        let (ma_blob, nonce) = auto_attestation_blob_with_count(&tbid_str, 1, &pub_key, 2, &pub_key, 0).unwrap();
-        let sig = server.sign(&ma_blob).unwrap();
+        let (attest_blob, nonce) = auto_attestation_blob_with_count(&tbid_str, 1, &pub_key, 2, &pub_key, 0).unwrap();
+        let sig = server.sign(&attest_blob).unwrap();
         let sig_bytes = sig.bytes.to_vec();
 
         let sig_alg = "Ed25519".to_string();
@@ -523,8 +523,8 @@ mod tests {
             crate::crypto_server::PublicKeyBytes::P256Compressed(pk) => pk.bytes[..32].try_into().unwrap(),
         };
 
-        let (ma_blob, nonce) = auto_attestation_blob_with_count(&tbid_str, 1, &pub_key, 2, &pub_key, 0).unwrap();
-        let sig = server.sign(&ma_blob).unwrap();
+        let (attest_blob, nonce) = auto_attestation_blob_with_count(&tbid_str, 1, &pub_key, 2, &pub_key, 0).unwrap();
+        let sig = server.sign(&attest_blob).unwrap();
         let mut sig_bytes = sig.bytes.to_vec();
         let sig_alg = "Ed25519".to_string();
 

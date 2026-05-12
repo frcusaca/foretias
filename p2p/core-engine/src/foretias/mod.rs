@@ -11,7 +11,7 @@ pub use types::{Tbid, TbidSecret, PublicKeyBytes, SignatureBytes, AlgorithmId, D
 pub use tick::{TickRecord, Foretis, CalendarLookup, stamp, verify, auto_attestation_blob, auto_attestation_blob_with_count, verify_pair, verify_genesis_signature};
 pub use calendar::Calendar;
 pub use external_attestation::ExternalAttestation;
-pub use callbacks::{TickObserver, Attester, PeerMessenger, PeerAddr, CommunityQuery, CommunityResponse, TransportError, AutoAttestObserver};
+pub use callbacks::{TickObserver, Attester, PeerMessenger, PeerAddr, CommunityQuery, CommunityResponse, TransportError, MutualAttestObserver};
 
 #[cfg(test)]
 mod encoding_tests;

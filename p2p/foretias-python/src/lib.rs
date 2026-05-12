@@ -903,7 +903,7 @@ pub struct PyNodeConfig {
     #[pyo3(get)]
     pub peers: Vec<String>,
     #[pyo3(get)]
-    pub auto_attest_every_n: u64,
+    pub mutually_attest_every_n: u64,
     #[pyo3(get)]
     pub request_timeout_secs: u64,
     #[pyo3(get)]
@@ -926,9 +926,9 @@ impl From<&TimeFamilyConfigInner> for PyNodeConfig {
             calendar_path: c.calendars[0].persist_path.to_string_lossy().to_string(),
             chronon_ns: c.chronomatter.chronon_ns,
             serialized: false,
-            peers: c.communerd.auto_attest.peers.clone(),
-            auto_attest_every_n: c.communerd.auto_attest.every_n_chronons,
-            request_timeout_secs: c.communerd.auto_attest.request_timeout_secs,
+            peers: c.communerd.mutual_attest.peers.clone(),
+            mutually_attest_every_n: c.communerd.mutual_attest.every_n_chronons,
+            request_timeout_secs: c.communerd.mutual_attest.request_timeout_secs,
             p2p_listen: c.communerd.p2p_listen.clone(),
             p2p_dial: c.communerd.p2p_dial.clone(),
             dht_namespace: c.communerd.dht.namespace.clone(),
@@ -949,7 +949,7 @@ impl PyNodeConfig {
             chronon_ns: 60_000_000_000,
             serialized: false,
             peers: Vec::new(),
-            auto_attest_every_n: 1,
+            mutually_attest_every_n: 1,
             request_timeout_secs: 5,
             p2p_listen: None,
             p2p_dial: Vec::new(),

@@ -187,7 +187,7 @@ fn test_stamp_and_verify_e2e() {
 // ── In-process integration tests ─────────────────────────────────────────────
 
 #[tokio::test]
-async fn test_two_nodes_auto_attest() {
+async fn test_two_nodes_mutual_attest() {
     use foretias_node::server::TimeFamilyServer;
 
     let port_a = find_available_port();
@@ -201,7 +201,7 @@ async fn test_two_nodes_auto_attest() {
     );
 
     let config = foretias_core::config::CommunerdConfig {
-        auto_attest: foretias_core::config::AutoAttestConfig {
+        mutual_attest: foretias_core::config::MutualAttestConfig {
             peers: vec![addr_b.clone()],
             every_n_chronons: 1,
             request_timeout_secs: 5,
@@ -259,7 +259,7 @@ async fn test_peer_unreachable_does_not_crash() {
     let addr = format!("127.0.0.1:{}", port);
 
     let config = foretias_core::config::CommunerdConfig {
-        auto_attest: foretias_core::config::AutoAttestConfig {
+        mutual_attest: foretias_core::config::MutualAttestConfig {
             peers: vec!["127.0.0.1:59999".to_string()],
             every_n_chronons: 1,
             request_timeout_secs: 1,

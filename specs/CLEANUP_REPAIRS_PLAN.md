@@ -68,7 +68,7 @@
 ### 3a. Create `CommunerdConfig` and move `AutoAttestConfig` (p2p.rs)
 
 - [x](2026-05-11 21:37) Add `CommunerdConfig` struct to `p2p/core-engine/src/config/p2p.rs` with fields:
-  - `auto_attest: AutoAttestConfig` (moved from chronomatter.rs)
+  - `mutual_attest: MutualAttestConfig` (moved from chronomatter.rs)
   - `p2p_listen: Option<String>` (from P2PConfig)
   - `p2p_port_range: [u16; 2]` (from P2PConfig)
   - `p2p_dial: Vec<String>` (from P2PConfig)
@@ -78,8 +78,8 @@
   - `collision: CollisionConfig` (from P2PConfig)
 - [x](2026-05-11 21:37) Add `#[derive(Debug, Clone, Serialize, Deserialize)]` with serde defaults
 - [x](2026-05-11 21:37) Implement `Default` for `CommunerdConfig`
-- [x](2026-05-11 21:37) Move `AutoAttestConfig` struct definition from `chronomatter.rs` to `p2p.rs`
-- [x](2026-05-11 21:37) Move `AutoAttestConfig` default functions to `p2p.rs`
+- [x](2026-05-11 21:37) Move `MutualAttestConfig` struct definition from `chronomatter.rs` to `p2p.rs`
+- [x](2026-05-11 21:37) Move `MutualAttestConfig` default functions to `p2p.rs`
 - [x](2026-05-11 21:37) Update `config/mod.rs` re-exports: add `CommunerdConfig`, `AutoAttestConfig` from p2p; keep `DHTConfig`, `CollisionConfig`
 
 ### 3b. Update `ChronomatterConfig` (chronomatter.rs)

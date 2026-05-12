@@ -22,7 +22,7 @@
 
 Restructure `TimeFamilyServer` into three time beings — **Chronomatter** (*Chronos fidelis authenticus*), **Calendar** (*Chronos fidelis grapha*), **Communerd** (*Chronos fidelis Locutus*)— each with its own TBID, coordinated by a **TimeFamily** (*Chronos fidelis adunatrix*, the orchestrator). Intra-family communication uses direct method calls and callbacks. Only Communerd communicates with extra-family peers. Then, using only the existing v0.1 JSON-RPC primitives (`/stamp`, `/verify`, `/get_calendar_slice`), implement **mutual attestation**: two statically-configured Foretias nodes periodically call each other's `/stamp` with their current `TickRecord` as content, verify the returned `Foretis`, and store it as an `ExternalAttestation` in their local calendar.
 
-**Terminology note:** "auto-attestation" (v0.1/v0.2.0) refers to **intra-node** tick chaining (same TBID, consecutive ticks linked by `aa_nonce`). "Mutual attestation" (this sub-spec) refers to **cross-node** stamping (different TBID). When TBID is different, it is no longer called "auto-attestation."
+**Terminology note:** "auto-attestation" (v0.1/v0.2.0) refers to **intra-node** chronon chaining (same TBID, consecutive chronons linked by `aa_nonce`). "Mutual attestation" (this sub-spec) refers to **cross-node** stamping (different TBID). When TBID is different, it is no longer called "auto-attestation."
 
 (@human — nothing about this sub-spec requires transport confidentiality.
 `/stamp` and `/verify` are not secrets; their content is public unless the

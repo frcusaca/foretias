@@ -100,7 +100,7 @@ The DHT stress test currently runs K seeds + N peers for a configurable runtime,
   - `mirror_request_sent` — (new, for active mirroring)
   - `mirror_catchup_complete` — (new, for active mirroring)
   - `heartbeat_sent` — add `tracing::debug!(event="heartbeat_sent")` in `heartbeat_broadcast_loop`
-  - `attestation_sent` — add `tracing::info!(event="attestation_sent", peer=...)` in auto-attest path
+  - `attestation_sent` — add `tracing::info!(event="attestation_sent", peer=...)` in mutual attest path
   - `connection_established` — already in swarm event handling
   - `connection_dropped` — already in swarm event handling
 
@@ -197,9 +197,9 @@ The DHT stress test currently runs K seeds + N peers for a configurable runtime,
 
 **Problem**: Auto-attestation and mirror selection should distribute load randomly across available peers.
 
-**Task 2.3.1** — Add shuffle to auto-attest peer selection in Chronomatter
+**Task 2.3.1** — Add shuffle to mutual attest peer selection in Chronomatter
 - **File**: `core-engine/src/chronomatter.rs`
-- **Check**: Find the auto-attest loop (likely inside `daemon_tick()` or a dedicated method). Does it select peers sequentially or randomly?
+- **Check**: Find the mutual attest loop (likely inside `daemon_tick()` or a dedicated method). Does it select peers sequentially or randomly?
 - **If sequential**: Add Fisher-Yates shuffle before selection:
   ```rust
   let mut peers = messenger.query_community(CommunityQuery::KnownPeers)?;
@@ -344,7 +344,7 @@ The DHT stress test currently runs K seeds + N peers for a configurable runtime,
 [ ] M3  Add --log-file flag for structured JSON output
 [ ] M4  TBID-based self-recognition in gossip_event_loop
 [ ] M5  max_discovered_peers cap in PeerPool
-[ ] M6  Random peer selection for auto-attestation
+[ ] M6  Random peer selection for mutual attestation
 [ ] M7  Create dht_stress_analysis.ipynb (shell + imports + config)
 [ ] M8  Enhanced log parser with timestamp extraction
 [ ] M9  Time-series plots (activity, stamps, verifies, discovery, errors)

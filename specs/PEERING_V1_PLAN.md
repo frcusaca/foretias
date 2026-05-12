@@ -36,7 +36,7 @@ This makes multi-node testing painful and prevents zero-config deployment. A new
 │  7. Bootstrap DHT                                                │
 │  8. GET record from DHT → discover peer list                     │
 │  9. Dial discovered peers (up to --max-discovered-peers=13)      │
-│ 10. Add to PeerPool → begin auto-attestation                     │
+│ 10. Add to PeerPool → begin mutual attestation                   │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -196,7 +196,7 @@ GET record from DHT key "/foretias/{namespace}/peers/v1"
     a. Dial multiaddr
     b. On connection established, extract JSON-RPC address from identify info
     c. Add to PeerPool with PeerAddr { json_rpc, peer_id, last_seen_ns }
-    d. Begin auto-attestation cycle
+    d. Begin mutual attestation cycle
 ```
 
 ### 5.2 Max Discovered Peers
@@ -426,7 +426,7 @@ async fn cmd_serve(
     persist_path: Option<String>,
     start_dormant: bool,
     peers: Vec<String>,
-    auto_attest_every_chronons: u64,
+    mutually_attest_every_chronons: u64,
     request_timeout_secs: u64,
     p2p_listen: Option<String>,
     p2p_dial: Vec<String>,
@@ -443,7 +443,7 @@ async fn cmd_serve(
     persist_path: Option<String>,
     start_dormant: bool,
     peers: Vec<String>,
-    auto_attest_every_chronons: u64,
+    mutually_attest_every_chronons: u64,
     request_timeout_secs: u64,
     p2p_listen: Option<String>,
     p2p_port_range: String,
@@ -523,7 +523,7 @@ Java CLI uses JNI to this FFI layer.
 ### Phase 3 — Peer Attestation (COMPLETE)
 
 - [x](2026-05-08 12:30) Wire `DhtPeerDiscovered` events into `PeerPool.add_peer()` in gossip loop — communerd/mod.rs:412-422
-- [x](2026-05-08 12:30) Implement attestation interval formula in auto-attestation scheduler — config/node.rs:71-73
+- [x](2026-05-08 12:30) Implement attestation interval formula in mutual attestation scheduler — config/node.rs:71-73
 - [x](2026-05-08 12:30) Print server startup info with P2P details (actual port, TBID, PeerId, multiaddr) — main.rs:400-424
 
 ### Phase 4 — Multi-Language Expansion (PARTIAL)

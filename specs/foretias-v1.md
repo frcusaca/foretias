@@ -22,7 +22,7 @@ The guarantee is simple:
 
 ### 1.3 What Foretias v1 Is
 
-Foretias v1 is a **Python library** that provides the core time being: a self-sovereign entity that stamps content and verifies stamps through its own local tick chain. This time being can be instantiated within your own system to record when things happened.
+Foretias v1 is a **Python library** that provides the core time being: a self-sovereign entity that stamps content and verifies stamps through its own local chronon chain. This time being can be instantiated within your own system to record when things happened.
 
 ---
 
@@ -49,7 +49,7 @@ A **time being** is a computational entity devoted to maintaining temporal integ
 
 **Lifecycle:**
 
-1. **Created** with `tbid`, `tbn`, `chronon`, and `serialized`. Generates its first keypair for tick 0. The calendar is initialized with one record: `tick_number` = 0, `public_key` = the new public key, `forward_foretis` and `backward_foretis` are computed from a self-transition auto-attestation (auto-attestation(genesis, genesis)).
+1. **Created** with `tbid`, `tbn`, `chronon`, and `serialized`. Generates its first keypair for tick 0. The calendar is initialized with one record: `tick_number` = 0, `public_key` = the new public key, `forward_foretis` and `backward_foretis` are computed from an existing chrononchain auto-attestation (auto-attestation(genesis, genesis)).
 2. **Advances ticks**:
    - If `serialized = False`: a background daemon thread calls `tick()` every `chronon_ns` nanoseconds. `stamp()` simply signs under the current tick.
    - If `serialized = True`: no background thread. `tick()` advances only when `stamp()` is called, and only one caller is permitted at a time (mutex-protected).
@@ -64,7 +64,7 @@ A **time being** is a computational entity devoted to maintaining temporal integ
 **Invariants:**
 
 - A time being never produces two different signatures for the same `(tick, content_hash)` pair.
-- No entry in the calendar has `forward_foretis = None` or `backward_foretis = None`. Genesis records a self-transition; every other record records a transition from its predecessor.
+- No entry in the calendar has `forward_foretis = None` or `backward_foretis = None`. Genesis records an existing chrononchain; every other record records a transition from its predecessor.
 - All consecutive pairs in the calendar are auto-attesting via `backward_foretis` and `forward_foretis`, verifiable using their respective public keys.
 - Public keys can only attest to Foretises signed after their own start boundary. The existence of a subsequent tick defines the end of the period during which a Foretis could have taken place.
 
@@ -119,7 +119,7 @@ class TickRecord:
 
 ### 2.3 Calendar (Latin: *Chronos graphus*)
 
-A **calendar** is the append-only log of a time being's tick chain. It stores every tick's public key and transition proof in sequential order.
+A **calendar** is the append-only log of a time being's chronon chain. It stores every tick's public key and transition proof in sequential order.
 
 **Operations:**
 
@@ -283,7 +283,7 @@ If the signature and content checks pass, the Foretis is valid. The window check
 
 ### 3.3 Chain Verification
 
-The tick chain provides temporal ordering and continuity guarantees:
+The chronon chain provides temporal ordering and continuity guarantees:
 
 - **Pair verification** (`_verify_pair(A, B)`): Given two consecutive tick records A and B, verify both cross-stamp signatures:
   - `forward_foretis` of B verifies against A's public key.

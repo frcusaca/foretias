@@ -61,8 +61,8 @@ foretias serve --addr 127.0.0.1:4001 --start-dormant --persist-path /tmp/cal
 | `--chronon-ns`, `-c` | `60000000000` | Chronon period in nanoseconds (60s) |
 | `--persist-path` | — | Persist calendar to directory |
 | `--start-dormant` | — | Start in verify-only mode (requires `--persist-path`) |
-| `--peer` | — | Peer address for auto-attestation (repeatable) |
-| `--auto-attest-every-chronons` | `1` | Mutual attestation frequency in chronons |
+| `--peer` | — | Peer address for mutual attestation (repeatable) |
+| `--mutually-attest-every-chronons` | `1` | Mutual attestation frequency in chronons |
 | `--request-timeout-secs` | `5` | RPC request timeout in seconds |
 | `--p2p-listen` | — | libp2p listen multiaddr (e.g. `/ip4/0.0.0.0/tcp/9901`) |
 | `--p2p-port-range` | `9900..9999` | Port range for auto-selection when `--p2p-listen` omitted |

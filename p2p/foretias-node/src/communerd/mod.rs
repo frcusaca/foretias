@@ -104,12 +104,12 @@ impl Clone for Communerd {
 impl Communerd {
     pub fn new(config: CommunerdConfig) -> Self {
         let transport: Arc<dyn PeerTransport> = Arc::new(JsonRpcTransport::new(
-            config.auto_attest.request_timeout_secs.max(1),
+            config.mutual_attest.request_timeout_secs.max(1),
         ));
         let libp2p_transport = Arc::new(Libp2pTransport::new(
-            config.auto_attest.request_timeout_secs.max(1),
+            config.mutual_attest.request_timeout_secs.max(1),
         ));
-        let peers: Vec<PeerAddr> = config.auto_attest.peers.iter()
+        let peers: Vec<PeerAddr> = config.mutual_attest.peers.iter()
             .map(|p| PeerAddr { json_rpc: p.clone(), peer_id: None, last_seen_ns: 0 })
             .collect();
         let peer_pool = PeerPool::new(peers, Arc::clone(&transport), 30);
@@ -137,7 +137,7 @@ impl Communerd {
     }
 
     pub fn start_liveness_pings(&self) {
-        if !self.config.auto_attest.peers.is_empty() {
+        if !self.config.mutual_attest.peers.is_empty() {
             let pool = self.peer_pool.clone();
             tokio::spawn(async move { pool.start_liveness_pings().await });
         }
@@ -802,11 +802,11 @@ impl PeerMessenger for Communerd {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use foretias_core::config::AutoAttestConfig;
+    use foretias_core::config::MutualAttestConfig;
 
     fn make_config() -> CommunerdConfig {
         CommunerdConfig {
-            auto_attest: AutoAttestConfig {
+            mutual_attest: MutualAttestConfig {
                 peers: vec!["127.0.0.1:4002".into()],
                 every_n_chronons: 1,
                 request_timeout_secs: 5,
@@ -864,8 +864,8 @@ mod tests {
     fn communerd_config_access() {
         let config = make_config();
         let communerd = Communerd::new(config.clone());
-        assert_eq!(communerd.config().auto_attest.peers, config.auto_attest.peers);
-        assert_eq!(communerd.config().auto_attest.every_n_chronons, 1);
+        assert_eq!(communerd.config().mutual_attest.peers, config.mutual_attest.peers);
+        assert_eq!(communerd.config().mutual_attest.every_n_chronons, 1);
     }
 
     #[test]

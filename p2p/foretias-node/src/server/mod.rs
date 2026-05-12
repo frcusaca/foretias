@@ -9,7 +9,7 @@ use tokio::net::TcpListener;
 use foretias_core::chronomatter::Chronomatter;
 use foretias_core::config::CommunerdConfig;
 use foretias_core::core::identity::generate_ed25519_keypair;
-use foretias_core::foretias::callbacks::{TickObserver, AutoAttestObserver};
+use foretias_core::foretias::callbacks::{TickObserver, MutualAttestObserver};
 use foretias_core::foretias::{TickRecord, types::{TickNumber, Tbid}};
 use foretias_core::error::NodeError;
 use foretias_core::noise;
@@ -63,7 +63,7 @@ impl TimeFamilyServer {
         let metrics = Arc::new(NodeMetrics::new());
         let calendar = Arc::new(Calendar::new(Tbid::default(), "init"));
         let mut cm = Chronomatter::new(chronon_ns, Arc::clone(&calendar) as Arc<dyn TickObserver>)?;
-        cm.set_auto_attest_observer(Arc::clone(&metrics) as Arc<dyn AutoAttestObserver>);
+        cm.set_mutual_attest_observer(Arc::clone(&metrics) as Arc<dyn MutualAttestObserver>);
         let (tbid, tbn) = (cm.get_tbid(), cm.get_tbn().to_string());
         let binding = calendar.inner();
         let mut cal_inner = binding.write();
@@ -97,7 +97,7 @@ impl TimeFamilyServer {
         )?);
         let mut cm = Chronomatter::from_calendar(path, crypto, Arc::new(NoOpObserver))?;
         let metrics = Arc::new(NodeMetrics::new());
-        cm.set_auto_attest_observer(Arc::clone(&metrics) as Arc<dyn AutoAttestObserver>);
+        cm.set_mutual_attest_observer(Arc::clone(&metrics) as Arc<dyn MutualAttestObserver>);
         let calendar = Arc::new(Calendar::from_persisted(path)?);
         let (pub_key, priv_key) = generate_ed25519_keypair()?;
         Ok(Self {
