@@ -65,27 +65,28 @@
 
 **Goal:** Normalize prose in specs and documentation. These are independent tasks that can be done in parallel.
 
-- [ ] `README.md` — "auto-attestation" → "mutual attestation" in peer flag context (line 64); CLI flag `--auto-attest-every-chronons` → `--mutually-attest-every-chronons` (line 65); verify "auto-attestation" is NOT used for cross-node elsewhere
-- [ ] `HOWTO.md` — "auto-attesting" → "mutually attesting" in all cross-node references (lines 8, 115, 203, 205, 226, 258); "auto-attestation" → "mutual attestation" where cross-node
-- [ ] `AGENTS.md` — `auto_attest_every_chronons` → `mutually_attest_every_chronons` (line 464)
-- [ ] `specs/CLI_SPECIFIED.md` — flag rename `--auto-attest-every-chronons` → `--mutually-attest-every-chronons` (lines 64, 349); description updates
-- [ ] `specs/FORETIAS_0_OVERVIEW.md` — context check: "auto-attestation" is used for Chronomatter self-linking (line 144) — this is CORRECT, leave as-is
-- [ ] `specs/CHRONONCHAIN_NAMING_SPEC.md` — line 28: "mutual auto-attestation" → "auto-attestation"
-- [ ] `specs/FORETIAS_2_IMPLEMENTATION_PLAN.md` — prose normalization where `auto_attest` appears in cross-calendar context
-- [ ] `specs/FORETIAS_2_P2P_2_direct_p2p_mutual_attestation.md` — line 25: verify terminology note is correct (it distinguishes auto vs mutual correctly)
-- [ ] `specs/foretias-v1.md` — line 52: "self-transition" → "existing chrononchain"; line 67: "self-transition" → "existing chrononchain"
-- [ ] `specs/foretias-v1.md` — line 25: "tick chain" → "chronon chain" (×3 occurrences)
-- [ ] `specs/FORETIAS_2_P2P_2_direct_p2p_mutual_attestation.md` — line 25: "intra-node tick chaining" → "intra-node chronon chaining"
-- [ ] `specs/CONFIG_HIERARCHY_PLAN.md` — `AutoAttestConfig` → `MutualAttestConfig` references; `auto_attest` → `mutual_attest` field references
-- [ ] `specs/CLEANUP_REPAIRS_SPEC.md` — `AutoAttestConfig` → `MutualAttestConfig` references (historical doc, optional)
-- [ ] `specs/CLEANUP_REPAIRS_PLAN.md` — `AutoAttestConfig` → `MutualAttestConfig` references (historical doc, optional)
-- [ ] `specs/FORETIAS_HOWTO_SPEC.md` — "auto-attestation" → "mutual attestation" where cross-node context
-- [ ] `specs/DHT_STRESS_TEST_ANALYSIS_PLAN.md` — "auto-attest" → "mutual attest" in prose where cross-node
-- [ ] `specs/CALENDAR_ACTIVE_MIRRORING_PLAN.md` — verify terminology (already uses "mutual attestation" correctly)
-- [ ] `specs/FORETIAS_2_P2P_5_hardening.md` — "mutual-attest" prose check (already correct as mutual attestation)
-- [ ] `specs/FORETIAS_2_P2P_6_probity_gossip.md` — "mutual-attest" prose check (already correct)
-- [ ] `specs/FORETIAS_2_P2P_7_collision_detection.md` — "mutual-attest" prose check (already correct)
-- [ ] `src/foretias/thin_client.py` — prose comment update where `auto_attest` appears in cross-node context
+- [x](2026-05-12 17:00) `README.md` — "auto-attestation" → "mutual attestation" in peer flag context (line 64); CLI flag `--auto-attest-every-chronons` → `--mutually-attest-every-chronons` (line 65); verify "auto-attestation" is NOT used for cross-node elsewhere
+- [x](2026-05-12 17:00) `HOWTO.md` — "auto-attesting" → "mutually attesting" in all cross-node references (lines 8, 115, 203, 205, 226, 258); "auto-attestation" → "mutual attestation" where cross-node
+- [x](2026-05-12 17:00) `AGENTS.md` — `auto_attest_every_chronons` → `mutually_attest_every_chronons` (line 464)
+- [x](2026-05-12 17:00) `specs/CLI_SPECIFIED.md` — flag rename `--auto-attest-every-chronons` → `--mutually-attest-every-chronons` (lines 64, 349); description updates; struct field `auto_attest_every_chronons` → `mutually_attest_every_chronons`
+- [x](2026-05-12 17:00) `specs/FORETIAS_0_OVERVIEW.md` — context check: "auto-attestation" is used for Chronomatter self-linking (line 144) — this is CORRECT, leave as-is
+- [x](2026-05-12 17:00) `specs/CHRONONCHAIN_NAMING_SPEC.md` — line 28: "mutual auto-attestation" → "auto-attestation"
+- [x](2026-05-12 17:00) `specs/FORETIAS_2_IMPLEMENTATION_PLAN.md` — prose normalization where `auto_attest` appears in cross-calendar context
+- [x](2026-05-12 17:00) `specs/FORETIAS_2_P2P_2_direct_p2p_mutual_attestation.md` — line 25: verify terminology note is correct (it distinguishes auto vs mutual correctly)
+- [x](2026-05-12 17:00) `specs/foretias-v1.md` — line 52: "self-transition" → "existing chrononchain"; line 67: "self-transition" → "existing chrononchain"
+- [x](2026-05-12 17:00) `specs/foretias-v1.md` — line 25: "tick chain" → "chronon chain" (×3 occurrences)
+- [x](2026-05-12 17:00) `specs/FORETIAS_2_P2P_2_direct_p2p_mutual_attestation.md` — line 25: "intra-node tick chaining" → "intra-node chronon chaining"
+- [x](2026-05-12 17:00) `specs/CONFIG_HIERARCHY_PLAN.md` — `AutoAttestConfig` → `MutualAttestConfig` references; `auto_attest` → `mutual_attest` field references; `legacy.auto_attest_every_n` → `legacy.mutually_attest_every_n`
+- [x](2026-05-12 17:00) `specs/CLEANUP_REPAIRS_SPEC.md` — `AutoAttestConfig` → `MutualAttestConfig` references (historical doc, optional — already correct)
+- [x](2026-05-12 17:00) `specs/CLEANUP_REPAIRS_PLAN.md` — `AutoAttestConfig` → `MutualAttestConfig` references (historical doc, optional — already correct)
+- [x](2026-05-12 17:00) `specs/FORETIAS_HOWTO_SPEC.md` — "auto-attestation" → "mutual attestation" where cross-node context (already clean)
+- [x](2026-05-12 17:00) `specs/DHT_STRESS_TEST_ANALYSIS_PLAN.md` — "auto-attest" → "mutual attest" in prose where cross-node (already clean)
+- [x](2026-05-12 17:00) `specs/CALENDAR_ACTIVE_MIRRORING_PLAN.md` — verify terminology (already uses "mutual attestation" correctly)
+- [x](2026-05-12 17:00) `specs/FORETIAS_2_P2P_5_hardening.md` — "mutual-attest" prose check (already correct as mutual attestation)
+- [x](2026-05-12 17:00) `specs/FORETIAS_2_P2P_6_probity_gossip.md` — "mutual-attest" prose check (already correct)
+- [x](2026-05-12 17:00) `specs/FORETIAS_2_P2P_7_collision_detection.md` — "mutual-attest" prose check (already correct)
+- [x](2026-05-12 17:00) `src/foretias/thin_client.py` — prose comment update where `auto_attest` appears in cross-node context (already clean)
+- [x](2026-05-12 17:00) `docs/threat_model_v0_5.md` — "auto-attestation" → "mutual attestation" in v0.2 cross-node context (lines 4, 12)
 
 ---
 

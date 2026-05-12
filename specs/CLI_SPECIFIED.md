@@ -346,7 +346,7 @@ Serve {
     persist_path: Option<String>,           // --persist-path
     start_dormant: bool,                    // --start-dormant
     peer: Vec<String>,                      // --peer (repeatable)
-    auto_attest_every_chronons: u64,        // --mutually-attest-every-chronons, default 1
+    mutually_attest_every_chronons: u64,    // --mutually-attest-every-chronons, default 1
     request_timeout_secs: u64,              // --request-timeout-secs, default 5
     p2p_listen: Option<String>,             // --p2p-listen
     p2p_port_range: String,                 // --p2p-port-range, default "9900..9999"

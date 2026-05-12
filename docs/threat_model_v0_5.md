@@ -1,7 +1,7 @@
 # Foretias v0.5 Threat Model
 
 **Version:** v0.5-hardening
-**Scope:** v0.2 through v0.4 implementation (auto-attestation, libp2p transport, DHT discovery)
+**Scope:** v0.2 through v0.4 implementation (mutual attestation, libp2p transport, DHT discovery)
 **Date:** 2026-04-30
 **Status:** Baseline — living artifact, updated with each milestone
 
@@ -9,7 +9,7 @@
 
 ## 1. Scope
 
-**In scope:** The complete attack surface introduced across v0.2 (direct P2P auto-attestation), v0.3 (libp2p transport with two-layer identity), and v0.4 (Kademlia DHT discovery with `DhtPeerSource` and hybrid transport selection).
+**In scope:** The complete attack surface introduced across v0.2 (direct P2P mutual attestation), v0.3 (libp2p transport with two-layer identity), and v0.4 (Kademlia DHT discovery with `DhtPeerSource` and hybrid transport selection).
 
 **Out of scope:** v0.6+ GossipSub layer (not yet shipped), v0.9+ secure enclave backend. Those will produce their own threat model addenda.
 

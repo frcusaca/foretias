@@ -270,7 +270,7 @@ impl From<LegacyNodeConfig> for TimeFamilyConfig {
                 signature_algorithm: legacy.signature_algorithm,
                 kem_algorithm: legacy.kem_algorithm,
                 mutual_attest: MutualAttestConfig {
-                    every_n_chronons: legacy.auto_attest_every_n,
+                    every_n_chronons: legacy.mutually_attest_every_n,
                     request_timeout_secs: legacy.request_timeout_secs,
                     peers: legacy.peers,
                 },
