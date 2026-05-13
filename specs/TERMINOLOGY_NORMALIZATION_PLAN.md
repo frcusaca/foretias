@@ -17,14 +17,14 @@
 
 **Goal:** Rename `AutoAttestConfig` → `MutualAttestConfig`, `AutoAttestObserver` → `MutualAttestObserver` and all related fields/methods.
 
-- [ ] `p2p/core-engine/src/config/p2p.rs` — rename `AutoAttestConfig` → `MutualAttestConfig`; rename field `auto_attest` → `mutual_attest` in `CommunerdConfig`; rename `default_auto_attest_every_n` → `default_mutual_attest_every_n`
-- [ ] `p2p/core-engine/src/config/node.rs` — remove deprecated `auto_attest_every_n` field from `NodeConfig` if still present (verify first)
-- [ ] `p2p/core-engine/src/config/time_family.rs` — update all accessor methods: `peers()` → `mutual_attest_peers()`, `auto_attest_every_n()` → `mutual_attest_every_n()`, `request_timeout_secs()` → `mutual_attest_request_timeout_secs()`; update all `self.communerd.auto_attest` → `self.communerd.mutual_attest`
-- [ ] `p2p/core-engine/src/config/mod.rs` — update re-exports: `AutoAttestConfig` → `MutualAttestConfig`
-- [ ] `p2p/core-engine/src/foretias/callbacks.rs` — rename `AutoAttestObserver` → `MutualAttestObserver`; rename methods `on_auto_attest_sent()` → `on_mutual_attest_sent()`, `on_auto_attest_ok()` → `on_mutual_attest_ok()`, `on_auto_attest_failed()` → `on_mutual_attest_failed()`
-- [ ] `p2p/core-engine/src/foretias/mod.rs` — update re-exports if `AutoAttestObserver` is re-exported here
-- [ ] `p2p/core-engine/src/chronomatter/mod.rs` — rename `auto_attest_observer` → `mutual_attest_observer`; rename `set_auto_attest_observer()` → `set_mutual_attest_observer()`; update all references to `AutoAttestObserver` → `MutualAttestObserver`
-- [ ] Run `cargo check -p foretias-core` — verify no compilation errors after Phase 1
+- [x](2026-05-13 00:33) `p2p/core-engine/src/config/p2p.rs` — rename `AutoAttestConfig` → `MutualAttestConfig`; rename field `auto_attest` → `mutual_attest` in `CommunerdConfig`; rename `default_auto_attest_every_n` → `default_mutual_attest_every_n`
+- [x](2026-05-13 00:33) `p2p/core-engine/src/config/node.rs` — remove deprecated `auto_attest_every_n` field from `NodeConfig` if still present (verify first — not deprecated, left as-is)
+- [x](2026-05-13 00:33) `p2p/core-engine/src/config/time_family.rs` — update all accessor methods: `peers()` → `mutual_attest_peers()`, `auto_attest_every_n()` → `mutual_attest_every_n()`, `request_timeout_secs()` → `mutual_attest_request_timeout_secs()`; update all `self.communerd.auto_attest` → `self.communerd.mutual_attest`
+- [x](2026-05-13 00:33) `p2p/core-engine/src/config/mod.rs` — update re-exports: `AutoAttestConfig` → `MutualAttestConfig`
+- [x](2026-05-13 00:33) `p2p/core-engine/src/foretias/callbacks.rs` — rename `AutoAttestObserver` → `MutualAttestObserver`; rename methods `on_auto_attest_sent()` → `on_mutual_attest_sent()`, `on_auto_attest_ok()` → `on_mutual_attest_ok()`, `on_auto_attest_failed()` → `on_mutual_attest_failed()`
+- [x](2026-05-13 00:33) `p2p/core-engine/src/foretias/mod.rs` — update re-exports if `AutoAttestObserver` is re-exported here
+- [x](2026-05-13 00:33) `p2p/core-engine/src/chronomatter/mod.rs` — rename `auto_attest_observer` → `mutual_attest_observer`; rename `set_auto_attest_observer()` → `set_mutual_attest_observer()`; update all references to `AutoAttestObserver` → `MutualAttestObserver`
+- [x](2026-05-13 00:33) Run `cargo check -p foretias-core` — verify no compilation errors after Phase 1
 
 ---
 
