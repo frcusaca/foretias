@@ -17,6 +17,10 @@ Please read the entire document word for word do not skip any thing.
 | **PtP** | Point-to-point (direct channel between two parties) | "point-to-point", "point to point", "point2point", "PTP" (capital T means something else) |
 | **P2P** | Peer-to-peer (network of distributed nodes) | "peer-to-peer", "peer to peer", "peer2peer" |
 
+**In prose (English):** The shorthand must be precisely capitalized as `PtP` and `P2P`. No other capitalization is permitted.
+
+**In code identifiers:** The three-character sequence must appear in either exact-case or all-lowercase. Acceptable examples: `PtPClient`, `P2PClient`, `make_ptp_connection`, `make_p2p_connection`, `ptp_transport`, `p2p_mesh`. Forbidden examples: `PtpClient`, `P2pClient`, `PTPCLIENT`, `P2PCLIENT`, `ptp_client` (lowercase p is fine; uppercase P is not — only `ptp` or `PtP` for the three chars, only `p2p` or `P2P` for the three chars).
+
 These shorthands are enforced across all specs, plans, code, comments, and documentation. No exceptions.
 
 ---
