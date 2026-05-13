@@ -19,42 +19,42 @@
 
 ### 0.1 Root Documentation
 
-- [ ] `AGENTS.md` — Add TERMINOLOGY SHORTHANDS section (table format)
-- [ ] `README.md` — Add inline terminology note
+- [x](2026-05-13 14:45) `AGENTS.md` — Add TERMINOLOGY SHORTHANDS section (table format)
+- [x](2026-05-13 14:45) `README.md` — Add inline terminology note
 
 ### 0.2 Spec Files — PtP replacements
 
-- [ ] `specs/CALENDAR_REPLICATION_SPEC.md` — 2 occurrences of "point-to-point" → `PtP`
-- [ ] `specs/FORETIAS_2_IMPLEMENTATION_PLAN.md` — 1 occurrence of "point-to-point" → `PtP`
-- [ ] `specs/FORETIAS_2_P2P_2_direct_p2p_mutual_attestation.md` — 1 occurrence of "point-to-point" → `PtP`
-- [ ] `specs/FORETIAS_6_HTTPS_TRANSPORT_SPEC.md` — 1 occurrence of "point-to-point" → `PtP`
-- [ ] `specs/CALENDAR_ACTIVE_MIRRORING_PLAN.md` — 1 occurrence of "point-to-point" → `PtP`
-- [ ] `specs/questions.md` — 3 occurrences of "point-to-point" → `PtP`
+- [x](2026-05-13 14:45) `specs/CALENDAR_REPLICATION_SPEC.md` — 2 occurrences of "point-to-point" → `PtP`
+- [x](2026-05-13 14:45) `specs/FORETIAS_2_IMPLEMENTATION_PLAN.md` — 1 occurrence of "point-to-point" → `PtP`
+- [x](2026-05-13 14:45) `specs/FORETIAS_2_P2P_2_direct_p2p_mutual_attestation.md` — 1 occurrence of "point-to-point" → `PtP`
+- [x](2026-05-13 14:45) `specs/FORETIAS_6_HTTPS_TRANSPORT_SPEC.md` — 1 occurrence of "point-to-point" → `PtP`
+- [x](2026-05-13 14:45) `specs/CALENDAR_ACTIVE_MIRRORING_PLAN.md` — 1 occurrence of "point-to-point" → `PtP`
+- [x](2026-05-13 14:45) `specs/questions.md` — 3 occurrences of "point-to-point" → `PtP`
 
 ### 0.3 Spec Files — P2P replacements
 
-- [ ] `specs/FORETIAS_2_IMPLEMENTATION_PLAN.md` — 1 occurrence of "peer-to-peer" → `P2P`
-- [ ] `specs/WHITEPAPER_SPEC.md` — 3 occurrences of "peer-to-peer" → `P2P`
-- [ ] `specs/FORETIAS_0_OVERVIEW.md` — 1 occurrence of "peer-to-peer" → `P2P`
-- [ ] `specs/FORETIAS_2_P2P_2_direct_p2p_mutual_attestation.md` — 1 occurrence of "peer-to-peer" → `P2P`
-- [ ] `specs/LOCAL_PEER_TESTING_ROUND_2_SPEC.md` — 1 occurrence of "peer-to-peer" → `P2P`
+- [x](2026-05-13 14:45) `specs/FORETIAS_2_IMPLEMENTATION_PLAN.md` — 1 occurrence of "peer-to-peer" → `P2P`
+- [x](2026-05-13 14:45) `specs/WHITEPAPER_SPEC.md` — 3 occurrences of "peer-to-peer" → `P2P`
+- [x](2026-05-13 14:45) `specs/FORETIAS_0_OVERVIEW.md` — 1 occurrence of "peer-to-peer" → `P2P`
+- [x](2026-05-13 14:45) `specs/FORETIAS_2_P2P_2_direct_p2p_mutual_attestation.md` — 1 occurrence of "peer-to-peer" → `P2P`
+- [x](2026-05-13 14:45) `specs/LOCAL_PEER_TESTING_ROUND_2_SPEC.md` — 1 occurrence of "peer-to-peer" → `P2P`
 
 ### 0.4 Combined PtP + P2P
 
-- [ ] `specs/FORETIAS_2_P2P_2_direct_p2p_mutual_attestation.md` — "All point-to-point and peer-to-peer communication" → "All PtP and P2P communication"
-- [ ] `specs/FORETIAS_2_IMPLEMENTATION_PLAN.md` — "All point-to-point & peer-to-peer communication" → "All PtP & P2P communication"
+- [x](2026-05-13 14:45) `specs/FORETIAS_2_P2P_2_direct_p2p_mutual_attestation.md` — "All point-to-point and peer-to-peer communication" → "All PtP and P2P communication"
+- [x](2026-05-13 14:45) `specs/FORETIAS_2_IMPLEMENTATION_PLAN.md` — "All point-to-point & peer-to-peer communication" → "All PtP & P2P communication"
 
 ### 0.5 Spec & Plan Prefix Consistency
 
-- [ ] `FORETIAS_6_HTTPS_TRANSPORT_SPEC.md` — Fix `FORETIAS_3_HTTPS_TRANSPORT_PLAN.md` → `FORETIAS_6_HTTPS_TRANSPORT_PLAN.md`
-- [ ] `FORETIAS_6_HTTPS_TRANSPORT_PLAN.md` — Fix `feat/foretias-3-https-transport` → `feat/foretias-6-https-transport` (branch names)
-- [ ] `FORETIAS_6_HTTPS_TRANSPORT_PLAN.md` — Fix `FORETIAS_3_HTTPS_TRANSPORT_PLAN.md` → `FORETIAS_6_HTTPS_TRANSPORT_PLAN.md` (Phase 10 references)
+- [x](2026-05-13 14:45) `FORETIAS_6_HTTPS_TRANSPORT_SPEC.md` — Fix `FORETIAS_3_HTTPS_TRANSPORT_PLAN.md` → `FORETIAS_6_HTTPS_TRANSPORT_PLAN.md`
+- [x](2026-05-13 14:45) `FORETIAS_6_HTTPS_TRANSPORT_PLAN.md` — Fix `feat/foretias-3-https-transport` → `feat/foretias-6-https-transport` (branch names)
+- [x](2026-05-13 14:45) `FORETIAS_6_HTTPS_TRANSPORT_PLAN.md` — Fix `FORETIAS_3_HTTPS_TRANSPORT_PLAN.md` → `FORETIAS_6_HTTPS_TRANSPORT_PLAN.md` (Phase 10 references)
 
 ### 0.6 Verification
 
-- [ ] Grep confirms zero remaining occurrences of `(?i)point.?to.?point` across specs/ and root docs
-- [ ] Grep confirms zero remaining occurrences of `(?i)peer.?to.?peer` across specs/ and root docs
-- [ ] Grep confirms zero remaining "FORETIAS_3_HTTPS" references in FORETIAS_6 files
+- [x](2026-05-13 14:45) Grep confirms zero remaining occurrences of `(?i)point.?to.?point` across specs/ and root docs (except rule definitions)
+- [x](2026-05-13 14:45) Grep confirms zero remaining occurrences of `(?i)peer.?to.?peer` across specs/ and root docs (except rule definitions)
+- [x](2026-05-13 14:45) Grep confirms zero remaining "FORETIAS_3_HTTPS" references in FORETIAS_6 files
 
 ---
 
