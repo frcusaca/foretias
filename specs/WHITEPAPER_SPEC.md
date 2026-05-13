@@ -290,10 +290,10 @@ predecessor with a cryptographic handshake. Inserting or altering any historical
 chronon would require reconstructing every subsequent signature — with keys that
 no longer exist.
 
-### A peer-to-peer network — the same model as Ethereum and BitTorrent
+### A P2P network — the same model as Ethereum and BitTorrent
 
 Rather than routing all trust through a central server, Foretias operates as a
-peer-to-peer network. Participants discover each other using Kademlia, the
+P2P network. Participants discover each other using Kademlia, the
 distributed hash table algorithm deployed in the Ethereum network, the
 InterPlanetary File System (IPFS), and BitTorrent. No single node controls the
 network, and no single node's failure can disrupt it.
@@ -331,7 +331,7 @@ clock, and no special authority granted to the verifier.
 
 Verification can be performed against any node that holds the relevant
 Chrononchain — including nodes discovered automatically across the
-peer-to-peer network.
+P2P network.
 
 ---
 

@@ -1,9 +1,58 @@
 # HTTPS Transport — Implementation Plan
 
-**Pairs with:** `FORETIAS_3_HTTPS_TRANSPORT_SPEC.md`
+**Pairs with:** `FORETIAS_6_HTTPS_TRANSPORT_SPEC.md`
 
-**Worktree path:** `FULL_WORKTREE_PATH=/home/hcbusy/tmp/foretias-worktrees/FORETIAS_3_HTTPS_TRANSPORT_4821`
-**Branch:** `feat/foretias-3-https-transport`
+**Worktree path:** `FULL_WORKTREE_PATH=/home/hcbusy/tmp/foretias-worktrees/FORETIAS_6_HTTPS_TRANSPORT_4821`
+**Branch:** `feat/foretias-6-https-transport`
+
+---
+
+## Step 0 — Terminology Normalization (PtP / P2P)
+
+**Goal:** Replace all occurrences of "point-to-point" (and variants) with `PtP`; replace all occurrences of "peer-to-peer" (and variants) with `P2P`. Apply across specs, plans, code, comments, and root docs.
+
+**Rules (from AGENTS.md + README.md):**
+- `PtP` = point-to-point (direct channel between two parties). Never "point-to-point", "point to point", "point2point", or "PTP".
+- `P2P` = peer-to-peer (network of distributed nodes). Never "peer-to-peer", "peer to peer", "peer2peer".
+
+### 0.1 Root Documentation
+
+- [ ] `AGENTS.md` — Add TERMINOLOGY SHORTHANDS section (table format)
+- [ ] `README.md` — Add inline terminology note
+
+### 0.2 Spec Files — PtP replacements
+
+- [ ] `specs/CALENDAR_REPLICATION_SPEC.md` — 2 occurrences of "point-to-point" → `PtP`
+- [ ] `specs/FORETIAS_2_IMPLEMENTATION_PLAN.md` — 1 occurrence of "point-to-point" → `PtP`
+- [ ] `specs/FORETIAS_2_P2P_2_direct_p2p_mutual_attestation.md` — 1 occurrence of "point-to-point" → `PtP`
+- [ ] `specs/FORETIAS_6_HTTPS_TRANSPORT_SPEC.md` — 1 occurrence of "point-to-point" → `PtP`
+- [ ] `specs/CALENDAR_ACTIVE_MIRRORING_PLAN.md` — 1 occurrence of "point-to-point" → `PtP`
+- [ ] `specs/questions.md` — 3 occurrences of "point-to-point" → `PtP`
+
+### 0.3 Spec Files — P2P replacements
+
+- [ ] `specs/FORETIAS_2_IMPLEMENTATION_PLAN.md` — 1 occurrence of "peer-to-peer" → `P2P`
+- [ ] `specs/WHITEPAPER_SPEC.md` — 3 occurrences of "peer-to-peer" → `P2P`
+- [ ] `specs/FORETIAS_0_OVERVIEW.md` — 1 occurrence of "peer-to-peer" → `P2P`
+- [ ] `specs/FORETIAS_2_P2P_2_direct_p2p_mutual_attestation.md` — 1 occurrence of "peer-to-peer" → `P2P`
+- [ ] `specs/LOCAL_PEER_TESTING_ROUND_2_SPEC.md` — 1 occurrence of "peer-to-peer" → `P2P`
+
+### 0.4 Combined PtP + P2P
+
+- [ ] `specs/FORETIAS_2_P2P_2_direct_p2p_mutual_attestation.md` — "All point-to-point and peer-to-peer communication" → "All PtP and P2P communication"
+- [ ] `specs/FORETIAS_2_IMPLEMENTATION_PLAN.md` — "All point-to-point & peer-to-peer communication" → "All PtP & P2P communication"
+
+### 0.5 Spec & Plan Prefix Consistency
+
+- [ ] `FORETIAS_6_HTTPS_TRANSPORT_SPEC.md` — Fix `FORETIAS_3_HTTPS_TRANSPORT_PLAN.md` → `FORETIAS_6_HTTPS_TRANSPORT_PLAN.md`
+- [ ] `FORETIAS_6_HTTPS_TRANSPORT_PLAN.md` — Fix `feat/foretias-3-https-transport` → `feat/foretias-6-https-transport` (branch names)
+- [ ] `FORETIAS_6_HTTPS_TRANSPORT_PLAN.md` — Fix `FORETIAS_3_HTTPS_TRANSPORT_PLAN.md` → `FORETIAS_6_HTTPS_TRANSPORT_PLAN.md` (Phase 10 references)
+
+### 0.6 Verification
+
+- [ ] Grep confirms zero remaining occurrences of `(?i)point.?to.?point` across specs/ and root docs
+- [ ] Grep confirms zero remaining occurrences of `(?i)peer.?to.?peer` across specs/ and root docs
+- [ ] Grep confirms zero remaining "FORETIAS_3_HTTPS" references in FORETIAS_6 files
 
 ---
 
@@ -16,7 +65,7 @@
 
 ## Worktree Setup
 
-- [ ] Create worktree `git worktree add -b feat/foretias-3-https-transport ${FULL_WORKTREE_PATH}`
+- [ ] Create worktree `git worktree add -b feat/foretias-6-https-transport ${FULL_WORKTREE_PATH}`
 - [ ] `cd ${FULL_WORKTREE_PATH}`; reset current session work directory to be the full worktree path
 
 ---
@@ -384,11 +433,11 @@
 
 ## Phase 10 — Final Verification & Merge
 
-- [ ] Verify all work is complete in `${FULL_WORKTREE_PATH}` and committed to `feat/foretias-3-https-transport`
+- [ ] Verify all work is complete in `${FULL_WORKTREE_PATH}` and committed to `feat/foretias-6-https-transport`
 - [ ] Run `cargo clippy --workspace` — no new warnings
-- [ ] Merge `feat/foretias-3-https-transport` to alpha
+- [ ] Merge `feat/foretias-6-https-transport` to alpha
 - [ ] Cleanup `${FULL_WORKTREE_PATH}`
 - [ ] Update `COMMUNERD_LIBP2P_DIRECT_PLAN.md` — verify no conflicts post-merge
-- [ ] Check that `FORETIAS_3_HTTPS_TRANSPORT_PLAN.md` has all but Cleanup checkboxes completed
+- [ ] Check that `FORETIAS_6_HTTPS_TRANSPORT_PLAN.md` has all but Cleanup checkboxes completed
 - [ ] Remove `${FULL_WORKTREE_PATH}` worktree reference
-- [ ] This is the last checkbox to be checked in `FORETIAS_3_HTTPS_TRANSPORT_PLAN.md`
+- [ ] This is the last checkbox to be checked in `FORETIAS_6_HTTPS_TRANSPORT_PLAN.md`

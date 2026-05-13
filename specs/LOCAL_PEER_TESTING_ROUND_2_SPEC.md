@@ -58,7 +58,7 @@ foretias> st
 
 ### 4. No peer connection distribution statistics
 
-The demo spawns many peers but provides no visibility into how well the peer-to-peer mesh is connected. Each server should report how many peers it's tracking.
+The demo spawns many peers but provides no visibility into how well the P2P mesh is connected. Each server should report how many peers it's tracking.
 
 **Fix**: Add a `peers` command to the REPL that queries each alive peer for its peer count and prints min/max/avg/stdev statistics. Use the `get_peers` JSON-RPC method (or a new `status` method) to fetch peer counts.
 

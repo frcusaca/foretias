@@ -750,7 +750,7 @@ These are deliberately deferred but planned:
 | Reconciliation loop | Periodic hash sanity checks per CALENDAR_REPLICATION_SPEC.md §5.3 — compare mirror state with source on a schedule |
 | Encrypted mirror storage | Encrypt period files on disk so mirrored data is not readable without the Calendar's key |
 | Route stamp for mirror data | Use route stamps rather than direct JSON-RPC for mirror data integrity |
-| Gossip-based mirror propagation | Multi-hop mirror distribution beyond point-to-point |
+| Gossip-based mirror propagation | Multi-hop mirror distribution beyond PtP |
 | Combined public key in Period metadata | Populate the `metadata` field on Period with the combined public key for signature verification chains |
 | MirrorStore compaction | Merge small period files, reclaim space from pruned mirrors |
 | Mirror consistency guarantees | CRDT-style or version-vector based conflict resolution for divergent mirror histories |

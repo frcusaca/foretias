@@ -14,7 +14,7 @@ The calendar replication service enables Time Beings to share calendar data (Tic
 2. **One-Way Calendar Mirror** — Request another calendar to ship and continuously mirror its TickRecords.
 3. **Mutual Calendar Mirroring** — Two calendars actively maintain mirrored copies of each other's data with bidirectional correctness guarantees.
 
-All replication uses **point-to-point JSON-RPC connections** over the existing `PeerTransport` layer. No new transport protocol is introduced.
+All replication uses **PtP JSON-RPC connections** over the existing `PeerTransport` layer. No new transport protocol is introduced.
 
 ---
 
@@ -147,7 +147,7 @@ Source → Mirror: stream_tick { tick_record: TickRecord }
 Mirror → Source: stream_ack { tick_number }
 ```
 
-- Uses the existing point-to-point connection (no new connection needed)
+- Uses the existing PtP connection (no new connection needed)
 - Source sends `stream_tick` whenever Chronomatter produces a new tick
 - Mirror stores tick, verifies pair, acks
 - **If ack not received within 5s → source retries once, then logs `ERROR:stream_acked_timeout`**

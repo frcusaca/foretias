@@ -2,7 +2,9 @@
 
 **Free, Open-source Resilient Time Integrity Attestation Service**
 
-Foretias makes digital timestamping backdate-proof by cryptographic construction. Each tick of a time being's calendar has its own Ed25519 keypair, and when a tick advances, the previous private key is destroyed. A Foretis stamped at tick *n* cannot be forged from the past.
+**Terminology:** `PtP` = point-to-point (direct channel between two parties). `P2P` = peer-to-peer (network of distributed nodes). Never write out the full phrases; never use `PTP` (capital T means something else).
+
+Foretias makes digital timestamping backdate-proof by cryptographic construction. Each tick of a time being's calendar has its own Ed25519 keypair, and when a tick advances, the previous private key is disabled. A Foretis stamped at tick *n* cannot be forged from the past.
 
 ## Installation
 

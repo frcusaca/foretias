@@ -16,7 +16,7 @@ Questions for human review during v0.1 implementation.
 
 3. **Noise_XX stub** — User said stub for later. I'm providing the full state struct but all functions return `FORETIAS_ERR_UNSUPPORTED`. The `foretias_noise_destroy` does a memzero. Is this sufficient?
 
-A: Sounds like Noise_XX is actually used for point-to-point communication and cannot be a stub.
+A: Sounds like Noise_XX is actually used for PtP communication and cannot be a stub.
 
 [ ] ❌ NOT IMPLEMENTED — `noise_xx.c` still returns `FORETIAS_ERR_UNSUPPORTED` for all 6 functions. The answer says it "cannot be a stub," but no implementation exists yet. This is a pending action item.
 
@@ -106,10 +106,10 @@ A: stub out for now, we'll preserve the ability to implement P-256 later when we
 
 16. **Noise_XX vs libp2p Noise** — libp2p has its own Noise implementation. Should the C11 Noise_XX be designed to interop with libp2p's Noise transport, or is it independent?
 
-**Clarification**: libp2p's Noise transport (libp2p-noise) handles encrypted multiplexed connections for P2P swarm communication — this is how Communerd connects to other peers in the gossip/kad network. However, we also need a point-to-point encrypted channel independent of libp2p for direct mutual attestation handshakes between two TimeBeings. This is the role of Noise_XX in C11 — it establishes a raw encrypted tunnel between two parties without libp2p overhead (no muxing, no swarm, no peer discovery).
+**Clarification**: libp2p's Noise transport (libp2p-noise) handles encrypted multiplexed connections for P2P swarm communication — this is how Communerd connects to other peers in the gossip/kad network. However, we also need a PtP encrypted channel independent of libp2p for direct mutual attestation handshakes between two TimeBeings. This is the role of Noise_XX in C11 — it establishes a raw encrypted tunnel between two parties without libp2p overhead (no muxing, no swarm, no peer discovery).
 
 **Two distinct use cases**:
 1. **libp2p Noise** → swarm P2P gossip, KAD, heartbeat propagation (many-to-many)
-2. **C11 Noise_XX** → direct point-to-point mutual attestation channel (one-to-one, outside libp2p)
+2. **C11 Noise_XX** → direct PtP mutual attestation channel (one-to-one, outside libp2p)
 
 These are independent. Noise_XX is stubbed for now per "crypto stuff can happen later." When implemented, it should interoperate with libp2p Noise at the cryptographic protocol level (both using the Noise_XX handshake pattern) but serve different purposes.

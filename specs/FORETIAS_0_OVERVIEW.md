@@ -657,7 +657,7 @@ Things intentionally not designed yet, to be revisited in later spec versions:
 - **Challenge protocols (Type A, Type B).** Formal protocol design for probity challenges.
 - **Retribution mechanics.** How bad reports consume prover resources.
 - **Stable-marriage liege matching.** Full liege/vassal bonding protocol.
-- **Cross-calendar verification.** Peer-to-peer verification of Foretises issued by third parties.
+- **Cross-calendar verification.** P2P verification of Foretises issued by third parties.
 - **Succession protocols.** Orderly identity handoff when a peer wants to retire gracefully instead of just terminating.
 - **Application-specific probity attributes.** The Foretias application layer defines these; the P2P layer is ready whenever the application wants to publish them.
 

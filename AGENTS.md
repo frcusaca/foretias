@@ -10,6 +10,17 @@ Please read the entire document word for word do not skip any thing.
 
 ---
 
+## TERMINOLOGY SHORTHANDS (Mandatory)
+
+| Shorthand | Meaning | NEVER use |
+|-----------|---------|-----------|
+| **PtP** | Point-to-point (direct channel between two parties) | "point-to-point", "point to point", "point2point", "PTP" (capital T means something else) |
+| **P2P** | Peer-to-peer (network of distributed nodes) | "peer-to-peer", "peer to peer", "peer2peer" |
+
+These shorthands are enforced across all specs, plans, code, comments, and documentation. No exceptions.
+
+---
+
 ## SPECS DIRECTORY CONVENTIONS (`foretias/specs/`)
 
 The `specs/` directory contains two kinds of files that work together:

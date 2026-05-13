@@ -17,7 +17,7 @@ All three components (Chronomatter, Calendar, Communerd) are **time beings** wit
 |-----------|------|----------------------|---------------|
 | **Chronomatter** (*Chronos fidelis authenticus*) | Autonomous ticking, stamping, verification | Direct method calls; Calendar calls `stamp()`, `verify()` | NO |
 | **Calendar** (*Chronos fidelis grapha*) | Calendar data, persistence (disk), mutual attestation scheduling | Direct method calls; receives tick notification from Chronomatter via callback | NO — routes through Communerd |
-| **Communerd** | *Chronos fidelis locutus* /KAH-myuh-nerd/) All point-to-point & peer-to-peer communication, transport, RPC | Called by Calendar via direct method calls (`send_to_peer()`, `query_community()`) | **YES** — only component with network access |
+| **Communerd** | *Chronos fidelis locutus* /KAH-myuh-nerd/) All PtP & P2P communication, transport, RPC | Called by Calendar via direct method calls (`send_to_peer()`, `query_community()`) | **YES** — only component with network access |
 
 **Communerd etymology:** A Communerd is a communard of a Time Family commune where timing information is shared in communal communion between families, AND he's a nerd about communications.
 | **TimeFamily** (*Chronos fidelis adunatrix*) | Orchestrator — creates/wires Chronomatter, Calendar, Communerd | Exposes JSON-RPC to external callers | NO — delegates |

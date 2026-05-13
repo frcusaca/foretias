@@ -115,7 +115,7 @@ TimeFamily — orchestrator, creates and wires all three time beings
 │
 └── Communerd (P2P communication) ──────────────────────────────────────
       Time being with its own TBID.
-      All point-to-point and peer-to-peer communication.
+      All PtP and P2P communication.
       Maintains a pool of direct JSON-RPC TCP clients to configured peers.
       Liveness: periodic no-op ping.
       Executes RPC calls on behalf of Calendar's mutual-attest scheduler.

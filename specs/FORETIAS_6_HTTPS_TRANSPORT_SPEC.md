@@ -1,8 +1,24 @@
 # HTTPS Transport — Specification
 
-**Prefix:** `FORETIAS_3_HTTPS_TRANSPORT`
-**Pairs with:** `FORETIAS_3_HTTPS_TRANSPORT_PLAN.md`
+**Prefix:** `FORETIAS_6_HTTPS_TRANSPORT`
+**Pairs with:** `FORETIAS_6_HTTPS_TRANSPORT_PLAN.md`
 **Date:** 2026-05-13
+
+---
+
+## Step 0 — Terminology Normalization
+
+Before any implementation, normalize PtP and P2P shorthands across the entire project:
+
+- **PtP** = point-to-point (direct channel between two parties). Never write "point-to-point", "point to point", "point2point", or "PTP" (capital T means something else).
+- **P2P** = peer-to-peer (network of distributed nodes). Never write "peer-to-peer", "peer to peer", or "peer2peer".
+
+This normalization applies to all specs, plans, code, comments, and documentation. See `AGENTS.md` TERMINOLOGY SHORTHANDS section and `README.md` for the authoritative rule.
+
+**Files affected by this spec:**
+- `AGENTS.md` — Added TERMINOLOGY SHORTHANDS section
+- `README.md` — Added inline terminology note
+- All spec/plan files — See `FORETIAS_6_HTTPS_TRANSPORT_PLAN.md` Step 0 for exhaustive list
 
 ---
 
@@ -20,7 +36,7 @@ Both modes coexist on the same connection when using WebSocket. HTTP POST is req
 
 ## 2. Problem
 
-Currently, all point-to-point communication uses either:
+Currently, all PtP communication uses either:
 - **TCP + Noise_XX** — requires open ports, fails behind NAT/firewalls, inaccessible from browsers
 - **libp2p request_response** — requires libp2p stack on both ends, not browser-compatible
 
