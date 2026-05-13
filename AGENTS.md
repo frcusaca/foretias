@@ -36,7 +36,14 @@ Checkboxes in PLAN.md files track progress. When an item is checked off, **alway
 
 This gives both agents and humans a clear idea of how work is progressing over time.
 
-### Backburnered PLAN.md
+### Specify, Plan and Backburnered PLAN.md
+Before a specification is complete, and some times before a plan is complete, we may have intermediate steps. In these situations a plan file may be created with corresponding open items:
+```markdown
+- [ ] Specify
+- [ ] Plan
+```
+Most of time this is not needed, but when specification or planning takes on multi-turn iteration, it is useful to track these separately and check them off.
+
 When a specification is considered VERY important but interfering with current highest priorities, it is marked with `[x] backburnered`. To be revived by removing the `[x] backburnered` marker. These plans are to be excluded when agent or human asks for plans that are: ready, pending, iterating, in progress, developing, active, etc. backburnered plans can only be found and addressed directly by using the words "backburnered plan(s)".
 ```markdown
 - [x] backburnered
