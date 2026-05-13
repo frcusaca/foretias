@@ -2,7 +2,7 @@
 
 **Free, Open-source Resilient Time Integrity Attestation Service**
 
-**Terminology:** Prose shorthand is precisely `PtP` (point-to-point) and `P2P` (peer-to-peer). Code identifiers use exact-case or all-lowercase: `PtPClient`, `P2PClient`, `make_ptp_connection`, `make_p2p_connection`. No other capitalizations permitted.
+**Terminology:** Prose shorthand is precisely `PtP` (point-to-point) and `P2P` (peer-to-peer). Code identifiers use exact-case or all-lowercase: `PtPClient`, `P2PClient`, `make_ptp_connection`, `make_p2p_connection`, `ptp_client`. No mixed-case or all-caps variants (`PtpClient`, `P2pClient`, `PTPCLIENT`, `P2PCLIENT`).
 
 Foretias makes digital timestamping backdate-proof by cryptographic construction. Each tick of a time being's calendar has its own Ed25519 keypair, and when a tick advances, the previous private key is disabled. A Foretis stamped at tick *n* cannot be forged from the past.
 

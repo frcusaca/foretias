@@ -15,7 +15,7 @@
 - `PtP` = point-to-point (direct channel between two parties). Never "point-to-point", "point to point", "point2point", or "PTP".
 - `P2P` = peer-to-peer (network of distributed nodes). Never "peer-to-peer", "peer to peer", "peer2peer".
 - **Prose:** Precisely `PtP` / `P2P`. No other capitalization.
-- **Code:** Exact-case or all-lowercase: `PtPClient`, `P2PClient`, `make_ptp_connection`, `make_p2p_connection`. No `PtpClient`, `P2pClient`, `PTPCLIENT`.
+- **Code:** Exact-case or all-lowercase: `PtPClient`, `P2PClient`, `make_ptp_connection`, `make_p2p_connection`, `ptp_client`. No `PtpClient`, `P2pClient`, `PTPCLIENT`, `P2PCLIENT`.
 
 ### 0.1 Root Documentation
 

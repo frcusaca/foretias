@@ -13,7 +13,7 @@ Before any implementation, normalize PtP and P2P shorthands across the entire pr
 - **PtP** = point-to-point (direct channel between two parties). Never write "point-to-point", "point to point", "point2point", or "PTP" (capital T means something else).
 - **P2P** = peer-to-peer (network of distributed nodes). Never write "peer-to-peer", "peer to peer", or "peer2peer".
 - **Prose:** Shorthand must be precisely capitalized `PtP` and `P2P`.
-- **Code identifiers:** Exact-case or all-lowercase only. Examples: `PtPClient`, `P2PClient`, `make_ptp_connection`, `make_p2p_connection`. Forbidden: `PtpClient`, `P2pClient`, `PTPCLIENT`.
+- **Code identifiers:** Exact-case or all-lowercase only. Examples: `PtPClient`, `P2PClient`, `make_ptp_connection`, `make_p2p_connection`, `ptp_client`. Forbidden: `PtpClient`, `P2pClient`, `PTPCLIENT`, `P2PCLIENT` (no mixed-case or all-caps).
 
 This normalization applies to all specs, plans, code, comments, and documentation. See `AGENTS.md` TERMINOLOGY SHORTHANDS section and `README.md` for the authoritative rule.
 
