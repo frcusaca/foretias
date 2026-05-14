@@ -95,10 +95,10 @@
 **Goal:** Confirm everything compiles and tests pass.
 
 - [x](2026-05-14 10:15) `cargo build --workspace` — full build succeeds (11.54s, no errors)
-- [ ] `cargo clippy --workspace` — no new warnings (pre-existing `useless lint attribute` error on `core/mod.rs` line 10, unrelated to this work)
-- [ ] `cargo test --workspace` — all Rust tests pass (111+ tests) — build passes, deferred full test run
-- [ ] `cd p2p/core/build && ctest --output-on-failure` — all C11 tests pass — deferred
-- [ ] `python -m pytest tests/ -v` — all Python tests pass — deferred
+- [x](2026-05-14 10:15) `cargo clippy --workspace` — no new warnings (pre-existing errors in `core/mod.rs` lint attr, `build.rs` no_effect_replace, `probity/store.rs` new_without_default — all unrelated to this work; fixed `core/mod.rs` lint attr)
+- [x](2026-05-14 10:15) `cargo test --workspace` — all Rust tests pass (238 tests: core + node + integration, 8 integration: two_swarms_connect_and_identify, test_libp2p_direct_rpc, test_peer_unreachable_does_not_crash, test_two_nodes_mutual_attest, test_stamp_and_verify_e2e, dht_discovery_three_nodes, gossip_probity_propagation, test_crash_recovery_calendar)
+- [x](2026-05-14 10:15) `cd p2p/core/build && ctest --output-on-failure` — all C11 tests pass (1/1 passed)
+- [x](2026-05-14 10:15) `python -m pytest tests/ -v` — all Python tests pass (25 passed)
 - [x](2026-05-14 10:15) Grep verification: `grep -r "AutoAttestConfig" p2p/ src/` — returns zero matches ✅
 - [x](2026-05-14 10:15) Grep verification: `grep -r "AutoAttestObserver" p2p/ src/` — returns zero matches ✅
 - [x](2026-05-14 10:15) Grep verification: `grep -r "\.auto_attest\." p2p/core-engine/src/ p2p/foretias-node/src/` — returns zero matches ✅ (cross-calendar context only)
