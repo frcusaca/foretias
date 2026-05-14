@@ -7,5 +7,4 @@ pub mod signing;
 pub mod hashing;
 pub mod rng;
 
-#[allow(missing_docs)]
 pub use bindings::*;
