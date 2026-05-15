@@ -637,6 +637,23 @@ async fn fetch_calendar_slice(
         serde_json::json!({"cal_tick_start": tick_number, "count": count}),
     ).await?;
 
+    // Validate structure before deserializing from untrusted network data
+    let result_array = result.as_array().ok_or(
+        "calendar slice result: expected JSON array of TickRecords",
+    )?;
+    for (i, item) in result_array.iter().enumerate() {
+        let obj = item.as_object().ok_or(format!(
+            "calendar slice[{}]: expected TickRecord object", i
+        ))?;
+        if !obj.contains_key("tick_number")
+            || !obj.contains_key("public_key")
+            || !obj.contains_key("forward_foretis")
+            || !obj.contains_key("backward_foretis")
+        {
+            return Err(format!("calendar slice[{}]: missing required TickRecord fields", i).into());
+        }
+    }
+
     let records: Vec<TickRecord> = serde_json::from_value(result)
         .map_err(|e| format!("failed to parse calendar slice: {}", e))?;
     Ok(records)
