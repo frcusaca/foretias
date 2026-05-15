@@ -207,10 +207,9 @@ impl Chronomatter {
         let (forward_foretis, backward_foretis, aa_nonce, stamps) = result?;
 
         // Sign genesis tick (tick 1) with TBID dual-key identity
-        let (genesis_signature, tb_version) = if tick == 1 {
+        let (genesis_sig_bytes, tb_version) = if tick == 1 {
             match &self.tbid_secret {
                 Some(secret) => {
-                    // Build genesis blob: tbid_raw_bytes || tick_number || public_key
                     let mut genesis_blob = Vec::with_capacity(96 + 8 + new_pub.len());
                     genesis_blob.extend_from_slice(&self.tbid.raw_bytes());
                     genesis_blob.extend_from_slice(&tick.to_be_bytes());
@@ -218,7 +217,7 @@ impl Chronomatter {
                     let sig = secret.sign(&genesis_blob)
                         .map_err(|e| NodeError::Crypto(e))?;
                     info!(genesis_blob_len = genesis_blob.len(), sig_len = sig.len(), "signed genesis tick");
-                    (sig, 1u32)
+                    (sig.into_inner(), 1u32)
                 }
                 None => {
                     warn!("no TBID secret available for genesis tick signing");
@@ -238,7 +237,7 @@ impl Chronomatter {
             aa_nonce: aa_nonce.into(),
             stamps_per_tick: stamps,
             external_attestations: Vec::new(),
-            genesis_signature: genesis_signature.into(),
+            genesis_signature: genesis_sig_bytes.into(),
             tb_version,
         })
     }

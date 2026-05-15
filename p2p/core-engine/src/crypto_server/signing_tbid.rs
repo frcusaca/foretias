@@ -40,7 +40,7 @@ pub fn tbid_keypair() -> Result<(SignatureBytes, SignatureBytes), CryptoError> {
     // SAFETY: zeroize secret key material immediately after extraction.
     unsafe { foretias_tbid_v1_secret_zeroize(&mut secret) };
 
-    Ok((public_bytes, secret_bytes))
+    Ok((SignatureBytes::from(public_bytes), SignatureBytes::from(secret_bytes)))
 }
 
 /* ── TBID V1 signing ─────────────────────────────────── */
@@ -75,7 +75,7 @@ pub fn tbid_sign(
     // SAFETY: zeroize secret key material immediately after signing.
     unsafe { foretias_tbid_v1_secret_zeroize(&mut secret) };
 
-    Ok(sig_bytes)
+    Ok(sig_bytes.into())
 }
 
 /* ── TBID V1 verification ────────────────────────────── */

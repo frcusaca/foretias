@@ -25,7 +25,7 @@ pub fn sphincs_keypair() -> Result<(SignatureBytes, SignatureBytes), CryptoError
     c_result_to_error(rc)?;
     let secret_bytes = secret.bytes[..secret.len].to_vec();
     let public_bytes = public.bytes[..public.len].to_vec();
-    Ok((public_bytes, secret_bytes))
+    Ok((public_bytes.into(), secret_bytes.into()))
 }
 
 /// Sign a message with SPHINCS+ SHA2-128s. Returns the signature bytes.
@@ -47,7 +47,7 @@ pub fn sphincs_sign(secret_key: &SignatureBytes, msg: &[u8]) -> Result<Signature
     unsafe {
         foretias_memzero(&mut secret as *mut _ as *mut _, std::mem::size_of::<ForetiasSecretKeyVar>());
     }
-    Ok(sig_bytes)
+    Ok(sig_bytes.into())
 }
 
 /// Verify a SPHINCS+ SHA2-128s signature. Returns Ok(true) if valid, Ok(false) if invalid.
@@ -95,7 +95,7 @@ pub fn sphincs_sha2_256f_keypair() -> Result<(SignatureBytes, SignatureBytes), C
     c_result_to_error(rc)?;
     let secret_bytes = secret.bytes[..secret.len].to_vec();
     let public_bytes = public.bytes[..public.len].to_vec();
-    Ok((public_bytes, secret_bytes))
+    Ok((public_bytes.into(), secret_bytes.into()))
 }
 
 /// Sign a message with SPHINCS+ SHA2-256f. Returns the signature bytes.
@@ -120,7 +120,7 @@ pub fn sphincs_sha2_256f_sign(
     unsafe {
         foretias_memzero(&mut secret as *mut _ as *mut _, std::mem::size_of::<ForetiasSecretKeyVar>());
     }
-    Ok(sig_bytes)
+    Ok(sig_bytes.into())
 }
 
 /// Verify a SPHINCS+ SHA2-256f signature. Returns Ok(true) if valid, Ok(false) if invalid.

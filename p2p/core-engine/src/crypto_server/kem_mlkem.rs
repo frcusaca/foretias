@@ -14,7 +14,7 @@ pub fn mlkem_768_keypair() -> Result<(SignatureBytes, SignatureBytes), CryptoErr
     c_result_to_error(rc)?;
     let secret_bytes = secret.bytes[..secret.len as usize].to_vec();
     let public_bytes = public.bytes[..public.len as usize].to_vec();
-    Ok((public_bytes, secret_bytes))
+    Ok((SignatureBytes::from(public_bytes), SignatureBytes::from(secret_bytes)))
 }
 
 pub fn mlkem_768_encapsulate(public_key: &SignatureBytes) -> Result<(SignatureBytes, SignatureBytes), CryptoError> {
@@ -31,7 +31,7 @@ pub fn mlkem_768_encapsulate(public_key: &SignatureBytes) -> Result<(SignatureBy
     };
     c_result_to_error(rc)?;
     let ct_bytes = ct.bytes[..ct.len as usize].to_vec();
-    Ok((ct_bytes, ss.to_vec()))
+    Ok((SignatureBytes::from(ct_bytes), SignatureBytes::from(ss.to_vec())))
 }
 
 pub fn mlkem_768_decapsulate(secret_key: &SignatureBytes, ciphertext: &SignatureBytes) -> Result<SignatureBytes, CryptoError> {
@@ -53,5 +53,5 @@ pub fn mlkem_768_decapsulate(secret_key: &SignatureBytes, ciphertext: &Signature
     unsafe {
         foretias_memzero(&mut sk as *mut _ as *mut _, std::mem::size_of::<ForetiasKemSecretKey>());
     }
-    Ok(ss.to_vec())
+    Ok(ss.to_vec().into())
 }

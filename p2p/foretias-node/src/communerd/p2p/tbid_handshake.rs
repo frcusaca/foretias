@@ -81,7 +81,7 @@ impl TbidHandshake {
 
         Ok(TbidProofResponse {
             tbid,
-            public_key,
+            public_key: PublicKeyBytes::from(public_key),
             signed_payload,
             signature,
         })

@@ -1,6 +1,6 @@
 //! Integration sanity tests for multi-algorithm PQC support.
 
-use crate::crypto_server::{CryptoServer, ForetiasCurve, software::SoftwareCryptoServer};
+use crate::crypto_server::{CryptoServer, ForetiasCurve, SignOps, VerifyOps, IdentityOps, software::SoftwareCryptoServer};
 use crate::crypto_server::kem_mlkem;
 use crate::foretias::types::{SignatureAlgorithm, KemAlgorithm};
 

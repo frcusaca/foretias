@@ -18,7 +18,7 @@ pub fn dilithium3_keypair() -> Result<(SignatureBytes, SignatureBytes), CryptoEr
     c_result_to_error(rc)?;
     let secret_bytes = secret.bytes[..secret.len].to_vec();
     let public_bytes = public.bytes[..public.len].to_vec();
-    Ok((public_bytes, secret_bytes))
+    Ok((SignatureBytes::from(public_bytes), SignatureBytes::from(secret_bytes)))
 }
 
 /// Sign a message with Dilithium3. Returns the signature bytes.
@@ -40,7 +40,7 @@ pub fn dilithium3_sign(secret_key: &SignatureBytes, msg: &[u8]) -> Result<Signat
     unsafe {
         foretias_memzero(&mut secret as *mut _ as *mut _, std::mem::size_of::<ForetiasSecretKeyVar>());
     }
-    Ok(sig_bytes)
+    Ok(sig_bytes.into())
 }
 
 /// Verify a Dilithium3 signature. Returns Ok(true) if valid, Ok(false) if invalid.

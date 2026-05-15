@@ -92,7 +92,7 @@ impl TbidSecret {
 
     /// Sign a message with both algorithms.
     /// Returns Ed25519_SIG(64) ‖ SLH-DSA_SIG(49856) = 49,920 bytes.
-    pub fn sign(&self, message: &[u8]) -> Result<Vec<u8>, crate::error::CryptoError> {
+    pub fn sign(&self, message: &[u8]) -> Result<SignatureBytes, crate::error::CryptoError> {
         use crate::crypto_server::signing_tbid;
         let mut secret_bytes = Vec::with_capacity(160);
         secret_bytes.extend_from_slice(&self.ed25519_sk[..]);
@@ -129,10 +129,266 @@ impl TbidSecret {
 }
 
 /// Public key bytes — variable length per algorithm (32 for Ed25519, 7856 for SPHINCS+, etc).
-pub type PublicKeyBytes = Vec<u8>;
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct PublicKeyBytes(Vec<u8>);
+
+impl PublicKeyBytes {
+    /// Create from an owned vector.
+    pub fn new(bytes: Vec<u8>) -> Self {
+        Self(bytes)
+    }
+
+    /// Create an empty instance.
+    pub fn empty() -> Self {
+        Self(Vec::new())
+    }
+
+    /// Create by cloning a slice.
+    pub fn from_slice(slice: &[u8]) -> Self {
+        Self(slice.to_vec())
+    }
+
+    /// View as a byte slice.
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+
+    /// View as a byte slice.
+    pub fn as_slice(&self) -> &[u8] {
+        &self.0
+    }
+
+    /// Number of bytes.
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Whether this instance contains no bytes.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Extract the owned inner vector.
+    pub fn into_inner(self) -> Vec<u8> {
+        self.0
+    }
+}
+
+impl std::ops::Deref for PublicKeyBytes {
+    type Target = [u8];
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for PublicKeyBytes {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl AsRef<[u8]> for PublicKeyBytes {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl From<Vec<u8>> for PublicKeyBytes {
+    fn from(v: Vec<u8>) -> Self {
+        Self(v)
+    }
+}
+
+impl From<PublicKeyBytes> for Vec<u8> {
+    fn from(v: PublicKeyBytes) -> Self {
+        v.0
+    }
+}
+
+impl<const N: usize> From<[u8; N]> for PublicKeyBytes {
+    fn from(arr: [u8; N]) -> Self {
+        Self(arr.to_vec())
+    }
+}
+
+impl std::ops::Index<usize> for PublicKeyBytes {
+    type Output = u8;
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
+impl std::ops::IndexMut<usize> for PublicKeyBytes {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.0[index]
+    }
+}
+
+impl std::ops::Index<std::ops::Range<usize>> for PublicKeyBytes {
+    type Output = [u8];
+    fn index(&self, index: std::ops::Range<usize>) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
+impl std::ops::Index<std::ops::RangeTo<usize>> for PublicKeyBytes {
+    type Output = [u8];
+    fn index(&self, index: std::ops::RangeTo<usize>) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
+impl std::ops::Index<std::ops::RangeFrom<usize>> for PublicKeyBytes {
+    type Output = [u8];
+    fn index(&self, index: std::ops::RangeFrom<usize>) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
+impl std::ops::Index<std::ops::RangeFull> for PublicKeyBytes {
+    type Output = [u8];
+    fn index(&self, index: std::ops::RangeFull) -> &Self::Output {
+        &self.0[index]
+    }
+}
 
 /// Signature bytes — variable length per algorithm (64 for Ed25519, 7856 for SPHINCS+, etc).
-pub type SignatureBytes = Vec<u8>;
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct SignatureBytes(Vec<u8>);
+
+impl SignatureBytes {
+    /// Create from an owned vector.
+    pub fn new(bytes: Vec<u8>) -> Self {
+        Self(bytes)
+    }
+
+    /// Create an empty instance.
+    pub fn empty() -> Self {
+        Self(Vec::new())
+    }
+
+    /// Create by cloning a slice.
+    pub fn from_slice(slice: &[u8]) -> Self {
+        Self(slice.to_vec())
+    }
+
+    /// View as a byte slice.
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+
+    /// View as a byte slice.
+    pub fn as_slice(&self) -> &[u8] {
+        &self.0
+    }
+
+    /// Number of bytes.
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Whether this instance contains no bytes.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Extract the owned inner vector.
+    pub fn into_inner(self) -> Vec<u8> {
+        self.0
+    }
+}
+
+impl std::ops::Deref for SignatureBytes {
+    type Target = [u8];
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for SignatureBytes {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl AsRef<[u8]> for SignatureBytes {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl From<Vec<u8>> for SignatureBytes {
+    fn from(v: Vec<u8>) -> Self {
+        Self(v)
+    }
+}
+
+impl From<crate::foretias::encoding::FTByteVector> for SignatureBytes {
+    fn from(v: crate::foretias::encoding::FTByteVector) -> Self {
+        Self(v.into())
+    }
+}
+
+impl From<SignatureBytes> for Vec<u8> {
+    fn from(v: SignatureBytes) -> Self {
+        v.0
+    }
+}
+
+impl<const N: usize> From<[u8; N]> for SignatureBytes {
+    fn from(arr: [u8; N]) -> Self {
+        Self(arr.to_vec())
+    }
+}
+
+impl std::ops::Index<usize> for SignatureBytes {
+    type Output = u8;
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
+impl std::ops::IndexMut<usize> for SignatureBytes {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.0[index]
+    }
+}
+
+impl std::ops::Index<std::ops::Range<usize>> for SignatureBytes {
+    type Output = [u8];
+    fn index(&self, index: std::ops::Range<usize>) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
+impl std::ops::Index<std::ops::RangeTo<usize>> for SignatureBytes {
+    type Output = [u8];
+    fn index(&self, index: std::ops::RangeTo<usize>) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
+impl std::ops::Index<std::ops::RangeFrom<usize>> for SignatureBytes {
+    type Output = [u8];
+    fn index(&self, index: std::ops::RangeFrom<usize>) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
+impl std::ops::Index<std::ops::RangeFull> for SignatureBytes {
+    type Output = [u8];
+    fn index(&self, index: std::ops::RangeFull) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
+impl zeroize::Zeroize for SignatureBytes {
+    fn zeroize(&mut self) {
+        self.0.zeroize();
+    }
+}
 
 /// Algorithm identifier as plain text (e.g. "SPHINCS+-SHA2-128s-simple").
 pub type AlgorithmId = String;

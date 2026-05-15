@@ -328,10 +328,11 @@ pub fn verify_genesis_signature(
     genesis_blob.extend_from_slice(&record.public_key);
 
     let pub_bytes = crate::foretias::types::SignatureBytes::from(tbid.raw_bytes());
+    let sig = crate::foretias::types::SignatureBytes::from(record.genesis_signature.clone());
     let sig_valid = crate::crypto_server::signing_tbid::tbid_verify(
         &pub_bytes,
         &genesis_blob,
-        &record.genesis_signature,
+        &sig,
     )
     .map_err(|e| NodeError::Crypto(e))?;
 

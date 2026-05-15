@@ -12,7 +12,7 @@ use crate::crypto_server::signing_sphincs;
 use crate::crypto_server::signing_dilithium;
 use crate::error::CryptoError;
 use crate::foretias::types::{SignatureAlgorithm, SignatureBytes};
-use super::{CryptoServer, CryptoServerCapabilities, ForetiasCurve, PublicKeyBytes, SharedSecret, SealedBlob};
+use super::{CryptoServerCapabilities, ForetiasCurve, PublicKeyBytes, SharedSecret, SealedBlob, SignOps, VerifyOps, KexOps, HashOps, SealOps, RngOps, IdentityOps, FrostOps, ProofOps};
 
 /// Derive seal key via HKDF-SHA256 over the Ed25519 seed.
 /// The seed never leaves C memory; the derivation happens inside C11.
@@ -140,43 +140,74 @@ impl Drop for SoftwareCryptoServer {
     }
 }
 
-impl CryptoServer for SoftwareCryptoServer {
-    fn public_key(&self) -> PublicKeyBytes { self.pub_key }
-    fn peer_id(&self) -> ForetiasPeerID { self.peer_id }
-    fn curve(&self) -> ForetiasCurve { self.curve }
-
-    fn capabilities(&self) -> CryptoServerCapabilities {
-        CryptoServerCapabilities {
-            backend_name: "software",
-            curve: self.curve,
-            supports_proof: false,
-            supports_sealing: true,
-            max_sealed_bytes: 1_048_576,
-            typical_sign_us: 50,
-            typical_ecdh_us: 100,
-        }
-    }
-
+impl SignOps for SoftwareCryptoServer {
     fn sign(&self, msg: &[u8]) -> Result<ForetiasSig64, CryptoError> {
         crate::core::signing::ed25519_sign_with_handle(&self.priv_key, msg)
     }
 
+    fn signature_algorithm(&self) -> SignatureAlgorithm {
+        SignatureAlgorithm::SPHINCS_SHA2_128S
+    }
+
+    fn sign_with(&self, msg: &[u8], alg: SignatureAlgorithm) -> Result<SignatureBytes, CryptoError> {
+        match alg {
+            SignatureAlgorithm::Ed25519 => {
+                let sig = self.sign(msg)?;
+                Ok(sig.bytes.to_vec().into())
+            }
+            SignatureAlgorithm::SPHINCS_SHA2_128S => {
+                let secret = self.sphincs_secret_key.as_ref()
+                    .ok_or(CryptoError::BadKey)?;
+                signing_sphincs::sphincs_sign(secret, msg)
+            }
+            SignatureAlgorithm::Dilithium3 => {
+                let secret = self.dilithium_secret_key.as_ref()
+                    .ok_or(CryptoError::BadKey)?;
+                signing_dilithium::dilithium3_sign(secret, msg)
+            }
+            SignatureAlgorithm::SLH_DSA_SHA2_256F => {
+                let secret = self.sphincs_sha2_256f_secret_key.as_ref()
+                    .ok_or(CryptoError::BadKey)?;
+                signing_sphincs::sphincs_sha2_256f_sign(secret, msg)
+            }
+        }
+    }
+}
+
+impl VerifyOps for SoftwareCryptoServer {
     fn verify_ed25519(&self, pub_key: &ForetiasPubKey32, msg: &[u8], sig: &ForetiasSig64) -> Result<bool, CryptoError> {
         crate::core::signing::ed25519_verify(pub_key, msg, sig)
     }
 
     fn verify_p256(&self, _pub_key: &ForetiasPubKey33, _msg: &[u8], _sig: &ForetiasSig64) -> Result<bool, CryptoError> {
-        Err(CryptoError::Unsupported("P-256 verify not implemented"))
+        Err(CryptoError::Unsupported("not supported"))
     }
 
-    fn ecdh_ed25519(&self, _peer_pub: &ForetiasPubKey32) -> Result<SharedSecret, CryptoError> {
-        Err(CryptoError::Unsupported("ECDH stub"))
+    fn verify_with(&self, pub_key: &[u8], alg_id: &str, msg: &[u8], sig: &[u8]) -> Result<bool, CryptoError> {
+        match SignatureAlgorithm::from_id_string(alg_id)? {
+            SignatureAlgorithm::Ed25519 => {
+                let pk_bytes: [u8; 32] = pub_key[..32].try_into()
+                    .map_err(|_| CryptoError::BadKey)?;
+                let sig_bytes: [u8; 64] = sig[..64].try_into()
+                    .map_err(|_| CryptoError::BadSignature)?;
+                self.verify_ed25519(&ForetiasPubKey32 { bytes: pk_bytes }, msg, &ForetiasSig64 { bytes: sig_bytes })
+            }
+            SignatureAlgorithm::SPHINCS_SHA2_128S => {
+                signing_sphincs::sphincs_verify(&SignatureBytes::from(pub_key.to_vec()), msg, &SignatureBytes::from(sig.to_vec()))
+            }
+            SignatureAlgorithm::Dilithium3 => {
+                signing_dilithium::dilithium3_verify(&SignatureBytes::from(pub_key.to_vec()), msg, &SignatureBytes::from(sig.to_vec()))
+            }
+            SignatureAlgorithm::SLH_DSA_SHA2_256F => {
+                signing_sphincs::sphincs_sha2_256f_verify(&SignatureBytes::from(pub_key.to_vec()), msg, &SignatureBytes::from(sig.to_vec()))
+            }
+        }
     }
+}
 
-    fn ecdh_p256(&self, _peer_pub: &ForetiasPubKey33) -> Result<SharedSecret, CryptoError> {
-        Err(CryptoError::Unsupported("P-256 ECDH not implemented"))
-    }
+impl KexOps for SoftwareCryptoServer {}
 
+impl HashOps for SoftwareCryptoServer {
     fn sha256(&self, data: &[u8]) -> Result<ForetiasHash32, CryptoError> {
         crate::core::hashing::sha256(data)
     }
@@ -192,7 +223,9 @@ impl CryptoServer for SoftwareCryptoServer {
     fn legacy_insecure_sha1(&self, data: &[u8]) -> Result<ForetiasHash20, CryptoError> {
         crate::core::hashing::legacy_insecure_sha1(data)
     }
+}
 
+impl SealOps for SoftwareCryptoServer {
     fn seal_for_self(&self, data: &[u8]) -> Result<SealedBlob, CryptoError> {
         let cipher = ChaCha20Poly1305::new_from_slice(&*self.seal_key)
             .map_err(|_| CryptoError::Internal(1))?;
@@ -216,70 +249,46 @@ impl CryptoServer for SoftwareCryptoServer {
             .map_err(|_| CryptoError::BadSignature)?;
         Ok(pt)
     }
+}
 
+impl RngOps for SoftwareCryptoServer {
     fn random_bytes(&self, out: &mut [u8]) -> Result<(), CryptoError> {
         crate::core::rng::random_bytes(out)
     }
+}
 
+impl IdentityOps for SoftwareCryptoServer {
+    fn public_key(&self) -> PublicKeyBytes { self.pub_key }
+    fn peer_id(&self) -> ForetiasPeerID { self.peer_id }
+    fn curve(&self) -> ForetiasCurve { self.curve }
+
+    fn capabilities(&self) -> CryptoServerCapabilities {
+        CryptoServerCapabilities {
+            backend_name: "software",
+            curve: self.curve,
+            supports_proof: false,
+            supports_sealing: true,
+            max_sealed_bytes: 1_048_576,
+            typical_sign_us: 50,
+            typical_ecdh_us: 100,
+        }
+    }
+}
+
+impl FrostOps for SoftwareCryptoServer {
     fn store_frost_share(&self, committee_id: &str, share: &[u8]) -> Result<(), CryptoError> {
-        let mut map = self.frost_shares.lock();
-        map.insert(committee_id.to_string(), Zeroizing::new(share.to_vec()));
+        self.frost_shares.lock().insert(committee_id.to_string(), Zeroizing::new(share.to_vec()));
         Ok(())
     }
 
-    fn frost_sign_partial(&self, _committee_id: &str, _session_state: &[u8]) -> Result<Vec<u8>, CryptoError> {
-        Err(CryptoError::Unsupported("FROST signing stub"))
+    fn frost_sign_partial(&self, _committee_id: &str, _session: &[u8]) -> Result<Vec<u8>, CryptoError> {
+        Err(CryptoError::Unsupported("FROST signing not supported in software backend"))
     }
+}
 
+impl ProofOps for SoftwareCryptoServer {
     fn backend_self_proof(&self, _challenge: &[u8]) -> Result<Option<Vec<u8>>, CryptoError> {
-        Ok(None)
-    }
-
-    fn signature_algorithm(&self) -> SignatureAlgorithm {
-        SignatureAlgorithm::SPHINCS_SHA2_128S
-    }
-
-    fn sign_with(&self, msg: &[u8], alg: SignatureAlgorithm) -> Result<SignatureBytes, CryptoError> {
-        match alg {
-            SignatureAlgorithm::Ed25519 => {
-                let sig = self.sign(msg)?;
-                Ok(sig.bytes.to_vec())
-            }
-            SignatureAlgorithm::SPHINCS_SHA2_128S => {
-                let secret = self.sphincs_secret_key.as_ref()
-                    .ok_or(CryptoError::BadKey)?;
-                signing_sphincs::sphincs_sign(secret, msg)
-            }
-            SignatureAlgorithm::Dilithium3 => {
-                let secret = self.dilithium_secret_key.as_ref()
-                    .ok_or(CryptoError::BadKey)?;
-                signing_dilithium::dilithium3_sign(secret, msg)
-            }
-            SignatureAlgorithm::SLH_DSA_SHA2_256F => {
-                Err(CryptoError::Unsupported("SLH_DSA_SHA2_256F signing not yet implemented"))
-            }
-        }
-    }
-
-    fn verify_with(&self, pub_key: &SignatureBytes, alg_id: &str, msg: &[u8], sig: &SignatureBytes) -> Result<bool, CryptoError> {
-        match SignatureAlgorithm::from_id_string(alg_id)? {
-            SignatureAlgorithm::Ed25519 => {
-                let pk_bytes: [u8; 32] = pub_key[..32].try_into()
-                    .map_err(|_| CryptoError::BadKey)?;
-                let sig_bytes: [u8; 64] = sig[..64].try_into()
-                    .map_err(|_| CryptoError::BadSignature)?;
-                self.verify_ed25519(&ForetiasPubKey32 { bytes: pk_bytes }, msg, &ForetiasSig64 { bytes: sig_bytes })
-            }
-            SignatureAlgorithm::SPHINCS_SHA2_128S => {
-                signing_sphincs::sphincs_verify(pub_key, msg, sig)
-            }
-            SignatureAlgorithm::Dilithium3 => {
-                signing_dilithium::dilithium3_verify(pub_key, msg, sig)
-            }
-            SignatureAlgorithm::SLH_DSA_SHA2_256F => {
-                Err(CryptoError::Unsupported("SLH_DSA_SHA2_256F verification not yet implemented"))
-            }
-        }
+        Err(CryptoError::Unsupported("backend self proof not supported"))
     }
 }
 
