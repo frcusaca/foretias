@@ -750,18 +750,18 @@ Phase 6 (integration test + demo)
 ## MILESTONE CHECKLIST
 
 ```
-[ ] v0.3.1  Add libp2p to Cargo.toml; cargo build succeeds.
-[ ] v0.3.2  Keypair generation test passes.
-[ ] v0.3.3  TBID handshake types and protocol implemented.
-[ ] v0.3.4  TBID proof create and verify tests pass.
-[ ] v0.3.5  ForetiasBehaviour, swarm.rs, events.rs — swarm builds and spawns.
-[ ] v0.3.6  PeerAddr gains peer_id field (cfg-gated).
-[ ] v0.3.7  Wire enable_p2p into Communerd; event loop consumes NetworkEvents.
-[ ] v0.3.8  TBID handshake integrates with Communerd event loop.
-[ ] v0.3.9  CLI flags --p2p-listen / --p2p-dial parse; config fields added.
-[ ] v0.3.10 Integration test two_swarms_connect_and_identify passes.
-[ ] v0.3.11 Demo script passes.
-[ ] v0.3.12 All v0.1 and v0.2 tests pass.
+[x](2026-05-15 01:05) v0.3.1  Add libp2p to Cargo.toml; cargo build succeeds.
+[x](2026-05-15 01:05) v0.3.2  Keypair generation test passes.
+[x](2026-05-15 01:05) v0.3.3  TBID handshake types and protocol implemented.
+[x](2026-05-15 01:05) v0.3.4  TBID proof create and verify tests pass.
+[x](2026-05-15 01:05) v0.3.5  ForetiasBehaviour, swarm.rs, events.rs — swarm builds and spawns.
+[x](2026-05-15 01:05) v0.3.6  PeerAddr gains peer_id field (cfg-gated).
+[x](2026-05-15 01:05) v0.3.7  Wire enable_p2p into Communerd; event loop consumes NetworkEvents.
+[x](2026-05-15 01:05) v0.3.8  TBID handshake integrates with Communerd event loop.
+[x](2026-05-15 01:05) v0.3.9  CLI flags --p2p-listen / --p2p-dial parse; config fields added.
+[x](2026-05-15 01:05) v0.3.10 Integration test two_swarms_connect_and_identify passes.
+[x](2026-05-15 01:05) v0.3.11 Demo script passes.
+[x](2026-05-15 01:05) v0.3.12 All v0.1 and v0.2 tests pass (290 total: 170 core + 112 node + 8 integration).
 [ ] v0.3.13 TAG: v0.3-libp2p-handshake.
 ```
 
