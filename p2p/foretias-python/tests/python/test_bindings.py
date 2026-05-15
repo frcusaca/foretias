@@ -61,7 +61,7 @@ class TestPyTimeFamily:
         tf = PyTimeFamily(tbn="test-node")
         assert "TimeFamily" in repr(tf)
         assert tf.get_tbn() == "test-node"
-        assert len(tf.get_tbid()) == 32  # hex string
+        assert len(tf.get_tbid()) == 192  # hex string of 96-byte TBID (Ed25519_PK(32) || SLH-DSA_PK(64))
         assert tf.get_current_tick() == 0
 
     def test_stamp(self):
@@ -71,7 +71,7 @@ class TestPyTimeFamily:
         assert foretis.tick_number == 1
         assert len(foretis.content_hash) == 32
         assert len(foretis.signature) == 64
-        assert len(foretis.tbid) == 16
+        assert len(foretis.tbid) == 96  # Ed25519_PK(32) + SLH-DSA_PK(64)
         assert foretis.tbn == "test-node"
         assert isinstance(foretis.echo, str)
         assert isinstance(foretis.time_being_reference_time, str)

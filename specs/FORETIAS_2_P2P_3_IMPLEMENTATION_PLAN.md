@@ -762,7 +762,7 @@ Phase 6 (integration test + demo)
 [x](2026-05-15 01:05) v0.3.10 Integration test two_swarms_connect_and_identify passes.
 [x](2026-05-15 01:05) v0.3.11 Demo script passes.
 [x](2026-05-15 01:05) v0.3.12 All v0.1 and v0.2 tests pass (290 total: 170 core + 112 node + 8 integration).
-[ ] v0.3.13 TAG: v0.3-libp2p-handshake.
+[x](2026-05-15 10:47) v0.3.13 TAG: v0.3-libp2p-handshake.
 ```
 
 ---

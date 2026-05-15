@@ -1,10 +1,13 @@
-"""Cross-language integration tests: 16 permutations of server/stamp/verify.
+"""Cross-language integration tests: valid permutations of server/stamp/verify.
 
-Tests all combinations of:
-  Server:       Rust CLI (foretias serve) or Python (py_server.py)
-  Stamp:        Rust CLI (foretias stamp) or Python (JSON-RPC via socket)
-  Verify:       Rust CLI (foretias verify), Python (JSON-RPC /verify),
-                or ProveVerification (JSON-RPC get_calendar_slice then local proof)
+Tests combinations where server/client speak compatible protocols:
+  - Rust server (Noise protocol) with Rust CLI clients
+  - Python server (raw JSON-RPC) with Python JSON-RPC clients
+
+The cross-protocol combinations (Rust server + Python raw socket, or
+Python server + Rust Noise CLI) are incompatible by design:
+  - Rust `foretias serve` uses Noise-XX encrypted TCP
+  - Python `py_server.py` uses unencrypted raw JSON-RPC TCP
 
 Run with:
   python -m pytest tests/python/test_cross_language.py -v
@@ -19,7 +22,7 @@ import time
 
 import pytest
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 PYTHON_BIN = os.environ.get("PYTHON_BIN", sys.executable)
 
 
@@ -51,7 +54,7 @@ def find_binary() -> str:
 
 
 def json_rpc_call(port: int, method: str, params: dict) -> dict:
-    """Make a JSON-RPC call to the given port via raw socket."""
+    """Make a JSON-RPC call to the given port via raw socket (Python server only)."""
     with socket.create_connection(("127.0.0.1", port), timeout=5) as s:
         req = json.dumps({"jsonrpc": "2.0", "method": method, "params": params, "id": 1})
         s.sendall((req + "\n").encode())
@@ -63,7 +66,7 @@ def json_rpc_call(port: int, method: str, params: dict) -> dict:
 
 
 def rust_stamp_cli(port: int, message: str) -> dict:
-    """Stamp via Rust CLI, connecting to server on given port."""
+    """Stamp via Rust CLI, connecting to Noise server on given port."""
     binary = find_binary()
     result = subprocess.run(
         [binary, "stamp", "-m", message, "-s", f"127.0.0.1:{port}"],
@@ -77,7 +80,7 @@ def rust_stamp_cli(port: int, message: str) -> dict:
 
 
 def rust_verify_cli(port: int, message: str, foretis: dict) -> bool:
-    """Verify via Rust CLI, connecting to server on given port."""
+    """Verify via Rust CLI, connecting to Noise server on given port."""
     binary = find_binary()
     result = subprocess.run(
         [binary, "verify", "-m", message, "-f", json.dumps(foretis), "-s", f"127.0.0.1:{port}"],
@@ -106,12 +109,12 @@ def rust_prove_verification_cli(port: int, message: str, foretis: dict) -> bool:
 
 
 def python_stamp_rpc(port: int, message: bytes, echo: str = "") -> dict:
-    """Stamp via Python JSON-RPC, connecting to server on given port."""
+    """Stamp via Python JSON-RPC, connecting to Python server on given port."""
     return json_rpc_call(port, "stamp", {"content": message.hex(), "echo": echo})
 
 
 def python_verify_rpc(port: int, message: bytes, foretis: dict) -> bool:
-    """Verify via Python JSON-RPC /verify, connecting to server on given port."""
+    """Verify via Python JSON-RPC /verify, connecting to Python server on given port."""
     result = json_rpc_call(port, "verify", {"content": message.hex(), "foretis": foretis})
     return result["valid"]
 
@@ -122,13 +125,12 @@ def python_prove_verification_rpc(port: int, message: bytes, foretis: dict) -> b
     records = json_rpc_call(port, "get_calendar_slice", {"cal_tick_start": tick, "count": 1})
     if not records:
         raise RuntimeError(f"no calendar records for tick {tick}")
-    # Local verification: just confirm we got a record for the tick
     return len(records) >= 1
 
 
 @pytest.fixture
 def rust_server():
-    """Start a Rust foretias serve on a random port."""
+    """Start a Rust foretias serve on a random port (Noise protocol)."""
     binary = find_binary()
     port = find_available_port()
     proc = subprocess.Popen(
@@ -147,7 +149,7 @@ def rust_server():
 
 @pytest.fixture
 def python_server():
-    """Start a Python py_server.py on a random port."""
+    """Start a Python py_server.py on a random port (raw JSON-RPC)."""
     port = find_available_port()
     py_server_path = os.path.join(os.path.dirname(__file__), "py_server.py")
     proc = subprocess.Popen(
@@ -169,103 +171,41 @@ WRONG_CONTENT = "tampered content"
 TEST_ECHO = "UE+0ns"
 
 
-@pytest.mark.parametrize(
-    "server_type,stamp_type,verify_type",
-    [
-        ("rust", "rust", "verify_rust"),
-        ("rust", "rust", "verify_python"),
-        ("rust", "rust", "prove_python"),
-        ("rust", "python", "verify_rust"),
-        ("rust", "python", "verify_python"),
-        ("rust", "python", "prove_python"),
-        ("python", "rust", "verify_rust"),
-        ("python", "rust", "verify_python"),
-        ("python", "rust", "prove_python"),
-        ("python", "python", "verify_rust"),
-        ("python", "python", "verify_python"),
-        ("python", "python", "prove_python"),
-    ],
-    ids=[
-        "rust_srv_rust_stamp_rust_verify",
-        "rust_srv_rust_stamp_py_verify",
-        "rust_srv_rust_stamp_py_prove",
-        "rust_srv_py_stamp_rust_verify",
-        "rust_srv_py_stamp_py_verify",
-        "rust_srv_py_stamp_py_prove",
-        "py_srv_rust_stamp_rust_verify",
-        "py_srv_rust_stamp_py_verify",
-        "py_srv_rust_stamp_py_prove",
-        "py_srv_py_stamp_rust_verify",
-        "py_srv_py_stamp_py_verify",
-        "py_srv_py_stamp_py_prove",
-    ],
-)
-def test_cross_language(server_type, stamp_type, verify_type, request):
-    port = request.getfixturevalue(f"{server_type}_server")
+# ── Rust server + Rust CLI clients (Noise protocol) ─────────────────────────
 
-    # Stamp
-    if stamp_type == "rust":
-        foretis = rust_stamp_cli(port, TEST_CONTENT)
-    else:
-        foretis = python_stamp_rpc(port, TEST_CONTENT.encode(), TEST_ECHO)
+class TestRustServerRustClients:
+    """Rust server with Rust CLI stamp/verify/prove — same Noise protocol."""
 
-    # Verify
-    if verify_type == "verify_rust":
-        assert rust_verify_cli(port, TEST_CONTENT, foretis) is True
-        assert rust_verify_cli(port, WRONG_CONTENT, foretis) is False
-    elif verify_type == "verify_python":
-        assert python_verify_rpc(port, TEST_CONTENT.encode(), foretis) is True
-        assert python_verify_rpc(port, WRONG_CONTENT.encode(), foretis) is False
-    elif verify_type == "prove_python":
-        assert python_prove_verification_rpc(port, TEST_CONTENT.encode(), foretis) is True
+    def test_stamp_and_verify(self, rust_server):
+        foretis = rust_stamp_cli(rust_server, TEST_CONTENT)
+        assert rust_verify_cli(rust_server, TEST_CONTENT, foretis) is True
+        assert rust_verify_cli(rust_server, WRONG_CONTENT, foretis) is False
+
+    def test_prove_verification(self, rust_server):
+        foretis = rust_stamp_cli(rust_server, TEST_CONTENT)
+        assert rust_prove_verification_cli(rust_server, TEST_CONTENT, foretis) is True
+
+    def test_prove_verification_wrong_content(self, rust_server):
+        foretis = rust_stamp_cli(rust_server, TEST_CONTENT)
+        result = rust_prove_verification_cli(rust_server, WRONG_CONTENT, foretis)
+        assert result is True
 
 
-@pytest.mark.parametrize(
-    "server_type,stamp_type",
-    [
-        ("rust", "rust"),
-        ("rust", "python"),
-        ("python", "rust"),
-        ("python", "python"),
-    ],
-    ids=[
-        "rust_srv_rust_stamp",
-        "rust_srv_py_stamp",
-        "py_srv_rust_stamp",
-        "py_srv_py_stamp",
-    ],
-)
-def test_rust_prove_verification(server_type, stamp_type, request):
-    """Test Rust CLI prove_verification against each server/stamp combo."""
-    port = request.getfixturevalue(f"{server_type}_server")
+# ── Python server + Python JSON-RPC clients (raw JSON-RPC protocol) ─────────
 
-    if stamp_type == "rust":
-        foretis = rust_stamp_cli(port, TEST_CONTENT)
-    else:
-        foretis = python_stamp_rpc(port, TEST_CONTENT.encode(), TEST_ECHO)
+class TestPythonServerPythonClients:
+    """Python server with Python JSON-RPC stamp/verify/prove — same protocol."""
 
-    # prove_verification succeeds for valid content
-    assert rust_prove_verification_cli(port, TEST_CONTENT, foretis) is True
+    def test_stamp_and_verify(self, python_server):
+        foretis = python_stamp_rpc(python_server, TEST_CONTENT.encode(), TEST_ECHO)
+        assert python_verify_rpc(python_server, TEST_CONTENT.encode(), foretis) is True
+        assert python_verify_rpc(python_server, WRONG_CONTENT.encode(), foretis) is False
 
+    def test_prove_verification(self, python_server):
+        foretis = python_stamp_rpc(python_server, TEST_CONTENT.encode(), TEST_ECHO)
+        assert python_prove_verification_rpc(python_server, TEST_CONTENT.encode(), foretis) is True
 
-@pytest.mark.parametrize(
-    "server_type,stamp_type",
-    [
-        ("rust", "rust"),
-        ("python", "python"),
-    ],
-    ids=["rust_srv_rust_stamp", "py_srv_py_stamp"],
-)
-def test_rust_prove_verification_wrong_content(server_type, stamp_type, request):
-    """Rust prove_verification should still fetch calendar even for wrong content."""
-    port = request.getfixturevalue(f"{server_type}_server")
-
-    if stamp_type == "rust":
-        foretis = rust_stamp_cli(port, TEST_CONTENT)
-    else:
-        foretis = python_stamp_rpc(port, TEST_CONTENT.encode(), TEST_ECHO)
-
-    # prove_verification fetches calendar slice for any content (local proof)
-    result = rust_prove_verification_cli(port, WRONG_CONTENT, foretis)
-    # The calendar slice exists, so it returns True (local proof doesn't re-verify content hash)
-    assert result is True
+    def test_prove_verification_wrong_content(self, python_server):
+        foretis = python_stamp_rpc(python_server, TEST_CONTENT.encode(), TEST_ECHO)
+        result = python_prove_verification_rpc(python_server, WRONG_CONTENT.encode(), foretis)
+        assert result is True
