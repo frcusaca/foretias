@@ -62,15 +62,20 @@
 **Fix:** Define `Clock` trait, inject into `stamp()` function signature.
 **Files:** `foretias/tick.rs`, `chronomatter/mod.rs`, `foretias-node/src/main.rs`
 
-### M6: Split `CryptoServer` Trait
+### M6: Split `CryptoServer` Trait — [NA — deferred]
 **Problem:** 22-method mega-trait mixing signing, verification, hashing, ECDH, sealing, RNG, FROST, backend proof.
 **Fix:** Split into focused traits: `Signer`, `Verifier`, `Hasher`, `KeyExchange`, `Sealer`, `RngSource`.
 **Files:** `crypto_server/mod.rs` + all implementors and call sites (~50 sites)
+**Status:** Deferred — requires M4 (newtypes) as dependency. M4 alone caused 58 compilation errors across 15+ files. Both deferred beyond cleanup scope.
+**Completed:** 2026-05-14T18:50:00-07:00 (deferred)
 
-### M4: Type Aliases → Newtypes
+### M4: Type Aliases → Newtypes — [NA — deferred]
 **Problem:** `type Tbid = [u8; 16]`, `type SignatureBytes = Vec<u8>`, `type PublicKeyBytes = Vec<u8>` allow semantic confusion at compile time.
 **Fix:** Convert to newtype structs with constructors: `struct Tbid([u8; 16])`, `struct SignatureBytes(Vec<u8>)`, etc.
 **Files:** `foretias/types.rs` + ~30 dependent files
+**Status:** Deferred — converting `SignatureBytes` from `type Vec<u8>` to `struct` caused 58 errors (Zeroize, Deref, FTByteVector interop, serializ
+ation bounds). Requires broader refactoring beyond cleanup scope.
+**Completed:** 2026-05-14T18:50:00-07:00 (deferred)
 
 ### M5: Checked Constructors for Domain Types
 **Problem:** `TickRecord` and `Foretis` are plain structs with public fields — invalid states are representable.

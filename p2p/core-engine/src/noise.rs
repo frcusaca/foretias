@@ -76,7 +76,7 @@ impl NoiseSession {
         let state_ptr = unsafe {
             let ptr = std::alloc::alloc_zeroed(layout);
             if ptr.is_null() {
-                return Err(CryptoError::Internal(-99));
+                return Err(CryptoError::BadInput("noise state allocation failed"));
             }
             ptr as *mut ForetiasNoiseState
         };
@@ -261,7 +261,7 @@ pub async fn noise_handshake(
     }
 
     if !session.is_complete() {
-        return Err(CryptoError::Internal(-99));
+        return Err(CryptoError::BadInput("noise handshake incomplete"));
     }
     Ok((session, stream))
 }
@@ -295,9 +295,12 @@ pub async fn noise_send(
     plaintext: &[u8],
 ) -> Result<(), CryptoError> {
     let ct = session.send(plaintext)?;
-    write_length_prefix(writer, ct.len() as u32).await.map_err(|_| CryptoError::Internal(-99))?;
-    tokio::io::AsyncWriteExt::write_all(writer, &ct).await.map_err(|_| CryptoError::Internal(-99))?;
-    tokio::io::AsyncWriteExt::flush(writer).await.map_err(|_| CryptoError::Internal(-99))?;
+    write_length_prefix(writer, ct.len() as u32).await
+        .map_err(|e| CryptoError::IoWrite(format!("length prefix: {}", e)))?;
+    tokio::io::AsyncWriteExt::write_all(writer, &ct).await
+        .map_err(|e| CryptoError::IoWrite(format!("ciphertext write: {}", e)))?;
+    tokio::io::AsyncWriteExt::flush(writer).await
+        .map_err(|e| CryptoError::IoWrite(format!("flush: {}", e)))?;
     Ok(())
 }
 
@@ -308,9 +311,11 @@ pub async fn noise_recv(
     session: &mut NoiseSession,
     reader: &mut tokio::io::BufReader<tokio::net::tcp::OwnedReadHalf>,
 ) -> Result<Vec<u8>, CryptoError> {
-    let ct_len = read_length_prefix(reader).await.map_err(|_| CryptoError::Internal(-99))? as usize;
+    let ct_len = read_length_prefix(reader).await
+        .map_err(|e| CryptoError::IoRead(format!("length prefix: {}", e)))? as usize;
     let mut ct_buf = vec![0u8; ct_len];
-    tokio::io::AsyncReadExt::read_exact(reader, &mut ct_buf).await.map_err(|_| CryptoError::Internal(-99))?;
+    tokio::io::AsyncReadExt::read_exact(reader, &mut ct_buf).await
+        .map_err(|e| CryptoError::IoRead(format!("ciphertext read: {}", e)))?;
     session.recv(&ct_buf)
 }
 
