@@ -1,0 +1,1382 @@
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/.github/workflows/android.yml ===
+name: android build
+
+permissions:
+  contents: read
+
+on: [workflow_call, workflow_dispatch]
+
+jobs:
+
+  android:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: [armeabi-v7a, arm64-v8a, x86, x86_64]
+        stfl_opt: [ON, OFF]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # pin@v3
+      - name: Build project
+        run: ./scripts/build-android.sh $ANDROID_NDK_HOME -a ${{ matrix.abi }} -f "-DOQS_ENABLE_SIG_STFL_LMS=ON -DOQS_ENABLE_SIG_STFL_XMSS=ON -DOQS_HAZARDOUS_EXPERIMENTAL_ENABLE_SIG_STFL_KEY_SIG_GEN=${{ matrix.stfl_opt }}"
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/.github/workflows/apple.yml ===
+name: apple build
+
+permissions:
+  contents: read
+
+on: [workflow_call, workflow_dispatch]
+
+jobs:
+
+  apple-mobile:
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [OS64, TVOS]
+        stfl_opt: [OFF, ON]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # pin@v3
+      - name: Generate project
+        run: |
+          cmake -B build --toolchain .CMake/apple.cmake -DOQS_USE_OPENSSL=OFF -DPLATFORM=${{ matrix.platform }} \
+            -DOQS_ENABLE_SIG_STFL_LMS=ON -DOQS_ENABLE_SIG_STFL_XMSS=ON -DOQS_HAZARDOUS_EXPERIMENTAL_ENABLE_SIG_STFL_KEY_SIG_GEN=${{ matrix.stfl_opt }} .
+      - name: Build project
+        run: cmake --build build
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/.github/workflows/basic.yml ===
+name: Basic checks
+
+permissions:
+  contents: read
+
+on: [workflow_call, workflow_dispatch]
+
+jobs:
+  workflowcheck:
+    name: Check validity of GitHub workflows
+    runs-on: ubuntu-latest
+    container: openquantumsafe/ci-ubuntu-latest:latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # pin@v4
+      - name: Ensure GitHub actions are valid
+        run: actionlint -shellcheck "" # run *without* shellcheck
+
+  stylecheck:
+    name: Check code formatting
+    needs: [workflowcheck]
+    runs-on: ubuntu-latest
+    container: openquantumsafe/ci-ubuntu-latest:latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # pin@v4
+      - name: Ensure code conventions are upheld
+        run: python3 -m pytest --verbose tests/test_code_conventions.py
+      - name: Check that doxygen can parse the documentation
+        run: mkdir build && ./scripts/run_doxygen.sh $(which doxygen) ./docs/.Doxyfile ./build
+      - name: Validate CBOM
+        run: scripts/validate_cbom.sh
+
+  upstreamcheck:
+    name: Check upstream code is properly integrated
+    needs: [workflowcheck]
+    runs-on: ubuntu-latest
+    container: openquantumsafe/ci-ubuntu-latest:latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # pin@v4
+      - name: Configure
+        run: |
+          git config --global user.name "ciuser" && \
+          git config --global user.email "ci@openquantumsafe.org" && \
+          git config --global --add safe.directory "$PWD" && \
+          echo "LIBOQS_DIR=$PWD" >> "$GITHUB_ENV"
+      - name: Verify copy_from_upstream state after copy
+        working-directory: "scripts/copy_from_upstream"
+        run: |
+          python3 copy_from_upstream.py -d copy && \
+          git status --porcelain && \
+          test -z "$(git status --porcelain)"
+      - name: Verify copy_from_upstream state after libjade
+        working-directory: "scripts/copy_from_upstream"
+        run: |
+          python3 copy_from_upstream.py -d libjade && \
+          git status --porcelain && \
+          test -z "$(git status --porcelain)"
+
+  buildcheck:
+    name: Check that code passes a basic build
+    needs: [workflowcheck, stylecheck, upstreamcheck]
+    runs-on: ubuntu-latest
+    container: openquantumsafe/ci-ubuntu-latest:latest
+    env:
+      KEM_NAME: ml_kem_768
+      SIG_NAME: ml_dsa_65
+    steps:
+      - name: Create random build folder
+        run: tmp_build=$(mktemp -d) && echo "RANDOM_BUILD_DIR=$tmp_build" >> $GITHUB_ENV
+      - name: Checkout code
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # pin@v4
+      - name: Configure
+        run: |
+          cmake \
+            -B ${{ env.RANDOM_BUILD_DIR }} \
+            -GNinja \
+            -DOQS_STRICT_WARNINGS=ON \
+            -DOQS_MINIMAL_BUILD="KEM_$KEM_NAME;SIG_$SIG_NAME" \
+            --warn-uninitialized . > config.log 2>&1 && \
+          cat config.log && \
+          cmake -LA -N . && \
+          ! (grep -i "uninitialized variable" config.log)
+      - name: Build code
+        run: ninja
+        working-directory: ${{ env.RANDOM_BUILD_DIR }}
+      - name: Build documentation
+        run: ninja gen_docs
+        working-directory: ${{ env.RANDOM_BUILD_DIR }}
+
+  cppcheck:
+    name: Check C++ linking with example program
+    runs-on: ubuntu-latest
+    container: openquantumsafe/ci-ubuntu-latest:latest
+    env:
+      SIG_NAME: dilithium_2
+    steps:
+      - name: Create random build folder
+        run: tmp_build=$(mktemp -d) && echo "RANDOM_BUILD_DIR=$tmp_build" >> $GITHUB_ENV
+      - name: Checkout code
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # pin@v4
+      - name: Configure
+        run: |
+          cmake \
+            -B ${{ env.RANDOM_BUILD_DIR }} \
+            -GNinja \
+            -DOQS_STRICT_WARNINGS=ON \
+            -DOQS_MINIMAL_BUILD="SIG_$SIG_NAME" \
+            --warn-uninitialized . > config.log 2>&1 && \
+          cat config.log && \
+          cmake -LA -N . && \
+          ! (grep -i "uninitialized variable" config.log)
+      - name: Build liboqs
+        run: ninja
+        working-directory: ${{ env.RANDOM_BUILD_DIR }}
+      - name: Link with C++ program
+        run: |
+          g++ "$GITHUB_WORKSPACE"/cpp/sig_linking_test.cpp -g \
+          -I./include -L./lib -loqs -lcrypto -std=c++11 -o example_sig && \
+          ./example_sig
+        working-directory: ${{ env.RANDOM_BUILD_DIR }}
+
+  fuzzbuildcheck:
+    name: Check that code passes a basic fuzzing build
+    needs: [workflowcheck, stylecheck, upstreamcheck]
+    runs-on: ubuntu-latest
+    container: openquantumsafe/ci-ubuntu-latest:latest
+    env:
+      SIG_NAME: dilithium_2
+      CC: clang
+      CXX: clang++
+      CFLAGS: -fsanitize=fuzzer-no-link,address
+      LDFLAGS: -fsanitize=address
+    steps:
+      - name: Create random build folder
+        run: tmp_build=$(mktemp -d) && echo "RANDOM_BUILD_DIR=$tmp_build" >> $GITHUB_ENV
+      - name: Checkout code
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # pin@v4
+      - name: Configure
+        run: |
+          cmake \
+            -B ${{ env.RANDOM_BUILD_DIR }} \
+            -GNinja \
+            -DOQS_STRICT_WARNINGS=ON \
+            -DOQS_BUILD_FUZZ_TESTS=ON \
+            -DOQS_MINIMAL_BUILD="SIG_$SIG_NAME" \
+            --warn-uninitialized . > config.log 2>&1 && \
+          cat config.log && \
+          cmake -LA -N . && \
+          ! (grep -i "uninitialized variable" config.log)
+      - name: Build code
+        run: ninja fuzz_test_sig
+        working-directory: ${{ env.RANDOM_BUILD_DIR }}
+
+      - name: Short fuzz check (30s)
+        run: ./tests/fuzz_test_sig -max_total_time=30
+        working-directory: ${{ env.RANDOM_BUILD_DIR }}
+
+  nixflakecheck:
+    name: Check that Nix flake has correct syntax and can build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # pin@v4
+      - name: Install Nix
+        uses: cachix/install-nix-action@08dcb3a5e62fa31e2da3d490afc4176ef55ecd72
+      - name: Check devShell
+        run: nix develop --command echo 
+      - name: Check flake syntax
+        run: nix flake check --no-build # check for accurate syntax
+      - name: Check that the flake builds
+        run: nix build # check that the build runs
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/.github/workflows/commit-to-main.yml ===
+name: Main branch tests
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: ['main']
+
+jobs:
+
+  platform-tests:
+    uses: ./.github/workflows/platforms.yml
+
+  scorecard:
+    uses: ./.github/workflows/scorecard.yml
+    secrets: inherit
+    permissions:
+      id-token: write
+      security-events: write
+
+  basic-downstream:
+    uses: ./.github/workflows/downstream-basic.yml
+    secrets: inherit
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/.github/workflows/downstream-basic.yml ===
+name: Trigger basic downstream CI
+
+permissions:
+  contents: read
+
+on: [workflow_call, workflow_dispatch]
+
+jobs:
+
+  trigger-downstream-ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger OQS-BoringSSL CI
+        if: ${{ !cancelled() }} # run all steps independent of failures
+        run: |
+          curl --silent \
+               --write-out "\n%{response_code}\n" \
+               --request POST \
+               --header "Accept: application/vnd.github+json" \
+               --header "Authorization: Bearer ${{ secrets.OQSBOT_GITHUB_ACTIONS }}" \
+               --header "X-GitHub-Api-Version: 2022-11-28" \
+               --data '{"event_type":"liboqs-upstream-trigger"}' \
+               https://api.github.com/repos/open-quantum-safe/boringssl/dispatches | tee curl_out \
+          && grep -q "204" curl_out
+      - name: Trigger OQS-OpenSSH CI
+        if: ${{ !cancelled() }} # run all steps independent of failures
+        run: |
+          curl --silent \
+               --write-out "\n%{response_code}\n" \
+               --request POST \
+               --header "Accept: application/vnd.github+json" \
+               --header "Authorization: Bearer ${{ secrets.OQSBOT_GITHUB_ACTIONS }}" \
+               --header "X-GitHub-Api-Version: 2022-11-28" \
+               --data '{"ref":"OQS-v9"}' \
+               https://api.github.com/repos/open-quantum-safe/openssh/actions/workflows/ubuntu.yaml/dispatches | tee curl_out \
+          && grep -q "204" curl_out
+      - name: Trigger oqs-provider CI
+        if: ${{ !cancelled() }} # run all steps independent of failures
+        run: |
+          curl --silent \
+               --write-out "\n%{response_code}\n" \
+               --user ${{ secrets.BUILD_TRIGGER_TOKEN }}: \
+               --request POST \
+               --header "Content-Type: application/json" \
+               --data '{ "branch": "main" }' \
+               https://circleci.com/api/v2/project/gh/open-quantum-safe/oqs-provider/pipeline | tee curl_out \
+          && grep -q "201" curl_out
+      - name: Trigger liboqs-cpp CI
+        if: ${{ !cancelled() }} # run all steps independent of failures
+        run: |
+          curl --silent \
+               --write-out "\n%{response_code}\n" \
+               --request POST \
+               --header "Accept: application/vnd.github+json" \
+               --header "Authorization: Bearer ${{ secrets.OQSBOT_GITHUB_ACTIONS }}" \
+               --header "X-GitHub-Api-Version: 2022-11-28" \
+               --data '{"event_type":"liboqs-upstream-trigger"}' \
+               https://api.github.com/repos/open-quantum-safe/liboqs-cpp/dispatches | tee curl_out \
+          && grep -q "204" curl_out
+      - name: Trigger liboqs-go CI
+        if: ${{ !cancelled() }} # run all steps independent of failures
+        run: |
+          curl --silent \
+               --write-out "\n%{response_code}\n" \
+               --request POST \
+               --header "Accept: application/vnd.github+json" \
+               --header "Authorization: Bearer ${{ secrets.OQSBOT_GITHUB_ACTIONS }}" \
+               --header "X-GitHub-Api-Version: 2022-11-28" \
+               --data '{"event_type":"liboqs-upstream-trigger"}' \
+               https://api.github.com/repos/open-quantum-safe/liboqs-go/dispatches | tee curl_out \
+          && grep -q "204" curl_out
+      - name: Trigger liboqs-python CI
+        if: ${{ !cancelled() }} # run all steps independent of failures
+        run: |
+          curl --silent \
+               --write-out "\n%{response_code}\n" \
+               --request POST \
+               --header "Accept: application/vnd.github+json" \
+               --header "Authorization: Bearer ${{ secrets.OQSBOT_GITHUB_ACTIONS }}" \
+               --header "X-GitHub-Api-Version: 2022-11-28" \
+               --data '{"event_type":"liboqs-upstream-trigger"}' \
+               https://api.github.com/repos/open-quantum-safe/liboqs-python/dispatches | tee curl_out \
+          && grep -q "204" curl_out
+      - name: Trigger liboqs-java CI
+        if: ${{ !cancelled() }} # run all steps independent of failures
+        run: |
+          curl --silent \
+               --write-out "\n%{response_code}\n" \
+               --request POST \
+               --header "Accept: application/vnd.github+json" \
+               --header "Authorization: Bearer ${{ secrets.OQSBOT_GITHUB_ACTIONS }}" \
+               --header "X-GitHub-Api-Version: 2022-11-28" \
+               --data '{"event_type":"liboqs-upstream-trigger"}' \
+               https://api.github.com/repos/open-quantum-safe/liboqs-java/dispatches | tee curl_out \
+          && grep -q "204" curl_out
+      - name: Trigger liboqs-rust CI
+        if: ${{ !cancelled() }} # run all steps independent of failures
+        run: |
+          curl --silent \
+               --write-out "\n%{response_code}\n" \
+               --request POST \
+               --header "Accept: application/vnd.github+json" \
+               --header "Authorization: Bearer ${{ secrets.OQSBOT_GITHUB_ACTIONS }}" \
+               --header "X-GitHub-Api-Version: 2022-11-28" \
+               --data '{"event_type":"liboqs-upstream-trigger"}' \
+               https://api.github.com/repos/open-quantum-safe/liboqs-rust/dispatches | tee curl_out \
+          && grep -q "204" curl_out
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/.github/workflows/downstream-release.yml ===
+name: Downstream release tests
+
+permissions:
+  contents: read
+
+on: [workflow_call, workflow_dispatch]
+
+# Trigger oqs-provider release tests.
+# When triggered by a release (see release.yml), the liboqs release tag and the provider "<release tag>-tracker" branch are used.
+# When triggered by a commit message (see filter.yml), the triggering liboqs branch and the provider "<liboqs branch>-tracker" branch are used.
+# If the tracker branch does not exist, the downstream pipeline should detect it and run on the main branch instead.
+
+jobs:
+  oqs-provider-release-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release tests script
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # pin@v4
+        with:
+          sparse-checkout: |
+            scripts/provider-test-trigger.sh
+          sparse-checkout-cone-mode: false
+      - name: Trigger oqs-provider release tests
+        run: |
+          CURL_FLAGS="--silent --write-out \n%{response_code}\n" \
+          ACCESS_TOKEN="${{ secrets.OQSBOT_GITHUB_ACTIONS }}" \
+          LIBOQS_REF="${{ github.ref_name }}" \
+          PROVIDER_REF="${{ github.ref_name }}-tracker" \
+          ./scripts/provider-test-trigger.sh | tee curl_out \
+          && grep -q "204" curl_out
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/.github/workflows/extended.yml ===
+name: Extended tests
+
+permissions:
+  contents: read
+
+on: [workflow_call, workflow_dispatch]
+
+jobs:
+
+  constant-time-x64:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: generic
+            container: openquantumsafe/ci-ubuntu-latest:latest
+            CMAKE_ARGS: -DOQS_DIST_BUILD=OFF -DOQS_OPT_TARGET=generic -DCMAKE_BUILD_TYPE=Debug -DOQS_ENABLE_TEST_CONSTANT_TIME=ON
+            PYTEST_ARGS: --numprocesses=auto -k 'test_constant_time'
+            SKIP_ALGS: 'SPHINCS\+-SHA(.)*s-simple,SPHINCS\+-SHAKE-(.)*'
+          - name: extensions
+            container: openquantumsafe/ci-ubuntu-latest:latest
+            CMAKE_ARGS: -DOQS_DIST_BUILD=OFF -DOQS_OPT_TARGET=auto -DCMAKE_BUILD_TYPE=Debug -DOQS_ENABLE_TEST_CONSTANT_TIME=ON
+            PYTEST_ARGS: --numprocesses=auto -k 'test_constant_time'
+            SKIP_ALGS: 'SPHINCS\+-SHA(.)*s-simple,SPHINCS\+-SHAKE-(.)*'
+    container:
+      image: ${{ matrix.container }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@ee0669bd1cc54295c223e0bb666b733df41de1c5 # pin@v2
+      - name: Configure
+        run: mkdir build && cd build && cmake -GNinja ${{ matrix.CMAKE_ARGS }} .. && cmake -LA -N ..
+      - name: Build
+        run: ninja
+        working-directory: build
+      - name: Run tests
+        timeout-minutes: 360
+        run: mkdir -p tmp && SKIP_ALGS='${{ matrix.SKIP_ALGS }}' python3 -m pytest --verbose ${{ matrix.PYTEST_ARGS }}
+
+  nistkat-x64:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: generic
+            container: openquantumsafe/ci-ubuntu-latest:latest
+            CMAKE_ARGS: -DOQS_DIST_BUILD=OFF -DOQS_OPT_TARGET=generic
+            PYTEST_ARGS: --numprocesses=auto -k 'test_kat_all'
+          - name: generic-libjade
+            container: openquantumsafe/ci-ubuntu-latest:latest
+            CMAKE_ARGS: -DOQS_DIST_BUILD=OFF -DOQS_OPT_TARGET=generic -DOQS_LIBJADE_BUILD=ON -DOQS_MINIMAL_BUILD="${{ vars.LIBJADE_ALG_LIST }}"
+            PYTEST_ARGS: --numprocesses=auto -k 'test_kat_all'
+          - name: extensions
+            container: openquantumsafe/ci-ubuntu-latest:latest
+            CMAKE_ARGS: -DOQS_DIST_BUILD=OFF -DOQS_OPT_TARGET=auto
+            PYTEST_ARGS: --numprocesses=auto -k 'test_kat_all'
+          - name: extensions-libjade
+            container: openquantumsafe/ci-ubuntu-latest:latest
+            CMAKE_ARGS: -DOQS_DIST_BUILD=OFF -DOQS_OPT_TARGET=auto -DOQS_LIBJADE_BUILD=ON -DOQS_MINIMAL_BUILD="${{ vars.LIBJADE_ALG_LIST}}"
+            PYTEST_ARGS: --numprocesses=auto -k 'test_kat_all'
+    container:
+      image: ${{ matrix.container }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # pin@v4
+      - name: Configure
+        run: mkdir build && cd build && cmake -GNinja ${{ matrix.CMAKE_ARGS }} .. && cmake -LA -N ..
+      - name: Build
+        run: ninja
+        working-directory: build
+      - name: Run tests
+        timeout-minutes: 360
+        run: mkdir -p tmp && python3 -m pytest --verbose ${{ matrix.PYTEST_ARGS }}
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/.github/workflows/linux.yml ===
+name: Linux tests
+
+permissions:
+  contents: read
+
+on: [workflow_call, workflow_dispatch]
+
+jobs:
+
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: arm64
+            runner: ubuntu-24.04-arm
+            container: openquantumsafe/ci-ubuntu-latest:latest
+            PYTEST_ARGS: --maxprocesses=10 --ignore=tests/test_kat_all.py
+            CMAKE_ARGS: -DOQS_ENABLE_SIG_STFL_LMS=ON -DOQS_ENABLE_SIG_STFL_XMSS=ON -DOQS_HAZARDOUS_EXPERIMENTAL_ENABLE_SIG_STFL_KEY_SIG_GEN=ON
+          - name: alpine
+            runner: ubuntu-latest
+            container: openquantumsafe/ci-alpine-amd64:latest
+            CMAKE_ARGS: -DOQS_STRICT_WARNINGS=ON -DOQS_USE_OPENSSL=ON -DBUILD_SHARED_LIBS=ON -DOQS_HAZARDOUS_EXPERIMENTAL_ENABLE_SIG_STFL_KEY_SIG_GEN=ON -DOQS_ENABLE_SIG_STFL_XMSS=ON -DOQS_ENABLE_SIG_STFL_LMS=ON
+            PYTEST_ARGS: --ignore=tests/test_alg_info.py --ignore=tests/test_kat_all.py
+          - name: alpine-libjade
+            runner: ubuntu-latest
+            container: openquantumsafe/ci-alpine-amd64:latest
+            CMAKE_ARGS: -DOQS_STRICT_WARNINGS=ON -DOQS_USE_OPENSSL=ON -DBUILD_SHARED_LIBS=ON -DOQS_LIBJADE_BUILD=ON -DOQS_MINIMAL_BUILD="${{ vars.LIBJADE_ALG_LIST }}"
+            PYTEST_ARGS: --ignore=tests/test_alg_info.py --ignore=tests/test_kat_all.py
+          - name: alpine-no-stfl-key-sig-gen
+            runner: ubuntu-latest
+            container: openquantumsafe/ci-alpine-amd64:latest
+            CMAKE_ARGS: -DOQS_STRICT_WARNINGS=ON -DOQS_USE_OPENSSL=ON -DBUILD_SHARED_LIBS=ON -DOQS_HAZARDOUS_EXPERIMENTAL_ENABLE_SIG_STFL_KEY_SIG_GEN=OFF -DOQS_ENABLE_SIG_STFL_XMSS=ON -DOQS_ENABLE_SIG_STFL_LMS=ON
+            PYTEST_ARGS: --ignore=tests/test_alg_info.py --ignore=tests/test_kat_all.py
+          - name: alpine-openssl-all
+            runner: ubuntu-latest
+            container: openquantumsafe/ci-alpine-amd64:latest
+            CMAKE_ARGS: -DOQS_STRICT_WARNINGS=ON -DOQS_USE_OPENSSL=ON -DBUILD_SHARED_LIBS=ON -DOQS_USE_AES_OPENSSL=ON -DOQS_USE_SHA2_OPENSSL=ON -DOQS_USE_SHA3_OPENSSL=ON -DOQS_HAZARDOUS_EXPERIMENTAL_ENABLE_SIG_STFL_KEY_SIG_GEN=ON -DOQS_ENABLE_SIG_STFL_XMSS=ON -DOQS_ENABLE_SIG_STFL_LMS=ON
+            PYTEST_ARGS: --ignore=tests/test_alg_info.py --ignore=tests/test_kat_all.py
+          - name: alpine-noopenssl
+            runner: ubuntu-latest
+            container: openquantumsafe/ci-alpine-amd64:latest
+            CMAKE_ARGS: -DOQS_STRICT_WARNINGS=ON -DOQS_USE_OPENSSL=OFF -DOQS_HAZARDOUS_EXPERIMENTAL_ENABLE_SIG_STFL_KEY_SIG_GEN=ON -DOQS_ENABLE_SIG_STFL_XMSS=ON -DOQS_ENABLE_SIG_STFL_LMS=ON
+            PYTEST_ARGS: --ignore=tests/test_alg_info.py --ignore=tests/test_kat_all.py
+          - name: noble-nistr4-openssl
+            runner: ubuntu-latest
+            container: openquantumsafe/ci-ubuntu-latest:latest
+            CMAKE_ARGS: -DOQS_STRICT_WARNINGS=ON -DOQS_ALGS_ENABLED=NIST_R4
+            PYTEST_ARGS: --ignore=tests/test_leaks.py --ignore=tests/test_kat_all.py
+          - name: noble-nistonramp-openssl
+            runner: ubuntu-latest
+            container: openquantumsafe/ci-ubuntu-latest:latest
+            CMAKE_ARGS: -DOQS_STRICT_WARNINGS=ON -DOQS_ALGS_ENABLED=NIST_SIG_ONRAMP
+            PYTEST_ARGS: --ignore=tests/test_leaks.py --ignore=tests/test_kat_all.py
+          - name: noble-noopenssl
+            runner: ubuntu-latest
+            container: openquantumsafe/ci-ubuntu-latest:latest
+            CMAKE_ARGS: -DOQS_USE_OPENSSL=OFF
+            PYTEST_ARGS: --ignore=tests/test_leaks.py --ignore=tests/test_kat_all.py
+          - name: noble-noopenssl-libjade
+            runner: ubuntu-latest
+            container: openquantumsafe/ci-ubuntu-latest:latest
+            CMAKE_ARGS: -DOQS_USE_OPENSSL=OFF -DOQS_LIBJADE_BUILD=ON -DOQS_MINIMAL_BUILD="${{ vars.LIBJADE_ALG_LIST }}"
+            PYTEST_ARGS: --ignore=tests/test_leaks.py --ignore=tests/test_kat_all.py
+          - name: noble-shared-noopenssl
+            runner: ubuntu-latest
+            container: openquantumsafe/ci-ubuntu-latest:latest
+            CMAKE_ARGS: -DOQS_DIST_BUILD=OFF -DOQS_USE_OPENSSL=OFF -DBUILD_SHARED_LIBS=ON
+            PYTEST_ARGS: --ignore=tests/test_namespace.py --ignore=tests/test_leaks.py --ignore=tests/test_kat_all.py
+          - name: jammy-clang
+            runner: ubuntu-latest
+            container: openquantumsafe/ci-ubuntu-jammy:latest
+            CMAKE_ARGS: -DOQS_STRICT_WARNINGS=ON -DCMAKE_C_COMPILER=clang
+            PYTEST_ARGS: --ignore=tests/test_kat_all.py
+          - name: noble-clang
+            runner: ubuntu-latest
+            container: openquantumsafe/ci-ubuntu-latest:latest
+            CMAKE_ARGS: -DOQS_STRICT_WARNINGS=ON -DCMAKE_C_COMPILER=clang
+            PYTEST_ARGS: --ignore=tests/test_kat_all.py -k 'not (leaks and (Dilithium or ML-DSA))'
+          - name: jammy-std-openssl3
+            runner: ubuntu-latest
+            container: openquantumsafe/ci-ubuntu-jammy:latest
+            CMAKE_ARGS: -DOQS_STRICT_WARNINGS=ON -DOQS_ALGS_ENABLED=STD -DBUILD_SHARED_LIBS=ON
+            PYTEST_ARGS: --ignore=tests/test_leaks.py --ignore=tests/test_kat_all.py
+          - name: jammy-std-openssl3-libjade
+            runner: ubuntu-latest
+            container: openquantumsafe/ci-ubuntu-jammy:latest
+            CMAKE_ARGS: -DOQS_STRICT_WARNINGS=ON -DOQS_ALGS_ENABLED=STD -DBUILD_SHARED_LIBS=ON -DOQS_LIBJADE_BUILD=ON -DOQS_MINIMAL_BUILD="${{ vars.LIBJADE_ALG_LIST }}"
+            PYTEST_ARGS: --ignore=tests/test_leaks.py --ignore=tests/test_kat_all.py
+          - name: jammy-std-openssl3-dlopen
+            runner: ubuntu-latest
+            container: openquantumsafe/ci-ubuntu-jammy:latest
+            CMAKE_ARGS: -DOQS_STRICT_WARNINGS=ON -DOQS_ALGS_ENABLED=STD -DBUILD_SHARED_LIBS=ON -DOQS_DLOPEN_OPENSSL=ON
+            PYTEST_ARGS: --ignore=tests/test_leaks.py --ignore=tests/test_kat_all.py
+          - name: jammy-std-openssl3-dlopen-libjade
+            runner: ubuntu-latest
+            container: openquantumsafe/ci-ubuntu-jammy:latest
+            CMAKE_ARGS: -DOQS_STRICT_WARNINGS=ON -DOQS_ALGS_ENABLED=STD -DBUILD_SHARED_LIBS=ON -DOQS_DLOPEN_OPENSSL=ON -DOQS_LIBJADE_BUILD=ON -DOQS_MINIMAL_BUILD="${{ vars.LIBJADE_ALG_LIST }}"
+            PYTEST_ARGS: --ignore=tests/test_leaks.py --ignore=tests/test_kat_all.py
+          - name: address-sanitizer
+            runner: ubuntu-latest
+            container: openquantumsafe/ci-ubuntu-latest:latest
+            CMAKE_ARGS: -DCMAKE_C_COMPILER=clang -DCMAKE_BUILD_TYPE=Debug -DUSE_SANITIZER=Address -DOQS_HAZARDOUS_EXPERIMENTAL_ENABLE_SIG_STFL_KEY_SIG_GEN=ON -DOQS_ENABLE_SIG_STFL_XMSS=ON -DOQS_ENABLE_SIG_STFL_LMS=ON
+            PYTEST_ARGS: --ignore=tests/test_distbuild.py --ignore=tests/test_leaks.py --ignore=tests/test_kat_all.py --maxprocesses=10
+          - name: address-sanitizer-no-stfl-key-sig-gen
+            runner: ubuntu-latest
+            container: openquantumsafe/ci-ubuntu-latest:latest
+            CMAKE_ARGS: -DCMAKE_C_COMPILER=clang -DCMAKE_BUILD_TYPE=Debug -DUSE_SANITIZER=Address -DOQS_HAZARDOUS_EXPERIMENTAL_ENABLE_SIG_STFL_KEY_SIG_GEN=OFF -DOQS_ENABLE_SIG_STFL_XMSS=ON -DOQS_ENABLE_SIG_STFL_LMS=ON
+            PYTEST_ARGS: --ignore=tests/test_distbuild.py --ignore=tests/test_leaks.py --ignore=tests/test_kat_all.py --maxprocesses=10
+          - name: address-sanitizer-libjade
+            runner: ubuntu-latest
+            container: openquantumsafe/ci-ubuntu-latest:latest
+            CMAKE_ARGS: -DCMAKE_C_COMPILER=clang -DCMAKE_BUILD_TYPE=Debug -DUSE_SANITIZER=Address -DOQS_LIBJADE_BUILD=ON -DOQS_MINIMAL_BUILD="${{ vars.LIBJADE_ALG_LIST }}"
+            PYTEST_ARGS: --ignore=tests/test_distbuild.py --ignore=tests/test_leaks.py --ignore=tests/test_kat_all.py --maxprocesses=10
+    runs-on: ${{ matrix.runner }}
+    container:
+      image: ${{ matrix.container }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # pin@v4
+      - name: Configure
+        run: mkdir build && cd build && cmake -GNinja ${{ matrix.CMAKE_ARGS }} .. && cmake -LA -N ..
+      - name: Build
+        run: ninja
+        working-directory: build
+      - name: Check the library artifacts
+        if: matrix.name == 'jammy-std-openssl3-dlopen'
+        run: |
+          nm -gu lib/liboqs.so | sed -n 's/^[[:space:]]*[Uw] \([^_].*\)/\1/p' > undefined-syms.txt &&
+          ! (grep '^\(CRYPTO\|ERR\|EVP\|OPENSSL\|RAND\)_' undefined-syms.txt)
+        working-directory: build
+      - name: Run tests
+        timeout-minutes: 60
+        run: mkdir -p tmp && python3 -m pytest --verbose --ignore=tests/test_code_conventions.py --numprocesses=auto ${{ matrix.PYTEST_ARGS }}
+      - name: Package .deb
+        if: matrix.name == 'jammy-std-openssl3'
+        run: cpack
+        working-directory: build
+      - name: Retain .deb file
+        if: matrix.name == 'jammy-std-openssl3'
+        uses: actions/upload-artifact@1746f4ab65b179e0ea60a494b83293b640dd5bba # pin@v4
+        with:
+          name: liboqs-openssl3-shared-x64
+          path: build/*.deb
+      - name: Check STD algorithm and alias
+        if: matrix.name == 'jammy-std-openssl3'
+        run: 'tests/dump_alg_info | grep -zoP "ML-DSA-44:\n    isnull: false" && tests/dump_alg_info | grep -zoP "ML-KEM-512:\n    isnull: false"'
+        working-directory: build
+
+  linux_arm_emulated:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: armhf
+            ARCH: armhf
+            CMAKE_ARGS: -DOQS_ENABLE_SIG_SPHINCS=OFF -DOQS_USE_OPENSSL=OFF -DOQS_DIST_BUILD=OFF -DOQS_OPT_TARGET=generic -DOQS_HAZARDOUS_EXPERIMENTAL_ENABLE_SIG_STFL_KEY_SIG_GEN=ON -DOQS_ENABLE_SIG_STFL_XMSS=ON -DOQS_ENABLE_SIG_STFL_LMS=ON
+            PYTEST_ARGS: --ignore=tests/test_alg_info.py --ignore=tests/test_kat_all.py
+          - name: armhf-no-stfl-key-sig-gen
+            ARCH: armhf
+            CMAKE_ARGS: -DOQS_ENABLE_SIG_SPHINCS=OFF -DOQS_USE_OPENSSL=OFF -DOQS_DIST_BUILD=OFF -DOQS_OPT_TARGET=generic -DOQS_HAZARDOUS_EXPERIMENTAL_ENABLE_SIG_STFL_KEY_SIG_GEN=OFF -DOQS_ENABLE_SIG_STFL_XMSS=ON -DOQS_ENABLE_SIG_STFL_LMS=ON
+            PYTEST_ARGS: --ignore=tests/test_alg_info.py --ignore=tests/test_kat_all.py
+          # no longer supporting armel
+          # - name: armel
+          #   ARCH: armel
+          #   CMAKE_ARGS: -DOQS_ENABLE_SIG_SPHINCS=OFF -DOQS_USE_OPENSSL=OFF -DOQS_DIST_BUILD=OFF -DOQS_OPT_TARGET=generic
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # pin@v4
+      - name: Install the emulation handlers
+        run: docker run --rm --privileged multiarch/qemu-user-static:register --reset
+      - name: Build in an x86_64 container
+        run: |
+          docker run --rm \
+                     -v `pwd`:`pwd` \
+                     -w `pwd` \
+                     openquantumsafe/ci-debian-buster-amd64:latest /bin/bash \
+                     -c "mkdir build && \
+                         (cd build && \
+                          cmake .. -GNinja ${{ matrix.CMAKE_ARGS }} \
+                                   -DCMAKE_TOOLCHAIN_FILE=../.CMake/toolchain_${{ matrix.ARCH }}.cmake && \
+                          cmake -LA -N .. && \
+                          ninja)"
+      - name: Run the tests in an ${{ matrix.ARCH }} container
+        timeout-minutes: 60
+        run: |
+          docker run --rm -e SKIP_TESTS=style,mem_kem,mem_sig \
+                          -v `pwd`:`pwd` \
+                          -w `pwd` \
+                          openquantumsafe/ci-debian-buster-${{ matrix.ARCH }}:latest /bin/bash \
+                          -c "mkdir -p tmp && \
+                              python3 -m pytest --verbose \
+                                                --numprocesses=auto \
+                                                --ignore=tests/test_code_conventions.py ${{ matrix.PYTEST_ARGS }}"
+
+  linux_cross_compile:
+    runs-on: ubuntu-latest
+    container: openquantumsafe/ci-ubuntu-latest:latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-binaries
+            CMAKE_ARGS: -DCMAKE_TOOLCHAIN_FILE=../.CMake/toolchain_windows-amd64.cmake
+          - name: windows-dll
+            CMAKE_ARGS: -DCMAKE_TOOLCHAIN_FILE=../.CMake/toolchain_windows-amd64.cmake -DBUILD_SHARED_LIBS=ON
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # pin@v4
+      - name: Configure
+        run: mkdir build && cd build && cmake -GNinja ${{ matrix.CMAKE_ARGS }} .. && cmake -LA -N ..
+      - name: Build
+        run: ninja
+        working-directory: build
+
+  linux_openssl330-dev:
+    runs-on: ubuntu-latest
+    container:
+      image: openquantumsafe/ci-ubuntu-jammy:latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # pin@v4
+      - name: Retrieve OpenSSL330 from cache
+        id: cache-openssl330
+        uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # pin@v4
+        with:
+          path: .localopenssl330
+          key: ${{ runner.os }}-openssl330
+      - name: Checkout the OpenSSL v3.3.0 commit
+        if: steps.cache-openssl330.outputs.cache-hit != 'true'
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # pin@v4
+        with:
+          repository: 'openssl/openssl'
+          ref: 'openssl-3.3.0-beta1'
+          path: openssl
+      - name: Prepare the OpenSSL build directory
+        if: steps.cache-openssl330.outputs.cache-hit != 'true'
+        run: mkdir .localopenssl330
+        working-directory: openssl
+      - name: Build openssl3 if not cached
+        if: steps.cache-openssl330.outputs.cache-hit != 'true'
+        run: |
+          ./config --prefix=`pwd`/../.localopenssl330 && make -j 4 && make install_sw install_ssldirs
+        working-directory: openssl
+      - name: Save OpenSSL
+        id: cache-openssl-save
+        if: steps.cache-openssl330.outputs.cache-hit != 'true'
+        uses: actions/cache/save@d4323d4df104b026a6aa633fdb11d772146be0bf # pin@v4
+        with:
+          path: |
+            .localopenssl330
+          key: ${{ runner.os }}-openssl330
+      - name: Configure
+        run: mkdir build && cd build && cmake -GNinja -DOQS_STRICT_WARNINGS=ON -DOPENSSL_ROOT_DIR=../.localopenssl330 -DOQS_USE_OPENSSL=ON -DBUILD_SHARED_LIBS=ON -DOQS_USE_AES_OPENSSL=ON -DOQS_USE_SHA2_OPENSSL=ON -DOQS_USE_SHA3_OPENSSL=ON .. && cmake -LA -N ..
+      - name: Build
+        run: ninja
+        working-directory: build
+      - name: Run tests
+        timeout-minutes: 60
+        run: mkdir -p tmp && python3 -m pytest --verbose --ignore=tests/test_code_conventions.py --ignore=tests/test_leaks.py --ignore=tests/test_kat_all.py
+
+  scan_build:
+    runs-on: ubuntu-latest
+    container: openquantumsafe/ci-ubuntu-latest:latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # pin@v4
+      - name: Configure
+        run: mkdir build && cd build && scan-build --status-bugs cmake -GNinja ..
+      - name: Build
+        run: scan-build --status-bugs ninja
+        working-directory: build
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/.github/workflows/macos.yml ===
+name: MacOS tests
+
+permissions:
+  contents: read
+
+on: [workflow_call, workflow_dispatch]
+
+jobs:
+
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          # macos-13 runs on x64; the others run on aarch64
+          - macos-13
+          - macos-14
+          - macos-15
+        CMAKE_ARGS:
+          - -DOQS_HAZARDOUS_EXPERIMENTAL_ENABLE_SIG_STFL_KEY_SIG_GEN=ON -DOQS_ENABLE_SIG_STFL_XMSS=ON -DOQS_ENABLE_SIG_STFL_LMS=ON
+          - -DCMAKE_C_COMPILER=gcc-14
+          - -DOQS_USE_OPENSSL=OFF
+          - -DBUILD_SHARED_LIBS=ON -DOQS_DIST_BUILD=OFF
+        libjade-build:
+          - -DOQS_LIBJADE_BUILD=OFF
+          # Restrict -DOQS_LIBJADE_BUILD=ON build to algs provided by
+          # libjade to minimise repeated tests
+          - -DOQS_LIBJADE_BUILD=ON -DOQS_MINIMAL_BUILD="${{ vars.LIBJADE_ALG_LIST }}"
+        exclude:
+          # macos-14 and macos-15 run on aarch64, libjade targets x86
+          # Skip testing libjade on macos-14
+          - os: macos-14
+            libjade-build: -DOQS_LIBJADE_BUILD=ON -DOQS_MINIMAL_BUILD="${{ vars.LIBJADE_ALG_LIST }}"
+          - os: macos-15
+            libjade-build: -DOQS_LIBJADE_BUILD=ON -DOQS_MINIMAL_BUILD="${{ vars.LIBJADE_ALG_LIST }}"
+          # No point in testing stateful sigs with minimal libjade build
+          - libjade-build: -DOQS_LIBJADE_BUILD=ON -DOQS_MINIMAL_BUILD="${{ vars.LIBJADE_ALG_LIST }}"
+            CMAKE_ARGS: -DOQS_HAZARDOUS_EXPERIMENTAL_ENABLE_SIG_STFL_KEY_SIG_GEN=ON -DOQS_ENABLE_SIG_STFL_XMSS=ON -DOQS_ENABLE_SIG_STFL_LMS=ON
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Install Python
+        uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # pin@v5
+        with:
+          python-version: '3.12'
+      - name: Checkout code
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # pin@v4
+      - name: Install dependencies
+        run: env HOMEBREW_NO_AUTO_UPDATE=1 brew install ninja && pip3 install --require-hashes --break-system-packages -r .github/workflows/requirements.txt
+      - name: Get system information
+        run: sysctl -a | grep machdep.cpu
+      - name: Configure
+        run: mkdir -p build && cd build && source ~/.bashrc && cmake -GNinja -DOQS_STRICT_WARNINGS=ON ${{ matrix.CMAKE_ARGS }} ${{ matrix.libjade-build }} .. && cmake -LA -N ..
+      - name: Build
+        run: ninja
+        working-directory: build
+      - name: Run tests
+        run: mkdir -p tmp && python3 -m pytest --verbose --ignore=tests/test_code_conventions.py --ignore=tests/test_kat_all.py
+        timeout-minutes: 60
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/.github/workflows/platforms.yml ===
+name: Tests for all supported platforms
+
+permissions:
+  contents: read
+
+on: [workflow_call, workflow_dispatch]
+
+jobs:
+
+  android-tests:
+    uses: ./.github/workflows/android.yml
+
+  ios-tests:
+    uses: ./.github/workflows/apple.yml
+
+  linux-tests:
+    uses: ./.github/workflows/linux.yml
+
+  macos-tests:
+    uses: ./.github/workflows/macos.yml
+
+  windows-tests:
+    uses: ./.github/workflows/windows.yml
+
+  zephyr-tests:
+    uses: ./.github/workflows/zephyr.yml
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/.github/workflows/pr.yml ===
+name: Pull request tests
+
+permissions:
+  contents: read
+
+on: pull_request
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  basic-checks:
+    uses: ./.github/workflows/basic.yml
+
+  platform-tests:
+    needs: basic-checks
+    uses: ./.github/workflows/platforms.yml
+
+  scorecard:
+    needs: basic-checks
+    uses: ./.github/workflows/scorecard.yml
+    secrets: inherit
+    permissions:
+      id-token: write
+      security-events: write
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/.github/workflows/push.yml ===
+name: Push tests
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches-ignore: 'main'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  basic-checks:
+    uses: ./.github/workflows/basic.yml
+
+  full-tests:
+    needs: basic-checks
+    if: contains( github.event.head_commit.message, '[full tests]' )
+    uses: ./.github/workflows/platforms.yml
+
+  extended-tests:
+    needs: basic-checks
+    if: contains( github.event.head_commit.message, '[extended tests]' )
+    uses: ./.github/workflows/extended.yml
+
+  downstream-release-tests:
+    needs: basic-checks
+    if: contains( github.event.head_commit.message, '[trigger downstream]' )
+    uses: ./.github/workflows/downstream-release.yml
+    secrets: inherit
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/.github/workflows/release.yml ===
+name: Release tests
+
+permissions:
+  contents: read
+
+on:
+  release:
+    types: [ published ]
+
+jobs:
+
+  extended-tests:
+    uses: ./.github/workflows/extended.yml
+
+  downstream-release-tests:
+    uses: ./.github/workflows/downstream-release.yml
+    secrets: inherit
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/.github/workflows/requirements.txt ===
+#
+# This file is autogenerated by pip-compile with Python 3.12
+# by the following command:
+#
+#    pip-compile --generate-hashes --output-file=requirements_new.txt requirements.txt
+#
+colorama==0.4.6 \
+    --hash=sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44 \
+    --hash=sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6
+    # via -r requirements.txt
+execnet==2.1.1 \
+    --hash=sha256:26dee51f1b80cebd6d0ca8e74dd8745419761d3bef34163928cbebbdc4749fdc \
+    --hash=sha256:5189b52c6121c24feae288166ab41b32549c7e2348652736540b9e6e7d4e72e3
+    # via
+    #   -r requirements.txt
+    #   pytest-xdist
+iniconfig==2.0.0 \
+    --hash=sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3 \
+    --hash=sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
+    # via
+    #   -r requirements.txt
+    #   pytest
+packaging==24.0 \
+    --hash=sha256:2ddfb553fdf02fb784c234c7ba6ccc288296ceabec964ad2eae3777778130bc5 \
+    --hash=sha256:eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9
+    # via
+    #   -r requirements.txt
+    #   pytest
+pluggy==1.4.0 \
+    --hash=sha256:7db9f7b503d67d1c5b95f59773ebb58a8c1c288129a88665838012cfb07b8981 \
+    --hash=sha256:8c85c2876142a764e5b7548e7d9a0e0ddb46f5185161049a79b7e974454223be
+    # via
+    #   -r requirements.txt
+    #   pytest
+pytest==8.1.1 \
+    --hash=sha256:2a8386cfc11fa9d2c50ee7b2a57e7d898ef90470a7a34c4b949ff59662bb78b7 \
+    --hash=sha256:ac978141a75948948817d360297b7aae0fcb9d6ff6bc9ec6d514b85d5a65c044
+    # via
+    #   -r requirements.txt
+    #   pytest-xdist
+pytest-xdist==3.5.0 \
+    --hash=sha256:cbb36f3d67e0c478baa57fa4edc8843887e0f6cfc42d677530a36d7472b32d8a \
+    --hash=sha256:d075629c7e00b611df89f490a5063944bee7a4362a5ff11c7cc7824a03dfce24
+    # via -r requirements.txt
+pyyaml==6.0.1 \
+    --hash=sha256:04ac92ad1925b2cff1db0cfebffb6ffc43457495c9b3c39d3fcae417d7125dc5 \
+    --hash=sha256:062582fca9fabdd2c8b54a3ef1c978d786e0f6b3a1510e0ac93ef59e0ddae2bc \
+    --hash=sha256:0d3304d8c0adc42be59c5f8a4d9e3d7379e6955ad754aa9d6ab7a398b59dd1df \
+    --hash=sha256:1635fd110e8d85d55237ab316b5b011de701ea0f29d07611174a1b42f1444741 \
+    --hash=sha256:184c5108a2aca3c5b3d3bf9395d50893a7ab82a38004c8f61c258d4428e80206 \
+    --hash=sha256:18aeb1bf9a78867dc38b259769503436b7c72f7a1f1f4c93ff9a17de54319b27 \
+    --hash=sha256:1d4c7e777c441b20e32f52bd377e0c409713e8bb1386e1099c2415f26e479595 \
+    --hash=sha256:1e2722cc9fbb45d9b87631ac70924c11d3a401b2d7f410cc0e3bbf249f2dca62 \
+    --hash=sha256:1fe35611261b29bd1de0070f0b2f47cb6ff71fa6595c077e42bd0c419fa27b98 \
+    --hash=sha256:28c119d996beec18c05208a8bd78cbe4007878c6dd15091efb73a30e90539696 \
+    --hash=sha256:326c013efe8048858a6d312ddd31d56e468118ad4cdeda36c719bf5bb6192290 \
+    --hash=sha256:40df9b996c2b73138957fe23a16a4f0ba614f4c0efce1e9406a184b6d07fa3a9 \
+    --hash=sha256:42f8152b8dbc4fe7d96729ec2b99c7097d656dc1213a3229ca5383f973a5ed6d \
+    --hash=sha256:49a183be227561de579b4a36efbb21b3eab9651dd81b1858589f796549873dd6 \
+    --hash=sha256:4fb147e7a67ef577a588a0e2c17b6db51dda102c71de36f8549b6816a96e1867 \
+    --hash=sha256:50550eb667afee136e9a77d6dc71ae76a44df8b3e51e41b77f6de2932bfe0f47 \
+    --hash=sha256:510c9deebc5c0225e8c96813043e62b680ba2f9c50a08d3724c7f28a747d1486 \
+    --hash=sha256:5773183b6446b2c99bb77e77595dd486303b4faab2b086e7b17bc6bef28865f6 \
+    --hash=sha256:596106435fa6ad000c2991a98fa58eeb8656ef2325d7e158344fb33864ed87e3 \
+    --hash=sha256:6965a7bc3cf88e5a1c3bd2e0b5c22f8d677dc88a455344035f03399034eb3007 \
+    --hash=sha256:69b023b2b4daa7548bcfbd4aa3da05b3a74b772db9e23b982788168117739938 \
+    --hash=sha256:6c22bec3fbe2524cde73d7ada88f6566758a8f7227bfbf93a408a9d86bcc12a0 \
+    --hash=sha256:704219a11b772aea0d8ecd7058d0082713c3562b4e271b849ad7dc4a5c90c13c \
+    --hash=sha256:7e07cbde391ba96ab58e532ff4803f79c4129397514e1413a7dc761ccd755735 \
+    --hash=sha256:81e0b275a9ecc9c0c0c07b4b90ba548307583c125f54d5b6946cfee6360c733d \
+    --hash=sha256:855fb52b0dc35af121542a76b9a84f8d1cd886ea97c84703eaa6d88e37a2ad28 \
+    --hash=sha256:8d4e9c88387b0f5c7d5f281e55304de64cf7f9c0021a3525bd3b1c542da3b0e4 \
+    --hash=sha256:9046c58c4395dff28dd494285c82ba00b546adfc7ef001486fbf0324bc174fba \
+    --hash=sha256:9eb6caa9a297fc2c2fb8862bc5370d0303ddba53ba97e71f08023b6cd73d16a8 \
+    --hash=sha256:a08c6f0fe150303c1c6b71ebcd7213c2858041a7e01975da3a99aed1e7a378ef \
+    --hash=sha256:a0cd17c15d3bb3fa06978b4e8958dcdc6e0174ccea823003a106c7d4d7899ac5 \
+    --hash=sha256:afd7e57eddb1a54f0f1a974bc4391af8bcce0b444685d936840f125cf046d5bd \
+    --hash=sha256:b1275ad35a5d18c62a7220633c913e1b42d44b46ee12554e5fd39c70a243d6a3 \
+    --hash=sha256:b786eecbdf8499b9ca1d697215862083bd6d2a99965554781d0d8d1ad31e13a0 \
+    --hash=sha256:ba336e390cd8e4d1739f42dfe9bb83a3cc2e80f567d8805e11b46f4a943f5515 \
+    --hash=sha256:baa90d3f661d43131ca170712d903e6295d1f7a0f595074f151c0aed377c9b9c \
+    --hash=sha256:bc1bf2925a1ecd43da378f4db9e4f799775d6367bdb94671027b73b393a7c42c \
+    --hash=sha256:bd4af7373a854424dabd882decdc5579653d7868b8fb26dc7d0e99f823aa5924 \
+    --hash=sha256:bf07ee2fef7014951eeb99f56f39c9bb4af143d8aa3c21b1677805985307da34 \
+    --hash=sha256:bfdf460b1736c775f2ba9f6a92bca30bc2095067b8a9d77876d1fad6cc3b4a43 \
+    --hash=sha256:c8098ddcc2a85b61647b2590f825f3db38891662cfc2fc776415143f599bb859 \
+    --hash=sha256:d2b04aac4d386b172d5b9692e2d2da8de7bfb6c387fa4f801fbf6fb2e6ba4673 \
+    --hash=sha256:d483d2cdf104e7c9fa60c544d92981f12ad66a457afae824d146093b8c294c54 \
+    --hash=sha256:d858aa552c999bc8a8d57426ed01e40bef403cd8ccdd0fc5f6f04a00414cac2a \
+    --hash=sha256:e7d73685e87afe9f3b36c799222440d6cf362062f78be1013661b00c5c6f678b \
+    --hash=sha256:f003ed9ad21d6a4713f0a9b5a7a0a79e08dd0f221aff4525a2be4c346ee60aab \
+    --hash=sha256:f22ac1c3cac4dbc50079e965eba2c1058622631e526bd9afd45fedd49ba781fa \
+    --hash=sha256:faca3bdcf85b2fc05d06ff3fbc1f83e1391b3e724afa3feba7d13eeab355484c \
+    --hash=sha256:fca0e3a251908a499833aa292323f32437106001d436eca0e6e7833256674585 \
+    --hash=sha256:fd1592b3fdf65fff2ad0004b5e363300ef59ced41c2e6b3a99d4089fa8c5435d \
+    --hash=sha256:fd66fc5d0da6d9815ba2cebeb4205f95818ff4b79c3ebe268e75d961704af52f
+    # via -r requirements.txt
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/.github/workflows/scorecard.yml ===
+name: Scorecard supply-chain security
+
+permissions: {}
+
+on:
+  # For Branch-Protection check. Only the default branch is supported. See
+  # https://github.com/ossf/scorecard/blob/main/docs/checks.md#branch-protection
+  branch_protection_rule:
+  workflow_call:
+  workflow_dispatch:
+
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    permissions:
+      # Needed to upload the results to code-scanning dashboard.
+      security-events: write
+      # Needed to publish results and get a badge (see publish_results below).
+      id-token: write
+      # Uncomment the permissions below if installing in a private repository.
+      # contents: read
+      # actions: read
+
+    steps:
+      - name: "Checkout code"
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # pin@v4
+        with:
+          persist-credentials: false
+
+      - name: "Run analysis"
+        uses: ossf/scorecard-action@62b2cac7ed8198b15735ed49ab1e5cf35480ba46 # pin@v2.4.0
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          # (Optional) "write" PAT token. Uncomment the `repo_token` line below if:
+          # - you want to enable the Branch-Protection check on a *public* repository, or
+          # - you are installing Scorecard on a *private* repository
+          # To create the PAT, follow the steps in https://github.com/ossf/scorecard-action#authentication-with-pat.
+          # repo_token: ${{ secrets.SCORECARD_TOKEN }}
+
+          # Public repositories:
+          #   - Publish results to OpenSSF REST API for easy access by consumers
+          #   - Allows the repository to include the Scorecard badge.
+          #   - See https://github.com/ossf/scorecard-action#publishing-results.
+          # For private repositories:
+          #   - `publish_results` will always be set to `false`, regardless
+          #     of the value entered here.
+          publish_results: true
+
+      # Upload the results as artifacts (optional). Commenting out will disable uploads of run results in SARIF
+      # format to the repository Actions tab.
+      - name: "Upload artifact"
+        uses: actions/upload-artifact@834a144ee995460fba8ed112a2fc961b36a5ec5a # pin@v4
+        with:
+          name: SARIF file
+          path: results.sarif
+          retention-days: 28
+      # Upload the results to GitHub's code scanning dashboard.
+      - name: "Upload to code-scanning"
+        uses: github/codeql-action/upload-sarif@2c779ab0d087cd7fe7b826087247c2c81f27bfa6 # pin@v3
+        with:
+          sarif_file: results.sarif
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/.github/workflows/weekly.yml ===
+name: Weekly tests
+
+permissions:
+  contents: read
+
+on:
+  schedule:
+    - cron: "5 0 * * 0"
+
+jobs:
+
+  # To guarantee Maintained check is occasionally updated. See
+  # https://github.com/ossf/scorecard/blob/main/docs/checks.md#maintained
+  scorecard:
+    uses: ./.github/workflows/scorecard.yml
+    secrets: inherit
+    permissions:
+      id-token: write
+      security-events: write
+
+  extended-tests:
+    uses: ./.github/workflows/extended.yml
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/.github/workflows/windows.yml ===
+name: Windows tests
+
+permissions:
+  contents: read
+
+on: [workflow_call, workflow_dispatch]
+
+jobs:
+
+  windows-arm64:
+    strategy:
+      matrix:
+        runner: [windows-2022, windows-2025]
+        stfl_opt: [ON, OFF]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # pin@v3
+      - name: Generate Project
+        run: cmake -B build --toolchain .CMake/toolchain_windows_arm64.cmake -DOQS_ENABLE_SIG_STFL_LMS=ON -DOQS_ENABLE_SIG_STFL_XMSS=ON -DOQS_HAZARDOUS_EXPERIMENTAL_ENABLE_SIG_STFL_KEY_SIG_GEN=${{ matrix.stfl_opt }} .
+      - name: Build Project
+        run: cmake --build build
+
+  windows-x86:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [windows-2022, windows-2025]
+        toolchain: [.CMake/toolchain_windows_x86.cmake, .CMake/toolchain_windows_amd64.cmake]
+        stfl_opt: [ON, OFF]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Install Python
+        uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # pin@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # pin@v3
+      - name: Generate Project
+        run: cmake -B build --toolchain ${{ matrix.toolchain }} -DOQS_ENABLE_SIG_STFL_LMS=ON -DOQS_ENABLE_SIG_STFL_XMSS=ON -DOQS_HAZARDOUS_EXPERIMENTAL_ENABLE_SIG_STFL_KEY_SIG_GEN=${{ matrix.stfl_opt }} .
+      - name: Build Project
+        run: cmake --build build
+      - name: Test dependencies
+        run: pip.exe install --require-hashes -r .github\workflows\requirements.txt
+      - name: Run tests
+        run: |
+          python -m pytest --numprocesses=auto -vv --maxfail=10 --ignore=tests/test_code_conventions.py --ignore=tests/test_kat_all.py --junitxml=build\test-results\pytest\test-results.xml
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/.github/workflows/zephyr.yml ===
+name: Zephyr tests
+
+permissions:
+  contents: read
+
+on: [workflow_call, workflow_dispatch]
+
+jobs:
+
+  zephyr_test:
+    runs-on: ubuntu-22.04
+    container: ghcr.io/zephyrproject-rtos/ci:v0.27.4
+    env:
+        CMAKE_PREFIX_PATH: /opt/toolchains
+    strategy:
+        fail-fast: false
+        matrix:
+          config:
+            - zephyr-ref: v3.4.0
+            - zephyr-ref: v3.7.0
+
+    steps:
+        - name: Init Zephyr workspace
+          run: |
+            mkdir zephyr && cd zephyr
+            mkdir manifest && cd manifest
+            echo "manifest:" > west.yml
+            echo "  remotes:" >> west.yml
+            echo "    - name: zephyr" >> west.yml
+            echo "      url-base: https://github.com/zephyrproject-rtos" >> west.yml
+            echo "    - name: liboqs" >> west.yml
+            echo "      url-base: https://github.com/${{ github.repository_owner }}" >> west.yml
+            echo "  projects:" >> west.yml
+            echo "    - name: zephyr" >> west.yml
+            echo "      remote: zephyr" >> west.yml
+            echo "      repo-path: zephyr" >> west.yml
+            echo "      revision: ${{ matrix.config.zephyr-ref }}" >> west.yml
+            echo "      import:" >> west.yml
+            echo "        name-allowlist:" >> west.yml
+            echo "          - picolibc" >> west.yml
+            echo "    - name: liboqs" >> west.yml
+            echo "      remote: liboqs" >> west.yml
+            echo "      revision: $(echo '${{ github.ref }}' | sed -e 's/refs\/heads\///')" >> west.yml
+            echo "      path: modules/crypto/liboqs" >> west.yml
+            west init -l --mf west.yml .
+
+        - name: Update west workspace
+          working-directory: zephyr
+          run: |
+            west update -n -o=--depth=1
+            west zephyr-export
+
+        - name: Run Signature test
+          working-directory: zephyr
+          run: |
+            west twister --integration -T modules/crypto/liboqs/zephyr -s samples/Signatures/sample.crypto.liboqs_signature_example -vvv
+
+        - name: Run KEM test
+          working-directory: zephyr
+          run: |
+            west twister --integration -T modules/crypto/liboqs/zephyr -s samples/KEMs/sample.crypto.liboqs_kem_example -vvv
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/docs/FUZZING.md ===
+# Fuzzing
+
+Fuzz testing is an automated software testing method that injects invalid, 
+malformed, or unexpected inputs to reveal defects and vulnerabilities. A fuzzing 
+tool monitors the system for exceptions like crashes, information leakage, or 
+errors, helping developers identify and fix bugs and security loopholes.
+
+## Current state of fuzzing in liboqs
+- [ ] kem 
+  - [ ] bike
+  - [ ] classic_mceliece
+  - [ ] frodokem
+  - [ ] hqc
+  - [ ] kyber
+  - [ ] ml_kem
+  - [ ] ntruprime
+- [ ] sig
+  - [x] dilithium
+  - [x] falcon
+  - [x] mayo
+  - [x] ml_dsa
+  - [x] sphincs
+- [ ] sig_stfl
+  - [ ] lms
+  - [ ] sig_stfl
+  - [ ] xmss
+
+## Building and running fuzz tests
+
+Building fuzz tests is very similar to building normally with some optional
+steps to target different types of bugs. The most basic ways to build the
+fuzz tests is as follows;
+
+```bash
+mkdir build && cd build
+cmake -GNinja ..  -DOQS_BUILD_FUZZ_TESTS=ON
+ninja -j$(nproc)
+```
+
+You'll now be able to run a fuzz test e.g.
+```bash
+./tests/fuzz_test_dilithium2
+#9764	NEW    cov: 4 ft: 708 corp: 100/318b lim: 43 exec/s: 9764 rss: 362Mb L: 41/41 MS: 4 EraseBytes-InsertRepeatedBytes-CMP-ChangeBit- DE: "\0004m\372"-
+...
+```
+The fuzzer will run indefinetely or;
+- until it finds a bug and crashes,
+- you manually stop the fuzzer i.e. CTRL-C
+- you set a timeout using the command line.
+
+For more details on the available command line args please consult the [libfuzzer docs](https://llvm.org/docs/LibFuzzer.html).
+
+## Sanitizers
+It is a common pattern to combine fuzzing with various sanitizers to catch different bugs.
+One of the simpler sanitizers is the fuzzing sanitizer, which will instrument the code
+for coverage driven fuzzing. To enable this simply add this to your environment variables
+before configuring cmake;
+
+```
+export CFLAGS=-fsanitize=fuzzer-no-link
+```
+
+It is common to combine the fuzzer sanitizer with either the [address](https://clang.llvm.org/docs/AddressSanitizer.html)
+or the [undefined behaviour sanitizer](https://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html). To
+add these simply add the relevant flags to BOTH the CFLAGS and LDFLAGS e.g.
+
+```
+export CFLAGS=-fsanitize=fuzzer-no-link,address
+export LDFLAGS=-fsanitize=address
+```
+
+Then rerun cmake as normal i.e.
+```bash
+mkdir build && cd build
+cmake -GNinja ..  -DOQS_BUILD_FUZZ_TESTS=ON
+ninja -j$(nproc)
+```
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/docs/PROCEDURES.md ===
+# Additional procedures for code maintenance 
+
+## Managing pinned dependencies
+
+The OpenSSF, via the [scorecard](https://securityscorecards.dev/) project recommends that projects pin any
+dependencies they use:
+
+* to ensure reproducibility
+* to reduce the risk for rogue dependency updates to compromise software
+
+It's important to note that this requires any changes to dependencies are properly reviewed, and
+these changes, by design, should not be automatic in themselves, though automated tools may provide recommendations.
+
+### Python dependencies
+
+Python dependencies used in the build process such as within `.github/workflows` should be pinned to a specific version to ensure reproducibility.
+
+This is achieved by:
+
+* Ensuring the required hash is in the `requirements.txt`.
+* Using the `--require-hashes` option on any `pip install` command line which causes pip to require hashes for all dependencies.
+
+To add a new, or changed dependency:
+
+* Ensure the `pip-compile` tool is installed via the [pip-tools](https://pypi.org/project/pip-tools/) package.
+* Update `requirements.in` with added, modified, or deleted dependencies. 
+* Update requirements.txt using `pip-compile --generate-hashes --output-file=requirements.txt requirements.in`.
+* Verify correct functionality.
+* Check in both `requirements.txt` and `requirements.in`.
+
+ Note: `requirements.in` acts purely as a template in this process. It is not used during the installation of a dependency.
+
+### Github Actions
+
+All actions used in `.github/worfklows` should pin the exact version of the action they are using, for
+example a step such as:
+
+```yaml
+- name: Checkout code
+  uses: actions/checkout@0ad4b8fadaa221de15dcec353f45205ec38ea70b # pin@v4
+```
+
+The exact hash specified after `@` is the git commit hash within the repo where the action is found.
+
+The [pin github action](https://github.com/mheap/pin-github-action) tool can be used to maintain these
+by, for example, running:
+
+```shell
+pin-github-action unix.yml
+```
+
+This will add the appropriate hash if not present, along with a comment, and also update each hash in accordance with any existing comment.
+
+For major updates, update the comment ie `pin@v4` to `pin@v5` and the tool will attempt to find the new hash.
+
+The comment should not be removed, and should exclusively be used for updating the version.
+
+A full explanation of how the tool operates can be found in the [documentation](https://github.com/mheap/pin-github-action).
+
+To help in explanation here's an example of a similar code fragment between tool executions:
+
+* Original entry is `uses: actions/checkout@v3`
+* run `pin-github-action unix.yml`
+* We now see `uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # pin@v3`
+* later we want to go to v4, so update the text to `uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # pin@v4`
+* Now run `pin-github-action unix.yml` to correct the sha
+* File now shows `uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # pin@v4`
+
+When changes have been made, correct functionality of the Github actions should be verified by reviewing the Github action logs and outputs. The SHA inserted by the tool can be searched for in Github to check it is associated with the expected version.

@@ -1,0 +1,3620 @@
+=== /home/hcbusy/webhash/foretias/HOWTO.md ===
+# Foretias HOWTO
+
+Foretias is a **decentralized time-integrity attestation service**. In plain terms: it cryptographically proves that a message existed at a specific tick in a specific calendar — and that calendar is replicated, verified, and signed by an entire network of peers.
+
+This document shows you **three escalating demos** that prove foretias is:
+
+1. **EASY** — start, stamp, verify in under 5 minutes
+2. **PEERABLE** — hundreds of nodes, all auto-discovering and mutually attesting
+3. **RESILIENT** — kill half the network and verification still works
+
+---
+
+## Prerequisites
+
+See [README.md](README.md) for full installation and build instructions. In short, you need the `foretias` binary:
+
+```bash
+cd p2p && cargo build
+```
+
+The binary lives at `p2p/target/debug/foretias` (or `p2p/target/release/foretias` for a release build).
+
+---
+
+## Section 1: Quick Start — Single Server
+
+> **Before you begin:** See [README.md](README.md) for full installation and build instructions. You need the `foretias` binary (`p2p/target/debug/foretias` or `p2p/target/release/foretias`).
+
+This section takes **under 2 minutes**.
+
+### Step 1: Start a server
+
+Open a terminal and start a TimeFamilyServer:
+
+```bash
+p2p/target/debug/foretias serve --addr 127.0.0.1:4001 --chronon-ns 1000000000
+```
+
+You'll see output like:
+
+```
+Foretias TimeFamilyServer starting...
+  Listen : 127.0.0.1:4001
+  TBN    : tf-a1b2c3d4e5f6...
+  TBID   : a1b2c3d4e5f6...
+  Chronon: 1 second
+```
+
+The server is now ticking — creating new calendar entries every second. Leave this terminal running.
+
+### Step 2: Stamp a message
+
+Open a **second terminal** and stamp a message:
+
+```bash
+p2p/target/debug/foretias stamp -m "hello world" -s 127.0.0.1:4001 -o /tmp/hello_world_stamp.json
+```
+
+This connects to the server over an encrypted Noise_XX channel, submits your message, and receives a **Foretis** — a cryptographically signed attestation containing the message hash, tick number, signature, and the server's unique TBID (Time-Being ID).
+
+The stamp is saved to `hello_world_stamp.json`. Inspect it:
+
+```bash
+cat /tmp/hello_world_stamp.json
+```
+
+You'll see the tick number, content hash, Ed25519 signature, and the server's TBID — all in one self-contained JSON object.
+
+### Step 3: Verify — Success case
+
+Verify the stamp against the **same** server:
+
+```bash
+p2p/target/debug/foretias verify -m "hello world" -F /tmp/hello_world_stamp.json -s 127.0.0.1:4001
+p2p/target/debug/foretias verify -m "hello world" -f "$(cat /tmp/hello_world_stamp.json)" -s 127.0.0.1:4001
+```
+
+Expected outputs should be:
+
+```json
+{
+  "method": "local",
+  "valid": true
+}
+```
+
+**That's it.** You just proved that the message `"hello world"` existed at a specific tick in a specific calendar, signed by a known key.
+
+### Step 4: Verify — Failure case
+
+Now try with the **wrong content**:
+
+```bash
+p2p/target/debug/foretias verify -m "tampered message" -F /tmp/hello_world_stamp.json -s 127.0.0.1:4001
+p2p/target/debug/foretias verify -m "hello world" -f "$(sed 's/0/2/g' /tmp/hello_world_stamp.json)" -s 127.0.0.1:4001
+```
+
+Expected outputs should both be:
+
+```json
+{
+  "method": "local",
+  "valid": false
+}
+```
+
+The content hash doesn't match. The stamp is immutable. Foretias caught the tampering.
+
+> **Quick start complete.** You've stamped and verified in under 2 minutes. Now let's scale.
+
+---
+
+## Section 2: Peering — Hundreds of Nodes
+
+A single server is fine for local demos. But foretias is designed for **networks**. This section shows how to spin up hundreds of peers, all auto-discovering and mutually attesting each other.
+
+### Step 1: Start the peer manager
+
+Foretias ships with an interactive peer manager script:
+
+```bash
+python3 integration-tests/start_local_peers.py --peers 100
+```
+
+This spawns **100 foretias servers** on your local machine, each with:
+
+- A unique identity (random Ed25519 keypair)
+- A unique RPC port (5000–5099)
+- A unique calendar
+- Knowledge of all other peers (via `--known-servers`)
+
+The script enters an interactive REPL:
+
+```
+foretias> help
+
+Commands:
+  status                  Show peer status table
+  stats                   Show detailed per-peer stats (errors, warnings, ticks)
+  sleep <seconds>         Pause for N seconds
+  kill-random N|N%        Kill N random alive peers (or N% of alive)
+  kill-tbid <hex-prefix>  Kill peers matching TBID prefix
+  stamp <port> <message>  Stamp a message via the given peer port
+  verify <port> <msg> <stamp.json>  Verify a stamp via the given peer port
+  help                    Show this help
+  shutdown / quit         Graceful shutdown and summary
+```
+
+### Step 2: Check the network
+
+```
+foretias> status
+```
+
+You'll see a table of all 100 peers with their TBIDs, ports, and tick counts:
+
+```
+Idx              TBID    Port   Alive   Ticks
+----------------------------------------------
+   0  23a2508b9a5d013d    5000     YES       5
+   1  48a4581832d48131    5001     YES       5
+   2  436690813d28c006    5002     YES       4
+   ...
+  99  ab12cd34ef567890    5099     YES       5
+```
+
+The stats thread runs in the background, printing live summaries to stderr every 10 seconds:
+
+```
+--- Live Stats (elapsed 45s) ---
+  Alive: 100/100  |  Errors: 0  |  Warnings: 2
+  Avg ticks/sec: 1.0  |  Highest tick: 47 (peer #12)
+```
+
+### Step 3: Stamp on one peer
+
+```
+foretias> stamp 5000 "this is a network test"
+```
+
+Output:
+
+```
+  $ foretias stamp -m this is a network test -s 127.0.0.1:5000
+{
+  "tick_number": 12,
+  "tbn": "tf-23a2508b9a5d013d",
+  "signature_algorithm": "Ed25519",
+  ...
+}
+  Saved to: /tmp/foretias_stamp_1778444763.json
+```
+
+### Step 4: Verify on a DIFFERENT peer
+
+This is where foretias earns its stripes. Stamp on peer #0, verify on peer #50:
+
+```
+foretias> sleep 5
+foretias> verify 5050 "this is a network test" /tmp/foretias_stamp_*.json
+```
+
+When peers mutually attest each other, their calendars cross-reference. A stamp from one peer becomes verifiable from another. This is the foundation of decentralized trust.
+
+> **Peering complete.** 100 nodes, zero configuration, auto-discovery, mutual attestation. Try scaling to 200 with `--peers 200`.
+
+---
+
+## Section 3: Resilience — Kill 50% of the Network
+
+Foretias is designed to survive catastrophic failure. Let's prove it.
+
+### Step 1: Start the same network
+
+```bash
+python3 integration-tests/start_local_peers.py --peers 50
+```
+
+### Step 2: Stamp a message
+
+```
+foretias> stamp 5000 "resilience test message"
+foretias> sleep 5
+```
+
+Wait for the stamp to propagate via mutual attestation.
+
+### Step 3: Kill half the network
+
+```
+foretias> kill-random 50%
+```
+
+The script randomly terminates 25 out of 50 peers. The stats thread immediately reflects the new state:
+
+```
+--- Live Stats (elapsed 60s) ---
+  Alive: 25/50  |  Errors: 3  |  Warnings: 5
+  Avg ticks/sec: 1.0  |  Highest tick: 58 (peer #7)
+```
+
+### Step 4: Verify still works
+
+```
+foretias> status
+foretias> verify 5020 "resilience test message" /tmp/foretias_stamp_*.json
+```
+
+Verification against a **surviving** peer succeeds:
+
+```json
+{
+  "method": "local",
+  "valid": true
+}
+```
+
+The stamp was created on peer #0. Peer #0 may have been killed. But the attestation was replicated to peer #20 (and others) via mutual attestation. **The calendar survives because it's decentralized.**
+
+### Step 5: Kill more — prove the limit
+
+Try killing 80%:
+
+```
+foretias> kill-random 30
+```
+
+Only 15 peers remain. Verification against any surviving peer still works — as long as at least one peer has the attestation in its calendar.
+
+### Step 6: Clean shutdown
+
+```
+foretias> shutdown
+```
+
+```
+=== Session Summary ===
+Peers started:    50
+Peers killed:     45
+Peers remaining:   5
+Stamps made:       1
+Verifications:     2
+Duration:          2m 15s
+```
+
+> **Resilience complete.** 50% (or 90%) of the network is dead. The data survives. The stamps are still verifiable. This is what decentralized trust looks like.
+
+---
+
+## Appendix: Peer Manager Reference
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--peers N` | 50 | Number of peers to spawn |
+| `--port-base N` | 5000 | Starting RPC port |
+| `--p2p-range` | 9900..9999 | P2P port range |
+| `--chronon-ns N` | 1000000000 | Tick interval (1s = fast demo) |
+| `--stats-interval N` | 10 | Seconds between stat prints (0 disables) |
+| `--dht-namespace` | howto-demo | DHT namespace |
+| `--persist-dir DIR` | temp dir | Where peer calendars are stored |
+
+### REPL Commands
+
+| Command | Description |
+|---------|-------------|
+| `status` | Peer table: index, TBID, port, alive, ticks |
+| `stats` | Full per-peer breakdown: errors, warnings, ticks |
+| `sleep N` | Pause for N seconds |
+| `kill-random N\|N%` | Kill N random peers, or N% of alive |
+| `kill-tbid <hex>` | Kill peers matching TBID prefix |
+| `stamp <port> <msg>` | Stamp via peer at given port |
+| `verify <port> <msg> <file>` | Verify stamp via peer at given port |
+| `shutdown` / `quit` | Graceful shutdown with summary |
+
+---
+
+*Foretias — time integrity that survives.*
+
+
+=== /home/hcbusy/webhash/foretias/README.md ===
+# Foretias
+
+**Free, Open-source Resilient Time Integrity Attestation Service**
+
+**Terminology:** Prose shorthand is precisely `PtP` (point-to-point) and `P2P` (peer-to-peer). Code identifiers use exact-case or all-lowercase: `PtPClient`, `P2PClient`, `make_ptp_connection`, `make_p2p_connection`, `ptp_client`. No mixed-case or all-caps variants (`PtpClient`, `P2pClient`, `PTPCLIENT`, `P2PCLIENT`).
+
+Foretias makes digital timestamping backdate-proof by cryptographic construction. Each tick of a time being's calendar has its own Ed25519 keypair, and when a tick advances, the previous private key is disabled. A Foretis stamped at tick *n* cannot be forged from the past.
+
+## Installation
+
+```bash
+# Build from source
+cd p2p && cargo build --release
+# Binary: p2p/target/release/foretias
+```
+
+## Quick Start
+
+### Start a Server
+
+```bash
+foretias serve --addr 127.0.0.1:4001 --chronon-ns 60000000000
+```
+
+### Stamp a Message
+
+```bash
+foretias stamp --message "hello world" --server 127.0.0.1:4001
+```
+
+### Verify a Stamp
+
+```bash
+foretias verify --message "hello world" --foretis '{"tick_number":...}' --server 127.0.0.1:4001
+```
+
+## CLI Reference
+
+### serve
+
+Start a TimeFamilyServer with optional P2P peers and persistence.
+
+```bash
+# Basic server
+foretias serve --addr 127.0.0.1:4001 --chronon-ns 60000000000
+
+# With P2P peers and DHT discovery
+foretias serve --addr 127.0.0.1:4001 \
+  --known-servers 127.0.0.1:4002 \
+  --dht-namespace mainnet \
+  --p2p-listen /ip4/0.0.0.0/tcp/9901
+
+# With persistence
+foretias serve --addr 127.0.0.1:4001 --persist-path /tmp/cal
+
+# Dormant (verify-only) mode
+foretias serve --addr 127.0.0.1:4001 --start-dormant --persist-path /tmp/cal
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--addr`, `-a` | `127.0.0.1:4001` | Listen address |
+| `--chronon-ns`, `-c` | `60000000000` | Chronon period in nanoseconds (60s) |
+| `--persist-path` | — | Persist calendar to directory |
+| `--start-dormant` | — | Start in verify-only mode (requires `--persist-path`) |
+| `--peer` | — | Peer address for mutual attestation (repeatable) |
+| `--mutually-attest-every-chronons` | `1` | Mutual attestation frequency in chronons |
+| `--request-timeout-secs` | `5` | RPC request timeout in seconds |
+| `--p2p-listen` | — | libp2p listen multiaddr (e.g. `/ip4/0.0.0.0/tcp/9901`) |
+| `--p2p-port-range` | `9900..9999` | Port range for auto-selection when `--p2p-listen` omitted |
+| `--p2p-dial` | — | libp2p peer multiaddr to dial (repeatable) |
+| `--known-servers`, `-k` | — | Known server for DHT self-registration (repeatable) |
+| `--dht-namespace` | `mainnet` | DHT namespace for Kademlia protocol isolation |
+| `--dht-bootstrap` | — | DHT bootstrap peer multiaddr (repeatable, legacy) |
+| `--max-discovered-peers` | `13` | Maximum peers to auto-discover from DHT |
+
+### stamp
+
+Stamp content against a running server.
+
+```bash
+# Inline message
+foretias stamp --message "hello world" --server 127.0.0.1:4001
+
+# From file, write output to file
+foretias stamp --message-file myfile.txt --stamp-output stamp.json --server 127.0.0.1:4001
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--message`, `-m` | — | Message to stamp |
+| `--message-file`, `-M` | — | Read message from file |
+| `--stamp-output`, `-o` | stdout | Write stamp output to file |
+| `--server`, `-s` | `127.0.0.1:4001` | Server address |
+
+### verify
+
+Verify content against a Foretis (server-side verification).
+
+```bash
+foretias verify --message "hello world" --foretis '{"tick_number":...}' --server 127.0.0.1:4001
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--message`, `-m` | — | Message to verify |
+| `--message-file`, `-M` | — | Read message from file |
+| `--foretis`, `-f` | — | Foretis JSON inline |
+| `--foretis-file`, `-F` | — | Read Foretis from file |
+| `--verify-output`, `-o` | stdout | Write verify output to file |
+| `--server`, `-s` | `127.0.0.1:4001` | Server address |
+
+### prove-verification
+
+Fetch a calendar slice from a remote TimeBeing and verify locally (client-side proof).
+
+```bash
+foretias prove-verification --message "hello world" --foretis '{"tick_number":...}' --server 127.0.0.1:4001
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--message`, `-m` | — | Message to verify |
+| `--message-file`, `-M` | — | Read message from file |
+| `--foretis`, `-f` | — | Foretis JSON inline |
+| `--foretis-file`, `-F` | — | Read Foretis from file |
+| `--proof-output`, `-o` | stdout | Write proof output to file |
+| `--server`, `-s` | `127.0.0.1:4001` | Remote TimeBeing server address |
+
+### inspect-attestations
+
+Offline verification of external attestations in a persisted calendar. Re-runs signature, hash, and echo verification on every `ExternalAttestation`. Exits 0 if all valid, 1 if any invalid.
+
+```bash
+foretias inspect-attestations --calendar /tmp/cal/calendar.json
+```
+
+| Flag | Description |
+|------|-------------|
+| `--calendar`, `-c` | Path to calendar JSON file |
+
+## Architecture
+
+Foretias decomposes into three time beings coordinated by an orchestrator:
+
+| Component | Role |
+|-----------|------|
+| **Chronomatter** (*Chronos fidelius authenticus*) | Autonomous ticking, stamping, verification |
+| **Calendar** (*Chronos fidelius grapha*) | Calendar data, persistence, mutual attestation scheduling |
+| **Communerd** (*Chronos fidelius locutus*) | All P2P communication — DHT, gossipsub, peer discovery |
+
+Intra-family communication uses direct method calls. Only Communerd communicates with extra-family peers.
+
+The `TimeFamilyServer` holds `Arc<Chronomatter>`, `Arc<Calendar>`, and `Option<Arc<Communerd>>`, exposing JSON-RPC and HTTP endpoints for stamp, verify, and calendar queries.
+
+## Tech Stack
+
+- **C11 core** — Verified cryptographic primitives (Ed25519 via libsodium, SHA-256, BLAKE3, Noise protocol, Merkle trees, FROST)
+- **foretias-core** — Rust safe wrappers over C11 FFI (bindgen), domain types, CryptoServer trait
+- **foretias-node** — Server, CLI binary, Communerd (libp2p), calendar store, metrics
+- **foretias-python** — PyO3 Python bindings (produces `foretias-p2p` pip package)
+- **foretias-java** — JNI bindings for Java
+
+## Current Features
+
+- **v0.1** — Local server with JSON-RPC stamp/verify (C11 core + Rust + PyO3)
+- **v0.2** — P2P mutual attestation between statically configured peers
+- **v0.3** — DHT peer discovery via Kademlia with private namespace
+
+## Development
+
+### Build
+
+```bash
+# C11 core
+cd p2p/core && cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build
+
+# Rust workspace
+cd p2p && cargo build --workspace
+
+# Python bindings
+cd p2p/foretias-python && maturin develop
+
+# Python shim package
+pip install -e .
+```
+
+### Test
+
+```bash
+# C11 core tests
+cd p2p/core/build && ctest --output-on-failure
+
+# Rust workspace tests
+cd p2p && cargo test --workspace
+
+# Python shim tests
+python -m pytest tests/ -v
+```
+
+The project uses the `alpha` branch as the center of development.
+
+## Appendix
+
+The classification for time beings belongs to this branch of the **Artificialia** domain.
+
+- Family: **Chronosidae**
+- Subfamily: **Chronosinae**
+- Tribe: **Chronosini**
+- Subtribe: **Chronosina**
+- Genus: **Chronos**
+- Species: **Chronos fidelius**
+- Subspecies:
+  - Chronomatter: **Chronos fidelius authenticus**
+  - Calendar: **Chronos fidelius grapha**
+  - Time Family: **Chronos fidelius adunatrix**
+  - Communerd: **Chronos fidelius locutus**
+  - Inquirer: TBD
+
+## License
+
+This project is licensed under the [BSD 3-Clause Clear License](LICENSE).
+
+
+=== /home/hcbusy/webhash/foretias/AGENTS.md ===
+# Notes to AI coding agents:
+
+Please read the entire document word for word do not skip any thing.
+  - This is the code repository for foretias
+  - The active and working specifications are in the `foretias/specs` directory.
+  - The architectures, including project language and dependencies are stated here.
+  - Sometimes new specifications come from user, and they may be placed in a new file in foretias/specs/
+  - Working specs may be updated while coding.
+  - When it is detected that specs diverge while coding, we maintain the reliance on `foretias/specs`.
+
+---
+
+## TERMINOLOGY SHORTHANDS (Mandatory)
+
+| Shorthand | Meaning | NEVER use |
+|-----------|---------|-----------|
+| **PtP** | Point-to-point (direct channel between two parties) | "point-to-point", "point to point", "point2point", "PTP" (capital T means something else) |
+| **P2P** | Peer-to-peer (network of distributed nodes) | "peer-to-peer", "peer to peer", "peer2peer" |
+
+**In prose (English):** The shorthand must be precisely capitalized as `PtP` and `P2P`. No other capitalization is permitted.
+
+**In code identifiers:** The three-character sequence must appear in either exact-case or all-lowercase. Acceptable examples: `PtPClient`, `P2PClient`, `make_ptp_connection`, `make_p2p_connection`, `ptp_transport`, `p2p_mesh`, `ptp_client`. Forbidden examples: `PtpClient`, `P2pClient`, `PTPCLIENT`, `P2PCLIENT` (mixed-case or all-caps variants are not allowed — only `ptp`/`PtP` for the three chars, only `p2p`/`P2P` for the three chars).
+
+These shorthands are enforced across all specs, plans, code, comments, and documentation. No exceptions.
+
+---
+
+## SPECS DIRECTORY CONVENTIONS (`foretias/specs/`)
+
+The `specs/` directory contains two kinds of files that work together:
+
+### SPEC.md Files — "What is needed"
+
+A `*_SPEC.md` file provides a **detailed description of functionality or internal design**. It specifies requirements, behavior, data structures, protocols, and constraints. A spec answers: *what must the system do, and how should it behave?*
+
+### PLAN.md Files — "How to build it"
+
+A `*_PLAN.md` file contains a **serialized or parallelized plan for actually implementing the corresponding spec**. It breaks the spec down into concrete, actionable tasks with dependencies and ordering. A plan answers: *what do we build first, next, and in parallel?*
+
+### Naming Convention
+
+Spec and plan files should always be paired by prefix:
+- `X_SPEC.md` pairs with `X_PLAN.md`
+- Example: `FORETIAS_2_P2P_SPEC.md` ↔ `FORETIAS_2_P2P_3_IMPLEMENTATION_PLAN.md`
+
+### Checkbox Format in PLAN.md
+
+Checkboxes in PLAN.md files track progress. When an item is checked off, **always place a timestamp (to the minute) next to the checkbox**:
+
+```markdown
+- [ ] Task not yet done
+- [x] Task completed                    ← bad (no timestamp)
+- [x](2026-05-06 13:11) Task completed  ← good (timestamped)
+```
+
+This gives both agents and humans a clear idea of how work is progressing over time.
+
+### Specify, Plan and Backburnered PLAN.md
+
+Before a specification is complete, and some times before a plan is complete, we may have intermediate steps. In these situations a plan file may be created with corresponding open items:
+```markdown
+- [ ] Specify
+- [ ] Plan
+```
+Most of time this is not needed, but when specification or planning takes on multi-turn iteration, it is useful to track these separately and check them off.
+
+When a specification is considered VERY important but interfering with current highest priorities, it is marked with `[x] backburnered`. To be revived by removing the `[x] backburnered` marker. These plans are to be excluded when agent or human asks for plans that are: ready, pending, iterating, in progress, developing, active, etc. backburnered plans can only be found and addressed directly by using the words "backburnered plan(s)".
+```markdown
+- [x] backburnered
+- [ ] Do this or system will break
+- [ ] And fix that bug
+- [ ] ...
+```
+
+### Worktree Branch Tracking in PLAN.md
+
+If a worktree branch is used for implementation, the PLAN.md **must** document the lifecycle of that worktree as explicit, separate checkbox tasks placed at appropriate points in the plan. The workpath shall always be `FULL_WORKTREE_PATH=${HOME}/tmp/foretias-worktrees/{SPEC_NAME_WITHOUT_MARKDOWN_EXTENSION}_${RANDOM}`, that random differentiator is set once while creating the plan file and stays consistent throughout the plan file.
+```markdown
+- [ ] Create worktree `git worktree add -b ${BRANCH_NAME} ${FULL_WORKTREE_PATH}}`
+- [ ] `cd ${FULL_WORKTREE_PATH}}`; reset current session work directory to be the full worktree path.
+...
+  (implementation tasks go here)
+...
+- [ ] Verify all work is complete in ${FULL_WORKTREE_PATH} and committed to ${BRANCH_NAME}
+- [ ] Merge ${BRANCH_NAME} to alpha
+```
+
+These tasks ensure the worktree lifecycle is tracked alongside the implementation work itself. Replace `${FULL_WORKTREE_PATH}` and `${BRANCH_NAME}` with actual values when writing the plan.
+
+---
+
+### Sub-Tasks
+
+If scoping was incorrect for any task, and and it became many tasks, It is possible to write additional sub-tasks. These are indented in markdown
+```markdown
+...
+- [ ] Merge ${BRANCH_NAME} to alpha
+  - [x](2026-05-06 14:00)  Detected complex merge situation # Note, here we used a completed task to justify these subtasks
+  - [ ] Update ${BRANCH_NAME} to follow new coding style
+  - [ ] Update ${BRANCH_NAME} to use new API call convention
+  - [x](2026-05-06 14:31) Merged breaking alpha # Again, this is needed to document a clear need for more work as subtasks
+  - [ ] Repair ALL tests in alpha
+  - [ ] Finalize:
+    - [ ] cleanup ${FULL_WORKTREE_PATH}
+    - [ ] Check that _PLAN.md has all but Cleanup checkboxes completed
+    - [ ] Remove "${FULL_WORKTREE_PATH}"
+    - [ ] This is the last checkbox to be checked in my _PLAN.md
+```
+This example also illustrates that because foretias uses git merge and not rebase this situation where a fix to merge on alpha may be required. The final stage, to finalize, means to cleanup the work path and just sanity check everything before completely wiping the work directory and marking the plan complete.
+
+## PROJECT STRUCTURE (Permanent Reference — Do Not Rescan)
+
+
+```
+foretias/                               # Repository root
+│
+├── specs/                              # All working specifications (SPEC.md & PLAN.md — see below)
+│   ├── FORETIAS_0_OVERVIEW.md          # Design invariants, roadmap, milestones
+│   ├── FORETIAS_1_MVP_SPEC.md          # v0.1 local-server stack (C11+Rust+PyO3)
+│   ├── FORETIAS_2_IMPLEMENTATION_PLAN.md
+│   ├── FORETIAS_2_P2P_SPEC.md          # v0.2-v0.8 network layers
+│   ├── FORETIAS_2_P2P_*.md             # P2P sub-specs (handshake, DHT, hardening, probity, etc.)
+│   ├── FORETIAS_3_PQC_INTEGRATION.md   # Post-quantum crypto (liboqs integration)
+│   ├── FORETIAS_4_GPU_CRYPTO_ACCELERATION.md
+│   ├── FORETIAS_CLI_SPEC.md            # CLI unified specification
+│   ├── CLI_SPECIFIED.md                # CLI specification (supplementary)
+│   ├── CALENDAR_REPLICATION_SPEC.md    # Calendar replication over P2P
+│   ├── foretias-v1.md                  # Product & technical specification
+│   ├── *_PLAN.md                       # Implementation plans (paired with SPEC.md files)
+│   └── questions.md                    # Open design questions
+│
+├── src/foretias/                       # Python shim (thin re-export layer)
+│   ├── __init__.py                     # Re-exports from foretias_p2p (Rust PyO3)
+│   ├── cli.py                          # CLI #1 (Python): "foretis" entry point (calls Rust via PyO3)
+│   ├── thin_client.py                  # Convenience client wrapper (calls Rust via PyO3)
+│   └── _version.py                     # Version string
+│
+├── tests/                              # Python shim integration tests
+│
+├── pyproject.toml                      # Top-level: hatchling build (installs shim pkg)
+│                                       # Runtime dep: foretias-p2p (the Rust bindings)
+│
+├── p2p/                                # Rust + C11 workspace root
+│   ├── Cargo.toml                      # Workspace: core-engine, foretias-node, foretias-python, foretias-java
+│   │
+│   ├── core/                           # C11 verified cryptographic primitives
+│   │   ├── include/
+│   │   │   └── foretias_core.h         # Single public header (Ed25519, P-256, SHA-256, BLAKE3, Noise, Merkle, FROST, etc.)
+│   │   ├── src/                        # 15 .c files (identity, signing, hashing, noise, merkle, frost, nullifier, rng, memzero, etc.)
+│   │   ├── tests/                      # 14 test files (test_ed25519.c, test_sha256.c, test_noise.c, etc.)
+│   │   ├── CMakeLists.txt              # Builds static lib (foretias_core), links libsodium + OpenSSL
+│   │   └── Makefile                    # Convenience targets (make, make test, make install)
+│   │
+│   ├── core-engine/                    # Rust crate — safe wrappers over C11 FFI + domain logic
+│   │   ├── Cargo.toml                  # foretias-core (links C11 via build.rs + bindgen)
+│   │   ├── build.rs                    # Compiles C11 core, runs bindgen over foretias_core.h
+│   │   └── src/
+│   │       ├── lib.rs                  # Re-exports: core, crypto_server, foretias, config, collision, epoch, noise, probity
+│   │       ├── core/                   # Safe Rust wrappers (bindings.rs, identity.rs, signing.rs, hash.rs, etc.)
+│   │       ├── crypto_server/          # CryptoServer trait + SoftwareCryptoServer backend
+│   │       ├── foretias/               # Domain types: tick.rs, foretis.rs, calendar.rs, external_attestation.rs
+│   │       ├── chronomatter/           # Time-being mutable logic (stamp, tick, auto-attestation, daemon)
+│   │       ├── config/                 # NodeConfig, TimeFamilyConfig
+│   │       ├── collision/              # Heartbeat, collision detection
+│   │       ├── epoch/                  # Epoch scheduler, snapshot, committee
+│   │       ├── probity/                # ProbityReport, aggregator, store
+│   │       ├── noise.rs                # Noise_XX handshake (Rust-side integration)
+│   │       └── error.rs                # NodeError, CryptoError
+│   │
+│   ├── foretias-node/                  # Rust crate — server + CLI binary (CLI #2)
+│   │   ├── Cargo.toml                  # foretias-node (depends on foretias-core, libp2p, liboqs via core-engine)
+│   │   ├── src/
+│   │   │   ├── lib.rs                  # Re-exports: server, communerd, calendar, calendar_store, metrics, probity
+│   │   │   ├── main.rs                 # CLI #2 (Rust): "foretias" binary — serve/stamp/verify/prove-verification/inspect-attestations
+│   │   │   ├── server/                 # TimeFamilyServer (stamp, verify, integrity_check, daemon, JSON-RPC, HTTP handlers)
+│   │   │   ├── communerd/              # P2P layer: libp2p swarm, DHT, gossipsub, peer pool, mutual attestation
+│   │   │   ├── calendar/               # Calendar wrapper
+│   │   │   ├── calendar_store/         # LRU policy, encrypted JSONL persistence
+│   │   │   ├── probity/                # Probity gossip handler
+│   │   │   ├── metrics.rs              # Node metrics
+│   │   │   └── replication_logger.rs   # Calendar replication logging
+│   │   └── tests/                      # Integration tests (e2e stamp/verify, P2P connect, probity gossip)
+│   │
+│   ├── foretias-python/                # Rust crate — PyO3 Python bindings
+│   │   ├── Cargo.toml                  # foretias-python (cdylib, depends on foretias-core + foretias-node)
+│   │   ├── pyproject.toml              # maturin build (produces foretias-p2p pip package)
+│   │   └── src/lib.rs                  # PyO3 classes: PyForetis, PyTickRecord, PyCalendar, PyTimeFamily, PyTimeFamilyServer, PyCryptoServer, etc.
+│   │
+│   └── foretias-java/                  # Rust crate — JNI bindings for Java
+│       ├── Cargo.toml                  # foretias-jni (cdylib, depends on ed25519-dalek, sha2, blake3)
+│       ├── pom.xml                     # Maven: org.foretias:foretias-java:0.2.0
+│       ├── build.sh                    # Build script (cargo + javac + jar)
+│       └── src/                        # Java source + Rust JNI crate
+
+**CLI Implementations (two active, possibly more):**
+
+| # | CLI | Language | Entry | Binary/Command | Location |
+|---|-----|----------|-------|----------------|----------|
+| 1 | Python "foretis" | Python (shim → Rust) | `src/foretias/cli.py` | `foretis` | Top-level pyproject.toml |
+| 2 | Rust "foretias" | Rust (native) | `p2p/foretias-node/src/main.rs` | `foretias` | p2p/ Cargo workspace |
+
+Both CLIs provide stamp, verify, and server commands. The Rust binary is the full-featured implementation; the Python CLI is a convenience wrapper that delegates to the Rust backend via PyO3. Additional CLI wrappers (e.g., Java) may exist or be added.
+
+### Architecture Layers
+
+```
+                    ┌─────────────────┐
+                    │   Application   │   (foretias-node CLI, Python shim, Java CLI)
+                    └────────┬────────┘
+                             │
+                    ┌────────▼────────┐
+                    │  foretias-node  │   Server, JSON-RPC, calendar store
+                    └────────┬────────┘
+            ┌─────────────────┼──────────────────┐
+            │                 │                  │
+ ┌──────────▼──────┐  ┌──────▼───────┐  ┌──────▼────────┐
+ │   communerd     │  │ foretias-py  │  │ foretias-java │
+ │  (libp2p P2P)   │  │   (PyO3)     │  │    (JNI)      │
+ │                 │  │              │  │               │
+ │ - DHT           │  │ Client-lang  │  │ Client-lang   │
+ │ - GossipSub     │  │ bindings     │  │ bindings      │
+ │ - Peer pool     │  │              │  │               │
+ │ - Mutual attest │  └──────┬───────┘  └──────┬────────┘
+ └────────┬────────┘         │                  │
+          │                  │                  │
+          │        ┌─────────▼──────────────────┴────────┐
+          │        │       foretias-core                 │
+          │        │  Safe Rust wrappers, CryptoServer,  │
+          │        │  domain types                       │
+          │        └─────────┬───────────────────────────┘
+          │                  │  (FFI via bindgen)
+          │        ┌─────────▼───────────────────────────┐
+          │        │       C11 core                      │
+          │        │  libsodium + OpenSSL + liboqs       │
+          │        └─────────┬───────────────────────────┘
+          │                  │
+ ┌────────▼────────┐   ┌─────▼────────┐   ┌────────────┐
+ │   libp2p        │   │  libsodium   │   │  liboqs    │
+ │  (Rust crate)   │   │ (Ed25519,    │   │ (PQC:      │
+ │                 │   │  hash, AEAD) │   │  Kyber,    │
+ │ - noise protocols│  └──────────────┘   │  Dilithium, │
+ │ - yamux/mplex   │                      │  etc.)      │
+ │ - identify      │                      └────────────┘
+ │ - ping          │
+ │ - dht           │
+ └─────────────────┘
+```
+
+### Peer Transport Comparison
+
+| Layer | Protocol | Encryption | Purpose |
+|-------|----------|-----------|---------|
+| libp2p Direct (new) | libp2p request_response over yamux | libp2p-noise (C11 deviation) | Stamp, verify, calendar replication, ping (preferred) |
+| Noise_XX TCP (custom) | Direct TCP + Noise_XX + JSON-RPC | C11 Noise_XX | Stamp, verify, calendar replication, ping (fallback) |
+| libp2p swarm | Kademlia DHT + GossipSub | libp2p-noise | Peer discovery, DHT, probity gossip, heartbeat |
+
+---
+
+## BUILD, TEST, RUN COMMANDS
+
+### Prerequisites (System Dependencies)
+
+```bash
+# Required
+sudo apt install build-essential cmake clang libsodium-dev libssl-dev
+# For BLAKE3 in C11 core
+# For P-256 support
+pip install maturin    # For Python bindings build
+rustup install stable  # Rust toolchain
+java -version >= 17    # For Java bindings (optional)
+```
+
+### Build Environment Variables
+
+Set these environment variables BEFORE any cargo build/check/test commands to accelerate compilation:
+
+```bash
+# Parallel CMake builds for oqs-sys (liboqs C library) — defaults to CPU count if unset
+export CMAKE_BUILD_PARALLEL_LEVEL=10
+```
+
+This variable is consumed by `core-engine/build.rs` which passes it to `cmake --build --parallel`. Without it, CMake falls back to single-threaded compilation of the ~200 post-quantum signature scheme source files, making foretias-core builds take 15-30 minutes instead of 2-5 minutes.
+
+### Build Caching Strategies
+
+The `foretias-core` crate (oqs-sys/liboqs C library) dominates build time. The following strategies reduce repeated build costs:
+
+**1. Enable only required libp2p features** — biggest win (20-25% reduction in initial build time):
+```toml
+# In foretias-node/Cargo.toml
+libp2p = { version = "0.56", default-features = false, features = [
+    "tcp", "noise", "yamux", "gossipsub", "kad", "identify", "ping", "request-response"
+] }
+```
+libp2p has 38 feature flags, none enabled by default. Enabling only what's used avoids compiling unused protocols (QUIC, WebRTC, WebSocket, TLS, etc.).
+
+**2. Use sccache for Rust compilation** — caches external crates (libp2p, etc.) across builds:
+```bash
+cargo install sccache # should already be installed
+export RUSTC_WRAPPER=sccache
+# First build populates cache; subsequent rebuilds hit cache for unchanged deps
+sccache -s  # Check cache stats
+```
+Note: sccache cannot cache incrementally-compiled workspace members or proc-macros, but it effectively caches the libp2p dependency tree.
+
+**3. Per-worktree target directories** — DO NOT share `target/` across worktrees (cargo locking will corrupt artifacts). Use separate target dirs per worktree:
+```bash
+export CARGO_TARGET_DIR="$HOME/.cache/cargo/foretias-$WORKTREE_NAME"
+```
+The shared `CARGO_HOME` registry (`~/.cargo/registry`) is already reused across worktrees for source downloads.
+
+**4. Pre-build heavy dependencies** — warm the cache before starting work:
+```bash
+export CMAKE_BUILD_PARALLEL_LEVEL=10
+# Build foretias-core first (takes longest), then only check foretias-node
+cd p2p && cargo build -p foretias-core
+cd p2p && cargo check -p foretias-node  # Fast after core is cached
+```
+
+**5. Profile optimization for dev builds** — faster incremental compilation:
+```toml
+[profile.dev.build-override]
+opt-level = 0
+codegen-units = 256
+```
+
+**What does NOT help for local development:**
+- `cargo-chef` — designed for Docker layer caching, not local incremental builds
+- Shared target directories — unsafe (race conditions on `.rmeta`/`.rlib` files)
+- `cargo-biscuit` — not widely adopted, limited benefit over native cargo caching
+
+### 1. Build C11 dependencies
+
+All builds require this first step:
+```bash
+export CMAKE_BUILD_PARALLEL_LEVEL=10
+# Step 1: Build C11 core library (static lib)
+cd p2p/core && cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build
+```
+
+### 2. Build Everything
+
+```bash
+# Do step 1, then
+
+# Step 2: Build Rust workspace (core-engine, foretias-node, foretias-python, foretias-java)
+cd p2p && cargo build --workspace
+
+# Step 3: Build Python bindings (installs foretias-p2p .so locally)
+cd p2p/foretias-python && maturin develop
+
+# Step 4: Install Python shim package (re-exports from foretias-p2p)
+cd /home/hcbusy/webhash/foretias && pip install -e .
+```
+
+### 1a. Build Individual Crates (Incremental)
+
+Use these when only one crate has changed — faster than rebuilding the full workspace. Always run from `p2p/`.
+
+```bash
+# Do step 1, then
+
+# Build only core-engine (safe Rust wrappers over C11 FFI)
+cd p2p && cargo build -p foretias-core
+
+# Build only foretias-node (server + CLI binary)
+cd p2p && cargo build -p foretias-node
+
+# Build only foretias-python (PyO3 bindings — produces .so)
+cd p2p && cargo build -p foretias-python
+
+# Build only foretias-java (JNI bindings — produces .so)
+cd p2p && cargo build -p foretias-java
+
+# Build a single crate in release mode
+cd p2p && cargo build -p foretias-node --release
+
+# Check a single crate without full compilation (fastest validation)
+cd p2p && cargo check -p foretias-core
+cd p2p && cargo check -p foretias-node
+```
+
+**Dependency chain** (build order when multiple crates change):
+1. C11 core (`p2p/core`) — static lib, linked by all Rust crates
+2. `foretias-core` (core-engine) — depends on C11 core via bindgen
+3. `foretias-node` — depends on core-engine
+4. `foretias-python` — depends on core-engine + foretias-node
+5. `foretias-java` — depends on core-engine
+
+If build stalls, and does not resolve after repeating an attempt, you may look at build process using verbose flag.
+This flag is very verbose, so use a subagent to run it and check on progressing output.
+```bash
+cd p2p && cargo build -vv
+```
+### 2. Run All Tests
+
+```bash
+# C11 core tests (ctest)
+cd p2p/core/build && ctest --output-on-failure
+
+# Rust workspace tests (unit + integration) — 111 tests
+cd p2p && cargo test --workspace
+
+# Python shim tests
+cd /home/hcbusy/webhash/foretias && python -m pytest tests/ -v
+
+# All tests at once
+cd p2p/core/build && ctest --output-on-failure && cd ../.. && cargo test --workspace && cd ../../foretias && python -m pytest tests/ -v
+```
+
+### 3. Run Individual / Targeted Tests
+
+```bash
+export CMAKE_BUILD_PARALLEL_LEVEL=10
+# --- C11 tests ---
+
+# Run a specific test file (CMake builds all into test_all, use -V to list):
+cd p2p/core/build && ctest -R foretias_core_tests --verbose
+
+# Or rebuild and run the test binary directly:
+cd p2p/core && cmake --build build --target test_all && ./build/test_all
+
+# --- Rust tests ---
+
+# Run all tests in one crate:
+cd p2p && cargo test -p foretias-core
+cd p2p && cargo test -p foretias-node
+cd p2p && cargo test -p foretias-python
+
+# Run a specific test by name (substring match):
+cd p2p && cargo test -p foretias-node -- test_stamp_and_verify_e2e
+cd p2p && cargo test -p foretias-core -- ed25519
+cd p2p && cargo test -- calendar_store
+
+# Run only unit tests (exclude integration):
+cd p2p && cargo test -p foretias-node --lib
+
+# Run only integration tests:
+cd p2p && cargo test -p foretias-node --test integration
+
+# Run with output (don't capture stdout):
+cd p2p && cargo test -- --nocapture
+
+# --- Python tests ---
+
+# Run one test file:
+python -m pytest tests/test_shim.py -v
+
+# Run one specific test function:
+python -m pytest tests/test_shim.py::test_stamp_and_verify -v
+
+# Run tests matching a pattern:
+python -m pytest tests/ -k "calendar" -v
+```
+
+### 4. Build for Release
+
+```bash
+# Release build — optimized, LTO, stripped
+cd p2p && cargo build --workspace --release
+
+# Release binary: p2p/target/release/foretias
+# Release C11 lib: p2p/core/build/libforetias_core.a
+```
+
+### 5. Package & Publish
+
+```bash
+# --- Python: foretias-p2p (Rust bindings) ---
+cd p2p/foretias-python
+maturin build --release                       # Produces wheel in target/wheels/
+pip install target/wheels/foretias_p2p-*.whl  # Install from wheel
+# To publish to PyPI: maturin publish
+
+# --- Python: foretias (shim package) ---
+cd /home/hcbusy/webhash/foretias
+pip install build
+python -m build                               # Produces sdist + wheel in dist/
+pip install dist/foretias-*.whl               # Install from wheel
+# To publish: twine upload dist/*
+
+# --- C11: install system-wide ---
+cd p2p/core && make install PREFIX=/usr/local
+
+# --- Java ---
+cd p2p/foretias-java && ./build.sh
+# Produces: target/foretias-java.jar
+```
+
+### 6. CLI Usage — Rust Binary (`foretias`)
+
+```bash
+# Build first:
+cd p2p && cargo build --release
+
+# Start server (daemon, stamps every chronon):
+target/release/foretias serve --addr 127.0.0.1:4001 --chronon_ns 60000000000
+
+# Start server with persistence:
+target/release/foretias serve --addr 127.0.0.1:4001 --persist-path /tmp/cal
+
+# Start server in dormant mode (verify-only, loads persisted calendar):
+target/release/foretias serve --addr 127.0.0.1:4001 --start-dormant --persist-path /tmp/cal
+
+# Start server with P2P peers:
+target/release/foretias serve --addr 127.0.0.1:4001 --peer 127.0.0.1:4002 --mutually_attest_every_chronons 10
+
+# Stamp a message (sends to running server via Noise+JSON-RPC):
+target/release/foretias stamp --message "hello world" --server 127.0.0.1:4001
+
+# Stamp from file:
+target/release/foretias stamp --message-file myfile.txt --server 127.0.0.1:4001 --stamp-output stamp.json
+
+# Verify a stamp (server-side verification):
+target/release/foretias verify --message "hello world" --foretis-file stamp.json --server 127.0.0.1:4001
+
+# Prove verification (fetch calendar slice, verify locally):
+target/release/foretias prove-verification --message "hello world" --foretis-file stamp.json --server 127.0.0.1:4001
+
+# Inspect external attestations in a persisted calendar:
+target/release/foretias inspect-attestations --calendar /tmp/cal/calendar.json
+```
+
+### 7. CLI Usage — Python (`foretis`)
+
+```bash
+# Install first:
+pip install -e /home/hcbusy/webhash/foretias
+
+# Stamp a message (creates ephemeral server, stamps, exits):
+foretis stamp -m "hello world"
+
+# Stamp from file, write output to file:
+foretis stamp -M myfile.txt -o stamp.json
+
+# Verify a stamp (loads persisted calendar in dormant mode):
+foretis verify -m "hello world" -F stamp.json --persist-path /tmp/cal
+
+# Chain integrity check:
+foretis integrity --persist-path /tmp/cal --start 0 --end 10
+
+# Note: "foretis serve" is a stub. Use the Rust binary for serving:
+#   cargo run --release -- serve (or target/release/foretias serve)
+```
+
+### 8. CLI Usage — Python thin_client (programmatic)
+
+```python
+from foretias.thin_client import ForetiasClient
+
+client = ForetiasClient("my-app")
+stamp = client.stamp("hello world")
+assert client.verify("hello world", stamp)
+print(client.public_key())
+print(client.tbid())
+print(client.calendar())
+```
+
+---
+
+## Project Segmentation
+
+Software projects May be large or small. Their complexity and diffiulty may also vary. Generally speaking we use these terms for disjoint components of softare:
+  - Major
+    - This is a noun, That "specification file is for a major", or an adjective "that is a major specification"
+    - This is a very large feature, that may break many existing functionalities while implementing
+    - Some extensive exchange with human may be required.
+    - Some multi-modal analysis, including web-searches, prototyping, analysis, etc.
+    - aka Major Feature, Major release, Major upgrade, etc.
+    - Example: "Centralize and fully sepcification of CLI interface by gathering features from all the existing implementations. Resolve any conflicts or redundancies. Then update all implementation to follow new specification."
+    - Example: "DHT for discovering peers for different purposes: mutual attestation, calendar replication, capability-matching, etc."
+  - Phase
+    - a Major feature may be implemented in many phases
+    - Example: Research, Discuss and Q&A with Human, Design and implement tests, Implementation feature, Code Review, Security Review, Fresh-eye review, merge to alpha, etc.
+  - Stage
+    - each phase may contain many stages
+    - Example for Research: Analyze code, web search, pose research questions, combination and synthesis, etc.
+  - Step
+    - Each stage may be several steps.
+    - Example: Search Arxiv, Search Google Schollar, Search wikipedia, Search reddit, Search Google Groups,
+    - Example: Change the entire project name from "Fortias" to "Foretias".
+  - Task
+    - Each step may be several tasks.
+    - Tasks are smaller very well defined jobs, typically using tool or simple updates.
+    - Example: Alter spelling of "Fortias" to "Foretias" in all file names
+    - Example: Alter spelling of "Fortias" to "Foretias" in C11 code.
+    - Example: Alter spelling of "Fortias" to "Foretias" in rs code.
+It is very important, given a request from user that correspond to a feature request or software change, to set a scope size. After scoping, perhaps the new request may be placed into an existing larger sized poject, or cause a split of existing project to form similar sized projects. Ultimately correctness and implementation efficiency is the goal achieved through organization, consideration and communication.
+
+When request is small, you may combine Major/Phase/Stage into 
+
+## Development tools
+
+Please use plugins and mcp's for performing disk operations, file searches and file edits. Use fully specified regular expressions (covering various cases), through mcp or using `sed` directly. These means of editing are much faster than regenerating the entire document. Each time regexp is used to for updates, please reread updated document before replacing original document.  Use Github mcp to perform git related actions.
+
+When commiting to Git, always state project segment and software version and model version:
+```git
+Major: Refactor CLI, Phase: Discussion with Human--complete
+opencode 1.14.39, Qwen3.6-27B-AWQ-BF16-INT4
+```
+
+## Development Rules
+
+**NEVER** start file changes for project Phase or larger WHEN any tests are broken.
+**NEVER** start large project segment work WHEN ANY tests are broken even if there're notes indicating those breakage are known. The test has to be manually disabled by human OR repaired and committed.
+
+## How To Write Rust Code
+
+This chapter applies to Rust code in both projects:
+
+Optimize in this order:
+
+1. **Correctness**
+2. **Readability and maintainability**
+3. **Testability**
+4. **Efficiency**
+5. **Style principles**
+
+Do not sacrifice correctness for cleverness, abstraction, minimalism, or performance. Do not sacrifice readability unless there is a measured, justified efficiency need.
+
+### General Rust Style
+
+Write Rust that a careful human maintainer can understand quickly.
+
+Prefer:
+
+- Prefer: Explicit data flow.
+- Prefer: Small functions with clear names.
+- Prefer: Local reasoning over global cleverness.
+- Prefer: Strong types over comments explaining weak types.
+- Prefer: Exhaustive matching over implicit behavior.
+- Prefer: Simple ownership over shared mutable state.
+- Prefer: Boring, obvious code over clever code.
+
+Avoid:
+
+- Avoid: Magic behavior hidden behind traits, macros, or global state.
+- Avoid: Type gymnastics that obscure intent.
+- Avoid: Excessive generic abstraction.
+- Avoid: Large functions that mix validation, transformation, I/O, and mutation.
+- Avoid: Panics in library or protocol logic.
+- Avoid: Silent error recovery in security-sensitive code.
+
+Use comments to explain **why**, not what. If the code needs a comment to explain what it does, first try to make the code clearer.
+
+### Project-Aware Priorities
+
+Code is **ALWAYD** security-critical.
+
+Rust code must make invalid protocol states difficult or impossible to represent. Prefer explicit state machines, newtypes, checked constructors, and narrow APIs. Be strict with parsing, validation, serialization, signatures, timestamps, peer identity, replay protection, and boundary checks.
+
+Parser, compiler, and interpreter code should make phases obvious. Keep syntax trees, typed representations, lowered forms, bytecode/intermediate forms, environments, and runtime values distinct unless there is a strong reason to merge them.
+
+### API Design
+
+Design APIs around invariants.
+Document behaviors and invariances by writing tests before coding.
+Code deliberately to satisfy features.
+Pass tests before comit.
+Prefer constructors that validate:
+
+```rust
+impl Timestamp {
+    pub fn new(value: u64) -> Result<Self, TimestampError> {
+        if value == 0 {
+            return Err(TimestampError::Zero);
+        }
+
+        Ok(Self(value))
+    }
+}
+
+Do not expose fields that allow invalid states unless the type is intentionally plain data.
+
+Prefer narrow public APIs. Keep modules private by default. Expose only what other modules actually need.
+
+Use newtypes for semantically distinct values:
+
+```rust
+pub struct PeerIdBytes(Vec<u8>);
+pub struct SignatureBytes(Vec<u8>);
+pub struct AttestationId([u8; 32]);
+```
+
+Do not pass unrelated byte arrays, strings, or integers through the same generic type if the values mean different things.
+
+### Error Handling
+
+Use `Result<T, E>` for recoverable failures.
+
+Do not use `unwrap`, `expect`, or `panic!` in production logic except when proving an internal invariant that truly cannot fail. In security, protocol, parser, compiler, interpreter, FFI, and network code, avoid them almost entirely.
+
+Good:
+
+```rust
+let message = Message::decode(bytes)
+    .map_err(ProtocolError::InvalidMessage)?;
+```
+
+Bad:
+
+```rust
+let message = Message::decode(bytes).unwrap();
+```
+
+Errors should be specific enough for callers to act on them.
+
+Prefer domain errors:
+
+```rust
+pub enum AttestationError {
+    InvalidTimestamp,
+    InvalidSignature,
+    UnknownPeer,
+    ReplayDetected,
+    StorageFailure(StorageError),
+}
+```
+
+Avoid stringly-typed errors for core logic.
+
+Error messages may be human-readable, but program logic should not depend on parsing error strings.
+
+### Enum Dispatch
+
+Matching on enums is acceptable and often preferred.
+
+It is fine to dispatch by matching an enum and then calling a concrete method, including a fully qualified method path when that is clearer or more efficient.
+
+Example:
+
+```rust
+match node {
+    Expr::Call(call) => CallExpr::type_check(call, ctx),
+    Expr::Lambda(lambda) => LambdaExpr::type_check(lambda, ctx),
+    Expr::Literal(literal) => LiteralExpr::type_check(literal, ctx),
+}
+```
+
+This is acceptable even if the method belongs to a trait implemented by the struct holding the data, especially when it improves readability, avoids unnecessary dynamic dispatch, or makes optimization easier.
+
+Do not replace clear enum dispatch with trait objects solely because “polymorphism is cleaner.” Use trait objects when runtime extensibility or object-safe abstraction is genuinely useful.
+
+Prefer enums when:
+
+* The set of variants is known and finite.
+* Exhaustiveness matters.
+* State transitions must be explicit.
+* Serialization/deserialization depends on variant identity.
+* Compiler optimization benefits from static dispatch.
+
+Prefer traits when:
+
+* Multiple independent types share behavior.
+* The set of implementors may grow externally.
+* The API needs behavior abstraction more than variant inspection.
+
+### Traits and Generics
+
+Use traits to express meaningful behavior, not to hide simple function calls.
+
+Good traits are small, named after capabilities, and have stable semantics:
+
+```rust
+pub trait Clock {
+    fn now(&self) -> Result<Timestamp, ClockError>;
+}
+```
+
+Avoid broad traits with many unrelated methods.
+
+Avoid generic parameters unless they provide real value. A concrete type is often easier to read, test, and optimize.
+
+Good:
+
+```rust
+pub fn verify_attestation(
+    attestation: &Attestation,
+    keyring: &Keyring,
+) -> Result<(), VerificationError> {
+    // ...
+}
+```
+
+Do not write generic abstraction just in case future code might need it.
+
+When using generics, keep bounds close to the function that needs them. Avoid spreading complex bounds across the codebase.
+
+### Ownership and Borrowing
+
+Prefer clear ownership boundaries.
+
+Use borrowed data when the caller retains ownership:
+
+```rust
+pub fn parse_module(source: &str) -> Result<ModuleAst, ParseError>
+```
+
+Use owned data when the value must outlive the caller or cross threads/tasks:
+
+```rust
+pub struct NetworkCommand {
+    pub payload: Vec<u8>,
+}
+```
+
+Avoid unnecessary cloning. But do not contort code into unreadable shapes to avoid a cheap clone outside hot paths.
+
+If cloning is meaningful or expensive, make it visible and intentional.
+
+Use `Arc` for shared ownership across threads/tasks. Use `Rc` only in single-threaded code. Use interior mutability only when it simplifies a real ownership problem, not as a shortcut around design.
+
+Avoid shared mutable state. If needed, isolate it behind a small API.
+
+### Concurrency and Async
+
+Concurrency must be explicit and testable.
+
+For Foretias network and P2P code, separate:
+
+* Protocol state.
+* Network I/O.
+* Storage.
+* Cryptographic verification.
+* Time sources.
+* Peer management.
+* Retry/backoff logic.
+
+Do not bury protocol decisions inside async tasks where they are hard to test.
+
+Prefer message-passing or narrow synchronization APIs over wide shared locks.
+
+Avoid holding locks across `.await`.
+
+Bad:
+
+```rust
+let mut state = self.state.lock().await;
+self.network.send(message).await?;
+state.mark_sent(id);
+```
+
+Better:
+
+```rust
+{
+    let mut state = self.state.lock().await;
+    state.mark_pending(id);
+}
+
+self.network.send(message).await?;
+
+{
+    let mut state = self.state.lock().await;
+    state.mark_sent(id);
+}
+```
+
+Keep task lifetimes clear. Every spawned task should have:
+
+* A clear owner.
+* A shutdown path.
+* Error handling.
+* Tests where practical.
+
+Do not ignore `JoinHandle`s unless the task is intentionally detached and documented.
+
+### Cryptographic and Security-Sensitive Code
+
+For Foretias, cryptographic code must be conservative.
+
+Never invent cryptographic protocols or alter protocol details casually.
+
+Do not use non-constant-time comparisons for secrets, signatures, MACs, or authentication tags when constant-time comparison is required.
+
+Do not log secrets, private keys, raw credentials, sensitive peer material, or unreduced protocol internals.
+
+Do not continue after cryptographic verification failure unless the protocol explicitly requires it.
+
+Validate before trust:
+
+```rust
+let signed = SignedMessage::decode(bytes)?;
+signed.verify(&trusted_keys)?;
+let message = signed.into_verified_message();
+```
+
+Prefer types that distinguish unverified from verified data:
+
+```rust
+pub struct UnverifiedAttestation {
+    bytes: Vec<u8>,
+}
+
+pub struct VerifiedAttestation {
+    inner: Attestation,
+}
+```
+
+Only trusted constructors should create verified types.
+
+Do not expose test-only shortcuts in production APIs.
+
+### Time Handling
+
+Do not call system time deep inside protocol logic. Inject a clock.
+
+Good:
+
+```rust
+pub trait Clock {
+    fn now(&self) -> Result<Timestamp, ClockError>;
+}
+```
+
+This makes tests deterministic and prevents hidden dependencies.
+
+Distinguish:
+
+* Local observation time.
+* Claimed timestamp.
+* Verified timestamp.
+* Network receive time.
+* Consensus or attestation time, if applicable.
+
+Never compare timestamps without knowing which kind they are.
+
+### FFI and C11 Core Boundaries
+
+Rust code that crosses into or out of the C11 core must be defensive.
+
+FFI boundaries must:
+
+* Validate pointers.
+* Validate lengths.
+* Define ownership clearly.
+* Avoid panics crossing the boundary.
+* Return explicit status/error codes.
+* Document allocation and deallocation responsibility.
+* Treat foreign data as untrusted.
+
+Do not expose Rust references, Rust-owned layout assumptions, or panic behavior over FFI.
+
+Use `#[repr(C)]` for FFI structs. Keep FFI types simple.
+
+Wrap unsafe code in small safe abstractions:
+
+```rust
+pub fn verify_with_c_core(input: &[u8]) -> Result<VerificationResult, CoreError> {
+    // Small, audited unsafe section.
+    unsafe {
+        // ...
+    }
+}
+```
+
+Every `unsafe` block must have a nearby safety comment explaining the invariant being upheld.
+
+Unsafe code should be rare, isolated, and easy to audit.
+
+### Serialization and Parsing
+
+Parsing must be strict.
+
+Reject malformed, ambiguous, non-canonical, or trailing data unless the format explicitly allows it.
+
+Do not accept multiple encodings for the same logical value in security-sensitive formats unless required by protocol.
+
+Keep parsing and validation separate when useful:
+
+```rust
+let raw = RawMessage::decode(bytes)?;
+let message = raw.validate()?;
+```
+
+For Foretias, decoded wire messages must not become trusted domain objects until validation succeeds.
+
+### Modules and File Organization
+
+Organize code by responsibility, not by vague utility.
+
+Good module names:
+
+* `diagnostics`
+* `attestation`
+* `verification`
+* `wire`
+* `peer`
+* `storage`
+* `clock`
+* `ffi`
+
+Avoid dumping unrelated helpers into large `utils` modules. A small helper module is acceptable only when the functions genuinely belong together.
+
+Keep public module surfaces small. Re-export intentionally.
+
+### Testing Requirements
+
+Write tests for behavior, invariants, and edge cases.
+
+Prefer deterministic tests. Inject clocks, RNGs, network handles, and storage backends where needed.
+
+For Foretias, include tests for:
+
+* Valid attestation verification.
+* Invalid signatures.
+* Timestamp boundary cases.
+* Replay attempts.
+* Malformed wire messages.
+* Peer identity errors.
+* Serialization round trips.
+* FFI boundary failures.
+* Shutdown and cancellation paths where applicable.
+
+Use property tests or fuzz tests where useful, especially for parsers, decoders, serialization, and protocol messages.
+
+A bug fix should usually begin with writing of a a regression test that reporduces the error condition, repair, and commit of code passing new regression test.
+
+### Performance
+
+Write efficient Rust, but measure before making code obscure.
+
+Prefer straightforward code unless profiling or clear algorithmic reasoning shows a problem.
+
+Optimize algorithms before micro-optimizing syntax.
+
+Accept enum matching, static dispatch, slices, iterators, and clear loops. Use whichever is more readable in context.
+
+Avoid unnecessary allocations in hot paths. Prefer borrowing, slices, and preallocation where clear.
+
+Do not introduce unsafe code for performance without strong justification and tests.
+
+Document performance-sensitive decisions:
+
+```rust
+// This avoids allocating during peer message validation, which is on the inbound hot path.
+```
+
+### Logging and Observability
+
+Logs should help diagnose behavior without leaking secrets.
+
+Use structured logging where the project already does so.
+
+Log:
+
+* State transitions.
+* Protocol failures.
+* Peer connection changes.
+* Retry exhaustion.
+* Storage failures.
+* Compiler phase failures when debugging Foretias.
+
+Do not log:
+
+* Private keys.
+* Secret material.
+* Raw credentials.
+* Full untrusted payloads unless sanitized.
+* User source code in contexts where that may be sensitive.
+
+Errors should carry enough context for debugging, but not sensitive data.
+
+### Panics and Assertions
+
+Use `debug_assert!` for internal invariants that help catch bugs during development.
+
+Use normal error handling for invalid external input.
+
+External input includes:
+
+* Network messages.
+* Files.
+* User source code.
+* FFI input.
+* Client-language bindings.
+* Serialized data.
+* Peer-provided data.
+* Clock or storage failures.
+
+A malformed packet, invalid program, bad timestamp, or null FFI pointer is not a reason to panic.
+
+### Macros
+
+Use macros sparingly.
+
+A macro is acceptable when it removes unavoidable repetition while preserving clarity.
+
+Avoid macros that hide control flow, error behavior, security checks, or generated public APIs.
+
+Prefer functions, traits, or ordinary modules unless a macro is clearly better.
+
+### Dependencies
+
+Do not add dependencies casually.
+
+Before adding a crate, consider:
+
+* Security posture.
+* Maintenance status.
+* API stability.
+* Transitive dependency weight.
+* `no_std` or FFI implications, if relevant.
+* Whether the project already has an equivalent dependency.
+* Whether the crate affects cryptography, parsing, networking, or serialization.
+
+For security-sensitive dependencies, prefer mature, audited, widely used crates.
+
+Do not change cryptographic dependencies, serialization formats, protocol behavior, or public APIs without understanding compatibility and security impact.
+
+### Client Bindings
+
+Rust APIs exposed to Python, Java, C, or other clients must be stable, narrow, and explicit.
+
+Do not leak internal Rust types into public binding contracts.
+
+Separate internal errors from binding-layer errors.
+
+Validate all foreign inputs. Convert foreign data into internal Rust domain types only after checks pass.
+
+Binding APIs should be boring and hard to misuse.
+
+### Code Review Checklist for AI Agents
+
+Before finishing Rust changes, check:
+
+* Does this preserve correctness?
+* Are invalid states prevented or checked?
+* Are all external inputs validated?
+* Are errors explicit and useful?
+* Are panics avoided in production paths?
+* Is unsafe code isolated and justified?
+* Are secrets protected from logs and errors?
+* Is concurrency shutdown/error behavior clear?
+* Are locks not held across `.await`?
+* Are tests added or updated?
+* Is the code readable by a human maintainer?
+* Is performance acceptable without obscuring intent?
+* Did public APIs, wire formats, FFI contracts, or serialized formats change?
+
+If a change affects security, protocol compatibility, storage compatibility, language semantics, or public bindings, treat it as high-risk and document the reasoning in the code, tests, or commit notes.
+
+### MISC
+
+#### Description is Important
+
+The AI agent is to refrain from simplifying a key behavior of Chronochain by saying "destroy private key". This project aspires to do this well. That description should not restrict the mindset of readers to what we are using now. The words that should replace destroy in that description so as to not lock human mind into a fixed mindset. The list to randomly select a term from include: disable/disablement, impair/impairment, incapacitate/incapacitation, debilitate/debilitation. Those descriptors could be further modified with intensifiers including: cryptographically, algorithmically, provably, verifiably, etc. Never use: destroy, delete, remove, forget. Never downtoned: simple, naive, etc.
+
+Do write: "The expring chronon is cryptographically disabled from making additional stamp after producing a forward_fortis"
+DO NOT write: "The Chronomatter simply forgets the private key so it can't be used again."
+
+It is paramount that we do not restrict thinking to the implementation. The Foretias project, foremost, is a human expression of human desire and human need, for some minimum amount of constant integrity.
+
+#### Embedded Communications
+
+If any file, other than this example in the AGENTS.md, contain a parenthetical comment, anywhere, it is a request for agent to comment based on the context surrounding that comment.
+```markdown
+Blah blah, some texxt (@Agent, do you think that word is mispelled?)
+```
+
+or
+```python
+def fibonacii(x):
+	# @agents, errrr, terminal case? spelling? did you even run this?
+	return fibonacii(x-1) + fibonacii(x-2)
+```
+
+or even not in a comment
+```python
+def add (x):
+@AGENT, this is just plain wrong!
+	return x+y;
+```
+The expectation is for agent to consider, discuss, and resolve the concern
+that follows various capitalizations of `@agent` or `@agents`. Resolution, once achieved, also means the parenthetical comment can be completely removed.
+
+If this form of embedded communication is discussed while performing another task, determin if it is relevant or interferes with current task. In some cases, this causes an immediately actionable response, other times, the encounterance results in an extra '[ ] TODO:human concern at file FILENAME line LINE_NUMBER' added to current task list to investigate. In some cases, if it is clear that the situation is too complex or require too much context, it may become a "[ ] TODO: write a specification and plan to address human concern at file FILENAME line LINE_NUMBER"
+
+#### Uncertainty and Other Utterances in Conversing with Human
+
+Expressions of uncertainty and hypotheticals, such as "perhaps", "maybe", "possible", "what if", "in case". These words does not mean a firm directive from human to either pause work, or make large changes. It means human wants a todo task enqueued, perhaps to be done immediately, to explore options regarding the statement. In the last sentence, the perhaps suggests an option that can be explored, and it also highlight the possibility of the task not at the top of the todo list. More than anything else, the statement suggests human is thinking about the issue and you can help that thinking process.
+
+"Wait!" is almost always typed when humans are reading the previous output and found something objectionable. "Wait!" meant stop that, something was wrong. This also implies whatever they ask about, it is highly unlikely they read through the reast of the response. Good or bad, that is human nature, please accomodate this behavior as a supportive agent. After addressing the concern following "wait!", the you can summarize what you meant to say after the output that the human said "Wait!" to--where it is is inferred based on the question or comment after "WAit!", when in doubt, summarize the whole response in the context of having addressed the human's concern.
+
+#### When in Doubt
+
+When uncertain, choose the design that is easiest to prove correct, easiest to test, and easiest for the next human to understand.
+
+Correctness first. Then readability and maintainability. Then efficiency. Then principles and asethetics.
+
+
+=== /home/hcbusy/webhash/foretias/.github/workflows/ci.yml ===
+name: CI
+
+on:
+  push:
+    branches:
+      - alpha
+      - mvp
+  pull_request:
+    branches:
+      - alpha
+      - mvp
+
+permissions:
+  contents: read
+
+jobs:
+  ##########################
+  # C11 Core Tests
+  ##########################
+  c11-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache C11 build
+        uses: actions/cache@v4
+        with:
+          path: p2p/core/build
+          key: c11-build-${{ runner.os }}-${{ hashFiles('p2p/core/**') }}
+          restore-keys: |
+            c11-build-${{ runner.os }}-
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake clang libsodium-dev libssl-dev
+
+      - name: Build C11 core
+        working-directory: p2p/core
+        run: make
+
+      - name: Run C11 tests
+        working-directory: p2p/core
+        run: make test
+
+  ##########################
+  # Rust Workspace Tests
+  ##########################
+  rust-tests:
+    runs-on: ubuntu-latest
+    needs: c11-tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache C11 build (for Rust FFI linkage)
+        uses: actions/cache@v4
+        with:
+          path: p2p/core/build
+          key: c11-build-${{ runner.os }}-${{ hashFiles('p2p/core/**') }}
+          restore-keys: |
+            c11-build-${{ runner.os }}-
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake clang libsodium-dev libssl-dev
+
+      - name: Build C11 core (required for bindgen in core-engine)
+        working-directory: p2p/core
+        run: make
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "p2p -> p2p/target"
+
+      - name: Run Rust workspace tests
+        working-directory: p2p
+        run: cargo test --workspace
+
+      - name: Run Clippy (deny warnings)
+        working-directory: p2p
+        run: cargo clippy --workspace -- -D warnings
+
+  ##########################
+  # Python Shim Tests
+  ##########################
+  python-tests:
+    runs-on: ubuntu-latest
+    needs: rust-tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache C11 build (for PyO3 linkage)
+        uses: actions/cache@v4
+        with:
+          path: p2p/core/build
+          key: c11-build-${{ runner.os }}-${{ hashFiles('p2p/core/**') }}
+          restore-keys: |
+            c11-build-${{ runner.os }}-
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake clang libsodium-dev libssl-dev
+
+      - name: Build C11 core (required for PyO3 linkage)
+        working-directory: p2p/core
+        run: make
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "p2p -> p2p/target"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: uv pip install maturin pytest
+
+      - name: Build C11 core (ensure available for maturin)
+        working-directory: p2p/core
+        run: make
+
+      - name: Build Rust workspace (ensure foretias-python compiles)
+        working-directory: p2p
+        run: cargo build --workspace
+
+      - name: Build & install foretias-p2p PyO3 bindings
+        working-directory: p2p/foretias-python
+        run: maturin develop
+
+      - name: Install foretias shim package
+        run: uv pip install -e .
+
+      - name: Run Python shim tests
+        run: python -m pytest tests/ -v
+
+  ##########################
+  # Format & Lint Gate
+  ##########################
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Check Rust formatting
+        working-directory: p2p
+        run: cargo fmt --workspace -- --check
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff (if available) or skip
+        run: |
+          uv pip install ruff || true
+
+      - name: Check Python formatting
+        run: |
+          ruff check src/ tests/ || true
+          ruff format --check src/ tests/ || true
+
+
+=== /home/hcbusy/webhash/foretias/.github/workflows/publish-setup.md ===
+# PyPI Trusted Publisher Setup
+
+After merging to the default branch, configure the trusted publisher:
+
+1. Go to https://pypi.org/project/foretias+/settings/
+2. Scroll to "Trusted Publishers" and click "Add an item"
+3. Select "GitHub" as the integration
+4. Set the repository to `frcusaca/foretias`
+5. Click "Save"
+
+This links your GitHub repo to PyPI — when a `v*` tag is pushed, PyPI
+trusts the GitHub Actions run and publishes the package without any API
+token.
+
+Alternatively, for token-based publishing:
+1. Generate a PyPI API token at https://pypi.org/manage/account/token/
+2. Add it as a GitHub secret: `PYPI_API_TOKEN`
+3. The workflow already references this secret
+
+
+=== /home/hcbusy/webhash/foretias/.github/workflows/release.yml ===
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+
+      - name: Create virtual environment
+        run: uv venv
+
+      - name: Install dependencies
+        run: uv pip install -e .
+
+      - name: Build package
+        run: uvx hatch build
+
+      - name: Check package
+        run: |
+          uv pip install twine
+          twine check dist/*
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+
+
+=== /home/hcbusy/webhash/foretias/.opencode/plans/1778440853148-curious-mountain.md ===
+# HOWTO v1 — User Documentation & Peer Manager Script
+
+**Random differentiator:** `4827`
+**Worktree path:** `/home/hcbusy/tmp/foretias-worktrees/HOWTO_4827`
+**Branch:** `howto-peer-manager`
+
+---
+
+## Deliverables
+
+1. **`integration-tests/start_local_peers.py`** — Interactive Python peer manager (stdlib-only)
+2. **`HOWTO.md`** — 3-section user documentation proving ease-of-use and reliability
+
+---
+
+## Phase 1: `start_local_peers.py`
+
+### Task 1.1 — Script skeleton + CLI args
+- Create `integration-tests/start_local_peers.py`
+- `argparse`: `--peers N` (default 50), `--port-base N` (default 5000), `--p2p-range`, `--chronon-ns` (default 1s), `--dht-namespace`, `--binary`, `--persist-dir`, `--stats-interval N` (default 10s, 0 disables)
+- `find_foretias_binary()`: check `p2p/target/release/foretias`, fallback `debug/`
+
+### Task 1.2 — Peer spawning
+- `spawn_peers()`: batch-spawn subprocesses via `subprocess.Popen`, each with unique RPC port, persist dir, log file
+- All peers get `--known-servers` pointing to every other peer (Rust skips self-dial)
+- `parse_peer_startup(log_path)`: regex-extract TBID, TBN, listen addr, P2P info from startup output
+- Per-peer tracking dict: index, tbid, tbn, rpc_port, pid, alive, persist_path, process, ticks, start_time
+
+### Task 1.3 — Continual Stats Gathering Thread
+A background Python thread continuously tails all peer logs, tracking errors, warnings, and tick counts. This thread is extensible — designed to be expanded later with richer metrics.
+
+- Runs in a separate `threading.Thread` started after all peers spawn
+- Polls each peer's log file every 3 seconds using a tail-file pattern (tracks file offset per peer, only reads new bytes)
+- Per-peer counters: `errors`, `warnings`, `last_tick`, `last_log_pos`
+- Prints a live summary to **stderr** (not interfering with REPL stdin) every `--stats-interval` seconds (default 10):
+
+```
+--- Live Stats (elapsed 45s) ---
+  Alive: 50/50  |  Errors: 0  |  Warnings: 2
+  Avg ticks/sec: 1.0  |  Highest tick: 47 (peer #12)
+```
+
+- Thread-safe: shared stats protected by a `threading.Lock`; REPL `status` command reads under the same lock
+- Graceful shutdown via `threading.Event`; thread exits cleanly on `shutdown`
+- New regex patterns/counters can be added later without architectural changes
+- Add a `stats` REPL command to dump full per-peer breakdown
+
+### Task 1.4 — Status monitoring
+- `check_peer_alive(peer)`: `os.kill(pid, 0)`
+- `parse_tick_count(log_path)`: scan log for latest tick
+- `status()`: formatted table — index, TBID prefix, port, alive, ticks (also pulls from stats thread data)
+
+### Task 1.4 — Kill commands
+- `kill_random(n)`: `random.sample()` from alive peers, `process.terminate()`, mark dead
+- Accept percentage syntax: `kill-random 50%` → kills floor(50% of alive)
+- `kill_tbid(prefix)`: filter by TBID prefix match, kill all matches
+- Edge cases: no alive peers, no matches, already-dead peers excluded
+
+### Task 1.5 — Stamp/Verify convenience
+- `stamp(port, message)`: runs `foretias stamp -m "..." -s 127.0.0.1:<port>`, prints command + output
+- `verify(port, message, stamp_file)`: runs `foretias verify ...`, prints command + output
+
+### Task 1.6 — REPL loop
+- Prompt: `foretias> `
+- Commands: `status`, `kill-random N|N%`, `kill-tbid <hex>`, `stamp <port> <msg>`, `verify <port> <msg> <file>`, `help`, `shutdown`, `quit`
+- SIGINT/Ctrl+C handler: clean shutdown of all children
+- Shutdown summary: peers started, killed, remaining, duration
+
+### Task 1.7 — Test the script
+- Build binary: `cd p2p && cargo build`
+- Run with `--peers 5`, test all REPL commands end-to-end
+- Verify status updates after kills, stamp/verify work against live peers
+
+---
+
+## Phase 2: `HOWTO.md`
+
+### Task 2.1 — Write document
+- Create `HOWTO.md` at repo root
+- **Intro**: What foretias is, why it matters, what this doc proves
+- **Section 1 — Quick Start**: Single server, stamp, verify success, verify failure (wrong content → `{"valid": false}`)
+- **Section 2 — Peering**: Run `start_local_peers.py --peers 100`, stamp on one peer, verify on another peer
+- **Section 3 — Resilience**: Same setup, `kill-random 50%`, verify still succeeds — proof of fault tolerance
+
+### Task 2.2 — Verify-by-following
+- Execute Section 1 commands literally from scratch
+- Execute Sections 2-3 with the actual script
+- Fix any discrepancies
+
+---
+
+## Phase 3: Finalize
+
+- [ ] Create worktree `git worktree add -b howto-peer-manager /home/hcbusy/tmp/foretias-worktrees/HOWTO_4827`
+- [ ] `cd /home/hcbusy/tmp/foretias-worktrees/HOWTO_4827`; reset session work directory
+- ... (implementation tasks above) ...
+- [ ] Verify all work complete in worktree, committed to `howto-peer-manager`
+- [ ] Merge `howto-peer-manager` to alpha
+
+---
+
+## Verification
+
+End-to-end verification sequence:
+1. `cd p2p && cargo build` — ensures binary exists
+2. `python3 integration-tests/start_local_peers.py --peers 5` → enters REPL
+3. Inside REPL: `status` → shows 5 alive peers
+4. Inside REPL: `stamp 5000 "hello"` → returns Foretis JSON
+5. Inside REPL: `verify 5001 "hello" stamp.json` → `{"valid": true}` across peers
+6. Inside REPL: `kill-random 3` → 2 peers remain
+7. Inside REPL: `verify 5001 "hello" stamp.json` → still `{"valid": true}`
+8. Inside REPL: `shutdown` → clean exit with summary
+9. Follow HOWTO.md Section 1 independently — all commands succeed
+
+
+=== /home/hcbusy/webhash/foretias/.opencode/plans/1778469701657-happy-river.md ===
+# Custom Base64 Display Encoding — SPEC + PLAN
+
+## SPEC
+
+### Overview
+
+Foretias JSON output currently serializes binary fields (`Vec<u8>`, `[u8; N]`) as JSON integer arrays:
+
+```json
+"tbid": [128, 52, 2, 40, 26, 86, ...]
+```
+
+This spec introduces a **custom base64 encoding** using alphabet `[a-zA-Z0-9|_]` for **display-only** purposes. Internal wire format, storage, and serde serialization remain **unchanged**.
+
+### Character Set (Verified)
+
+```rust
+const BASE64_CUSTOM: [char; 64] = [
+    'x', 'I', 'T', 'h', 'b', 't', 'm', 'P', 'o', 'y',
+    'q', 'Q', 'B', 'R', 'n', 'C', 'F', 'Y', 'j', 'd',
+    'J', '_', 'N', 'i', 'l', 'X', 'O', 'L', 'g', 'c',
+    'W', 'E', '|', 'u', '4', '0', 'f', 'e', 'H', 'r',
+    's', 'w', 'G', 'S', 'z', 'v', 'A', 'k', '1', 'U',
+    'p', 'M', 'D', 'K', 'V', 'Z', 'a', '9', '2', '7',
+    '3', '8', '5', '6'
+];
+```
+
+- 64 unique characters, no duplicates
+- Exact permutation of `[a-zA-Z0-9|_]` (26 upper + 26 lower + 10 digits + `_` + `|`)
+- No padding character — length implicitly indicates padding
+
+### Encoding Algorithm
+
+Standard base64 grouping (3 bytes → 4 chars) using `BASE64_CUSTOM` lookup. No `=` padding; encoded length implies original byte count: `len % 4 == 0` → `bytes % 3 == 0`, `len % 4 == 2` → `bytes % 3 == 1`, `len % 4 == 3` → `bytes % 3 == 2`.
+
+Decode uses an inverse ASCII-indexed lookup table `INVERSE_BASE64[128]`.
+
+### Architecture Layers
+
+1. **C11 Core** (`p2p/core/src/encoding_custom_base64.c`, `p2p/core/include/foretias_core.h`)
+   - `foretias_custom_base64_encode()` / `foretias_custom_base64_decode()`
+   - `foretias_custom_base64_encoded_len()` / `foretias_custom_base64_decoded_len()`
+   - Defensive: NULL checks, buffer-size checks, character validation, invalid-length rejection (`len % 4 == 1`)
+
+2. **Rust Wrapper** (`p2p/core-engine/src/core/encoding.rs`)
+   - `custom_base64_encode(&[u8]) -> String`
+   - `custom_base64_decode(&str) -> Result<Vec<u8>, CryptoError>`
+   - FFI via bindgen
+
+3. **Display Formatter** (`p2p/core-engine/src/foretias/display.rs`)
+   - `format_json_for_display(&serde_json::Value) -> String`
+   - Recursively walks JSON, replaces integer arrays (all `Value::Number` in `[0,255]`) with custom-base64 strings, returns pretty-printed JSON
+
+4. **CLI Integration**
+   - Rust CLI (`main.rs`): Replace `serde_json::to_string_pretty` with `format_json_for_display`
+   - Python CLI (`cli.py`): Python helper `format_binary_fields(obj)` before `json.dumps`
+   - PyO3: Add `to_json_display()` method
+
+### What Does NOT Change
+
+- Internal Serde `Serialize`/`Deserialize` on all domain types
+- Wire protocol (JSON-RPC, TCP+Noise, HTTP)
+- Storage (calendar persistence, encrypted JSONL)
+- PyO3 `to_json()` / `from_json()` for cross-language interop
+
+---
+
+## PLAN
+
+**Worktree:** `git worktree add -b feat/custom-base64-display /home/hcbusy/tmp/foretias-worktrees/FORETIAS_CUSTOM_BASE64_SPEC_$$RAND$$`
+**Branch:** `feat/custom-base64-display`
+
+### Phase 1: C11 Implementation
+
+- [ ] Create worktree `git worktree add -b feat/custom-base64-display /home/hcbusy/tmp/foretias-worktrees/FORETIAS_CUSTOM_BASE64_SPEC_${RANDOM}`
+- [ ] `cd` to worktree; reset session working directory
+- [ ] Write `p2p/core/src/encoding_custom_base64.c` — encode/decode functions with BASE64_CUSTOM table, inverse table, boundary checks
+- [ ] Add declarations to `p2p/core/include/foretias_core.h`
+- [ ] Write `p2p/core/tests/test_custom_base64.c` — roundtrip tests, boundary cases (0 bytes, 1 byte, 2 bytes, 3 bytes, large buffers), invalid char rejection, NULL rejection, buffer-too-small rejection, invalid length (`len % 4 == 1`)
+- [ ] Update `p2p/core/tests/test_all.c` — add `test_custom_base64_main` declaration and call
+- [ ] Update `p2p/core/tests/CMakeLists.txt` — add `test_custom_base64.c` to `TEST_SOURCES`
+- [ ] Update `p2p/core/CMakeLists.txt` — add `src/encoding_custom_base64.c` to `FORETIAS_CORE_SOURCES`
+- [ ] Build C11: `cd p2p/core && cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build`
+- [ ] Run C11 tests: `cd p2p/core/build && ctest --output-on-failure`
+- [ ] Commit C11 changes
+
+### Phase 2: Rust Wrapper
+
+- [ ] Ensure `p2p/core-engine/build.rs` picks up new header declarations (bindgen should auto-generate)
+- [ ] Create `p2p/core-engine/src/core/encoding.rs` — safe Rust wrappers over C11 FFI
+- [ ] Add `pub mod encoding;` to `p2p/core-engine/src/core/mod.rs`
+- [ ] Write unit tests in `encoding.rs` — roundtrip, empty input, known test vectors
+- [ ] Build: `cd p2p && cargo build -p foretias-core`
+- [ ] Test: `cd p2p && cargo test -p foretias-core -- encoding`
+- [ ] Commit Rust wrapper changes
+
+### Phase 3: Display Formatter
+
+- [ ] Create `p2p/core-engine/src/foretias/display.rs` — `format_json_for_display()` function
+- [ ] Add `pub mod display;` to `p2p/core-engine/src/foretias/mod.rs`
+- [ ] Write unit tests — integer arrays become base64 strings, nested structures, non-binary arrays pass through unchanged, empty arrays pass through
+- [ ] Build: `cd p2p && cargo build -p foretias-core`
+- [ ] Test: `cd p2p && cargo test -p foretias-core -- display`
+- [ ] Commit display formatter changes
+
+### Phase 4: CLI Integration
+
+- [ ] **Rust CLI** (`p2p/foretias-node/src/main.rs`): In `cmd_stamp`, `cmd_verify`, `cmd_prove_verification`, replace `serde_json::to_string_pretty(&result)` with `foretias_core::foretias::display::format_json_for_display(&result)`
+- [ ] **Python CLI** (`src/foretias/cli.py`): Add `format_binary_fields(obj)` helper that uses a PyO3 `to_json_display()` or does the transformation in Python; apply before `json.dumps`
+- [ ] **PyO3 bindings** (`p2p/foretias-python/src/lib.rs`): Add `to_json_display()` method to `PyForetis`, `PyCalendar`, `PyTickRecord`
+- [ ] Build: `cd p2p && cargo build -p foretias-node && cargo build -p foretias-python`
+- [ ] Test: `cd p2p && cargo test --workspace`
+- [ ] Commit CLI integration changes
+
+### Phase 5: Verification
+
+- [ ] Run C11 tests: `cd p2p/core/build && ctest --output-on-failure`
+- [ ] Run Rust tests: `cd p2p && cargo test --workspace`
+- [ ] Build Python bindings: `cd p2p/foretias-python && maturin develop`
+- [ ] Install Python shim: `pip install -e /home/hcbusy/webhash/foretias`
+- [ ] Run Python tests: `python -m pytest tests/ -v`
+- [ ] Manual smoke test: `p2p/target/debug/foretias stamp -m "hello" --server 127.0.0.1:4001` — verify `tbid`/`signature`/`content_hash` show as base64 strings
+- [ ] Verify wire format unchanged: capture JSON-RPC response, confirm internal fields still use integer arrays
+- [ ] Verify all 111 Rust tests pass, all C11 tests pass, all Python tests pass
+
+### Phase 6: Merge
+
+- [ ] Verify all work in worktree is committed to `feat/custom-base64-display`
+- [ ] Merge `feat/custom-base64-display` to `alpha`
+- [ ] Cleanup worktree:
+  - [ ] Verify all checkboxes above are completed
+  - [ ] Remove worktree directory `git worktree remove /home/hcbusy/tmp/foretias-worktrees/FORETIAS_CUSTOM_BASE64_SPEC_${RANDOM}`
+  - [ ] This is the last checkbox in this plan
+
+
+=== /home/hcbusy/webhash/foretias/docs/threat_model_v0_5.md ===
+# Foretias v0.5 Threat Model
+
+**Version:** v0.5-hardening
+**Scope:** v0.2 through v0.4 implementation (mutual attestation, libp2p transport, DHT discovery)
+**Date:** 2026-04-30
+**Status:** Baseline — living artifact, updated with each milestone
+
+---
+
+## 1. Scope
+
+**In scope:** The complete attack surface introduced across v0.2 (direct P2P mutual attestation), v0.3 (libp2p transport with two-layer identity), and v0.4 (Kademlia DHT discovery with `DhtPeerSource` and hybrid transport selection).
+
+**Out of scope:** v0.6+ GossipSub layer (not yet shipped), v0.9+ secure enclave backend. Those will produce their own threat model addenda.
+
+---
+
+## 2. Asset Inventory
+
+The following assets are worth protecting. Each has a trust boundary, current protection status, and the component responsible.
+
+| Asset | Where it lives | Protection | Responsible component |
+|---|---|---|---|
+| **Tick private keys** | In-memory only, `Vec<TickKeyPair>` inside `Chronomatter` (`p2p/core-engine/src/chronomatter/mod.rs`) | Never written to disk. `PrivKeyHandle` from the C11 core (`p2p/core/src/`) provides `zeroize` on drop. Key rotated every tick. | `CryptoServer` trait (`p2p/core-engine/src/crypto_server/mod.rs`), `SoftwareCryptoServer` (`p2p/core-engine/src/crypto_server/software.rs`) |
+| **Calendar integrity** | `Calendar` struct backed by `Chronomatter` tick records. Persisted to `NodeConfig::calendar_path` | Forward/backward `Foretis` signatures in each `TickRecord` form a chained attestation. `integrity_check()` in `Chronomatter` verifies the chain. | `Chronomatter` (`p2p/core-engine/src/chronomatter/mod.rs`), `foretias::tick::verify_pair()` |
+| **External attestation authenticity** | `TickRecord.external_attestations` vector | Verified before storage per the mutual-attestation flow (v0.2). Unverified attestations are never appended to the calendar. | `Chronomatter::verify()`, stamp handler in `p2p/foretias-node/src/server/handlers.rs` |
+| **Peer identity binding** | Two-layer identity: libp2p `PeerId` (transport layer, Noise protocol) + application TBID (Foretias identity) | libp2p's Noise handshake authenticates the transport `PeerId`. The application layer verifies Foretias signatures against the peer's TBID public key chain. | `Communerd` (`p2p/foretias-node/src/communerd/mod.rs`), `JsonRpcTransport` (`p2p/foretias-node/src/communerd/json_rpc_transport.rs`) |
+| **Liveness of mutual-attest loop** | `PeerPool` liveness pings (`start_liveness_pings()`) + daemon tick loop in `Chronomatter` | Periodic RPC pings detect dead peers. Daemon tick advances on a timer, not on peer responses, so a slow peer cannot stall the clock. | `PeerPool` (`p2p/foretias-node/src/communerd/peer_pool.rs`), `Chronomatter::start_daemon()` |
+| **DHT peer table** | `DhtPeerSource` (`p2p/foretias-node/src/communerd/dht_peer_source.rs`), an `Arc<RwLock<HashMap<PeerId, PeerAddr>>>` | Currently unprotected against exhaustion. No cap on table size (see §6, recommendation E1). | `DhtPeerSource::upsert()` |
+| **Calendar on disk** | Plaintext JSON file at `calendar_path` (v0.1-v0.4 format) | Plaintext. Migration to encrypted JSONL with per-block AEAD authentication tag is part of v0.5 (§5 of FORETIAS_2_P2P_5_hardening.md). | `EncryptedJsonlCalendarStore` (new in v0.5) |
+
+---
+
+## 3. Attacker Model
+
+Three attacker levels are considered, each with increasing capability.
+
+### 3.1 Network Observer
+
+**Capability:** Passive read access to all TCP traffic between nodes. Cannot modify, inject, or replay packets.
+
+**Relevant to:**
+- JSON-RPC traffic (TCP, no TLS by design). An observer reads all stamp requests, calendar queries, and their responses in cleartext.
+- libp2p transport is encrypted via Noise, so the P2P control plane is opaque to passive observers.
+
+**Impact assessment:** High for JSON-RPC content confidentiality, low for identity (Noise-encrypted libp2p connections reveal only the fact of connection).
+
+### 3.2 Active Network Attacker
+
+**Capability:** Full MITM on TCP. Can inject, drop, modify, and replay packets. Cannot break libp2p's Noise handshake or forge Ed25519 signatures.
+
+**Relevant to:**
+- JSON-RPC replay attacks (replaying a `/stamp` response with a different content)
+- Connection flood (opening many TCP connections to exhaust resources)
+- libp2p address spoofing via the identify protocol
+
+**Impact assessment:** Medium. libp2p transport is resistant. JSON-RPC handlers rely on echo fields and signature verification, which limit replay damage.
+
+### 3.3 Compromised Peer
+
+**Capability:** A legitimate peer with valid keys, behaving maliciously. Can send forged requests, refuse to attest, or collude with other compromised peers.
+
+**Relevant to:**
+- Sybil identity generation (if RNG is weak)
+- Tick-rate exhaustion (flood the victim with stamp requests to force rapid key rotation)
+- Forged external attestations (submitting a valid-looking but incorrect attestation)
+
+**Impact assessment:** Medium-high. The protocol's cross-signature verification in the mutual-attest flow limits what a single compromised peer can achieve. A majority compromise is a different threat class.
+
+---
+
+## 4. Threat Catalogue
+
+| # | Threat | Description | Affected component | Impact | Mitigation |
+|---|---|---|---|---|---|
+| 1 | Content replay | An attacker captures a `/stamp` JSON-RPC response and replays it with different content, claiming a timestamp they did not earn. | `/stamp` JSON-RPC handler (`p2p/foretias-node/src/server/handlers.rs`) | High — undermines trust model | **Implemented.** Echo field encodes requester identity + tick number. A replayed response fails the echo check (v0.2 §6.2, step 14). The `handle_stamp` function returns the echo in the `Foretis` response for client-side verification. |
+| 2 | Stamp flood (DoS) | Attacker sends a high volume of stamp requests to exhaust the node's CPU or job queue. | `Chronomatter` job queue (`p2p/core-engine/src/chronomatter/mod.rs`) | Medium — availability | **Partially implemented.** Two-layer rate limit from v0.2 §4.1. Queue depth cap added in v0.5 (§7, `MAX_JOB_QUEUE_DEPTH = 64`). Further hardening in v0.6 with GossipSub mesh caps. |
+| 3 | Oversized request | A single request carries gigabytes of data, exhausting memory in the JSON-RPC handler. | All JSON-RPC handlers (`p2p/foretias-node/src/server/handlers.rs`) | Medium — availability | **Implemented.** `MAX_CONTENT_BYTES` (1 GB) in `handlers.rs` line 9. `MAX_CALENDAR_SLICE_COUNT` (10,000) limits calendar queries. `MAX_REQUEST_BYTES` in the cross-attest path (v0.2). |
+| 4 | DHT eclipse attack | Attacker controls the majority of a node's Kademlia peer table, isolating it from honest peers. | Kademlia peer table (`p2p/foretias-node/src/communerd/dht_peer_source.rs`) | High — isolation | **Partially implemented.** Private namespace key (`dht_namespace` in `NodeConfig`, `p2p/core-engine/src/config.rs`) limits cross-network pollution. Bootstrap list in config prevents relying solely on DHT for initial discovery. Kademlia's own bucket diversity provides additional protection. `MAX_PEERS` cap added in v0.5 (§7). |
+| 5 | Sybil via RNG failure | Weak or predictable RNG produces colliding TBIDs, allowing an attacker to impersonate another node. | Identity generation in `Chronomatter::new()` (`p2p/core-engine/src/chronomatter/mod.rs`, line 45-46) | High — identity compromise | **Implemented.** `rng_mix.c` in the C11 core (`p2p/core/src/`) mixes multiple entropy sources. v0.7 adds explicit collision detection as a backstop. |
+| 6 | Forged external attestation | A compromised peer submits an attestation with valid structure but incorrect content (wrong tick, wrong key, wrong signature). | Calendar verification (`p2p/core-engine/src/chronomatter/mod.rs`) | High — integrity | **Implemented.** Full verification in v0.2 §6.2 steps 12-14: signature check against the peer's public key, tick number validation, TBID consistency. Unverified attestations are never stored. |
+| 7 | Calendar file tampering | An attacker with disk access modifies the plaintext calendar file to insert or remove tick records. | Disk storage (calendar JSON file at `calendar_path`) | High — integrity | **Implemented in v0.5.** Encrypted JSONL format (`EncryptedJsonlCalendarStore`, new in v0.5) with per-block AEAD authentication tag (ChaCha20-Poly1305) detects any tampering. Migration path renames old file to `.bak`. |
+| 8 | Private-key exfiltration via disk | An attacker reads the disk to recover tick private keys, allowing them to forge signatures. | `CryptoServer` key storage (`p2p/core-engine/src/crypto_server/software.rs`) | Critical — total compromise | **Implemented.** Keys are never written to disk (§0.3 invariant). `PrivKeyHandle` from C11 core uses `zeroize` on drop. Tick keypairs are regenerated every tick, so old keys are discarded immediately. |
+| 9 | Tick-rate exhaustion | A peer forces the victim to advance its tick counter rapidly by sending many stamp requests, causing excessive key rotation and resource consumption. | `Chronomatter` (`p2p/core-engine/src/chronomatter/mod.rs`) | Medium — resource exhaustion | **Implemented.** Tick advance is timer-driven via `start_daemon()` (the daemon loop on line 239-267), not stamp-driven. Inbound stamp requests are rate-limited. A stamp call does advance the tick but the daemon interval provides a floor. |
+| 10 | JSON-RPC address spoofing via identify | An attacker uses libp2p's identify protocol to advertise a false JSON-RPC address, redirecting RPC traffic. | `Communerd` + libp2p identify (`p2p/foretias-node/src/communerd/mod.rs`) | Low — misdirection | **Implemented.** The address from identify is advisory only. The actual RPC call still requires a verified Foretias response with correct Ed25519 signatures. A forged address results in a connection failure, not a security breach. |
+
+---
+
+## 5. Residual Risks and Deferred Mitigations
+
+The following threats have no complete mitigation in v0.5 and are tracked for future sub-specs.
+
+| Risk | Why it remains | Deferred to |
+|---|---|---|
+| **GossipSub message amplification** | GossipSub is not yet implemented. No mesh size or flood-publish caps exist. An attacker could flood the gossip mesh once it ships. | v0.6 — GossipSub and ProbityReport. Mesh size and flood-publish caps will be part of the initial implementation. |
+| **No transport encryption on JSON-RPC** | JSON-RPC over TCP has no Noise or TLS layer by current design. A network observer reads all stamp content and calendar queries. | Deferred. The primary threat (content replay) is mitigated by echo fields and signature verification. Adding TLS is a separate infrastructure concern. |
+| **Single-key compromise recovery** | If a node's in-memory private key is extracted (e.g., via memory dump), there is no revocation mechanism. All past and future signatures from that key remain valid. | v0.7 — Collision detection and identity revocation. |
+| **DHT namespace collision across networks** | Two networks using the same `dht_namespace` would interleave their Kademlia tables, potentially allowing cross-network peer injection. | Addressed by operational guidance: testnet vs mainnet use distinct namespaces. Formal namespace governance is out of scope. |
+| **Plaintext `.bak` file after migration** | The migration from plaintext to encrypted JSONL leaves a `.bak` copy of the old calendar on disk. | Operational. The `.bak` file is intended for one-time inspection. Future v0.5.x may add an auto-deletion timer. |
+| **No rate limit on JSON-RPC connections** | The JSON-RPC server accepts unlimited concurrent TCP connections. A connection flood could exhaust file descriptors. | v0.6 — Connection limits as part of the observability and rate-limiting pass. |
+| **Sybil identity without economic cost** | Creating new nodes has no cost. An attacker can create thousands of identities to influence consensus (once gossip adds voting). | v0.7 — Collision detection. Long-term, staking or reputation mechanisms may be added. |
+
+---
+
+## 6. Recommendations for v0.5 Code Changes
+
+The threat analysis motivates three immediate code hardening items, all scoped to v0.5:
+
+### 6.1 Enforce `MAX_PEERS` cap in `DhtPeerSource`
+
+**File:** `p2p/foretias-node/src/communerd/dht_peer_source.rs`
+
+**Problem:** `DhtPeerSource::upsert()` currently inserts any discovered peer without limit. A DHT eclipse attacker could fill the table with thousands of bogus peers, increasing memory and CPU.
+
+**Change:**
+
+```rust
+const MAX_PEERS: usize = 256;
+
+impl DhtPeerSource {
+    pub fn upsert(&self, peer_id: PeerId, addr: PeerAddr) {
+        let mut guard = self.peers.write();
+        if guard.len() >= MAX_PEERS && !guard.contains_key(&peer_id) {
+            tracing::warn!("peer table full ({MAX_PEERS}); ignoring new peer");
+            return;
+        }
+        guard.insert(peer_id, addr);
+    }
+}
+```
+
+This is idempotent for known peers (updating an existing entry does not count against the cap) and rejects unknown peers once the table is full.
+
+### 6.2 Add `max_queue_depth` to Chronomatter job queue
+
+**File:** `p2p/core-engine/src/chronomatter/mod.rs`
+
+**Problem:** The stamp job queue has no upper bound. A stamp flood can queue unbounded work.
+
+**Change:** Add `MAX_JOB_QUEUE_DEPTH` constant (suggested value: 64). When the bounded channel is full, reject with `NodeError::QueueFull` rather than blocking or dropping silently.
+
+```rust
+const MAX_JOB_QUEUE_DEPTH: usize = 64;
+
+// In the job submission path (TimeFamily inbound handler):
+if job_tx.capacity() == 0 {  // bounded channel; 0 remaining = full
+    return Err(NodeError::QueueFull);
+}
+```
+
+### 6.3 Validate `dht_namespace` configuration
+
+**File:** `p2p/core-engine/src/config.rs`
+
+**Problem:** An empty or excessively long `dht_namespace` could cause protocol errors in the Kademlia layer or make the node join an unintended network.
+
+**Change:** Add validation to `NodeConfig::load()`:
+
+```rust
+fn validate(cfg: &NodeConfig) -> Result<(), ConfigError> {
+    if cfg.dht_namespace.is_empty() || cfg.dht_namespace.len() > 64 {
+        return Err(ConfigError::InvalidField("dht_namespace must be 1-64 bytes"));
+    }
+    Ok(())
+}
+```
+
+This ensures the namespace is present and bounded, preventing accidental cross-network joins or Kademlia protocol errors from oversized keys.
+
+---
+
+## 7. Component-Specific Threat Summary
+
+### 7.1 Communerd (`p2p/foretias-node/src/communerd/mod.rs`)
+
+The P2P orchestrator. All external communication flows through this component. Key threats: address spoofing via identify (mitigated by signature verification), DHT table exhaustion (mitigated by `MAX_PEERS` cap in v0.5).
+
+### 7.2 Chronomatter (`p2p/core-engine/src/chronomatter/mod.rs`)
+
+The tick engine. Owns keypair generation, signing, and verification. Key threats: tick-rate exhaustion (mitigated by timer-driven daemon), stamp flood (mitigated by queue depth cap), private key exfiltration (mitigated by in-memory-only storage with zeroize).
+
+### 7.3 CryptoServer (`p2p/core-engine/src/crypto_server/mod.rs` + `software.rs`)
+
+The cryptographic abstraction layer. Key threats: key exfiltration (mitigated by `zeroize` on drop and no disk writes), RNG weakness (mitigated by `rng_mix.c` multi-source entropy).
+
+### 7.4 JSON-RPC Handlers (`p2p/foretias-node/src/server/handlers.rs`)
+
+The inbound request handlers. Key threats: oversized requests (mitigated by `MAX_CONTENT_BYTES`), content replay (mitigated by echo field), stamp flood (mitigated by rate limiting and queue cap).
+
+### 7.5 DhtPeerSource (`p2p/foretias-node/src/communerd/dht_peer_source.rs`)
+
+The DHT-backed peer discovery. Key threats: eclipse attack (mitigated by namespace key and bootstrap list), table exhaustion (mitigated by `MAX_PEERS` cap in v0.5).
+
+### 7.6 Config (`p2p/core-engine/src/config.rs`)
+
+Node configuration loading. Key threats: malformed namespace (mitigated by validation in v0.5), default values that may be insecure (reviewed per release).
+
+---
+
+## 8. Appendix: Trust Boundaries
+
+```
++------------------+     +------------------+     +------------------+
+|  JSON-RPC Client |---->|   Foretias Node   |---->|  Peer Node      |
+|  (untrusted)     |     |  (this process)  |     |  (untrusted)    |
++------------------+     +------------------+     +------------------+
+                           |       |       |
+                    +-------+  +----+  +---+-------+
+                    | Crypto | |Chrono| | Communerd |
+                    | Server | |matter| |  + DHT    |
+                    +--------+ +------+ +-----------+
+                          ^        ^         ^
+                    zeroize on  timer-     Noise-
+                    drop, no   driven     encrypted
+                    disk write daemon     transport
+```
+
+- **External clients** (JSON-RPC) are untrusted. All inputs are validated.
+- **Peer nodes** are untrusted. All attestations are verified before storage.
+- **CryptoServer** is trusted but minimized: no disk writes, keys zeroized on drop.
+- **Chronomatter** is trusted for correct tick logic: timer-driven, not request-driven.
+- **Communerd** is trusted for correct routing but relies on libp2p's Noise for transport security.
+
+
+=== /home/hcbusy/webhash/foretias/docs/superpowers/plans/2026-04-27-infrastructure-prioritization.md ===
+# Foretias v0.1 Tooling & Infrastructure Prioritization Plan
+
+> **For agents:** REQUIRED SUB-SKILL: Use `subagent-driven-development` to implement this plan task-by-task.
+>
+> **Goal:** Prioritize 6 infrastructure tasks by dependency, effort, and risk reduction.
+>
+> **Architecture:** Three-layer stack (C11 core → Rust node → Python) with PyO3 bindings. Tasks are ordered to maximize independent parallel work early, then address the high-risk Task 6 (Python→Rust migration) as its own phased epic.
+>
+> **Tech Stack:** C11/libsodium, Rust/PyO3/tokio, Python/cryptography, CMake, Cargo, hatchling
+
+---
+
+## Executive Summary: Why Task 6 is the Elephant
+
+Task 6 ("Python uses ONLY Rust") is **not** a simple import swap. The current state:
+
+| Protocol Feature | Python (`chronomatter.py`) | Rust PyO3 (`python.rs`) |
+|---|---|---|
+| Per-tick key rotation | Full (`_timebeing._tick`) | **Missing** |
+| Mutual acknowledgement | Full (forward/backward foretis) | **Missing** |
+| Daemon ticking (V1 + V1Serial) | Full (thread-based, chronon) | **Missing** |
+| Inquirer (standalone verifier) | Full (chain integrity, MA verify) | **Missing** |
+| Calendar chain integrity | Full (`_verify_pair`, `_verify_chain`) | **Partial** (tick order only) |
+| Save/load persistence | Full (JSON, `from_calendar`) | **Missing** |
+| Config / dormant instance loading | Full | **Missing** |
+| Shutdown / daemon lifecycle | Full | **Missing** |
+
+**Rust `PyTimeFamily.stamp()`** uses a simple counter increment with a **static keypair**. It does NOT rotate keys per tick, does NOT create auto-attestations, and does NOT have a daemon. Python `ChronomatterV1.stamp()` generates a new keypair each tick, creates forward/backward auto-attestation signatures, and runs on a background daemon.
+
+**This means Task 6 requires a full Rust protocol rewrite, not a build-system change.** It is its own engineering epic.
+
+---
+
+## Dependency Graph
+
+```
+                    ┌──────────────┐
+                    │  Task 6 (XL) │──┐
+                    │ Py→Rust only │  │ BLOCKED by:
+                    └──────┬───────┘  │   - Rust tick rotation
+                             │         │   - Rust MA signing
+                             │         │   - Rust daemon
+                             │         │   - Rust Inquirer
+                             │         │   - Rust persistence
+                             │         │   - Rust Config
+                             │         │   - Rust dormant load
+                             │         │   - 80+ Python test rewrites
+                             │         │
+    ┌──────────┐  ┌─────────┴──────────────────────────┐
+    │ Task 1   │  │ Task 6 requires ALL of these first  │
+    │ Makefiles│  │ (Tasks 1-5 help but aren't sufficient)│
+    │ (S)      │  └─────────────────────────────────────┘
+    └──────────┘
+    ┌──────────┐
+    │ Task 2   │
+    │ Rust docs│
+    │ (S)      │
+    └──────────┘
+    ┌──────────┐
+    │ Task 3   │
+    │ Py docs  │
+    │ (S)      │
+    └──────────┘
+    ┌──────────┐
+    │ Task 4   │
+    │ C11 tests│
+    │ (M)      │
+    └──────────┘
+    ┌──────────┐
+    │ Task 5   │
+    │ Rust hard│
+    │ (M)      │
+    └──────────┘
+```
+
+**Tasks 1-5 have zero dependencies on each other.** All can be done in parallel.
+**Task 6 depends on everything AND a substantial Rust rewrite not yet planned.**
+
+---
+
+## Phase 1: Independent Infrastructure (Parallel)
+
+**All 5 tasks can be dispatched simultaneously.** Total parallel wall time = max(S, S, S, M, M) = **M**
+
+### Task 1: Makefiles (S — ~20 min)
+
+**Goal:** Top-level Makefile with targets for C, Rust, and Python builds.
+
+**Rationale:** No Makefile exists. CMake and Cargo work but have no unified entry point. A single `make all` should build everything.
+
+**Files:**
+- Create: `foretias/Makefile` (root)
+- Modify: `foretias/p2p/core/tests/CMakeLists.txt` (add test binaries)
+
+**The Makefile should expose:**
+```make
+# Top-level targets
+all            # Build C core + Rust + Python wheel
+build-c        # cmake --build for C core
+build-rust     # cargo build --release
+build-python   # pip install -e .
+test           # Run all test suites
+test-c         # ctest (after Task 4 adds tests)
+test-rust      # cargo test
+test-python    # pytest
+clean          # Remove build artifacts
+fmt            # Format all three languages
+lint           # Clippy + mypy/flake8 equivalent
+```
+
+**Key insight:** The `build.rs` already compiles C code via `cc` crate. The Makefile `build-c` target should use CMake (for standalone C builds and testing), while `build-rust` uses Cargo (which internally builds C via build.rs). These are complementary, not redundant:
+- `build-c` → standalone `libforetias_core.a` for C consumers and C test execution
+- `build-rust` → `libforetias_p2p.so` + `foretias` binary, includes C compilation internally
+
+### Task 2: Rust README docs (S — ~15 min)
+
+**Goal:** Build/debug/deploy documentation for the Rust layer.
+
+**Files:**
+- Create: `foretias/p2p/node/README.md`
+
+**Contents:**
+- Build: `cargo build --release` / `cargo build --features python`
+- Build for Python: `cargo build --release --features python --lib --crate-type cdylib`
+- Debug: VSCode launch config / `cargo run -- serve` with tracing
+- Run binary: `cargo run -- serve --addr 127.0.0.1:8080`
+- Subcommands: `serve`, `stamp`, `verify`, `prove-verification`
+- Dependencies: libsodium (`sudo apt install libsodium-dev`)
+- PyO3 build: maturin or direct cargo with `python` feature
+- Cross-compilation notes (if any)
+
+### Task 3: Python README docs (S — ~15 min)
+
+**Goal:** Build/package/publish documentation for Python layer.
+
+**Files:**
+- Create: `foretias/README.md` (or update existing)
+
+**Contents:**
+- Install: `pip install -e ".[dev]"` or `uv pip install -e ".[dev]"`
+- Build wheel: `python -m build`
+- Publish: `twine upload dist/*`
+- Dependencies: `cryptography>=42`
+- Optional native: build Rust layer first, set `FORETIAS_USE_NATIVE=1`
+- Test: `pytest tests/ -v`
+- CLI: `foretis serve` / `foretis stamp` / `foretis verify`
+
+### Task 4: C11 Unit Tests (M — ~2-3 hours)
+
+**Goal:** Standard unit tests for all 14 C source files.
+
+**Rationale:** 0 tests exist for 476 lines of C code. The spec calls for `ctest` via CMake. Each test file should cover happy path + every error code.
+
+**Files:**
+- Create: `foretias/p2p/core/tests/test_identity_ed25519.c`
+- Create: `foretias/p2p/core/tests/test_identity_p256.c`
+- Create: `foretias/p2p/core/tests/test_signing_ed25519.c`
+- Create: `foretias/p2p/core/tests/test_signing_p256.c`
+- Create: `foretias/p2p/core/tests/test_hash_sha256.c`
+- Create: `foretias/p2p/core/tests/test_hash_blake3.c`
+- Create: `foretias/p2p/core/tests/test_hash_legacy_md5.c`
+- Create: `foretias/p2p/core/tests/test_hash_legacy_sha1.c`
+- Create: `foretias/p2p/core/tests/test_noise_xx.c`
+- Create: `foretias/p2p/core/tests/test_merkle.c`
+- Create: `foretias/p2p/core/tests/test_frost_ed25519.c`
+- Create: `foretias/p2p/core/tests/test_nullifier.c`
+- Create: `foretias/p2p/core/tests/test_rng_mix.c`
+- Create: `foretias/p2p/core/tests/test_memzero.c`
+- Modify: `foretias/p2p/core/tests/CMakeLists.txt` (add all test executables)
+
+**Test framework:** Use CMocka or Unity (lightweight, no dependencies). CMocka preferred because it integrates with CTest natively.
+
+**Per-file test coverage:**
+
+- **`test_identity_ed25519.c`**: Generate keypair, verify pub!=priv, derive peer_id, check deterministic peer_id from same pub
+- **`test_identity_p256.c`**: Same as above for P-256 (may be stubs if not yet implemented)
+- **`test_signing_ed25519.c`**: Sign known message, verify with correct pub (OK), verify with wrong pub (BAD_SIG), verify with wrong message (BAD_SIG), verify with truncated sig (BAD_SIG)
+- **`test_signing_p256.c`**: Same for P-256
+- **`test_hash_sha256.c`**: Hash known vector (e.g., "abc" → da39a3...), empty input, large input, `sha256_concat` round-trip
+- **`test_hash_blake3.c`**: Known BLAKE3 vector, empty input
+- **`test_hash_legacy_md5.c`**: Known MD5 vector for "abc"
+- **`test_hash_legacy_sha1.c`**: Known SHA-1 vector for "abc"
+- **`test_noise_xx.c`**: Full handshake round-trip: initiator creates, sends 3 steps, responder responds 3 steps, verify send/recv encrypts/decrypts correctly, destroy state
+- **`test_merkle.c`**: Leaf hash, verify valid proof, verify invalid proof (wrong root, wrong sibling, wrong depth)
+- **`test_frost_ed25519.c`**: Round1 nonce generation, sign_share with k=2 n=3, aggregate, verify aggregated signature
+- **`test_nullifier.c`**: Derive nullifier from priv+context, same inputs produce same output, different context produces different nullifier
+- **`test_rng_mix.c`**: Generate N bytes, statistical sanity (not all zeros), generate twice produces different output
+- **`test_memzero.c`**: Write known pattern, memzero, volatile read-back confirms zero
+
+**CMakeLists.txt changes:**
+```cmake
+# Find CMocka
+find_package(cmocka REQUIRED)
+include(/usr/share/cmocka/CMocka.cmake)
+
+add_executable(test_identity_ed25519 tests/test_identity_ed25519.c)
+target_link_libraries(test_identity_ed25519 foretias_core cmocka)
+add_test(NAME test_identity_ed25519 COMMAND test_identity_ed25519)
+
+# ... repeat for each test file ...
+```
+
+### Task 5: Rust Hardening Tests (M — ~1-2 hours)
+
+**Goal:** Defensive programming tests at the Rust layer.
+
+**Rationale:** 0 Rust unit tests exist. The Rust code has existing defensive patterns (error propagation, tracing, timeouts, content limits) but no tests verify them.
+
+**Files:**
+- Create: `foretias/p2p/node/src/crypto_server/mod.rs` — add `#[cfg(test)] mod tests`
+- Create: `foretias/p2p/node/src/foretias/tick.rs` — add `#[cfg(test)] mod tests`
+- Create: `foretias/p2p/node/src/foretias/calendar.rs` — add `#[cfg(test)] mod tests`
+- Create: `foretias/p2p/node/src/error.rs` — add `#[cfg(test)] mod tests`
+- Create: `foretias/p2p/node/src/core/signing.rs` — add `#[cfg(test)] mod tests`
+- Create: `foretias/p2p/node/src/core/hashing.rs` — add `#[cfg(test)] mod tests`
+
+**Test categories:**
+
+1. **CryptoServer software backend:**
+   - `test_generate_ed25519_keypair` — generates valid keypair
+   - `test_sign_verify_roundtrip` — sign message, verify with correct key
+   - `test_verify_wrong_key` — verify with wrong public key returns false
+   - `test_verify_wrong_signature` — tampered signature returns false
+   - `test_verify_wrong_message` — different message returns false
+   - `test_seal_unseal_roundtrip` — encrypt/decrypt data
+   - `test_unseal_wrong_key` — try unseal with different server returns error
+   - `test_random_bytes_not_zero` — generated bytes are not all zeros
+   - `test_random_bytes_different` — two calls produce different output
+   - `test_drop_zeroizes_privkey` — can't test directly (memory), but test `Drop` is called
+
+2. **Hash functions:**
+   - `test_sha256_known_vector` — "abc" → expected hash
+   - `test_sha256_empty` — empty input
+   - `test_blake3_known_vector` — known BLAKE3 test vector
+   - `test_md5_known_vector` — legacy MD5
+   - `test_sha1_known_vector` — legacy SHA1
+
+3. **Foretis stamp/verify:**
+   - `test_stamp_verify_roundtrip` — stamp content, verify same content
+   - `test_verify_wrong_content` — wrong content returns false
+   - `test_verify_content_hash_mismatch` — tampered hash
+   - `test_verify_signature_mismatch` — tampered signature
+
+4. **Calendar:**
+   - `test_append_ordered_ticks` — ticks must be ascending
+   - `test_append_duplicate_tick` — should fail or assert
+   - `test_integrity_check_valid_chain` — valid chain passes
+   - `test_integrity_check_tampered_chain` — tampered chain fails
+   - `test_lookup_by_tick_number` — correct tick returned
+   - `test_lookup_nonexistent_tick` — empty vec returned
+
+5. **Error handling:**
+   - `test_crypto_error_conversion` — error variants convert correctly
+   - `test_null_pointer_handling` — null/empty inputs produce correct error codes
+
+6. **PyO3 bindings (Python-facing):**
+   - Already covered by existing 16 PyO3 tests + 20 cross-language tests in `tests/python/`
+   - Add: `test_py_timefamily_stamp_wrong_content` — PyO3 verify with wrong content
+   - Add: `test_py_cryptoserver_curve_validation` — invalid curve name raises error
+
+---
+
+## Phase 2: Task 6 Feasibility Assessment
+
+**Status: BLOCKED — requires substantial Rust rewrite before Python can depend on Rust.**
+
+### The Gap Analysis
+
+The Python layer's protocol is implemented in 3 files:
+1. `_timebeing.py` (259 lines) — pure functional stamp/tick/verify/MA operations
+2. `chronomatter.py` (583 lines) — ChronomatterV1, ChronomatterV1Serial, Inquirer, daemon threads
+3. `time_family.py` (254 lines) — orchestrator, persistence, dormant loading
+
+The Rust PyO3 bindings in `python.rs` (402 lines) are **only 30% feature-complete** relative to the Python API.
+
+### What Needs to be Built in Rust
+
+| Component | Python | Rust needed | Effort |
+|---|---|---|---|
+| Per-tick key rotation | `_timebeing._tick()` | New Rust function: rotate keypair, create MA | M |
+| Mutual acknowledgement | `_genesis_ma()` + `_tick()` MA | New Rust: `tick_transition()` with forward/backward foretis | M |
+| Chronomatter daemon | `_daemon_loop()` in V1 + V1Serial | New Rust: `tokio::task::spawn` ticker | M |
+| Inquirer (standalone verify) | `Inquirer` class with chain verify | New Rust: `Inquirer` struct + `verify()` | M |
+| Calendar chain integrity | `_verify_pair()`, `_verify_chain()` | Extend `calendar.rs` `integrity_check()` | S |
+| Save/load persistence | `Calendar.save()` / `Calendar.load()` | New Rust: JSON serialization to/from file | S |
+| Config | `Config` class | New Rust: match Python Config | S |
+| Dormant instance loading | `ChronomatterV1Serial.from_calendar()` | New Rust: load without private key | M |
+| Shutdown | `shutdown()` with thread join | New Rust: graceful shutdown | S |
+| PyO3 bindings for all above | N/A | Rewrite `python.rs` to expose full API | L |
+| Python test migration | 131 tests pass | Rewrite 131 tests for Rust API | XL |
+
+**Total Task 6 effort: XL (40-80 hours)**
+
+### Recommended Approach: Incremental, Not Big Bang
+
+Do NOT attempt Task 6 as a single task. Instead:
+
+**Phase 2A: Rust Protocol Foundation** (separate plan, ~20 hours)
+1. Implement `_timebeing._tick()` equivalent in Rust (`foretias/tick.rs` — tick rotation with MA)
+2. Implement `_verify_pair()` / `_verify_chain()` in Rust (`foretias/calendar.rs`)
+3. Add Rust unit tests for protocol operations
+4. Wire into PyO3: expose `PyTimeFamily.tick()` that actually rotates keys
+
+**Phase 2B: Rust Daemon & Lifecycle** (separate plan, ~15 hours)
+1. Implement Rust daemon: `tokio::task::spawn` with cron-like ticker
+2. Implement shutdown: `tokio::sync::watch` channel
+3. Implement save/load: JSON serialization of Calendar
+4. Wire into PyO3
+
+**Phase 2C: Inquirer & Python Migration** (separate plan, ~15 hours)
+1. Implement Rust `Inquirer` with chain integrity verification
+2. Expose through PyO3
+3. Modify Python to use Rust via `FORETIAS_USE_NATIVE=1`
+4. Migrate 131 Python tests to use Rust (or keep dual-mode)
+
+---
+
+## Recommended Execution Order
+
+### Wave 1 (Parallel — dispatch all 5 agents simultaneously)
+
+| Agent | Task | Effort | Output |
+|---|---|---|---|
+| A1 | Task 1: Makefiles | S (20 min) | `Makefile` |
+| A2 | Task 2: Rust README | S (15 min) | `p2p/node/README.md` |
+| A3 | Task 3: Python README | S (15 min) | `README.md` |
+| A4 | Task 4: C11 unit tests | M (2-3 hrs) | 14 test files + CMakeLists update |
+| A5 | Task 5: Rust hardening | M (1-2 hrs) | 6 inline test modules |
+
+**Wave 1 parallel wall time: ~2 hours** (bounded by Tasks 4 + 5)
+
+### Wave 2 (Sequential — after Wave 1, if Task 6 is desired)
+
+| Agent | Task | Effort | Output |
+|---|---|---|---|
+| B1 | Phase 2A: Rust protocol foundation | M (6-8 hrs) | Rust tick rotation + MA + tests |
+| B2 | Phase 2B: Rust daemon & lifecycle | M (5-8 hrs) | Rust daemon + persistence + tests |
+| B3 | Phase 2C: Inquirer + Python migration | L (8-12 hrs) | Rust Inquirer + PyO3 + test migration |
+
+**Wave 2 sequential wall time: ~20-28 hours**
+
+---
+
+## Risk Assessment
+
+| Risk | Severity | Mitigation |
+|---|---|---|
+| Task 4: C tests discover bugs in stub implementations (P-256, FROST) | Medium | Tests will expose these; fix stubs first, then test |
+| Task 4: `foretias_core_version()` is declared but not implemented — linker error | High | Implement before running any C tests |
+| Task 5: Rust tests may expose that `build.rs` doesn't link all needed C files | Low | `build.rs` already lists all 14 source files |
+| Task 6: Attempting full migration in one shot will break Python tests | Critical | Use incremental phased approach with dual-mode |
+| Task 6: 131 Python tests will fail if we cut Python crypto before Rust is ready | Critical | Keep `FORETIAS_USE_NATIVE` as opt-in; default stays pure Python |
+
+---
+
+## Immediate Action Items
+
+1. **Fix `foretias_core_version()`** before any C tests run — this is a linker time-bomb. Add implementation in a new `src/version.c` or inline it in `src/rng_mix.c`.
+
+2. **Wave 1 is ready to dispatch** — no blockers. All 5 tasks are independent.
+
+3. **Task 6 should be deferred** until Wave 1 completes and the team decides to invest 20-28 hours in the Rust protocol rewrite. The current PyO3 bindings are a proof-of-concept, not production-ready for full Python migration.
+
+---
+
+## Self-Review
+
+**Spec coverage check:**
+- Makefiles: covered (Task 1)
+- Rust README: covered (Task 2)
+- Python README: covered (Task 3)
+- C11 unit tests: covered (Task 4, with per-file coverage)
+- Rust hardening tests: covered (Task 5, with categories)
+- Python→Rust migration: covered (Phase 2, with gap analysis and phased approach)
+
+**Placeholder scan:** No "TBD", "TODO", or vague language found. All file paths, test names, and effort estimates are concrete.
+
+**Type consistency:** All C function names match `foretias_core.h`. All Rust struct names match existing codebase. All Python class names match existing `chronomatter.py`.
+
+
+=== /home/hcbusy/webhash/foretias/docs/superpowers/plans/2026-05-04-fortias-foretias-rename.md ===
+# Fortias → Foretias Rename Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Rename "fortias" → "foretias" and "fortis" → "foretis" (case-preserving) across two repos in `/home/hcbusy/webhash/`.
+
+**Architecture:** Two independent scopes (wdocs prose, code repo) processed in parallel-safe phases. Text replacements before file renames. Build directories and `.venv` excluded (regenerate on next build).
+
+**Tech Stack:** `sed` for text replacements, `git mv` for file renames, `grep` for verification.
+
+---
+
+## Replacement Rules
+
+All replacements are **case-preserving direct string** matches (no word boundaries):
+- `Fortias` → `Foretias` (PascalCase prefix, e.g., `FortiasBehaviour` → `ForetiasBehaviour`)
+- `fortias` → `foretias` (lowercase prefix, e.g., `fortias_p2p` → `foretias_p2p`, `fortias_core` → `foretias_core`)
+- `FORTIAS` → `FORETIAS` (uppercase prefix, e.g., `FORTIAS_ERR_BAD_INPUT` → `FORETIAS_ERR_BAD_INPUT`)
+- `Fortis` → `Foretis` (PascalCase prefix)
+- `fortis` → `foretis` (lowercase prefix, e.g., `fortis_json` → `foretis_json`)
+- `FORTIS` → `FORETIS` (uppercase prefix)
+
+**Why no word boundaries (`\b`)?** The `_` underscore is a word character in regex, so `\bfortias\b` would NOT match `fortias_p2p`, `fortias_core`, `FORTIAS_ERR_BAD_INPUT`, etc. Since `fortias`/`fortis` only appear as project identifiers (not as English words), direct substring replacement is safe with zero false-positive risk. The replacement `s/fortias/foretias/g` catches `fortias`, `fortias_p2p`, `FortiasBehaviour` (via PascalCase rule), `fortias_core`, `FORTIAS_ERR_*`, and `fortias_core.h`.
+
+---
+
+## Exclusions (do NOT touch)
+
+| Path | Reason |
+|------|--------|
+| `foretias/p2p/target/` | Build artifacts — regenerate |
+| `foretias/p2p/core/build/` | CMake build tree — regenerate |
+| `foretias/.pytest_cache/` | Test cache — regenerate |
+| `foretias/src/fortias/__pycache__/` | Bytecode cache — regenerate |
+| `foretias/tests/__pycache__/` | Bytecode cache — regenerate |
+| `foretias/.git/` | Git history is historical truth |
+| `CAeHius/webhash/.venv/` | Virtual env — regenerate |
+| `foretias/.opencode/plans/` | Agent plans — optional, low priority |
+| `CAeHius/webhash/.opencode/` | Agent config — optional |
+
+---
+
+## Task 1: Verify current state and create backup branches
+
+**Files:** Both repos
+
+- [ ] **Step 1: Verify both repos are clean**
+
+```bash
+cd /home/hcbusy/webhash/CAeHius/webhash && git status
+cd /home/hcbusy/webhash/foretias && git status
+```
+
+Expected: Clean working trees or known uncommitted changes (document them).
+
+- [ ] **Step 2: Create backup branches**
+
+```bash
+cd /home/hcbusy/webhash/CAeHius/webhash && git checkout -b pre-rename-backup
+cd /home/hcbusy/webhash/foretias && git checkout -b pre-rename-backup
+```
+
+- [ ] **Step 3: Count baseline occurrences**
+
+```bash
+# Scope 1: wdocs
+grep -r -c -i 'fortias\|fortis' /home/hcbusy/webhash/CAeHius/webhash/ --include='*.md' --include='*.py' 2>/dev/null | grep -v ':0$' | wc -l
+
+# Scope 2: foretias code (excluding build artifacts)
+cd /home/hcbusy/webhash/foretias && grep -r -c -i 'fortias\|fortis' --include='*.rs' --include='*.c' --include='*.h' --include='*.py' --include='*.toml' --include='*.md' --include='*.txt' --include='*.cmake' --include='CMakeLists.txt' . 2>/dev/null | grep -v ':0$' | grep -v 'target/' | grep -v 'build/' | grep -v '.pytest_cache/' | grep -v '__pycache__/' | wc -l
+```
+
+Expected: ~37 files in wdocs, ~95 files in foretias code.
+
+- [ ] **Step 4: Commit backup**
+
+```bash
+cd /home/hcbusy/webhash/CAeHius/webhash && git checkout -
+cd /home/hcbusy/webhash/foretias && git checkout -
+```
+
+---
+
+## Task 2: Text replacements in wdocs (CAeHius/webhash/)
+
+**Files:** 37 files across `specs/`, `design/`, `docs/`, and root context files.
+
+- [ ] **Step 1: In-place text replacements in prose files**
+
+```bash
+cd /home/hcbusy/webhash/CAeHius/webhash
+
+# Process .md and .py files (spec/docs/design files)
+# Using \b word boundaries to avoid partial matches
+find specs/ design/ docs/ -type f \( -name '*.md' -o -name '*.py' \) ! -path '*/old/*' -exec sed -i \
+  -e 's/Fortias/Foretias/g' \
+  -e 's/fortias/foretias/g' \
+  -e 's/FORTIAS/FORETIAS/g' \
+  -e 's/Fortis/Foretis/g' \
+  -e 's/fortis/foretis/g' \
+  -e 's/FORTIS/FORETIS/g' \
+  {} +
+```
+
+- [ ] **Step 2: In-place text replacements in root context files**
+
+```bash
+cd /home/hcbusy/webhash/CAeHius/webhash
+sed -i \
+  -e 's/Fortias/Foretias/g' \
+  -e 's/fortias/foretias/g' \
+  -e 's/FORTIAS/FORETIAS/g' \
+  -e 's/Fortis/Foretis/g' \
+  -e 's/fortis/foretis/g' \
+  -e 's/FORTIS/FORETIS/g' \
+  README.md AGENTS.md VERSION
+```
+
+- [ ] **Step 3: Verify zero remaining matches**
+
+```bash
+grep -r -i 'fortias\|fortis' /home/hcbusy/webhash/CAeHius/webhash/ --include='*.md' --include='*.py' --include='*.txt' 2>/dev/null | grep -v '.venv/' | grep -v ':0$'
+```
+
+Expected: No output (or only `.venv/` lines which we exclude).
+
+- [ ] **Step 4: Commit**
+
+```bash
+cd /home/hcbusy/webhash/CAeHius/webhash
+git add -A
+git commit -m "rename: fortias→foretias, fortis→foretis in all prose/spec files"
+```
+
+---
+
+## Task 3: File renames in wdocs (before text changes above, or after — order doesn't matter for file names since they don't affect content search)
+
+**Files:** Spec files with `FORTIAS_` prefix, `OLD_PYMVP_Fortias_v1.md`
+
+- [ ] **Step 1: Rename spec files**
+
+```bash
+cd /home/hcbusy/webhash/CAeHius/webhash/specs/
+git mv FORTIAS_0_OVERVIEW.md FORETIAS_0_OVERVIEW.md
+git mv FORTIAS_1_MVP_SPEC.md FORETIAS_1_MVP_SPEC.md
+git mv FORTIAS_2_IMPLEMENTATION_PLAN.md FORETIAS_2_IMPLEMENTATION_PLAN.md
+git mv FORTIAS_2_P2P_SPEC.md FORETIAS_2_P2P_SPEC.md
+git mv FORTIAS_2_P2P_2_direct_p2p_mutual_attestation.md FORETIAS_2_P2P_2_direct_p2p_mutual_attestation.md
+git mv FORTIAS_2_P2P_3_libp2p_handshake.md FORETIAS_2_P2P_3_libp2p_handshake.md
+git mv FORTIAS_2_P2P_4_dht_discovery.md FORETIAS_2_P2P_4_dht_discovery.md
+git mv FORTIAS_2_P2P_5_hardening.md FORETIAS_2_P2P_5_hardening.md
+git mv FORTIAS_2_P2P_6_probity_gossip.md FORETIAS_2_P2P_6_probity_gossip.md
+git mv FORTIAS_2_P2P_7_collision_detection.md FORETIAS_2_P2P_7_collision_detection.md
+git mv FORTIAS_2_P2P_8_epoch_consensus.md FORETIAS_2_P2P_8_epoch_consensus.md
+git mv FORTIAS_9_ENCLAVE_SPEC.md FORETIAS_9_ENCLAVE_SPEC.md
+git mv OLD_PYMVP_Fortias_v1.md OLD_PYMVP_Foretis_v1.md
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+cd /home/hcbusy/webhash/CAeHius/webhash
+git add -A
+git commit -m "rename: FORTIAS_*.md → FORETIAS_*.md, Fortias→Foretis spec file names"
+```
+
+---
+
+## Task 4: Text replacements in foretias/ — C source files
+
+**Files:** `p2p/core/include/fortias_core.h` (126 occurrences), 17 `.c` files, 14 `.c` test files
+
+- [ ] **Step 1: Replace in C header**
+
+```bash
+cd /home/hcbusy/webhash/foretias
+sed -i \
+  -e 's/Fortias/Foretias/g' \
+  -e 's/fortias/foretias/g' \
+  -e 's/FORTIAS/FORETIAS/g' \
+  p2p/core/include/fortias_core.h
+```
+
+- [ ] **Step 2: Replace in all C source files**
+
+```bash
+cd /home/hcbusy/webhash/foretias
+find p2p/core/src/ -name '*.c' -exec sed -i \
+  -e 's/Fortias/Foretias/g' \
+  -e 's/fortias/foretias/g' \
+  -e 's/FORTIAS/FORETIAS/g' \
+  {} +
+```
+
+- [ ] **Step 3: Replace in all C test files**
+
+```bash
+cd /home/hcbusy/webhash/foretias
+find p2p/core/tests/ -type f \( -name '*.c' -o -name '*.h' \) -exec sed -i \
+  -e 's/Fortias/Foretias/g' \
+  -e 's/fortias/foretias/g' \
+  -e 's/FORTIAS/FORETIAS/g' \
+  {} +
+```
+
+- [ ] **Step 4: Replace in CMakeLists.txt files**
+
+```bash
+cd /home/hcbusy/webhash/foretias
+sed -i \
+  -e 's/fortias/foretias/g' \
+  -e 's/FORTIAS/FORETIAS/g' \
+  p2p/core/CMakeLists.txt \
+  p2p/core/tests/CMakeLists.txt
+```
+
+- [ ] **Step 5: Verify zero remaining matches in C files**
+
+```bash
+grep -r -i 'fortias' /home/hcbusy/webhash/foretias/p2p/core/ --include='*.c' --include='*.h' --include='*.txt' --include='CMakeLists.txt' 2>/dev/null | grep -v 'build/'
+```
+
+Expected: No output.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /home/hcbusy/webhash/foretias
+git add -A
+git commit -m "rename: fortias→foretias in C sources, headers, tests, CMakeLists"
+```
+
+---
+
+## Task 5: Text replacements in foretias/ — Rust source files
+
+**Files:** 33 `.rs` files across `core-engine/`, `foretias-node/`, `foretias-python/`
+
+- [ ] **Step 1: Replace in all Rust source files**
+
+```bash
+cd /home/hcbusy/webhash/foretias
+find p2p/ -name '*.rs' -not -path '*/target/*' -exec sed -i \
+  -e 's/Fortias/Foretias/g' \
+  -e 's/fortias/foretias/g' \
+  -e 's/FORTIAS/FORETIAS/g' \
+  -e 's/Fortis/Foretis/g' \
+  -e 's/fortis/foretis/g' \
+  -e 's/FORTIS/FORETIS/g' \
+  {} +
+```
+
+- [ ] **Step 2: Verify**
+
+```bash
+grep -r -i 'fortias\|fortis' /home/hcbusy/webhash/foretias/p2p/ --include='*.rs' 2>/dev/null | grep -v 'target/'
+```
+
+Expected: No output.
+
+- [ ] **Step 3: Commit**
+
+```bash
+cd /home/hcbusy/webhash/foretias
+git add -A
+git commit -m "rename: fortias→foretias, fortis→foretis in Rust source files"
+```
+
+---
+
+## Task 6: Text replacements in foretias/ — Rust build config files
+
+**Files:** `Cargo.toml`, `build.rs`, `pyproject.toml`, `README.md`
+
+- [ ] **Step 1: Replace in Cargo.toml files**
+
+```bash
+cd /home/hcbusy/webhash/foretias
+sed -i \
+  -e 's/fortias/foretias/g' \
+  -e 's/Fortias/Foretias/g' \
+  p2p/Cargo.toml \
+  p2p/core-engine/Cargo.toml \
+  p2p/foretias-node/Cargo.toml \
+  p2p/foretias-python/Cargo.toml
+```
+
+- [ ] **Step 2: Replace in build.rs**
+
+```bash
+cd /home/hcbusy/webhash/foretias
+sed -i \
+  -e 's/Fortias/Foretias/g' \
+  -e 's/fortias/foretias/g' \
+  -e 's/FORTIAS/FORETIAS/g' \
+  -e 's/Fortis/Foretis/g' \
+  -e 's/fortis/foretis/g' \
+  -e 's/FORTIS/FORETIS/g' \
+  p2p/core-engine/build.rs
+```
+
+- [ ] **Step 3: Replace in Python project files**
+
+```bash
+cd /home/hcbusy/webhash/foretias
+sed -i \
+  -e 's/fortias/foretias/g' \
+  -e 's/Fortias/Foretias/g' \
+  -e 's/Fortis/Foretis/g' \
+  -e 's/fortis/foretis/g' \
+  pyproject.toml \
+  p2p/foretias-python/pyproject.toml \
+  p2p/foretias-python/README.md
+```
+
+- [ ] **Step 4: Replace in root README.md**
+
+```bash
+cd /home/hcbusy/webhash/foretias
+sed -i \
+  -e 's/Fortias/Foretias/g' \
+  -e 's/fortias/foretias/g' \
+  -e 's/FORTIAS/FORETIAS/g' \
+  -e 's/Fortis/Foretis/g' \
+  -e 's/fortis/foretis/g' \
+  -e 's/FORTIS/FORETIS/g' \
+  README.md
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+cd /home/hcbusy/webhash/foretias
+git add -A
+git commit -m "rename: fortias→foretias in Cargo.toml, build.rs, pyproject.toml, README"
+```
+
+---
+
+## Task 7: Text replacements in foretias/ — Python source files
+
+**Files:** 12 files in `src/fortias/`, 11 test files, 2 integration test files
+
+- [ ] **Step 1: Replace in Python source files**
+
+```bash
+cd /home/hcbusy/webhash/foretias
+find src/ -name '*.py' -exec sed -i \
+  -e 's/Fortias/Foretias/g' \
+  -e 's/fortias/foretias/g' \
+  -e 's/FORTIAS/FORETIAS/g' \
+  -e 's/Fortis/Foretis/g' \
+  -e 's/fortis/foretis/g' \
+  -e 's/FORTIS/FORETIS/g' \
+  {} +
+```
+
+- [ ] **Step 2: Replace in test files**
+
+```bash
+cd /home/hcbusy/webhash/foretias
+find tests/ -name '*.py' -exec sed -i \
+  -e 's/Fortias/Foretias/g' \
+  -e 's/fortias/foretias/g' \
+  -e 's/FORTIAS/FORETIAS/g' \
+  -e 's/Fortis/Foretis/g' \
+  -e 's/fortis/foretis/g' \
+  -e 's/FORTIS/FORETIS/g' \
+  {} +
+```
+
+- [ ] **Step 3: Replace in integration tests**
+
+```bash
+cd /home/hcbusy/webhash/foretias
+find integration-tests/ -name '*.py' -exec sed -i \
+  -e 's/Fortias/Foretias/g' \
+  -e 's/fortias/foretias/g' \
+  -e 's/FORTIAS/FORETIAS/g' \
+  -e 's/Fortis/Foretis/g' \
+  -e 's/fortis/foretis/g' \
+  -e 's/FORTIS/FORETIS/g' \
+  {} +
+```
+
+- [ ] **Step 4: Replace in foretias-python Python test files**
+
+```bash
+cd /home/hcbusy/webhash/foretias
+find p2p/foretias-python/tests/python/ -name '*.py' -exec sed -i \
+  -e 's/Fortias/Foretias/g' \
+  -e 's/fortias/foretias/g' \
+  -e 's/FORTIAS/FORETIAS/g' \
+  -e 's/Fortis/Foretis/g' \
+  -e 's/fortis/foretis/g' \
+  -e 's/FORTIS/FORETIS/g' \
+  {} +
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+cd /home/hcbusy/webhash/foretias
+git add -A
+git commit -m "rename: fortias→foretias, fortis→foretis in Python source and test files"
+```
+
+---
+
+## Task 8: Text replacements in foretias/ — spec and doc files
+
+**Files:** 14 spec files, 2 doc files, 1 GitHub workflow doc
+
+- [ ] **Step 1: Replace in spec files**
+
+```bash
+cd /home/hcbusy/webhash/foretias
+find specs/ -name '*.md' -exec sed -i \
+  -e 's/Fortias/Foretias/g' \
+  -e 's/fortias/foretias/g' \
+  -e 's/FORTIAS/FORETIAS/g' \
+  -e 's/Fortis/Foretis/g' \
+  -e 's/fortis/foretis/g' \
+  -e 's/FORTIS/FORETIS/g' \
+  {} +
+```
+
+- [ ] **Step 2: Replace in doc files**
+
+```bash
+cd /home/hcbusy/webhash/foretias
+sed -i \
+  -e 's/Fortias/Foretias/g' \
+  -e 's/fortias/foretias/g' \
+  -e 's/FORTIAS/FORETIAS/g' \
+  -e 's/Fortis/Foretis/g' \
+  -e 's/fortis/foretis/g' \
+  -e 's/FORTIS/FORETIS/g' \
+  docs/threat_model_v0_5.md \
+  docs/superpowers/plans/2026-04-27-infrastructure-prioritization.md \
+  .github/workflows/publish-setup.md
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+cd /home/hcbusy/webhash/foretias
+git add -A
+git commit -m "rename: fortias→foretias in specs and docs"
+```
+
+---
+
+## Task 9: File and directory renames in foretias/
+
+**Important:** Do text replacements FIRST (Tasks 4-8), then rename. The `src/fortias/` directory still exists as a path to reference during text replacement.
+
+**Directory renames:**
+| Old | New |
+|-----|-----|
+| `src/fortias/` | `src/foretias/` |
+| `p2p/core/include/fortias_core.h` | `p2p/core/include/foretias_core.h` |
+
+**File renames in specs/:**
+| Old | New |
+|-----|-----|
+| `specs/fortias-v1.md` | `specs/foretias-v1.md` |
+| `specs/FORTIAS_0_OVERVIEW.md` | `specs/FORETIAS_0_OVERVIEW.md` |
+| `specs/FORTIAS_1_MVP_SPEC.md` | `specs/FORETIAS_1_MVP_SPEC.md` |
+| `specs/FORTIAS_2_IMPLEMENTATION_PLAN.md` | `specs/FORETIAS_2_IMPLEMENTATION_PLAN.md` |
+| `specs/FORTIAS_2_P2P_2_direct_p2p_mutual_attestation.md` | `specs/FORETIAS_2_P2P_2_direct_p2p_mutual_attestation.md` |
+| `specs/FORTIAS_2_P2P_3_IMPLEMENTATION_PLAN.md` | `specs/FORETIAS_2_P2P_3_IMPLEMENTATION_PLAN.md` |
+| `specs/FORTIAS_2_P2P_3_libp2p_handshake.md` | `specs/FORETIAS_2_P2P_3_libp2p_handshake.md` |
+| `specs/FORTIAS_2_P2P_4_dht_discovery.md` | `specs/FORETIAS_2_P2P_4_dht_discovery.md` |
+| `specs/FORTIAS_2_P2P_5_hardening.md` | `specs/FORETIAS_2_P2P_5_hardening.md` |
+| `specs/FORTIAS_2_P2P_6_probity_gossip.md` | `specs/FORETIAS_2_P2P_6_probity_gossip.md` |
+| `specs/FORTIAS_2_P2P_7_collision_detection.md` | `specs/FORETIAS_2_P2P_7_collision_detection.md` |
+| `specs/FORTIAS_2_P2P_8_epoch_consensus.md` | `specs/FORETIAS_2_P2P_8_epoch_consensus.md` |
+| `specs/FORTIAS_2_P2P_SPEC.md` | `specs/FORETIAS_2_P2P_SPEC.md` |
+
+- [ ] **Step 1: Rename C header file**
+
+```bash
+cd /home/hcbusy/webhash/foretias
+git mv p2p/core/include/fortias_core.h p2p/core/include/foretias_core.h
+```
+
+- [ ] **Step 2: Update CMakeLists.txt file references**
+
+The CMakeLists.txt still references the old header name internally. After rename, update any `fortias_core.h` → `foretias_core.h` in `include()` directives and link references:
+
+```bash
+grep -r 'fortias_core' /home/hcbusy/webhash/foretias/p2p/core/ --include='*.txt' --include='*.cmake' --include='*.c' --include='*.h' --include='*.rs' 2>/dev/null | grep -v 'build/'
+```
+
+If any references remain (e.g., `#include "fortias_core.h"`), they should have been caught by Task 4's sed. Verify:
+
+```bash
+grep -r 'fortias_core\.h' /home/hcbusy/webhash/foretias/ --include='*.c' --include='*.h' --include='*.rs' 2>/dev/null | grep -v 'target/' | grep -v 'build/'
+```
+
+Expected: No output. If output exists, fix remaining `#include` directives:
+
+```bash
+sed -i 's/fortias_core\.h/foretias_core.h/g' /home/hcbusy/webhash/foretias/p2p/core-engine/build.rs
+```
+
+- [ ] **Step 3: Update build.rs header path reference**
+
+```bash
+grep 'fortias_core\|foretias_core' /home/hcbusy/webhash/foretias/p2p/core-engine/build.rs
+```
+
+Verify `foretias_core.h` appears (not `fortias_core.h`). If not, the sed in Task 4 already handled it.
+
+- [ ] **Step 4: Rename Python package directory**
+
+```bash
+cd /home/hcbusy/webhash/foretias
+git mv src/fortias src/foretias
+```
+
+- [ ] **Step 5: Rename spec files**
+
+```bash
+cd /home/hcbusy/webhash/foretias/specs/
+git mv fortias-v1.md foretias-v1.md
+git mv FORTIAS_0_OVERVIEW.md FORETIAS_0_OVERVIEW.md
+git mv FORTIAS_1_MVP_SPEC.md FORETIAS_1_MVP_SPEC.md
+git mv FORTIAS_2_IMPLEMENTATION_PLAN.md FORETIAS_2_IMPLEMENTATION_PLAN.md
+git mv FORTIAS_2_P2P_2_direct_p2p_mutual_attestation.md FORETIAS_2_P2P_2_direct_p2p_mutual_attestation.md
+git mv FORTIAS_2_P2P_3_IMPLEMENTATION_PLAN.md FORETIAS_2_P2P_3_IMPLEMENTATION_PLAN.md
+git mv FORTIAS_2_P2P_3_libp2p_handshake.md FORETIAS_2_P2P_3_libp2p_handshake.md
+git mv FORTIAS_2_P2P_4_dht_discovery.md FORETIAS_2_P2P_4_dht_discovery.md
+git mv FORTIAS_2_P2P_5_hardening.md FORETIAS_2_P2P_5_hardening.md
+git mv FORTIAS_2_P2P_6_probity_gossip.md FORETIAS_2_P2P_6_probity_gossip.md
+git mv FORTIAS_2_P2P_7_collision_detection.md FORETIAS_2_P2P_7_collision_detection.md
+git mv FORTIAS_2_P2P_8_epoch_consensus.md FORETIAS_2_P2P_8_epoch_consensus.md
+git mv FORTIAS_2_P2P_SPEC.md FORETIAS_2_P2P_SPEC.md
+```
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /home/hcbusy/webhash/foretias
+git add -A
+git commit -m "rename: file/directory renames fortias→foretias (C header, Python pkg, spec files)"
+```
+
+---
+
+## Task 10: Verify build integrity
+
+- [ ] **Step 1: Clean build artifacts**
+
+```bash
+cd /home/hcbusy/webhash/foretias
+# Clean CMake build
+rm -rf p2p/core/build/
+# Clean Rust target
+rm -rf p2p/target/
+# Clean Python caches
+rm -rf src/foretias/__pycache__/
+rm -rf tests/__pycache__/
+rm -rf .pytest_cache/
+```
+
+- [ ] **Step 2: Build C library**
+
+```bash
+cd /home/hcbusy/webhash/foretias/p2p/core
+mkdir -p build && cd build
+cmake ..
+make
+```
+
+Expected: No errors. If errors about missing `fortias_core.h` — the header rename failed.
+
+- [ ] **Step 3: Build Rust crates**
+
+```bash
+cd /home/hcbusy/webhash/foretias/p2p
+cargo check --workspace
+```
+
+Expected: No errors. Bindgen will regenerate bindings from the renamed header.
+
+- [ ] **Step 4: Run C tests**
+
+```bash
+cd /home/hcbusy/webhash/foretias/p2p/core/build
+ctest --output-on-failure
+```
+
+Expected: All tests pass.
+
+- [ ] **Step 5: Run Python tests**
+
+```bash
+cd /home/hcbusy/webhash/foretias
+python -m pytest tests/ -v
+```
+
+Expected: All tests pass. If `import fortias` errors, check `pyproject.toml` entry points.
+
+- [ ] **Step 6: Commit build verification**
+
+```bash
+cd /home/hcbusy/webhash/foretias
+git commit --allow-empty -m "verify: build and tests pass after fortias→foretias rename"
+```
+
+---
+
+## Task 11: Final global verification
+
+- [ ] **Step 1: Sweep both repos for remaining occurrences**
+
+```bash
+# wdocs (excluding .venv)
+grep -r -i 'fortias\|fortis' /home/hcbusy/webhash/CAeHius/webhash/ \
+  --include='*.md' --include='*.py' --include='*.txt' \
+  2>/dev/null | grep -v '.venv/' | grep -v '.opencode/'
+
+# foretias (excluding build artifacts)
+cd /home/hcbusy/webhash/foretias
+grep -r -i 'fortias\|fortis' . \
+  --include='*.rs' --include='*.c' --include='*.h' --include='*.py' \
+  --include='*.toml' --include='*.md' --include='*.txt' \
+  --include='*.cmake' --include='CMakeLists.txt' \
+  2>/dev/null | grep -v 'target/' | grep -v 'build/' | grep -v '.pytest_cache/' | grep -v '__pycache__/' | grep -v '.git/'
+```
+
+Expected: No output from either command (or only `.opencode/` files which are optional).
+
+- [ ] **Step 2: Verify no broken file references**
+
+```bash
+# Check that all spec file references in docs point to renamed files
+grep -r 'FORTIAS_' /home/hcbusy/webhash/foretias/ --include='*.md' 2>/dev/null | grep -v 'FORETIAS_' | grep -v '.git/'
+grep -r 'fortias-v1' /home/hcbusy/webhash/foretias/ --include='*.md' --include='*.toml' 2>/dev/null | grep -v 'foretias-v1' | grep -v '.git/'
+```
+
+Expected: No output.
+
+- [ ] **Step 3: Final commit**
+
+```bash
+cd /home/hcbusy/webhash/foretias
+git status
+cd /home/hcbusy/webhash/CAeHius/webhash
+git status
+```
+
+---
+
+## Risk Considerations
+
+1. **Word boundary edge case:** `\b` in sed works for standard word chars (`[a-zA-Z0-9_]`). `Fortias` in `FortiasNode` would match the `Fortias` part. Check for compound identifiers:
+   ```bash
+   grep -r 'Fortias[A-Z]\|fortias[a-z]\|FORTIAS[A-Z]' /home/hcbusy/webhash/foretias/ --include='*.rs' --include='*.c' --include='*.h' --include='*.py' 2>/dev/null | grep -v 'target/'
+   ```
+   If compound identifiers exist (e.g., `FortiasNode`), they should become `ForetiasNode` — use `s/Fortias/Foretias/g` (no boundary) for compound words. Direct replacement already handles all cases.
+
+2. **Bindgen regeneration:** `p2p/core-engine/build.rs` uses bindgen to generate Rust bindings from the C header. After rename, the bindgen output file (`core_bindings.rs`) is regenerated. The `build.rs` file must reference `foretias_core.h` not `fortias_core.h`.
+
+3. **Python entry points:** `pyproject.toml` may have `fortias = "fortias.cli:main"` style entry points. Both the package name and the module path need updating.
+
+4. **CMake target names:** CMakeLists.txt may define targets like `fortias_core`. These internal identifiers should also rename.
+
+5. **Cargo package names:** `Cargo.toml` `[package] name = "fortias-core"` should become `"foretias-core"`. Check all workspace members.
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core/CMakeLists.txt ===
+cmake_minimum_required(VERSION 3.16)
+project(foretias_core C)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_EXTENSIONS OFF)
+
+# ── Compiler flags ──────────────────────────────────────────────────────
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wpedantic -Werror")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-strict-aliasing")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fstack-protector")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=hidden")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O2")
+
+# ── Find libsodium ──────────────────────────────────────────────────────
+find_library(SODIUM_LIBRARY NAMES sodium REQUIRED)
+find_path(SODIUM_INCLUDE_DIR sodium.h REQUIRED)
+
+# ── Find OpenSSL (for legacy MD5/SHA-1) ─────────────────────────────────
+find_package(OpenSSL REQUIRED COMPONENTS Crypto)
+
+# ── Source files ────────────────────────────────────────────────────────
+set(FORETIAS_CORE_SOURCES
+    src/version.c
+    src/memzero.c
+    src/rng_mix.c
+    src/identity_ed25519.c
+    src/identity_p256.c
+    src/signing_ed25519.c
+    src/signing_p256.c
+    src/hash_sha256.c
+    src/hash_blake3.c
+    src/hash_legacy_insecure_md5.c
+    src/hash_legacy_insecure_sha1.c
+    src/noise_xx.c
+    src/merkle.c
+    src/frost_ed25519.c
+    src/nullifier.c
+    src/privkey.c
+)
+
+# ── Static library ──────────────────────────────────────────────────────
+add_library(foretias_core STATIC ${FORETIAS_CORE_SOURCES})
+
+target_include_directories(foretias_core
+    PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/include
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+target_include_directories(foretias_core SYSTEM PRIVATE ${SODIUM_INCLUDE_DIR})
+target_include_directories(foretias_core SYSTEM PRIVATE ${OPENSSL_INCLUDE_DIR})
+target_link_libraries(foretias_core PUBLIC ${SODIUM_LIBRARY} OpenSSL::Crypto)
+
+# ── Install ──────────────────────────────────────────────────────────────
+install(TARGETS foretias_core
+    ARCHIVE DESTINATION lib
+    LIBRARY DESTINATION lib
+)
+install(DIRECTORY include/ DESTINATION include)
+
+# ── Tests ───────────────────────────────────────────────────────────────
+enable_testing()
+add_subdirectory(tests)
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core/tests/CMakeLists.txt ===
+# ── Foretias Core Tests ──────────────────────────────────────────────────
+
+# Test sources (all compiled into one executable)
+set(TEST_SOURCES
+    test_all.c
+    test_memzero.c
+    test_rng.c
+    test_version.c
+    test_ed25519.c
+    test_sha256.c
+    test_merkle.c
+    test_nullifier.c
+    test_p256_stub.c
+    test_blake3_stub.c
+    test_noise.c
+    test_frost_stub.c
+    test_legacy_hash.c
+    test_privkey.c
+)
+
+# Build test executable
+add_executable(test_all ${TEST_SOURCES})
+target_link_libraries(test_all PRIVATE foretias_core)
+target_include_directories(test_all PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# Register with CTest
+add_test(NAME foretias_core_tests COMMAND test_all)

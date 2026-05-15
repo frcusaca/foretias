@@ -78,7 +78,7 @@ fn default_chronon_ns() -> u64 { 60_000_000_000 }
 fn default_auto_attest_every_n() -> u64 { 1 }
 fn default_request_timeout_secs() -> u64 { 5 }
 fn default_dht_namespace() -> String { "mainnet".to_string() }
-fn default_signature_algorithm() -> SignatureAlgorithm { SignatureAlgorithm::SPHINCS_SHA2_128S }
+fn default_signature_algorithm() -> SignatureAlgorithm { SignatureAlgorithm::Ed25519 }
 fn default_kem_algorithm() -> KemAlgorithm { KemAlgorithm::NoiseXX }
 fn default_p2p_port_range() -> [u16; 2] { [9900, 9999] }
 fn default_max_discovered_peers() -> usize { 13 }

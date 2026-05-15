@@ -1,0 +1,678 @@
+{
+  "nodes": [
+    {
+      "id": "liboqs_src_cmake",
+      "label": "liboqs src CMakeLists",
+      "description": "Top-level CMake build for liboqs src: aggregates KEM, SIG, and stateful signature object libraries into oqs and oqs-internal targets",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_oqs_library",
+      "label": "oqs library target",
+      "description": "Main liboqs library combining KEM, signature, stateful signature, and common crypto object files. Versioned with SOVERSION 7",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_oqs_internal_library",
+      "label": "oqs-internal library target",
+      "description": "Internal static library for test programs only, with default C visibility",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_common_cmake",
+      "label": "liboqs common CMakeLists",
+      "description": "Build configuration for common crypto primitives: AES (OpenSSL or native with AES-NI/ARM crypto), SHA-2 (OpenSSL or native), SHA-3 (OpenSSL or XKCP), FIPS202 shims, random number generation",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/common/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_common_aes",
+      "label": "Common AES implementations",
+      "description": "AES support via OpenSSL, or native C implementation with AES-NI (x86) and ARMv8 crypto extensions",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/common/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_common_sha2",
+      "label": "Common SHA-2 implementations",
+      "description": "SHA-2 support via OpenSSL or native C implementation with ARMv8 crypto extensions",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/common/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_common_sha3_xkcp",
+      "label": "SHA-3 XKCP low-level",
+      "description": "KeccakP-1600 SHA-3 implementation from XKCP: plain 64-bit and AVX2-optimized variants, single and 4-way serial",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/common/sha3/xkcp_low/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_copy_xkcp_cmake",
+      "label": "copy_from_xkcp CMakeLists",
+      "description": "Script template for XKCP SHA-3 low-level KeccakP-1600 build with plain64 and AVX2 variants",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/scripts/copy_from_xkcp/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_copy_upstream_kem_template",
+      "label": "copy_from_upstream KEM Jinja2 template",
+      "description": "Jinja2 CMake template for generating KEM family build files from algorithm metadata. Handles common deps, scheme implementations, compile flags, CUDA, libjade fragments",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/scripts/copy_from_upstream/src/kem/family/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_copy_upstream_sig_template",
+      "label": "copy_from_upstream SIG Jinja2 template",
+      "description": "Jinja2 CMake template for generating signature scheme family build files. Handles common deps, implementations, compile flags for AVX2/ARM",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/scripts/copy_from_upstream/src/sig/family/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_kem_bike",
+      "label": "BIKE KEM",
+      "description": "Bit Flipping Key Encapsulation Mechanism. Levels L1, L3, L5. Round 4 spec with biased sampling. Constant-time QC-MDPC code-based crypto with AVX2, AVX512, PCLMULQDQ, VPCLMULQDQ optimizations",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/bike/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_kem_bike_r4_readme",
+      "label": "BIKE r4 README",
+      "description": "DGK team optimized BIKE implementation. NIST R4 candidate. Constant-time, no secret-dependent branches or memory access. Supports SHA3/SHAKE and BIND_PK_AND_M security flags. Performance benchmarks on Intel Xeon with/without vector-PCLMUL",
+      "file_type": "document",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/bike/additional_r4/README.md",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_kem_bike_gf2x",
+      "label": "BIKE GF2X polynomial algebra",
+      "description": "Binary polynomial operations for BIKE: inversion, Karatsuba squaring, multiplication, base multiplication. Optimized for AVX2/AVX512/PCLMUL/VPCLMUL",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/bike/CMakeLists.txt",
+      "confidence": 0.95
+    },
+    {
+      "id": "liboqs_kem_bike_sampling",
+      "label": "BIKE error vector sampling",
+      "description": "Biased sampling for private key and error vectors. Rejection sampling replaced since June 2022 to mitigate timing attacks by Guo et al.",
+      "file_type": "concept",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/bike/additional_r4/README.md",
+      "confidence": 0.95
+    },
+    {
+      "id": "liboqs_kem_frodokem",
+      "label": "FrodoKEM KEM",
+      "description": "Module-LWE based KEM. Variants: 640, 976, 1344 with AES or SHAKE symmetric primitives. AVX2-optimized implementations",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/frodokem/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_kem_classic_mceliece",
+      "label": "Classic McEliece KEM",
+      "description": "Code-based KEM. 10 parameter sets (348864 through 8192128) with clean and AVX2 implementations. Uses PQClean reference with AES-256-CTR, Berlekamp-Massey, FFT, syndrome decoding",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/classic_mceliece/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_kem_hqc",
+      "label": "HQC KEM",
+      "description": "Quasi-cyclic code-based KEM. Security levels 128, 192, 256. Clean implementations with FFT, Reed-Muller, Reed-Solomon codes, SHAKE PRF",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/hqc/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_kem_kyber",
+      "label": "Kyber KEM",
+      "description": "Module-LWE KEM (pre-standardization name). Levels 512 (K=2), 768 (K=3), 1024 (K=4). Reference, AVX2, and AArch64 implementations. NTT, polynomial arithmetic, IND-CPA. Also includes libjade Jasmin implementations",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/kyber/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_kem_ml_kem",
+      "label": "ML-KEM KEM (NIST FIPS 203)",
+      "description": "NIST-standardized Module-Lattice KEM (final standard). Levels 512 (K=2), 768 (K=3), 1024 (K=4). Reference C, x86_64 AVX2, AArch64 NEON, and CUDA implementations. NTT-based polynomial arithmetic, IND-CPA, compression, sampling",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/ml_kem/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_ml_kem_aarch64_backend",
+      "label": "ML-KEM AArch64 NEON backend",
+      "description": "Auto-generated ARM NEON assembly for ML-KEM via SLOTHY superoptimizer. Derived from Neon NTT research by Becker et al. Covers NTT, INTT, polynomial operations, rejection sampling. Used for ML-KEM-512, 768, 1024",
+      "file_type": "document",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/ml_kem/mlkem-native_ml-kem-512_aarch64/mlkem/native/aarch64/README.md",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_ml_kem_x86_backend",
+      "label": "ML-KEM x86_64 AVX2 backend",
+      "description": "Native x86_64 arithmetic backend from the official Kyber team AVX2 implementation. NTT, base multiplication, rejection sampling, compression",
+      "file_type": "document",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/ml_kem/mlkem-native_ml-kem-512_x86_64/mlkem/native/x86_64/README.md",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_ml_kem_cuda_backend",
+      "label": "ML-KEM CUDA backend",
+      "description": "GPU-accelerated ML-KEM via cupqc library. compute_70 architecture, device link-time optimization",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/ml_kem/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_kem_ntruprime",
+      "label": "NTRU-Prime KEM",
+      "description": "NTRU-Prime sntrup761. Clean and AVX2 implementations with NTT-based polynomial multiplication. Included for interop testing only",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/ntruprime/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_sig_cross",
+      "label": "CROSS signature scheme",
+      "description": "Experimental hash-based signature. rsdp (randomized) and rsdpg (generic) variants at 128, 192, 256 bit security. balanced, fast, small modes. AVX2 optimizations. Common components: merkle trees, seed trees, CSPRNG, signing",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/sig/cross/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_sig_dilithium",
+      "label": "Dilithium signature (pre-standardization)",
+      "description": "Module-lattice signature (CRYSTALS-Dilithium). Levels 2, 3, 5. Reference, AVX2, AArch64 implementations. NTT, polynomial/vector arithmetic, packing, rounding, randomized signing",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/sig/dilithium/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_pqclean_shims",
+      "label": "PQClean shims",
+      "description": "Common shim layer providing FIPS202 (SHA-3) and FIPS202x4 implementations used across all PQClean-based algorithm implementations",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/common/CMakeLists.txt",
+      "confidence": 0.95
+    },
+    {
+      "id": "liboqs_neon_ntt_research",
+      "label": "Neon NTT research",
+      "description": "Research paper: Faster Dilithium, Kyber, and Saber on Cortex-A72 and Apple M1 by Becker, Hwang, Kannwischer, Yang, Yang. Foundation for AArch64 ML-KEM backend",
+      "file_type": "rationale",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/ml_kem/mlkem-native_ml-kem-512_aarch64/mlkem/native/aarch64/README.md",
+      "confidence": 0.95
+    },
+    {
+      "id": "liboqs_slothy_superoptimizer",
+      "label": "SLOTHY superoptimizer",
+      "description": "Constraint-solving based assembly superoptimizer used to generate auditable high-performance assembly from clean source. Part of ML-KEM AArch64 backend pipeline",
+      "file_type": "concept",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/ml_kem/mlkem-native_ml-kem-512_aarch64/mlkem/native/aarch64/README.md",
+      "confidence": 0.95
+    },
+    {
+      "id": "liboqs_bike_bgf_decoder",
+      "label": "BIKE BGF decoder",
+      "description": "Constant-time QC-MDPC decoder with negligible failure rate. Several shades of gray approach by Drucker, Gueron, Kostic",
+      "file_type": "concept",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/bike/additional_r4/README.md",
+      "confidence": 0.95
+    },
+    {
+      "id": "liboqs_build_oqs_enable_flags",
+      "label": "OQS_ENABLE feature flags",
+      "description": "CMake configuration variables controlling which algorithms are compiled. Pattern: OQS_ENABLE_KEM_<family>_<scheme>[_<impl>]. Enables conditional compilation of algorithm object libraries",
+      "file_type": "concept",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_kyber_libjade",
+      "label": "Kyber libjade Jasmin implementations",
+      "description": "Jasmin-verified Kyber implementations via libjade. Constant-time verified assembly for Kyber-512 and Kyber-768, reference and AVX2 variants",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/kyber/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_openSSL_dependency",
+      "label": "OpenSSL dependency",
+      "description": "Optional OpenSSL integration for AES, SHA-2, SHA-3. Supports static link or dlopen. Affects common crypto and BIKE implementations",
+      "file_type": "concept",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/common/CMakeLists.txt",
+      "confidence": 0.95
+    },
+    {
+      "id": "liboqs_memory_secure_clear",
+      "label": "Secure memory clearing",
+      "description": "Platform detection for explicit_bzero, explicit_memset, memset_s to ensure secure erasure of sensitive crypto material",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/common/CMakeLists.txt",
+      "confidence": 0.95
+    },
+    {
+      "id": "liboqs_aligned_malloc",
+      "label": "Aligned memory allocation",
+      "description": "Platform detection for aligned_alloc, posix_memalign, memalign for SIMD-optimized crypto operations requiring aligned buffers",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/common/CMakeLists.txt",
+      "confidence": 0.95
+    },
+    {
+      "id": "liboqs_timing_attack_bike",
+      "label": "BIKE rejection sampling timing attack",
+      "description": "Timing vulnerability in BIKE rejection sampling identified by Guo et al. (TCHES 2022). Mitigated in Round 4 with isochronous biased sampling since June 2022",
+      "file_type": "concept",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/bike/additional_r4/README.md",
+      "confidence": 0.95
+    }
+  ],
+  "edges": [
+    {
+      "source": "liboqs_src_cmake",
+      "target": "liboqs_oqs_library",
+      "relation": "builds",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_src_cmake",
+      "target": "liboqs_oqs_internal_library",
+      "relation": "builds",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_src_cmake",
+      "target": "liboqs_common_cmake",
+      "relation": "includes_subdir",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_src_cmake",
+      "target": "liboqs_kem_bike",
+      "relation": "conditionally_includes",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_src_cmake",
+      "target": "liboqs_kem_frodokem",
+      "relation": "conditionally_includes",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_src_cmake",
+      "target": "liboqs_kem_classic_mceliece",
+      "relation": "conditionally_includes",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_src_cmake",
+      "target": "liboqs_kem_hqc",
+      "relation": "conditionally_includes",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_src_cmake",
+      "target": "liboqs_kem_kyber",
+      "relation": "conditionally_includes",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_src_cmake",
+      "target": "liboqs_kem_ml_kem",
+      "relation": "conditionally_includes",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_src_cmake",
+      "target": "liboqs_kem_ntruprime",
+      "relation": "conditionally_includes",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_src_cmake",
+      "target": "liboqs_sig_dilithium",
+      "relation": "conditionally_includes",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_src_cmake",
+      "target": "liboqs_sig_cross",
+      "relation": "conditionally_includes",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_build_oqs_enable_flags",
+      "target": "liboqs_src_cmake",
+      "relation": "controls",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_oqs_library",
+      "target": "liboqs_common_cmake",
+      "relation": "links",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_oqs_library",
+      "target": "liboqs_kem_ml_kem",
+      "relation": "links",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_oqs_library",
+      "target": "liboqs_sig_dilithium",
+      "relation": "links",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_common_cmake",
+      "target": "liboqs_common_aes",
+      "relation": "provides",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_common_cmake",
+      "target": "liboqs_common_sha2",
+      "relation": "provides",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_common_cmake",
+      "target": "liboqs_common_sha3_xkcp",
+      "relation": "includes_subdir",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_common_cmake",
+      "target": "liboqs_pqclean_shims",
+      "relation": "provides",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_common_cmake",
+      "target": "liboqs_openSSL_dependency",
+      "relation": "optionally_uses",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_common_cmake",
+      "target": "liboqs_memory_secure_clear",
+      "relation": "provides",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_common_cmake",
+      "target": "liboqs_aligned_malloc",
+      "relation": "provides",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_copy_xkcp_cmake",
+      "target": "liboqs_common_sha3_xkcp",
+      "relation": "generates",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_copy_upstream_kem_template",
+      "target": "liboqs_kem_ml_kem",
+      "relation": "generates_cmake_for",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_copy_upstream_kem_template",
+      "target": "liboqs_kem_kyber",
+      "relation": "generates_cmake_for",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_copy_upstream_kem_template",
+      "target": "liboqs_kem_classic_mceliece",
+      "relation": "generates_cmake_for",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_copy_upstream_kem_template",
+      "target": "liboqs_kem_hqc",
+      "relation": "generates_cmake_for",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_copy_upstream_sig_template",
+      "target": "liboqs_sig_dilithium",
+      "relation": "generates_cmake_for",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_copy_upstream_sig_template",
+      "target": "liboqs_sig_cross",
+      "relation": "generates_cmake_for",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_kem_ml_kem",
+      "target": "liboqs_ml_kem_aarch64_backend",
+      "relation": "has_backend",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_kem_ml_kem",
+      "target": "liboqs_ml_kem_x86_backend",
+      "relation": "has_backend",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_kem_ml_kem",
+      "target": "liboqs_ml_kem_cuda_backend",
+      "relation": "has_backend",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_ml_kem_aarch64_backend",
+      "target": "liboqs_neon_ntt_research",
+      "relation": "derived_from",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_ml_kem_aarch64_backend",
+      "target": "liboqs_slothy_superoptimizer",
+      "relation": "generated_by",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_ml_kem_x86_backend",
+      "target": "liboqs_kem_kyber",
+      "relation": "from_team",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_kem_bike",
+      "target": "liboqs_kem_bike_r4_readme",
+      "relation": "documented_by",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_kem_bike",
+      "target": "liboqs_kem_bike_gf2x",
+      "relation": "uses",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_kem_bike",
+      "target": "liboqs_kem_bike_sampling",
+      "relation": "uses",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_kem_bike",
+      "target": "liboqs_bike_bgf_decoder",
+      "relation": "uses",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_kem_bike_sampling",
+      "target": "liboqs_timing_attack_bike",
+      "relation": "mitigates",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_kem_kyber",
+      "target": "liboqs_kyber_libjade",
+      "relation": "has_verified_impl",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_kem_ml_kem",
+      "target": "liboqs_kem_kyber",
+      "relation": "is_standardized_version_of",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_pqclean_shims",
+      "target": "liboqs_kem_ml_kem",
+      "relation": "used_by",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_pqclean_shims",
+      "target": "liboqs_kem_kyber",
+      "relation": "used_by",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_pqclean_shims",
+      "target": "liboqs_kem_classic_mceliece",
+      "relation": "used_by",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_pqclean_shims",
+      "target": "liboqs_kem_hqc",
+      "relation": "used_by",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_pqclean_shims",
+      "target": "liboqs_sig_dilithium",
+      "relation": "used_by",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_pqclean_shims",
+      "target": "liboqs_sig_cross",
+      "relation": "used_by",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_pqclean_shims",
+      "target": "liboqs_kem_ntruprime",
+      "relation": "used_by",
+      "confidence": 0.95
+    }
+  ],
+  "hyperedges": [
+    {
+      "nodes": [
+        "liboqs_kem_bike",
+        "liboqs_kem_frodokem",
+        "liboqs_kem_classic_mceliece",
+        "liboqs_kem_hqc",
+        "liboqs_kem_kyber",
+        "liboqs_kem_ml_kem",
+        "liboqs_kem_ntruprime"
+      ],
+      "relation": "all_kem_algorithms",
+      "description": "Complete set of key encapsulation mechanisms in liboqs",
+      "confidence": 1.0
+    },
+    {
+      "nodes": [
+        "liboqs_sig_cross",
+        "liboqs_sig_dilithium"
+      ],
+      "relation": "signature_algorithms_in_chunk",
+      "description": "Signature schemes covered in this build chunk (full liboqs also includes Falcon, SPHINCS+, MAYO, UOV, ML-DSA, XMSS, LMS)",
+      "confidence": 1.0
+    },
+    {
+      "nodes": [
+        "liboqs_kem_ml_kem",
+        "liboqs_ml_kem_aarch64_backend",
+        "liboqs_ml_kem_x86_backend",
+        "liboqs_ml_kem_cuda_backend"
+      ],
+      "relation": "ml_kem_multi_platform",
+      "description": "ML-KEM implementations spanning reference C, x86_64 AVX2, AArch64 NEON, and CUDA GPU backends",
+      "confidence": 1.0
+    },
+    {
+      "nodes": [
+        "liboqs_kem_kyber",
+        "liboqs_kyber_libjade",
+        "liboqs_ml_kem_x86_backend"
+      ],
+      "relation": "kyber_ml_kem_family",
+      "description": "Kyber and ML-KEM share algorithmic lineage; Kyber team provides AVX2 backend, libjade provides verified assembly",
+      "confidence": 0.95
+    },
+    {
+      "nodes": [
+        "liboqs_kem_bike",
+        "liboqs_kem_bike_gf2x",
+        "liboqs_kem_bike_sampling",
+        "liboqs_bike_bgf_decoder",
+        "liboqs_timing_attack_bike"
+      ],
+      "relation": "bike_security_architecture",
+      "description": "BIKE's security model: QC-MDPC codes, GF2X arithmetic, constant-time BGF decoding, isochronous biased sampling to prevent timing attacks",
+      "confidence": 0.95
+    },
+    {
+      "nodes": [
+        "liboqs_common_aes",
+        "liboqs_common_sha2",
+        "liboqs_common_sha3_xkcp",
+        "liboqs_openSSL_dependency",
+        "liboqs_pqclean_shims"
+      ],
+      "relation": "symmetric_crypto_stack",
+      "description": "Symmetric primitive layer: AES/SHA2/SHA3 with OpenSSL or native fallbacks, plus FIPS202 shims for PQClean compatibility",
+      "confidence": 0.95
+    },
+    {
+      "nodes": [
+        "liboqs_copy_upstream_kem_template",
+        "liboqs_copy_upstream_sig_template",
+        "liboqs_copy_xkcp_cmake"
+      ],
+      "relation": "build_generation_pipeline",
+      "description": "Automated CMake generation: Jinja2 templates produce per-algorithm CMakeLists from metadata, XKCP template produces SHA-3 builds",
+      "confidence": 0.95
+    },
+    {
+      "nodes": [
+        "liboqs_common_sha3_xkcp",
+        "liboqs_copy_xkcp_cmake",
+        "liboqs_pqclean_shims"
+      ],
+      "relation": "sha3_keccak_chain",
+      "description": "SHA-3 build chain: XKCP KeccakP-1600 low-level -> common SHA-3 wrappers -> FIPS202 PQClean shims",
+      "confidence": 0.95
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

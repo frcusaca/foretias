@@ -19,6 +19,10 @@ find_path(SODIUM_INCLUDE_DIR sodium.h REQUIRED)
 # ── Find OpenSSL (for legacy MD5/SHA-1) ─────────────────────────────────
 find_package(OpenSSL REQUIRED COMPONENTS Crypto)
 
+# ── Find liboqs (for PQC signing/KEM) ───────────────────────────────────
+find_library(OQS_LIBRARY NAMES oqs REQUIRED)
+find_path(OQS_INCLUDE_DIR oqs/oqs.h REQUIRED)
+
 # ── Source files ────────────────────────────────────────────────────────
 set(FORETIAS_CORE_SOURCES
     src/version.c
@@ -37,6 +41,9 @@ set(FORETIAS_CORE_SOURCES
     src/frost_ed25519.c
     src/nullifier.c
     src/privkey.c
+    src/signing_sphincs.c
+    src/signing_dilithium.c
+    src/kem_mlkem.c
 )
 
 # ── Static library ──────────────────────────────────────────────────────
@@ -48,7 +55,8 @@ target_include_directories(foretias_core
 )
 target_include_directories(foretias_core SYSTEM PRIVATE ${SODIUM_INCLUDE_DIR})
 target_include_directories(foretias_core SYSTEM PRIVATE ${OPENSSL_INCLUDE_DIR})
-target_link_libraries(foretias_core PUBLIC ${SODIUM_LIBRARY} OpenSSL::Crypto)
+target_include_directories(foretias_core SYSTEM PRIVATE ${OQS_INCLUDE_DIR})
+target_link_libraries(foretias_core PUBLIC ${SODIUM_LIBRARY} OpenSSL::Crypto ${OQS_LIBRARY})
 
 # ── Install ──────────────────────────────────────────────────────────────
 install(TARGETS foretias_core

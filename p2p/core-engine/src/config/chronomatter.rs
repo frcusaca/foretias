@@ -53,7 +53,7 @@ fn default_chronon_ns() -> u64 {
 }
 
 fn default_signature_algorithm() -> SignatureAlgorithm {
-    SignatureAlgorithm::SPHINCS_SHA2_128S
+    SignatureAlgorithm::Ed25519
 }
 
 fn default_kem_algorithm() -> KemAlgorithm {

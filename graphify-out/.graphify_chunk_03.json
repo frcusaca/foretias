@@ -1,0 +1,1463 @@
+{
+  "nodes": [
+    {
+      "id": "kem_binary",
+      "label": "Key Encapsulation Mechanism",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "Cryptographic primitive for secure key exchange between two parties",
+        "category": "public_key_cryptography"
+      }
+    },
+    {
+      "id": "kem_assumption_qc_mdpc",
+      "label": "QC-MDPC",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "Quasi-Cyclic Moderate Density Parity-Check codes",
+        "category": "cryptographic_assumption"
+      }
+    },
+    {
+      "id": "kem_assumption_goppa_codes",
+      "label": "Binary Goppa Codes",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "Niederreiter dual version of McEliece public key encryption",
+        "category": "cryptographic_assumption"
+      }
+    },
+    {
+      "id": "kem_assumption_lwe",
+      "label": "LWE",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "Learning With Errors problem",
+        "category": "cryptographic_assumption"
+      }
+    },
+    {
+      "id": "kem_assumption_hqc_syndrome",
+      "label": "Syndrome Decoding (HQC)",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "Syndrome decoding of structured codes using Hamming Quasi-Cyclic approach",
+        "category": "cryptographic_assumption"
+      }
+    },
+    {
+      "id": "kem_assumption_module_lwe",
+      "label": "Module LWE+R",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "Module Learning With Errors plus Ring-LWE with base ring Z[x]/(3329, x^256+1)",
+        "category": "cryptographic_assumption"
+      }
+    },
+    {
+      "id": "kem_assumption_ntru",
+      "label": "NTRU",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "NTRU lattice-based cryptographic assumption",
+        "category": "cryptographic_assumption"
+      }
+    },
+    {
+      "id": "kem_security_ind_cpa",
+      "label": "IND-CPA",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "Indistinguishability under Chosen Plaintext Attack",
+        "category": "security_model"
+      }
+    },
+    {
+      "id": "kem_security_ind_cca2",
+      "label": "IND-CCA2",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "Indistinguishability under Adaptive Chosen Ciphertext Attack",
+        "category": "security_model"
+      }
+    },
+    {
+      "id": "kem_algo_bike",
+      "label": "BIKE",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "BIKE KEM algorithm family",
+        "spec_version": "5.1",
+        "website": "http://bikesuite.org/",
+        "nist_round": 4,
+        "primary_source": "https://github.com/awslabs/bike-kem",
+        "license": "Apache-2.0",
+        "shared_secret_bytes": 32
+      }
+    },
+    {
+      "id": "kem_algo_bike_l1",
+      "label": "BIKE-L1",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 1,
+        "pk_bytes": 1541,
+        "sk_bytes": 5223,
+        "ct_bytes": 1573
+      }
+    },
+    {
+      "id": "kem_algo_bike_l3",
+      "label": "BIKE-L3",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 3,
+        "pk_bytes": 3083,
+        "sk_bytes": 10105,
+        "ct_bytes": 3115
+      }
+    },
+    {
+      "id": "kem_algo_bike_l5",
+      "label": "BIKE-L5",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 5,
+        "pk_bytes": 5122,
+        "sk_bytes": 16494,
+        "ct_bytes": 5154
+      }
+    },
+    {
+      "id": "kem_algo_classic_mceliece",
+      "label": "Classic McEliece",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "Classic McEliece KEM algorithm family",
+        "spec_version": "SUPERCOP-20221025",
+        "website": "https://classic.mceliece.org",
+        "nist_round": 3,
+        "primary_source": "PQClean",
+        "license": "Public domain",
+        "shared_secret_bytes": 32,
+        "advisories": [
+          "Parameter sets 460896, 460896f, 6960119, 6960119f fail memory leak testing on x86-64 with clang -O2/-O3",
+          "Implementation may not be constant-time"
+        ]
+      }
+    },
+    {
+      "id": "kem_algo_classic_mceliece_348864",
+      "label": "Classic-McEliece-348864",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 1,
+        "pk_bytes": 261120,
+        "sk_bytes": 6492,
+        "ct_bytes": 96,
+        "large_stack": true
+      }
+    },
+    {
+      "id": "kem_algo_classic_mceliece_460896",
+      "label": "Classic-McEliece-460896",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 3,
+        "pk_bytes": 524160,
+        "sk_bytes": 13608,
+        "ct_bytes": 156,
+        "large_stack": true
+      }
+    },
+    {
+      "id": "kem_algo_classic_mceliece_6688128",
+      "label": "Classic-McEliece-6688128",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 5,
+        "pk_bytes": 1044992,
+        "sk_bytes": 13932,
+        "ct_bytes": 208,
+        "large_stack": true
+      }
+    },
+    {
+      "id": "kem_algo_classic_mceliece_8192128",
+      "label": "Classic-McEliece-8192128",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 5,
+        "pk_bytes": 1357824,
+        "sk_bytes": 14120,
+        "ct_bytes": 208,
+        "large_stack": true
+      }
+    },
+    {
+      "id": "kem_algo_frodokem",
+      "label": "FrodoKEM",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "FrodoKEM algorithm family",
+        "spec_version": "NIST Round 3 submission",
+        "website": "https://frodokem.org/",
+        "nist_round": 3,
+        "primary_source": "https://github.com/microsoft/PQCrypto-LWEKE",
+        "license": "MIT"
+      }
+    },
+    {
+      "id": "kem_algo_frodokem_640",
+      "label": "FrodoKEM-640",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 1,
+        "pk_bytes": 9616,
+        "sk_bytes": 19888,
+        "ct_bytes": 9720,
+        "shared_secret_bytes": 16,
+        "variants": ["AES", "SHAKE"]
+      }
+    },
+    {
+      "id": "kem_algo_frodokem_976",
+      "label": "FrodoKEM-976",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 3,
+        "pk_bytes": 15632,
+        "sk_bytes": 31296,
+        "ct_bytes": 15744,
+        "shared_secret_bytes": 24,
+        "variants": ["AES", "SHAKE"]
+      }
+    },
+    {
+      "id": "kem_algo_frodokem_1344",
+      "label": "FrodoKEM-1344",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 5,
+        "pk_bytes": 21520,
+        "sk_bytes": 43088,
+        "ct_bytes": 21632,
+        "shared_secret_bytes": 32,
+        "variants": ["AES", "SHAKE"]
+      }
+    },
+    {
+      "id": "kem_algo_hqc",
+      "label": "HQC",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "HQC KEM algorithm family",
+        "spec_version": "2023-04-30",
+        "website": "https://pqc-hqc.org/",
+        "nist_round": 4,
+        "primary_source": "PQClean",
+        "license": "Public domain",
+        "shared_secret_bytes": 64
+      }
+    },
+    {
+      "id": "kem_algo_hqc_128",
+      "label": "HQC-128",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 1,
+        "pk_bytes": 2249,
+        "sk_bytes": 2305,
+        "ct_bytes": 4433
+      }
+    },
+    {
+      "id": "kem_algo_hqc_192",
+      "label": "HQC-192",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 3,
+        "pk_bytes": 4522,
+        "sk_bytes": 4586,
+        "ct_bytes": 8978
+      }
+    },
+    {
+      "id": "kem_algo_hqc_256",
+      "label": "HQC-256",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 5,
+        "pk_bytes": 7245,
+        "sk_bytes": 7317,
+        "ct_bytes": 14421
+      }
+    },
+    {
+      "id": "kem_algo_kyber",
+      "label": "Kyber",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "Kyber KEM algorithm family (pre-standardization name)",
+        "spec_version": "NIST Round 3 submission",
+        "website": "https://pq-crystals.org/",
+        "nist_round": 3,
+        "primary_source": "https://github.com/pq-crystals/kyber",
+        "license": "CC0-1.0 or Apache-2.0",
+        "shared_secret_bytes": 32,
+        "has_formally_verified_impl": true
+      }
+    },
+    {
+      "id": "kem_algo_kyber_512",
+      "label": "Kyber512",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 1,
+        "pk_bytes": 800,
+        "sk_bytes": 1632,
+        "ct_bytes": 768
+      }
+    },
+    {
+      "id": "kem_algo_kyber_768",
+      "label": "Kyber768",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 3,
+        "pk_bytes": 1184,
+        "sk_bytes": 2400,
+        "ct_bytes": 1088
+      }
+    },
+    {
+      "id": "kem_algo_kyber_1024",
+      "label": "Kyber1024",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 5,
+        "pk_bytes": 1568,
+        "sk_bytes": 3168,
+        "ct_bytes": 1568
+      }
+    },
+    {
+      "id": "kem_impl_libjade",
+      "label": "libjade",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "Formally-verified implementation of Kyber/ML-KEM",
+        "source": "https://github.com/formosa-crypto/libjade",
+        "license": "CC0-1.0 OR Apache-2.0",
+        "platforms": ["x86_64"],
+        "variants": ["ref", "avx2"]
+      }
+    },
+    {
+      "id": "kem_algo_ml_kem",
+      "label": "ML-KEM",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "ML-KEM - NIST FIPS 203 final standard (standardized name for Kyber)",
+        "spec_version": "ML-KEM (FIPS 203)",
+        "website": "https://pq-crystals.org/kyber/ and https://csrc.nist.gov/pubs/fips/203",
+        "nist_round": "FIPS203",
+        "primary_source": "https://github.com/pq-code-package/mlkem-native",
+        "license": "CC0-1.0 or Apache-2.0",
+        "shared_secret_bytes": 32,
+        "keypair_seed_bytes": 64,
+        "has_cuda_impl": true
+      }
+    },
+    {
+      "id": "kem_algo_ml_kem_512",
+      "label": "ML-KEM-512",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 1,
+        "pk_bytes": 800,
+        "sk_bytes": 1632,
+        "ct_bytes": 768,
+        "keypair_seed_bytes": 64
+      }
+    },
+    {
+      "id": "kem_algo_ml_kem_768",
+      "label": "ML-KEM-768",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 3,
+        "pk_bytes": 1184,
+        "sk_bytes": 2400,
+        "ct_bytes": 1088,
+        "keypair_seed_bytes": 64
+      }
+    },
+    {
+      "id": "kem_algo_ml_kem_1024",
+      "label": "ML-KEM-1024",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 5,
+        "pk_bytes": 1568,
+        "sk_bytes": 3168,
+        "ct_bytes": 1568,
+        "keypair_seed_bytes": 64
+      }
+    },
+    {
+      "id": "kem_impl_cupqc",
+      "label": "cupqc-cuda",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "GPU-accelerated CUDA implementation of ML-KEM",
+        "source": "https://github.com/praveksharma/cupqc-mlkem",
+        "license": "Apache-2.0",
+        "platform": "CUDA"
+      }
+    },
+    {
+      "id": "kem_algo_ntruprime",
+      "label": "NTRU-Prime",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "NTRU-Prime KEM algorithm family",
+        "spec_version": "supercop-20200826",
+        "website": "https://ntruprime.cr.yp.to",
+        "nist_round": 3,
+        "primary_source": "PQClean",
+        "license": "Public domain",
+        "shared_secret_bytes": 32
+      }
+    },
+    {
+      "id": "kem_algo_sntrup761",
+      "label": "sntrup761",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 2,
+        "pk_bytes": 1158,
+        "sk_bytes": 1763,
+        "ct_bytes": 1039
+      }
+    },
+    {
+      "id": "kem_common_pqclean",
+      "label": "PQClean",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "PQClean reference implementation framework used as primary source for multiple KEM algorithms",
+        "source": "https://github.com/PQClean/PQClean"
+      }
+    },
+    {
+      "id": "kem_common_liboqs",
+      "label": "liboqs",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "Open source C library for quantum-safe cryptographic algorithms, provides common-crypto primitives (AES, SHA2, SHA3) used by KEM implementations",
+        "provides": ["AES", "SHA2", "SHA3"]
+      }
+    },
+    {
+      "id": "nist_pqc_level_1",
+      "label": "NIST PQC Level 1",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "Security level equivalent to AES-128",
+        "equivalent": "AES-128"
+      }
+    },
+    {
+      "id": "nist_pqc_level_2",
+      "label": "NIST PQC Level 2",
+      "type": "concept",
+      "confidence": 0.95,
+      "source": "INFERRED",
+      "file_type": "document",
+      "properties": {
+        "description": "Intermediate security level between Level 1 and Level 3",
+        "used_by": ["sntrup761"]
+      }
+    },
+    {
+      "id": "nist_pqc_level_3",
+      "label": "NIST PQC Level 3",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "Security level equivalent to AES-192",
+        "equivalent": "AES-192"
+      }
+    },
+    {
+      "id": "nist_pqc_level_5",
+      "label": "NIST PQC Level 5",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "Security level equivalent to SHA-512",
+        "equivalent": "SHA-512"
+      }
+    },
+    {
+      "id": "kem_impl_platform_x86_avx2",
+      "label": "x86_64 AVX2",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "Optimized implementation platform using AVX2, BMI2, POPCNT CPU extensions",
+        "category": "cpu_acceleration"
+      }
+    },
+    {
+      "id": "kem_impl_platform_aarch64",
+      "label": "ARM64_V8",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "ARM64 V8 architecture platform for KEM implementations",
+        "category": "cpu_platform"
+      }
+    },
+    {
+      "id": "kem_impl_platform_cuda",
+      "label": "CUDA",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "GPU acceleration platform for ML-KEM via cupqc-cuda",
+        "category": "gpu_acceleration"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "kem_algo_bike",
+      "target": "kem_binary",
+      "label": "is_a",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_classic_mceliece",
+      "target": "kem_binary",
+      "label": "is_a",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_frodokem",
+      "target": "kem_binary",
+      "label": "is_a",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_hqc",
+      "target": "kem_binary",
+      "label": "is_a",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_kyber",
+      "target": "kem_binary",
+      "label": "is_a",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_ml_kem",
+      "target": "kem_binary",
+      "label": "is_a",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_ntruprime",
+      "target": "kem_binary",
+      "label": "is_a",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_bike",
+      "target": "kem_assumption_qc_mdpc",
+      "label": "based_on",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_classic_mceliece",
+      "target": "kem_assumption_goppa_codes",
+      "label": "based_on",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_frodokem",
+      "target": "kem_assumption_lwe",
+      "label": "based_on",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_hqc",
+      "target": "kem_assumption_hqc_syndrome",
+      "label": "based_on",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_kyber",
+      "target": "kem_assumption_module_lwe",
+      "label": "based_on",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_ml_kem",
+      "target": "kem_assumption_module_lwe",
+      "label": "based_on",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_ntruprime",
+      "target": "kem_assumption_ntru",
+      "label": "based_on",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_bike",
+      "target": "kem_security_ind_cpa",
+      "label": "provides_security",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_classic_mceliece",
+      "target": "kem_security_ind_cca2",
+      "label": "provides_security",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_frodokem",
+      "target": "kem_security_ind_cca2",
+      "label": "provides_security",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_hqc",
+      "target": "kem_security_ind_cca2",
+      "label": "provides_security",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_kyber",
+      "target": "kem_security_ind_cca2",
+      "label": "provides_security",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_ml_kem",
+      "target": "kem_security_ind_cca2",
+      "label": "provides_security",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_ntruprime",
+      "target": "kem_security_ind_cca2",
+      "label": "provides_security",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_bike",
+      "target": "kem_algo_bike_l1",
+      "label": "has_variant",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_bike",
+      "target": "kem_algo_bike_l3",
+      "label": "has_variant",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_bike",
+      "target": "kem_algo_bike_l5",
+      "label": "has_variant",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_classic_mceliece",
+      "target": "kem_algo_classic_mceliece_348864",
+      "label": "has_variant",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_classic_mceliece",
+      "target": "kem_algo_classic_mceliece_460896",
+      "label": "has_variant",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_classic_mceliece",
+      "target": "kem_algo_classic_mceliece_6688128",
+      "label": "has_variant",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_classic_mceliece",
+      "target": "kem_algo_classic_mceliece_8192128",
+      "label": "has_variant",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_frodokem",
+      "target": "kem_algo_frodokem_640",
+      "label": "has_variant",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_frodokem",
+      "target": "kem_algo_frodokem_976",
+      "label": "has_variant",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_frodokem",
+      "target": "kem_algo_frodokem_1344",
+      "label": "has_variant",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_hqc",
+      "target": "kem_algo_hqc_128",
+      "label": "has_variant",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_hqc",
+      "target": "kem_algo_hqc_192",
+      "label": "has_variant",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_hqc",
+      "target": "kem_algo_hqc_256",
+      "label": "has_variant",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_kyber",
+      "target": "kem_algo_kyber_512",
+      "label": "has_variant",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_kyber",
+      "target": "kem_algo_kyber_768",
+      "label": "has_variant",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_kyber",
+      "target": "kem_algo_kyber_1024",
+      "label": "has_variant",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_ml_kem",
+      "target": "kem_algo_ml_kem_512",
+      "label": "has_variant",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_ml_kem",
+      "target": "kem_algo_ml_kem_768",
+      "label": "has_variant",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_ml_kem",
+      "target": "kem_algo_ml_kem_1024",
+      "label": "has_variant",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_ntruprime",
+      "target": "kem_algo_sntrup761",
+      "label": "has_variant",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_kyber",
+      "target": "kem_algo_ml_kem",
+      "label": "standardized_as",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "properties": {
+        "standard": "NIST FIPS 203",
+        "note": "Kyber was renamed to ML-KEM upon NIST standardization"
+      }
+    },
+    {
+      "source": "kem_algo_kyber_512",
+      "target": "kem_algo_ml_kem_512",
+      "label": "standardized_as",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "properties": {
+        "note": "Identical parameters, renamed for standardization"
+      }
+    },
+    {
+      "source": "kem_algo_kyber_768",
+      "target": "kem_algo_ml_kem_768",
+      "label": "standardized_as",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "properties": {
+        "note": "Identical parameters, renamed for standardization"
+      }
+    },
+    {
+      "source": "kem_algo_kyber_1024",
+      "target": "kem_algo_ml_kem_1024",
+      "label": "standardized_as",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "properties": {
+        "note": "Identical parameters, renamed for standardization"
+      }
+    },
+    {
+      "source": "kem_algo_bike_l1",
+      "target": "nist_pqc_level_1",
+      "label": "targets_level",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_bike_l3",
+      "target": "nist_pqc_level_3",
+      "label": "targets_level",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_bike_l5",
+      "target": "nist_pqc_level_5",
+      "label": "targets_level",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_classic_mceliece_348864",
+      "target": "nist_pqc_level_1",
+      "label": "targets_level",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_classic_mceliece_460896",
+      "target": "nist_pqc_level_3",
+      "label": "targets_level",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_classic_mceliece_6688128",
+      "target": "nist_pqc_level_5",
+      "label": "targets_level",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_classic_mceliece_8192128",
+      "target": "nist_pqc_level_5",
+      "label": "targets_level",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_frodokem_640",
+      "target": "nist_pqc_level_1",
+      "label": "targets_level",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_frodokem_976",
+      "target": "nist_pqc_level_3",
+      "label": "targets_level",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_frodokem_1344",
+      "target": "nist_pqc_level_5",
+      "label": "targets_level",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_hqc_128",
+      "target": "nist_pqc_level_1",
+      "label": "targets_level",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_hqc_192",
+      "target": "nist_pqc_level_3",
+      "label": "targets_level",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_hqc_256",
+      "target": "nist_pqc_level_5",
+      "label": "targets_level",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_kyber_512",
+      "target": "nist_pqc_level_1",
+      "label": "targets_level",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_kyber_768",
+      "target": "nist_pqc_level_3",
+      "label": "targets_level",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_kyber_1024",
+      "target": "nist_pqc_level_5",
+      "label": "targets_level",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_ml_kem_512",
+      "target": "nist_pqc_level_1",
+      "label": "targets_level",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_ml_kem_768",
+      "target": "nist_pqc_level_3",
+      "label": "targets_level",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_ml_kem_1024",
+      "target": "nist_pqc_level_5",
+      "label": "targets_level",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_sntrup761",
+      "target": "nist_pqc_level_2",
+      "label": "targets_level",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_classic_mceliece",
+      "target": "kem_common_pqclean",
+      "label": "implements_via",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_hqc",
+      "target": "kem_common_pqclean",
+      "label": "implements_via",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_ntruprime",
+      "target": "kem_common_pqclean",
+      "label": "implements_via",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_bike",
+      "target": "kem_common_liboqs",
+      "label": "uses_common_crypto",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "properties": {
+        "primitives": ["AES"]
+      }
+    },
+    {
+      "source": "kem_algo_classic_mceliece",
+      "target": "kem_common_liboqs",
+      "label": "uses_common_crypto",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "properties": {
+        "primitives": ["AES", "SHA3"]
+      }
+    },
+    {
+      "source": "kem_algo_frodokem",
+      "target": "kem_common_liboqs",
+      "label": "uses_common_crypto",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "properties": {
+        "primitives": ["AES", "SHA3"]
+      }
+    },
+    {
+      "source": "kem_algo_hqc",
+      "target": "kem_common_liboqs",
+      "label": "uses_common_crypto",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "properties": {
+        "primitives": ["SHA3"]
+      }
+    },
+    {
+      "source": "kem_algo_kyber",
+      "target": "kem_common_liboqs",
+      "label": "uses_common_crypto",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "properties": {
+        "primitives": ["SHA3"]
+      }
+    },
+    {
+      "source": "kem_algo_ml_kem",
+      "target": "kem_common_liboqs",
+      "label": "uses_common_crypto",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "properties": {
+        "primitives": ["SHA3"]
+      }
+    },
+    {
+      "source": "kem_algo_ntruprime",
+      "target": "kem_common_liboqs",
+      "label": "uses_common_crypto",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "properties": {
+        "primitives": ["AES", "SHA2"]
+      }
+    },
+    {
+      "source": "kem_algo_kyber",
+      "target": "kem_impl_libjade",
+      "label": "has_verified_impl",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_ml_kem",
+      "target": "kem_impl_cupqc",
+      "label": "has_gpu_impl",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_impl_cupqc",
+      "target": "kem_impl_platform_cuda",
+      "label": "runs_on",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_bike",
+      "target": "kem_impl_platform_x86_avx2",
+      "label": "optimized_for",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "properties": {
+        "cpu_extensions": ["AVX2", "AVX512", "PCLMUL", "SSE2"]
+      }
+    },
+    {
+      "source": "kem_algo_classic_mceliece",
+      "target": "kem_impl_platform_x86_avx2",
+      "label": "optimized_for",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "properties": {
+        "cpu_extensions": ["AVX2", "POPCNT", "BMI1"]
+      }
+    },
+    {
+      "source": "kem_algo_frodokem",
+      "target": "kem_impl_platform_x86_avx2",
+      "label": "optimized_for",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "properties": {
+        "cpu_extensions": ["AVX2"]
+      }
+    },
+    {
+      "source": "kem_algo_kyber",
+      "target": "kem_impl_platform_x86_avx2",
+      "label": "optimized_for",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "properties": {
+        "cpu_extensions": ["AVX2", "BMI2", "POPCNT"]
+      }
+    },
+    {
+      "source": "kem_algo_kyber",
+      "target": "kem_impl_platform_aarch64",
+      "label": "optimized_for",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_ml_kem",
+      "target": "kem_impl_platform_x86_avx2",
+      "label": "optimized_for",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "properties": {
+        "cpu_extensions": ["AVX2", "BMI2", "POPCNT"]
+      }
+    },
+    {
+      "source": "kem_algo_ml_kem",
+      "target": "kem_impl_platform_aarch64",
+      "label": "optimized_for",
+      "confidence": 1.0,
+      "source": "EXTRACTED"
+    },
+    {
+      "source": "kem_algo_ntruprime",
+      "target": "kem_impl_platform_x86_avx2",
+      "label": "optimized_for",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "properties": {
+        "cpu_extensions": ["AVX2"]
+      }
+    }
+  ],
+  "hyperedges": [
+    {
+      "label": "code_family_code_based",
+      "nodes": [
+        "kem_algo_bike",
+        "kem_algo_classic_mceliece",
+        "kem_algo_hqc"
+      ],
+      "confidence": 0.85,
+      "source": "INFERRED",
+      "properties": {
+        "description": "Code-based cryptography family: BIKE (QC-MDPC), Classic McEliece (binary Goppa), HQC (syndrome decoding)"
+      }
+    },
+    {
+      "label": "lattice_family",
+      "nodes": [
+        "kem_algo_frodokem",
+        "kem_algo_kyber",
+        "kem_algo_ml_kem",
+        "kem_algo_ntruprime"
+      ],
+      "confidence": 0.95,
+      "source": "INFERRED",
+      "properties": {
+        "description": "Lattice-based cryptography family: FrodoKEM (LWE), Kyber/ML-KEM (Module LWE+R), NTRU-Prime (NTRU)"
+      }
+    },
+    {
+      "label": "nist_standard_final",
+      "nodes": [
+        "kem_algo_ml_kem",
+        "kem_algo_ml_kem_512",
+        "kem_algo_ml_kem_768",
+        "kem_algo_ml_kem_1024"
+      ],
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "properties": {
+        "description": "ML-KEM is the only KEM in liboqs implementing a NIST final standard (FIPS 203)"
+      }
+    },
+    {
+      "label": "nist_round_4_candidates",
+      "nodes": [
+        "kem_algo_bike",
+        "kem_algo_hqc"
+      ],
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "properties": {
+        "description": "Algorithms that advanced to NIST Round 4"
+      }
+    },
+    {
+      "label": "large_stack_warning",
+      "nodes": [
+        "kem_algo_classic_mceliece",
+        "kem_algo_classic_mceliece_348864",
+        "kem_algo_classic_mceliece_460896",
+        "kem_algo_classic_mceliece_6688128",
+        "kem_algo_classic_mceliece_8192128"
+      ],
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "properties": {
+        "description": "Classic McEliece variants have large stack usage that may cause failures in threads or constrained environments"
+      }
+    },
+    {
+      "label": "constant_time_advisory",
+      "nodes": [
+        "kem_algo_classic_mceliece",
+        "kem_algo_classic_mceliece_348864",
+        "kem_algo_classic_mceliece_460896",
+        "kem_algo_classic_mceliece_6688128",
+        "kem_algo_classic_mceliece_8192128"
+      ],
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "properties": {
+        "description": "Classic McEliece implementations may not be constant-time; memory leak issues with clang -O2/-O3 on x86-64"
+      }
+    },
+    {
+      "label": "constant_time_verified",
+      "nodes": [
+        "kem_algo_bike",
+        "kem_algo_frodokem",
+        "kem_algo_hqc",
+        "kem_algo_kyber",
+        "kem_algo_ml_kem"
+      ],
+      "confidence": 0.95,
+      "source": "INFERRED",
+      "properties": {
+        "description": "Algorithms with claimed AND valgrind-verified no-secret-dependent-branching across all parameter sets (clean implementations)"
+      }
+    },
+    {
+      "label": "shared_parameter_sizes_kyber_mlkem",
+      "nodes": [
+        "kem_algo_kyber_512", "kem_algo_ml_kem_512",
+        "kem_algo_kyber_768", "kem_algo_ml_kem_768",
+        "kem_algo_kyber_1024", "kem_algo_ml_kem_1024"
+      ],
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "properties": {
+        "description": "Kyber and ML-KEM parameter pairs have identical key/ciphertext sizes - ML-KEM adds keypair_seed_bytes field"
+      }
+    },
+    {
+      "label": "smallest_public_key_sizes",
+      "nodes": [
+        "kem_algo_kyber_512",
+        "kem_algo_ml_kem_512",
+        "kem_algo_sntrup761"
+      ],
+      "confidence": 0.85,
+      "source": "INFERRED",
+      "properties": {
+        "description": "Kyber512/ML-KEM-512 (800 bytes) and sntrup761 (1158 bytes) have the smallest public keys among Level 1-2 KEMs, vs BIKE-L1 (1541), HQC-128 (2249), FrodoKEM-640 (9616), Classic-McEliece-348864 (261120)"
+      }
+    },
+    {
+      "label": "interop_only",
+      "nodes": [
+        "kem_algo_ntruprime",
+        "kem_algo_sntrup761"
+      ],
+      "confidence": 0.85,
+      "source": "INFERRED",
+      "properties": {
+        "description": "sntrup761 is included in liboqs only for interop testing, not recommended for production"
+      }
+    }
+  ],
+  "input_tokens": 14832,
+  "output_tokens": 0
+}

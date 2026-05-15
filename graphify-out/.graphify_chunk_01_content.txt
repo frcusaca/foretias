@@ -1,0 +1,1604 @@
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/.travis.yml ===
+language: c
+before_script:
+  - sudo apt update && sudo apt -y install astyle cmake gcc ninja-build libssl-dev python3-pytest python3-pytest-xdist unzip xsltproc doxygen graphviz valgrind
+jobs:
+  include:
+    - arch: ppc64le         # The IBM Power LXD container based build for OSS only
+      os: linux             # required for arch different than amd64
+      dist: focal           # or bionic | xenial with xenial as default
+      compiler: gcc
+      if: NOT branch =~ /^ghactionsonly-/
+      script:
+        - mkdir build && cd build && cmake -GNinja -DOQS_ENABLE_SIG_STFL_LMS=ON -DOQS_ENABLE_SIG_STFL_XMSS=ON -DOQS_HAZARDOUS_EXPERIMENTAL_ENABLE_STFL_SIG_KEY_SIG_GEN=ON .. && cmake -LA -N .. && ninja
+        - cd build & ninja run_tests
+    - arch: s390x
+      os: linux
+      dist: focal
+      compiler: gcc
+      if: NOT branch =~ /^ghactionsonly-/
+      script:
+        - mkdir build && cd build && cmake -GNinja -DOQS_ENABLE_SIG_STFL_LMS=ON -DOQS_ENABLE_SIG_STFL_XMSS=ON -DOQS_HAZARDOUS_EXPERIMENTAL_ENABLE_STFL_SIG_KEY_SIG_GEN=ON .. && cmake -LA -N .. && ninja
+        - cd build & ninja run_tests
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/CI.md ===
+# Continuous Integration (CI)
+
+This document aims to provide a accessible yet comprehensive overview of the liboqs CI setup.
+
+## GitHub Actions
+
+liboqs relies on GitHub Actions for almost all of its CI and makes extensive use of [reusable workflows](https://docs.github.com/en/actions/sharing-automations/reusing-workflows).
+All workflow files are located in the `.github/workflows` subdirectory.
+
+### Caller workflows
+
+These workflows are triggered by GitHub events (for example, a pull request or a release).
+They implement the logic dictating which tests should run on which events.
+
+#### <a name="push.yml"></a> Push workflow (`push.yml`)
+
+This workflow is triggered by pushes to non-`main` branches.
+It calls only [basic checks](#basic.yml) unless one of the following strings is included in the commit message:
+- "[full tests]": calls [all platform tests](#platforms.yml).
+- "[extended tests]": calls the [extended tests](#extended.yml).
+- "[trigger downstream]": calls the [downstream release tests](#downstream-release.yml).
+
+To trigger multiple test suites, include multiple trigger strings in the commit message.
+For example, "[full tests] [trigger downstream]" will trigger both the platform tests and the downstream release tests.
+
+#### <a name="pr.yml"></a> Pull request workflow (`pr.yml`)
+
+This workflow runs on pull requests.
+It calls [basic checks](#basic.yml), [platform tests](#platforms.yml) and [scorecard analysis](#scorecard.yml).
+
+#### <a name="commit-to-main.yml"></a> Commit-to-main workflow (`commit-to-main.yml`)
+
+This workflow runs on pushes to the `main` branch (typically done automatically when a pull request is merged).
+It calls [platform tests](#platforms.yml), [scorecard analysis](#scorecard.yml), and [basic downstream tests](#downstream-basic.yml).
+
+#### <a name="weekly.yml"></a> Weekly workflow (`weekly.yml`)
+
+This workflow is triggered by a weekly schedule.
+It calls [extended tests](#extended.yml) and [scorecard analysis](#scorecard.yml).
+
+#### <a name="release.yml"></a> Release workflow (`release.yml`)
+
+This workflow is triggered when a release (including a pre-release) is published on GitHub.
+It calls [extended tests](#extended) and [downstream release tests](#downstream-release.yml).
+
+### Callable workflows
+
+These workflows are not triggered directly by any GitHub event.
+They are instead called by one of the [caller workflows](#caller-workflows).
+Users with "write" permissions can also trigger them manually via the GitHub web UI or REST API.
+
+#### <a name="basic.yml"></a> Basic checks (`basic.yml`)
+
+This workflow runs a minimal set of tests that should pass before heavier tests are triggered.
+
+#### <a name="<platform>.yml"></a> Individual platform tests (`<platform>.yml`)
+
+These workflows contain tests for the individual [platforms supported by liboqs](PLATFORMS.md).
+Currently, these include
+- `android.yml`,
+- `apple.yml`,
+- `macos.yml`,
+- `linux.yml`,
+- `windows.yml`, and
+- `zephyr.yml`.
+
+All of these these are wrapped by [`platforms.yml`](#platforms.yml).
+
+#### <a name="platforms.yml"></a> All platform tests (`platforms.yml`)
+
+This workflow calls all of the [platform-specific tests](#<platform>.yml).
+
+#### <a name="extended.yml"></a> Extended tests (`extended.yml`)
+
+This workflow calls tests which are either resource intensive or rarely need to be triggered.
+Currently, this includes constant-time testing with valgrind and the full suite of NIST Known Answer Tests.
+
+#### <a name="downstream-basic.yml"></a> Basic downstream trigger (`downstream-basic.yml`)
+
+This workflow triggers basic CI for a selection of projects that depend on `liboqs`.
+Currently, these include
+- [`OQS OpenSSL3 provider`](https://github.com/open-quantum-safe/oqs-provider)
+- [`OQS-BoringSSL`](https://github.com/open-quantum-safe/boringssl)
+- [`OQS-OpenSSH`](https://github.com/open-quantum-safe/openssh)
+- [`OQS Demos`](https://github.com/open-quantum-safe/oqs-demos)
+- [`liboqs-cpp`](https://github.com/open-quantum-safe/liboqs-cpp)
+- [`liboqs-go`](https://github.com/open-quantum-safe/liboqs-go)
+- [`liboqs-python`](https://github.com/open-quantum-safe/liboqs-python)
+
+Callers must include `secrets: inherit` in order for the appropriate access tokens to be passed to this workflow.
+
+#### <a name="downstream-release.yml"></a> Downstream release trigger (`downstream-release.yml`)
+
+This workflow triggers release tests for a selection of projects that depend on `liboqs`.
+Currently, this is only the [`OQS OpenSSL3 provider`](https://github.com/open-quantum-safe/oqs-provider).
+Callers must include `secrets: inherit` in order for the appropriate access tokens to be passed to this workflow.
+
+#### <a name="scorecard.yml"></a> OpenSSF scorecard analysis (`scorecard.yml`)
+
+This workflow runs the [OpenSSF scorecard](https://github.com/ossf/scorecard) tool.
+It is additionally triggered automatically when branch protection rules are changed.
+Callers must include `secrets: inherit` in order for the appropriate access tokens to be passed to this workflow.
+
+## Travis CI
+
+In the past, we used Travis CI to test on [some IBM platforms](PLATFORMS.md#tier-3-1) that are not supported by GitHub Actions.
+Our Travis builds are currently disabled pending resolution of [issue #1888](https://github.com/open-quantum-safe/liboqs/issues/1888).
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/CMakeLists.txt ===
+# SPDX-License-Identifier: MIT
+
+cmake_minimum_required (VERSION 3.15)
+# option() honors normal variables.
+# see: https://cmake.org/cmake/help/git-stage/policy/CMP0077.html
+if(POLICY CMP0077)
+    cmake_policy(SET CMP0077 NEW)
+endif()
+# Honor symbol visibility properties for all target types.
+# see: https://cmake.org/cmake/help/git-stage/policy/CMP0063.html
+if(POLICY CMP0063)
+    cmake_policy(SET CMP0063 NEW)
+endif()
+if(POLICY CMP0066)
+    cmake_policy(SET CMP0066 NEW)
+endif()
+if(POLICY CMP0067)
+    cmake_policy(SET CMP0067 NEW)
+endif()
+
+project(liboqs C ASM)
+
+option(OQS_DIST_BUILD "Build distributable library with optimized code for several CPU microarchitectures. Enables run-time CPU feature detection." ON)
+option(OQS_BUILD_ONLY_LIB "Build only liboqs and do not expose build targets for tests, documentation, and pretty-printing available." OFF)
+set(OQS_MINIMAL_BUILD "" CACHE STRING "Only build specifically listed algorithms.")
+option(OQS_LIBJADE_BUILD "Enable formally verified implementation of supported algorithms from libjade." OFF)
+option(OQS_PERMIT_UNSUPPORTED_ARCHITECTURE "Permit compilation on an an unsupported architecture." OFF)
+option(OQS_STRICT_WARNINGS "Enable all compiler warnings." OFF)
+option(OQS_EMBEDDED_BUILD "Compile liboqs for an Embedded environment without a full standard library." OFF)
+option(OQS_USE_CUPQC "Utilize cuPQC as the backend for supported PQC algorithms." OFF)
+
+# Libfuzzer isn't supported on gcc
+if('${CMAKE_C_COMPILER_ID}' STREQUAL 'Clang')
+    option(OQS_BUILD_FUZZ_TESTS "Build fuzz test suite" OFF)
+endif()
+
+
+set(OQS_OPT_TARGET auto CACHE STRING "The target microarchitecture for optimization.")
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(CMAKE_C_VISIBILITY_PRESET hidden)
+set(OQS_VERSION_MAJOR 0)
+set(OQS_VERSION_MINOR 13)
+set(OQS_VERSION_PATCH 0)
+set(OQS_VERSION_PRE_RELEASE "")
+set(OQS_VERSION_TEXT "${OQS_VERSION_MAJOR}.${OQS_VERSION_MINOR}.${OQS_VERSION_PATCH}${OQS_VERSION_PRE_RELEASE}")
+set(OQS_COMPILE_BUILD_TARGET "${CMAKE_SYSTEM_PROCESSOR}-${CMAKE_HOST_SYSTEM}")
+set(OQS_MINIMAL_GCC_VERSION "7.1.0")
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# Determine the flags for fuzzing. Use OSS-Fuzz's configuration if available, otherwise fall back to defaults.
+if(DEFINED ENV{LIB_FUZZING_ENGINE})
+    set(FUZZING_ENGINE $ENV{LIB_FUZZING_ENGINE})
+    set(FUZZING_COMPILE_FLAGS "")
+    set(FUZZING_LINK_FLAGS "${FUZZING_ENGINE}")
+else()
+    set(FUZZING_COMPILE_FLAGS "-fsanitize=fuzzer,address")
+    set(FUZZING_LINK_FLAGS "-fsanitize=fuzzer,address")
+endif()
+
+# heuristic check to see whether we're running on a RaspberryPi
+if(EXISTS "/opt/vc/include/bcm_host.h")
+	add_definitions( -DOQS_USE_RASPBERRY_PI )
+endif()
+
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64|AMD64")
+    set(ARCH "x86_64")
+    set(ARCH_X86_64 ON)
+    if(${OQS_DIST_BUILD})
+        set(OQS_DIST_X86_64_BUILD ON)
+    endif()
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86|i586|i686")
+    set(ARCH "i586")
+    set(ARCH_X86 ON)
+    if(${OQS_DIST_BUILD})
+        set(OQS_DIST_X86_BUILD ON)
+    endif()
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64|arm64v8")
+    set(ARCH "arm64v8")
+    set(ARCH_ARM64v8 ON)
+    if(${OQS_DIST_BUILD})
+        set(OQS_DIST_ARM64_V8_BUILD ON)
+    endif()
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "armel|armhf|armv7|arm32v7")
+    set(ARCH "arm32v7")
+    set(ARCH_ARM32v7 ON)
+    if(${OQS_DIST_BUILD})
+        set(OQS_DIST_ARM32_V7_BUILD ON)
+    endif()
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "ppc64le|powerpc64le")
+    set(ARCH "ppc64le")
+    set(ARCH_PPC64LE ON)
+    if(${OQS_DIST_BUILD})
+        set(OQS_DIST_PPC64LE_BUILD ON)
+    endif()
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "(ppc64|powerpc64)")
+    message(WARNING "There is currently no CI for: " ${CMAKE_SYSTEM_PROCESSOR})
+    set(ARCH "ppc64")
+    set(ARCH_PPC64 ON)
+    if(${OQS_DIST_BUILD})
+        set(OQS_DIST_PPC64_BUILD ON)
+    endif()
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "(ppc|powerpc)")
+    message(WARNING "There is currently no CI for: " ${CMAKE_SYSTEM_PROCESSOR})
+    # CMake uses uname to derive CMAKE_SYSTEM_PROCESSOR value, so on Darwin
+    # the value is identical for ppc and ppc64. To have the right build arch
+    # in 64-bit case, we use CMAKE_OSX_ARCHITECTURES.
+    if(APPLE AND CMAKE_OSX_ARCHITECTURES STREQUAL "ppc64")
+        set(ARCH "ppc64")
+        set(ARCH_PPC64 ON)
+        if(${OQS_DIST_BUILD})
+            set(OQS_DIST_PPC64_BUILD ON)
+        endif()
+    else()
+        set(ARCH "ppc")
+        set(ARCH_PPC ON)
+        if(${OQS_DIST_BUILD})
+            set(OQS_DIST_PPC_BUILD ON)
+        endif()
+    endif()
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "s390x")
+    set(ARCH "s390x")
+    set(ARCH_S390X ON)
+    if(${OQS_DIST_BUILD})
+        set(OQS_DIST_S390X_BUILD ON)
+    endif()
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "riscv")
+    set(ARCH "riscv")
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "loongarch64")
+    set(ARCH "loongarch64")
+    set(ARCH_LOONGARCH64 ON)
+    if(${OQS_DIST_BUILD})
+        set(OQS_DIST_LOONGARCH64_BUILD ON)
+    endif()
+elseif(OQS_PERMIT_UNSUPPORTED_ARCHITECTURE)
+    message(WARNING "Unknown or unsupported processor: " ${CMAKE_SYSTEM_PROCESSOR})
+    message(WARNING "Compilation on an unsupported processor should only be used for testing, as it may result an insecure configuration, for example due to variable-time instructions leaking secret information.")
+else()
+    message(FATAL_ERROR "Unknown or unsupported processor: " ${CMAKE_SYSTEM_PROCESSOR} ". Override by setting OQS_PERMIT_UNSUPPORTED_ARCHITECTURE=ON")
+endif()
+
+if(${OQS_USE_CUPQC})
+    # CMAKE's CUDA language requires CMAKE 3.18
+    cmake_minimum_required (VERSION 3.18)
+    enable_language(CUDA)
+    if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+      set(CMAKE_CUDA_ARCHITECTURES 80 90)
+    endif()
+    find_package(cuPQC 0.2.0 REQUIRED)
+endif()
+
+if (NOT ((CMAKE_SYSTEM_NAME MATCHES "Linux|Darwin") AND (ARCH_X86_64 STREQUAL "ON")) AND (OQS_LIBJADE_BUILD STREQUAL "ON"))
+    message(FATAL_ERROR "Building liboqs with libjade implementations from libjade is only supported on Linux and Darwin on x86_64.")
+endif()
+
+# intentionally don't switch to variables to avoid --warn-uninitialized report
+if(OQS_USE_CPU_EXTENSIONS)
+    message(FATAL_ERROR "OQS_USE_CPU_EXTENSIONS is deprecated")
+endif()
+
+# intentionally don't switch to variables to avoid --warn-uninitialized report
+if(OQS_PORTABLE_BUILD)
+    message(FATAL_ERROR "OQS_PORTABLE_BUILD is deprecated")
+endif()
+
+if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    set(OQS_DEBUG_BUILD ON)
+else()
+    set(OQS_DEBUG_BUILD OFF)
+endif()
+
+option(OQS_SPEED_USE_ARM_PMU "Use ARM Performance Monitor Unit during benchmarking" OFF)
+
+if(WIN32 AND NOT (MINGW OR MSYS OR CYGWIN))
+    set(CMAKE_GENERATOR_CC cl)
+endif()
+
+include(.CMake/compiler_opts.cmake)
+include(.CMake/alg_support.cmake)
+
+if(${OQS_USE_OPENSSL})
+    if(NOT DEFINED OPENSSL_ROOT_DIR)
+        if(${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Darwin")
+            if(EXISTS "/usr/local/opt/openssl@1.1")
+                set(OPENSSL_ROOT_DIR "/usr/local/opt/openssl@1.1")
+            elseif(EXISTS "/opt/homebrew/opt/openssl@1.1")
+                set(OPENSSL_ROOT_DIR "/opt/homebrew/opt/openssl@1.1")
+            endif()
+        endif()
+    endif()
+    find_package(OpenSSL 1.1.1 REQUIRED)
+
+    if(OQS_DLOPEN_OPENSSL)
+      find_program(OBJDUMP objdump)
+      if(NOT OBJDUMP)
+	message(FATAL_ERROR "objdump not found. Please install it from binutils.")
+      endif()
+      execute_process(
+	COMMAND ${OBJDUMP} -p ${OPENSSL_CRYPTO_LIBRARY}
+	COMMAND sed -n "s/[ 	]\\{1,\\}SONAME[ 	]\\{1,\\}//p"
+	OUTPUT_VARIABLE OQS_OPENSSL_CRYPTO_SONAME
+	OUTPUT_STRIP_TRAILING_WHITESPACE
+	COMMAND_ERROR_IS_FATAL ANY)
+      message(STATUS "OpenSSL dlopen SONAME: " ${OQS_OPENSSL_CRYPTO_SONAME})
+    endif()
+endif()
+
+set(PUBLIC_HEADERS ${PROJECT_SOURCE_DIR}/src/oqs.h
+                   ${PROJECT_SOURCE_DIR}/src/common/aes/aes_ops.h
+                   ${PROJECT_SOURCE_DIR}/src/common/common.h
+                   ${PROJECT_SOURCE_DIR}/src/common/rand/rand.h
+                   ${PROJECT_SOURCE_DIR}/src/common/sha2/sha2_ops.h
+                   ${PROJECT_SOURCE_DIR}/src/common/sha3/sha3_ops.h
+                   ${PROJECT_SOURCE_DIR}/src/common/sha3/sha3x4_ops.h
+                   ${PROJECT_SOURCE_DIR}/src/kem/kem.h
+                   ${PROJECT_SOURCE_DIR}/src/sig/sig.h
+                   ${PROJECT_SOURCE_DIR}/src/sig_stfl/sig_stfl.h)
+
+set(INTERNAL_HEADERS ${PROJECT_SOURCE_DIR}/src/common/aes/aes.h
+                     ${PROJECT_SOURCE_DIR}/src/common/rand/rand_nist.h
+                     ${PROJECT_SOURCE_DIR}/src/common/sha2/sha2.h
+                     ${PROJECT_SOURCE_DIR}/src/common/sha3/sha3.h
+                     ${PROJECT_SOURCE_DIR}/src/common/sha3/sha3x4.h)
+
+if(${OQS_ENABLE_KEM_BIKE})
+    set(PUBLIC_HEADERS ${PUBLIC_HEADERS} ${PROJECT_SOURCE_DIR}/src/kem/bike/kem_bike.h)
+endif()
+if(${OQS_ENABLE_KEM_FRODOKEM})
+    set(PUBLIC_HEADERS ${PUBLIC_HEADERS} ${PROJECT_SOURCE_DIR}/src/kem/frodokem/kem_frodokem.h)
+endif()
+if(OQS_ENABLE_KEM_NTRUPRIME)
+    set(PUBLIC_HEADERS ${PUBLIC_HEADERS} ${PROJECT_SOURCE_DIR}/src/kem/ntruprime/kem_ntruprime.h)
+endif()
+##### OQS_COPY_FROM_UPSTREAM_FRAGMENT_INCLUDE_HEADERS_START
+if(OQS_ENABLE_KEM_CLASSIC_MCELIECE)
+    set(PUBLIC_HEADERS ${PUBLIC_HEADERS} ${PROJECT_SOURCE_DIR}/src/kem/classic_mceliece/kem_classic_mceliece.h)
+endif()
+if(OQS_ENABLE_KEM_HQC)
+    set(PUBLIC_HEADERS ${PUBLIC_HEADERS} ${PROJECT_SOURCE_DIR}/src/kem/hqc/kem_hqc.h)
+endif()
+if(OQS_ENABLE_KEM_KYBER)
+    set(PUBLIC_HEADERS ${PUBLIC_HEADERS} ${PROJECT_SOURCE_DIR}/src/kem/kyber/kem_kyber.h)
+endif()
+if(OQS_ENABLE_KEM_ML_KEM)
+    set(PUBLIC_HEADERS ${PUBLIC_HEADERS} ${PROJECT_SOURCE_DIR}/src/kem/ml_kem/kem_ml_kem.h)
+endif()
+if(OQS_ENABLE_SIG_DILITHIUM)
+    set(PUBLIC_HEADERS ${PUBLIC_HEADERS} ${PROJECT_SOURCE_DIR}/src/sig/dilithium/sig_dilithium.h)
+endif()
+if(OQS_ENABLE_SIG_ML_DSA)
+    set(PUBLIC_HEADERS ${PUBLIC_HEADERS} ${PROJECT_SOURCE_DIR}/src/sig/ml_dsa/sig_ml_dsa.h)
+endif()
+if(OQS_ENABLE_SIG_FALCON)
+    set(PUBLIC_HEADERS ${PUBLIC_HEADERS} ${PROJECT_SOURCE_DIR}/src/sig/falcon/sig_falcon.h)
+endif()
+if(OQS_ENABLE_SIG_SPHINCS)
+    set(PUBLIC_HEADERS ${PUBLIC_HEADERS} ${PROJECT_SOURCE_DIR}/src/sig/sphincs/sig_sphincs.h)
+endif()
+if(OQS_ENABLE_SIG_MAYO)
+    set(PUBLIC_HEADERS ${PUBLIC_HEADERS} ${PROJECT_SOURCE_DIR}/src/sig/mayo/sig_mayo.h)
+endif()
+if(OQS_ENABLE_SIG_CROSS)
+    set(PUBLIC_HEADERS ${PUBLIC_HEADERS} ${PROJECT_SOURCE_DIR}/src/sig/cross/sig_cross.h)
+endif()
+if(OQS_ENABLE_SIG_UOV)
+    set(PUBLIC_HEADERS ${PUBLIC_HEADERS} ${PROJECT_SOURCE_DIR}/src/sig/uov/sig_uov.h)
+endif()
+##### OQS_COPY_FROM_UPSTREAM_FRAGMENT_INCLUDE_HEADERS_END
+if(OQS_ENABLE_SIG_STFL_XMSS)
+    set(PUBLIC_HEADERS ${PUBLIC_HEADERS} ${PROJECT_SOURCE_DIR}/src/sig_stfl/xmss/sig_stfl_xmss.h)
+endif()
+if(OQS_ENABLE_SIG_STFL_LMS)
+    set(PUBLIC_HEADERS ${PUBLIC_HEADERS} ${PROJECT_SOURCE_DIR}/src/sig_stfl/lms/sig_stfl_lms.h)
+endif()
+execute_process(COMMAND ${CMAKE_COMMAND} -E make_directory ${PROJECT_BINARY_DIR}/include/oqs)
+execute_process(COMMAND ${CMAKE_COMMAND} -E copy ${PUBLIC_HEADERS} ${PROJECT_BINARY_DIR}/include/oqs)
+execute_process(COMMAND ${CMAKE_COMMAND} -E copy ${INTERNAL_HEADERS} ${PROJECT_BINARY_DIR}/include/oqs)
+configure_file(src/oqsconfig.h.cmake ${PROJECT_BINARY_DIR}/include/oqs/oqsconfig.h)
+set(PUBLIC_HEADERS ${PUBLIC_HEADERS} ${PROJECT_BINARY_DIR}/include/oqs/oqsconfig.h)
+
+include_directories(${PROJECT_BINARY_DIR}/include)
+add_subdirectory(src)
+
+if(NOT ${OQS_BUILD_ONLY_LIB})
+    add_subdirectory(tests)
+
+    if (NOT CYGWIN)
+      find_package(Doxygen)
+      if(DOXYGEN_FOUND)
+        set(DOXYFILE ${PROJECT_SOURCE_DIR}/docs/.Doxyfile)
+        add_custom_target(
+            gen_docs
+            COMMAND ${PROJECT_SOURCE_DIR}/scripts/run_doxygen.sh ${DOXYGEN_EXECUTABLE} ${DOXYFILE} ${PROJECT_BINARY_DIR}
+            WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+            COMMENT "Generate API documentation with Doxygen."
+            USES_TERMINAL)
+      endif()
+    endif()
+
+    if(NOT WIN32)
+        add_custom_target(
+            prettyprint
+            COMMAND find src tests -name '*.[ch]' | grep -v '/external/' | grep -v 'kem.*/pqclean_' | grep -v 'sig.*/pqclean_' | xargs astyle --options=.astylerc
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+            USES_TERMINAL)
+    endif()
+endif()
+set(CPACK_GENERATOR "DEB")
+set(CPACK_PACKAGE_VENDOR "www.openquantumsafe.org")
+set(CPACK_PACKAGE_VERSION ${OQS_VERSION_TEXT})
+if(${OQS_USE_OPENSSL})
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6, openssl")
+else()
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6")
+endif()
+
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "www.openquantumsafe.org")
+include(CPack)
+
+# uninstall target
+if(NOT TARGET uninstall)
+  configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/.CMake/cmake_uninstall.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake"
+    IMMEDIATE @ONLY)
+
+  add_custom_target(uninstall
+    COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake)
+endif()
+
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/CODE_OF_CONDUCT.md ===
+# Contributor Covenant Code of Conduct
+
+## Our Pledge
+
+We as members, contributors, and leaders pledge to make participation in our
+community a harassment-free experience for everyone, regardless of age, body
+size, visible or invisible disability, ethnicity, sex characteristics, gender
+identity and expression, level of experience, education, socio-economic status,
+nationality, personal appearance, race, religion, or sexual identity
+and orientation.
+
+We pledge to act and interact in ways that contribute to an open, welcoming,
+diverse, inclusive, and healthy community.
+
+## Our Standards
+
+Examples of behavior that contributes to a positive environment for our
+community include:
+
+* Demonstrating empathy and kindness toward other people
+* Being respectful of differing opinions, viewpoints, and experiences
+* Giving and gracefully accepting constructive feedback
+* Accepting responsibility and apologizing to those affected by our mistakes,
+  and learning from the experience
+* Focusing on what is best not just for us as individuals, but for the
+  overall community
+
+Examples of unacceptable behavior include:
+
+* The use of sexualized language or imagery, and sexual attention or
+  advances of any kind
+* Trolling, insulting or derogatory comments, and personal or political attacks
+* Public or private harassment
+* Publishing others' private information, such as a physical or email
+  address, without their explicit permission
+* Other conduct which could reasonably be considered inappropriate in a
+  professional setting
+
+## Enforcement Responsibilities
+
+Community leaders are responsible for clarifying and enforcing our standards of
+acceptable behavior and will take appropriate and fair corrective action in
+response to any behavior that they deem inappropriate, threatening, offensive,
+or harmful.
+
+Community leaders have the right and responsibility to remove, edit, or reject
+comments, commits, code, wiki edits, issues, and other contributions that are
+not aligned to this Code of Conduct, and will communicate reasons for moderation
+decisions when appropriate.
+
+## Scope
+
+This Code of Conduct applies within all community spaces, and also applies when
+an individual is officially representing the community in public spaces.
+Examples of representing our community include using an official e-mail address,
+posting via an official social media account, or acting as an appointed
+representative at an online or offline event.
+
+## Enforcement
+
+Instances of abusive, harassing, or otherwise unacceptable behavior may be
+reported to the community leaders responsible for enforcement at
+conduct@openquantumsafe.org.
+All complaints will be reviewed and investigated promptly and fairly.
+
+All community leaders are obligated to respect the privacy and security of the
+reporter of any incident.
+
+## Enforcement Guidelines
+
+Community leaders will follow these Community Impact Guidelines in determining
+the consequences for any action they deem in violation of this Code of Conduct:
+
+### 1. Correction
+
+**Community Impact**: Use of inappropriate language or other behavior deemed
+unprofessional or unwelcome in the community.
+
+**Consequence**: A private, written warning from community leaders, providing
+clarity around the nature of the violation and an explanation of why the
+behavior was inappropriate. A public apology may be requested.
+
+### 2. Warning
+
+**Community Impact**: A violation through a single incident or series
+of actions.
+
+**Consequence**: A warning with consequences for continued behavior. No
+interaction with the people involved, including unsolicited interaction with
+those enforcing the Code of Conduct, for a specified period of time. This
+includes avoiding interactions in community spaces as well as external channels
+like social media. Violating these terms may lead to a temporary or
+permanent ban.
+
+### 3. Temporary Ban
+
+**Community Impact**: A serious violation of community standards, including
+sustained inappropriate behavior.
+
+**Consequence**: A temporary ban from any sort of interaction or public
+communication with the community for a specified period of time. No public or
+private interaction with the people involved, including unsolicited interaction
+with those enforcing the Code of Conduct, is allowed during this period.
+Violating these terms may lead to a permanent ban.
+
+### 4. Permanent Ban
+
+**Community Impact**: Demonstrating a pattern of violation of community
+standards, including sustained inappropriate behavior,  harassment of an
+individual, or aggression toward or disparagement of classes of individuals.
+
+**Consequence**: A permanent ban from any sort of public interaction within
+the community.
+
+## Attribution
+
+This Code of Conduct is adapted from the [Contributor Covenant][homepage],
+version 2.0, available at
+https://www.contributor-covenant.org/version/2/0/code_of_conduct.html.
+
+Community Impact Guidelines were inspired by [Mozilla's code of conduct
+enforcement ladder](https://github.com/mozilla/diversity).
+
+[homepage]: https://www.contributor-covenant.org
+
+For answers to common questions about this code of conduct, see the FAQ at
+https://www.contributor-covenant.org/faq. Translations are available at
+https://www.contributor-covenant.org/translations.
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/CONFIGURE.md ===
+Options for configuring liboqs builds
+=====================================
+
+The following options can be passed to CMake before the build file generation process to customize the way liboqs is built. The syntax for doing so is: `cmake .. [ARGS] [-D<OPTION_NAME>=<OPTION_VALUE>]...`, where `<OPTON_NAME>` is:
+
+- [BUILD_SHARED_LIBS](#BUILD_SHARED_LIBS)
+- [CMAKE_BUILD_TYPE](#CMAKE_BUILD_TYPE)
+- [CMAKE_INSTALL_PREFIX](#CMAKE_INSTALL_PREFIX)
+- [OQS_ALGS_ENABLED](#OQS_ALGS_ENABLED)
+- [OQS_BUILD_ONLY_LIB](#OQS_BUILD_ONLY_LIB)
+- [OQS_ENABLE_KEM_ALG/OQS_ENABLE_SIG_ALG/OQS_ENABLE_SIG_STFL_ALG](#OQS_ENABLE_KEM_ALG/OQS_ENABLE_SIG_ALG/OQS_ENABLE_SIG_STFL_ALG)
+- [OQS_MINIMAL_BUILD](#OQS_MINIMAL_BUILD)
+- [OQS_DIST_BUILD](#OQS_DIST_BUILD)
+- [OQS_USE_CPUFEATURE_INSTRUCTIONS](#OQS_USE_CPUFEATURE_INSTRUCTIONS)
+- [OQS_USE_OPENSSL](#OQS_USE_OPENSSL)
+- [OQS_USE_CUPQC](#OQS_USE_CUPQC)
+- [OQS_OPT_TARGET](#OQS_OPT_TARGET)
+- [OQS_SPEED_USE_ARM_PMU](#OQS_SPEED_USE_ARM_PMU)
+- [USE_SANITIZER](#USE_SANITIZER)
+- [OQS_ENABLE_TEST_CONSTANT_TIME](#OQS_ENABLE_TEST_CONSTANT_TIME)
+- [OQS_STRICT_WARNINGS](#OQS_STRICT_WARNINGS)
+- [OQS_EMBEDDED_BUILD](#OQS_EMBEDDED_BUILD)
+- [OQS_LIBJADE_BUILD](#OQS_LIBJADE_BUILD)
+- [OQS_ENABLE_LIBJADE_KEM_ALG/OQS_ENABLE_LIBJADE_SIG_ALG](#OQS_ENABLE_LIBJADE_KEM_ALG/OQS_ENABLE_LIBJADE_SIG_ALG)
+- [OQS_BUILD_FUZZ_TESTS](#OQS_BUILD_FUZZ_TESTS)
+
+## BUILD_SHARED_LIBS
+
+Can be set to `ON` or `OFF`. When `ON`, liboqs is built as a shared library.
+
+**Default**: `OFF`.
+
+This means liboqs is built as a static library by default.
+
+## CMAKE_BUILD_TYPE
+
+Can be set to the following values:
+
+- `Debug`: This turns off all compiler optimizations and produces debugging information. When the compiler is Clang, the [USE_SANITIZER](#USE_SANITIZER) option can also be specified to enable a Clang sanitizer. **This value only has effect when the compiler is GCC or Clang**
+
+- `Release`: This compiles code at the `O3` optimization level, and sets other compiler flags that reduce the size of the binary.
+
+**Default**: `Release`.
+
+## CMAKE_INSTALL_PREFIX
+
+See the [CMake documentation](https://cmake.org/cmake/help/latest/variable/CMAKE_INSTALL_PREFIX.html).
+
+## OQS_ENABLE_KEM_ALG/OQS_ENABLE_SIG_ALG/OQS_ENABLE_SIG_STFL_ALG
+
+Note: `ALG` in `OQS_ENABLE_KEM_ALG/OQS_ENABLE_SIG_ALG/OQS_ENABLE_SIG_STFL_ALG` should be replaced with the specific algorithm name as demonstrated below.
+
+This can be set to `ON` or `OFF`, and is `ON` by default. When `OFF`, `ALG` and its code are excluded from the build process. When `ON`, made available are additional options whereby individual variants of `ALG` can be excluded from the build process. 
+
+For example: if `OQS_ENABLE_KEM_BIKE` is set to `ON`, the options `OQS_ENABLE_KEM_bike_l1`, `OQS_ENABLE_KEM_bike_l3`, and `OQS_ENABLE_KEM_bike_l5` are made available (and are set to be `ON` by default).
+
+To enable `XMSS` stateful signature, set `OQS_ENABLE_SIG_STFL_XMSS` to `ON`, the options `OQS_ENABLE_SIG_STFL_xmss_sha256_h10` and its variants are also set to be `ON` by default. Similarly, `LMS` stateful signature family can also be enabled by setting `OQS_ENABLE_SIG_STFL_LMS` to `ON`.
+
+For a full list of such options and their default values, consult [.CMake/alg_support.cmake](https://github.com/open-quantum-safe/liboqs/blob/master/.CMake/alg_support.cmake).
+
+**Default**: Unset.
+
+## OQS_ALGS_ENABLED
+
+A selected algorithm set is enabled. Possible values are "STD" selecting all algorithms standardized by NIST; "NIST_R4" selecting all algorithms evaluated in round 4 of the NIST PQC competition; "NIST_SIG_ONRAMP" selecting algorithms evaluated in the NIST PQC "onramp" standardization for additional signature schemes; "All" (or any other value) selecting all algorithms integrated into liboqs. Parameter setting "STD" minimizes library size but may require re-running code generator scripts in projects integrating `liboqs`; e.g., [oqs-provider](https://github.com/open-quantum-safe/oqs-provider) and [oqs-boringssl](https://github.com/open-quantum-safe/boringssl).
+
+**Attention**: If you use any predefined value (`STD` or `NIST_R4` or `NIST_SIG_ONRAMP` as of now) for this variable, the values added via [OQS_ENABLE_KEM_ALG/OQS_ENABLE_SIG_ALG/OQS_ENABLE_SIG_STFL_ALG](#OQS_ENABLE_KEM_ALG/OQS_ENABLE_SIG_ALG/OQS_ENABLE_SIG_STFL_ALG) variables will be ignored.
+
+**Default**: `All`.
+
+## OQS_BUILD_ONLY_LIB
+
+Can be `ON` or `OFF`. When `ON`, only liboqs is built, and all the targets: `run_tests`, `gen_docs`, and `prettyprint` are excluded from the build system.
+
+**Default**: `OFF`.
+
+## OQS_MINIMAL_BUILD
+
+If set, this defines a semicolon-delimited list of algorithms to be contained in a minimal build of `liboqs`: Only algorithms explicitly set here are included in a build: For example running `cmake -DOQS_MINIMAL_BUILD="KEM_kyber_768;SIG_dilithium_3" ..` will build a minimum-size `liboqs` library only containing support for Kyber768 and Dilithium3.
+
+The full list of identifiers that can be set is listed [here for KEM algorithms](https://github.com/open-quantum-safe/liboqs/blob/main/src/kem/kem.h#L34) and [here for Signature algorithms](https://github.com/open-quantum-safe/liboqs/blob/f3caccff9e6225e7c50ca27f5ee6e58b7bc74188/src/sig/sig.h#L34). The default setting is empty, thus including all [supported algorithms](https://github.com/open-quantum-safe/liboqs#supported-algorithms) in the build.
+
+**Default**: Unset.
+
+## OQS_DIST_BUILD
+
+Can be `ON` or `OFF`. When `ON`, build liboqs for distribution. When `OFF`, build liboqs for use on a single machine.
+
+The library is always built for a particular architecture, either x86-64, ARM32v7, or ARM64v8, depending on the setting of CMAKE_SYSTEM_PROCESSOR. But liboqs contains code that is optimized for micro-architectures as well, e.g. x86-64 with the AVX2 extension.
+
+When built for distribution, the library will run on any CPU of the target architecture. Function calls will be dispatched to micro-architecture optimized routines at run-time using CPU feature detection.
+
+When built for use on a single machine, the library will only include the best available code for the target micro-architecture (see [OQS_OPT_TARGET](#OQS_OPT_TARGET)).
+
+**Default**: `ON`.
+
+## OQS_USE_CPUFEATURE_INSTRUCTIONS
+
+Note: `CPUFEATURE` in `OQS_USE_CPUFEATURE_INSTRUCTIONS` should be replaced with the specific CPU feature as noted below.
+
+These can be set to `ON` or `OFF` and take effect if liboqs is built for use on a single machine. By default, the CPU features are automatically determined and set to `ON` or `OFF` based on the CPU features available on the build system. The default values can be overridden by providing CMake build options. The available options on x86-64 are: `OQS_USE_ADX_INSTRUCTIONS`, `OQS_USE_AES_INSTRUCTIONS`, `OQS_USE_AVX_INSTRUCTIONS`, `OQS_USE_AVX2_INSTRUCTIONS`, `OQS_USE_AVX512_INSTRUCTIONS`, `OQS_USE_BMI1_INSTRUCTIONS`, `OQS_USE_BMI2_INSTRUCTIONS`, `OQS_USE_PCLMULQDQ_INSTRUCTIONS`, `OQS_USE_VPCLMULQDQ_INSTRUCTIONS`, `OQS_USE_POPCNT_INSTRUCTIONS`, `OQS_USE_SSE_INSTRUCTIONS`, `OQS_USE_SSE2_INSTRUCTIONS` and `OQS_USE_SSE3_INSTRUCTIONS`. The available options on ARM64v8 are `OQS_USE_ARM_AES_INSTRUCTIONS`, `OQS_USE_ARM_SHA2_INSTRUCTIONS`, `OQS_USE_ARM_SHA3_INSTRUCTIONS` and `OQS_USE_ARM_NEON_INSTRUCTIONS`.
+
+**Default**: Options valid on the build machine.
+
+## OQS_USE_OPENSSL
+
+To save size and limit the amount of different cryptographic code bases, it is possible to use OpenSSL as a crypto code provider by setting this configuration option.
+
+This can be set to `ON` or `OFF`. When `ON`, the additional options `OQS_USE_AES_OPENSSL`, `OQS_USE_SHA2_OPENSSL`, and `OQS_USE_SHA3_OPENSSL` are made available to control whether liboqs uses OpenSSL's AES, SHA-2, and SHA-3 implementations.
+
+By default,
+- `OQS_USE_AES_OPENSSL` is `ON` (on x86-64 only if `OQS_DIST_BUILD` and `OQS_USE_AES_INSTRUCTIONS` are not set)
+- `OQS_USE_SHA2_OPENSSL` is `ON`
+- `OQS_USE_SHA3_OPENSSL` is `OFF`.
+
+These default choices have been made to optimize the default performance of all algorithms. Changing them implies performance penalties.
+
+When `OQS_USE_OPENSSL` is `ON`, CMake also scans the filesystem to find the minimum version of OpenSSL required by liboqs (which happens to be 1.1.1). The [OPENSSL_ROOT_DIR](https://cmake.org/cmake/help/latest/module/FindOpenSSL.html) option can be set to aid CMake in its search.
+
+**Default**: `ON`.
+
+### OQS_DLOPEN_OPENSSL
+
+Dynamically load OpenSSL through `dlopen`. When using liboqs from other cryptographic libraries, hard dependency on OpenSSL is sometimes undesirable. If this option is `ON`, loading of OpenSSL will be deferred until any of the OpenSSL functions is used.
+
+Only has an effect if the system supports `dlopen` and ELF binary format, such as Linux or BSD family.
+
+### OQS_USE_CUPQC
+
+Can be `ON` or `OFF`.  When `ON`, use NVIDIA's cuPQC library where able (currently just ML-KEM).  When this option is enabled, liboqs may not run correctly on machines that lack supported GPUs. To download cuPQC follow the instructions at (https://developer.nvidia.com/cupqc-download/). Detailed descriptions of the API, requirements, and installation guide are in the cuPQC documentation (https://docs.nvidia.com/cuda/cupqc/index.html). While the code shipped by liboqs required to use cuPQC is licensed under Apache 2.0 the cuPQC SDK comes with its own license agreement (https://docs.nvidia.com/cuda/cupqc/license.html). 
+
+**Default**: `OFF`
+
+
+## Stateful Hash Based Signatures 
+
+XMSS and LMS are the two supported Hash-Based Signatures schemes.
+`OQS_ENABLE_SIG_STFL_XMSS` and `OQS_ENABLE_SIG_STFL_LMS` control these algorithms, which are disabled by default.
+A third variable, `OQS_HAZARDOUS_EXPERIMENTAL_ENABLE_SIG_STFL_KEY_SIG_GEN`, also controls the ability to generate keys and signatures. This is also disabled by default.
+Each of these variables can be set to `ON` or `OFF`.
+When all three are `ON`, stateful signatures are fully functional and can generate key pairs, sign data, and verify signatures.
+If `OQS_HAZARDOUS_EXPERIMENTAL_ENABLE_SIG_STFL_KEY_SIG_GEN` is `OFF` signature verification is the only functional operation.
+
+Standards bodies, such as NIST, recommend that key and signature generation only by done in hardware in order to best enforce the one-time use of secret keys.
+Keys stored in a file system are extremely susceptible to simultaneous use.
+When enabled in this library a warning message will be generated by the config process.
+The name of the configuration variable has been chosen to make every user of this feature aware of its security risks.
+The OQS team explicitly discourages enabling this variable and reserves the right to remove this feature in future releases if its use causes actual harm.
+It remains present as long as it is responsibly used as per the stated warnings.
+
+By default,
+- `OQS_ENABLE_SIG_STFL_XMSS` is `OFF` 
+- `OQS_ENABLE_SIG_STFL_LMS` is `OFF`
+- `OQS_HAZARDOUS_EXPERIMENTAL_ENABLE_SIG_STFL_KEY_SIG_GEN` is `OFF`.
+
+**Default**: `OFF`.
+
+## OQS_OPT_TARGET
+
+An optimization target. Only has an effect if the compiler is GCC or Clang and `OQS_DIST_BUILD=OFF`. Can take any valid input to the `-march` (on x86-64) or `-mcpu` (on ARM32v7 or ARM64v8) option for `CMAKE_C_COMPILER`. Can also be set to one of the following special values.
+  - `auto`: Use `-march=native` or `-mcpu=native` (if the compiler supports it).
+  - `generic`: Use `-march=x86-64` on x86-64, or `-mcpu=cortex-a5` on ARM32v7, or `-mcpu=cortex-a53` on ARM64v8.
+
+**Default**: `auto`.
+
+## OQS_SPEED_USE_ARM_PMU
+
+Can be `ON` or `OFF`. When `ON`, the benchmarking script will try to use the ARMv8 Performance Monitoring Unit (PMU). This will make cycle counts on ARMv8 platforms significantly more accurate.
+
+In order to use this option, user mode access to the PMU must be enabled via a kernel module. If user mode access is not enabled via the kernel module, benchmarking will throw an `Illegal Instruction` error. A kernel module that has been found to work on several platforms can be found [here for Linux](https://github.com/mupq/pqax#enable-access-to-performance-counters). Follow the instructions there (i.e., clone the repository, `cd enable_ccr` and `make install`) to load the kernel module, after which benchmarking should work. Superuser permissions are required. Linux header files must also be installed on your platform, which may not be present by default.
+
+Note that this option is not known to work on Apple M1 chips.
+
+**Default**: `OFF`.
+
+## USE_SANITIZER
+
+This has an effect when the compiler is Clang and when [CMAKE_BUILD_TYPE](#CMAKE_BUILD_TYPE) is `Debug`. Then, it can be set to:
+
+- `Address`: This enables Clang's `AddressSanitizer`
+- `Memory`: This enables Clang's `MemorySanitizer`
+- `MemoryWithOrigins`: This enables Clang's `MemorySanitizer` with the added functionality of being able to track the origins of uninitialized values
+- `Undefined`: This enables Clang's `UndefinedBehaviorSanitizer`. The `BLACKLIST_FILE` option can be additionally set to a path to a file listing the entities Clang should ignore.
+- `Thread`: This enables Clang's `ThreadSanitizer`
+- `Leak`: This enables Clang's `LeakSanitizer`
+
+**Default**: Unset.
+
+## OQS_ENABLE_TEST_CONSTANT_TIME
+
+This is used in conjunction with `tests/test_constant_time.py` to use Valgrind to look for instances of secret-dependent control flow.  liboqs must also be compiled with [CMAKE_BUILD_TYPE](#CMAKE_BUILD_TYPE) set to `Debug`.  
+
+See the documentation in [`tests/test_constant_time.py`](https://github.com/open-quantum-safe/liboqs/blob/main/tests/test_constant_time.py) for more usage information.
+
+**Default**: `OFF`.
+
+## OQS_STRICT_WARNINGS
+
+Can be `ON` or `OFF`. When `ON`, all compiler warnings are enabled and treated as errors. This setting is recommended to be enabled prior to submission of a Pull Request as CI runs with this setting active. When `OFF`, significantly fewer compiler warnings are enabled such as to avoid undue build errors triggered by (future) compiler warning features/unknown at the development time of this library.
+
+**Default**: `OFF`.
+
+## OQS_EMBEDDED_BUILD
+
+Can be `ON` or `OFF`. When `ON`, calls to standard library functions typically not present in a bare-metal embedded environment are excluded from compilation. 
+
+At the moment, this is **only** considered for random number generation, as both `getentropy()` and a file based `/dev/urandom` are not available on embedded targets (e.g. the Zephyr port).
+
+**Attention**: When this option is enabled, you have to supply a custom callback for obtaining random numbers using the `OQS_randombytes_custom_algorithm()` API before accessing the cryptographic API. Otherwise, all key generation and signing operations will fail. 
+
+**Default**: `OFF`.
+
+## OQS_LIBJADE_BUILD
+Can be `ON` or `OFF`. When `ON` liboqs is built to use high assurance implementations of cryptographic algorithms from [Libjade](https://github.com/formosa-crypto/libjade). The cryptographic primitives in Libjade are written using [Jasmin](https://github.com/jasmin-lang/jasmin) and built using the Jasmin compiler. The Jasmin compiler is proven (in Coq) to preserve semantic correctness of a program, maintain secret-independence of control flow, and maintain secret independence of locations of memory access through compilation. Additionally, the Jasmin compiler guarantees thread safety because Jasmin doesn't support global variables. 
+
+At the moment, Libjade only provides Kyber512 and Kyber768 KEMs. 
+
+At the moment, libjade only supports Linux and Darwin based operating systems on x86_64 platforms.
+
+**Default** `OFF`.
+
+## OQS_ENABLE_LIBJADE_KEM_ALG/OQS_ENABLE_LIBJADE_SIG_ALG
+
+Note: `ALG` in `OQS_ENABLE_LIBJADE_KEM_ALG/OQS_ENABLE_LIBJADE_SIG_ALG` should be replaced with the specific algorithm name as demonstrated in OQS_ENABLE_KEM_ALG/OQS_ENABLE_SIG_ALG.
+
+**Default**: `OFF` if OQS_LIBJADE_BUILD is `OFF` else unset.
+
+## OQS_BUILD_FUZZ_TESTS
+Can be `ON` or `OFF`. When `ON` liboqs the fuzz test-suite will be enabled. This option is only available if the c compiler is set to clang i.e. `-DCMAKE_C_COMPILER=clang`.
+
+Note: It is strongly recommended that this configuration be enabled with `CFLAGS=-fsanitize=address,fuzzer-no-link LDFLAGS=-fsanitize=address`. While fuzzing will run without these flags, enabling this instrumentation will make fuzzing performance much faster and catch [potential memory related bugs](https://clang.llvm.org/docs/AddressSanitizer.html). 
+
+**Default** `OFF`.
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/CONTRIBUTING.md ===
+# Contributing
+
+The OQS core team welcomes all proposals to improve this project. This may take 
+the form of [a discussion](https://github.com/open-quantum-safe/liboqs/discussions)
+for input or feedback, possible bug reports or feature requests via [issues](https://github.com/open-quantum-safe/liboqs/issues)
+as well as new code and documentation via a [pull request (PR)](https://github.com/open-quantum-safe/liboqs/pulls).
+
+## Baseline design goal
+
+OQS is a collection of many different PQC algorithms, maintained by a small team of people who are not guaranteed to be versed in the intricate details of each algorithm.
+
+Therefore, all contributions to the general logic of the project should be as independent of any single algorithm such as to ease long-term maintainability. If changes are contributed catering to the properties of a specific algorithm, it is expected that consideration is given at least how the other algorithms of the same type (KEM or SIG) should cater to the proposed changes, e.g., by way of a new, generally satisfiable API.
+
+All contributions to a specific algorithm ideally come with the willingness to provide long-term support, or at least a contact person that can help the OQS team pinpoint potential problems with the algorithm.
+
+## Review and Feedback
+
+We aim to provide timely feedback to any input. If you are uncertain as to whether
+a particular contribution is welcome, needed or timely, please first open an [issue](https://github.com/open-quantum-safe/liboqs/issues)
+particularly in case of possible bugs or new feature requests or create a
+[discussion](https://github.com/open-quantum-safe/liboqs/discussions).
+
+## Pull requests
+
+Pull requests should clearly state their purpose, possibly referencing an existing
+[issue](https://github.com/open-quantum-safe/liboqs/issues) when resolving it.
+
+All PRs should move to "Ready for Review" stage only if all CI tests pass (are green).
+
+The OQS core team is happy to provide feedback also to Draft PRs in order to improve
+them before the final "Review" stage.
+
+### Coding style
+
+This project has adopted a slightly modified [Google code formatting style](https://astyle.sourceforge.net/astyle.html#_style=google) for the core components
+of the library as documented in the [style template](.astylerc).
+The `astyle` tool is used to check formatting in CI.
+Due to variations in behaviour across version and platforms, it is possible to encounter CI failures even if code has been locally formatted with `astyle`.
+To assist with this inconvenience, we provide a convenience script which runs `astyle` in the same Docker image that we use for the CI checks:
+```bash
+LIBOQS_DIR=<liboqs directory> ./scripts/format_code.sh
+```
+This script has been tested on x86\_64 Ubuntu and arm64 macOS. Contributions for other platforms are welcome and appreciated!
+
+### Continuous Integration (CI)
+
+`liboqs` uses GitHub Actions for CI.
+For a comprehensive overview of our CI setup, see [CI.md](CI.md).
+
+#### Running CI on your branch
+
+OQS attempts to be responsible with resource usage and only runs a minimal set of tests automatically on push.
+A more thorough test suite runs automatically on pull requests.
+To trigger these tests before creating a PR, include the string "[full tests]" in a commit message.
+Other trigger strings are documented in [CI.md](CI.md#push.yml).
+
+#### Running CI locally
+
+[Act](https://github.com/nektos/act) is a tool facilitating local execution of
+GitHub CI jobs. When executed in the main `liboqs` directory, 
+
+    act -l Displays all GitHub CI jobs
+    act -j some-job Executes "some-job"
+
+When installing `act` as a GitHub extension, prefix the commands with `gh `.
+
+## Modifications to CI
+
+Modifications to GitHub Actions workflows are checked with [actionlint](https://github.com/rhysd/actionlint) during the [basic.yml](.github/workflows/basic.yml) job, protecting the CI chain and against wrong approval decisions based on improper CI runs.  Changes to these workflows can be validated locally with `actionlint`:
+
+```bash
+actionlint .github/workflows/*.yml
+```
+
+or running the CI locally (as above):
+
+```bash
+act workflow_call -W '.github/workflows/basic.yml'
+```
+
+### New features
+
+Any PR introducing a new feature is expected to contain a test of this feature
+and this test should be part of the CI pipeline.
+
+## Failsafe
+
+If you feel your contribution is not getting proper attention, please be sure to
+add a tag to one or more of our [most active contributors](https://github.com/open-quantum-safe/liboqs/graphs/contributors).
+
+## Issues to start working on
+
+If you feel like contributing but don't know what specific topic to work on,
+please check the [open issues tagged "good first issue" or "help wanted"](https://github.com/open-quantum-safe/liboqs/issues).
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/GOVERNANCE.md ===
+# Governance
+
+## Basic principles
+
+The Open Quantum Safe project aims to operate by the following principles:
+
+- **Openness**: The project will be open in its operation, open to contributions, and produce open source software.
+- **Respect**: The project will foster respectful interactions with all participants.
+- **Scientific integrity**: The project will follow advancements in cryptographic research and will be guided by standards and best practices.
+
+Decision making in the project will follow the principles above, and be governed first and foremost by reason and mutually respectful interaction between all participants.
+The project will aim to build consensus for decisions, and will where possible operate by the approach of [lazy consensus](https://community.apache.org/committers/decisionMaking.html).
+If decisions cannot be reached using lazy consensus, voting will be used to come to a resolution.
+
+## Community and Roles
+
+The OQS community is open to all who would like to participate in the project following its principles, including academic, industry, public sector, and individual contributors.
+
+The following roles exist in the project:
+
+### Users
+
+A **User** is a person or organization using software produced by the project.
+
+Responsibilities:
+
+- Abide by the [license](LICENSE.txt)
+- Consider participating in the project!
+
+### Community Members
+
+A **Community Member** is a User who interacts with the project, for example by participating in discussions on Github or mailing lists, or in project meetings.
+
+Responsibilities:
+
+- Follow the [code of conduct](CODE_OF_CONDUCT.md)
+
+### Contributors
+
+A **Contributor** is a Community Member who contributes directly to the project by submitting code or documentation, or actively participating in issues or pull requests on Github.
+
+### Committers
+
+A **Committer** is a Contributor with increased experience in the project who helps review pull requests and actively participates in discussions about the project. Committers will be members of the open-quantum-safe GitHub organization and will have "write" permissions in GitHub.
+
+Responsibilities:
+
+- Further the goals of the project.
+- Monitor and respond to GitHub issues.
+- Review and merge pull requests.
+- Assist with security releases when required.
+- Participate in discussions and project meetings.
+
+### Maintainers
+
+A **Maintainer** is a Committer who makes significant and sustained contributions to the project, and is committed to guiding the direction of the project. Maintainers will have "administrative" permissions in GitHub.
+
+Responsibilities:
+
+- Oversee the overall project health and growth.
+- Lead communication for the project.
+- Define general and technical guidelines for the project.
+- Identify priorities and manage the release cycle.
+
+### Change of role
+
+Any Community Member may become a Contributor by creating a pull request (PR) and getting it successfully reviewed and merged by Committers.
+
+Any Contributor can become a Committer by contributing sufficient code and displaying deep subject matter knowledge in discussions such that a majority of Committers vote for this change of role. A Maintainer can veto such a vote. Such a veto can be overruled by a 2/3 majority of Committers.
+
+As such a voting decision may be considered subjective, Contributors striving to become Committers are encouraged to ask for advice from Committers/Maintainers as to what they can do to obtain this role. Baseline requirements for contributions are documented in [CONTRIBUTING.md](CONTRIBUTING.md). Any Contributor can create a discussion item to request a vote to become Committer.
+
+Any Committer can become a Maintainer by majority vote of voting Committers. A current Maintainer can veto such a vote. Such a veto can be overruled by a 2/3 majority of all Committers.
+
+A Maintainer is not permitted to remove another Maintainer's GitHub privileges.
+
+A Committer may be automatically moved to Contributor status if not actively contributing by discussion or PR review during the last 90 days or by voluntarily suspending this status (e.g., by taking a ["Leave of absence"](#leave-of-absence)). If a Maintainer loses or relinquishes the Committer status and, hence, the Maintainer status, the Committers have to determine whether a new Maintainer needs to be elected.
+
+Any person violating the [code of conduct](CODE_OF_CONDUCT.md), consistently not fulfilling the role responsibilities, or for other reasons can lose the role held if a simple majority of Committers votes for such removal and no Maintainer vetoes that decision. If a Maintainer is to be removed from that role a 2/3 majority of Committers must agree.
+
+Depending on the reason for removal, a Maintainer may be converted to Emeritus status. Emeritus Maintainers may still be consulted on some project matters, and can be returned to Maintainer status if their availability changes and a simple majority of Committers agrees.
+
+### Leave of absence
+
+Any Committer may voluntarily step down from the role for a documented period of time, losing voting rights for that time period. The period is documented in this file next to the person's name below.  At the end of this time period, the Committer automatically regains their voting rights.
+
+A leave of absence may not be longer than a year. If the Committer needs to be away for longer than that, they must step down from that role unconditionally, and regaining that role becomes subject of normal procedures to become Committer, as described in ["Change of role"](#change-of-role) above.
+
+## Voting
+
+Change of role or changes to this document is subject to voting.
+
+Votes are to be executed by way of open GitHub discussions. No quorum is needed for votes open for 4 weeks. Urgent matters may be decided by majority vote among Maintainers or 2/3 majority by all Committers within an arbitrary voting period.
+
+## Current Maintainers and Committers
+
+### Maintainers
+
+@baentsch
+@dstebila
+
+### Committers
+
+@baentsch
+@bhess
+@christianpaquin
+@dstebila
+@jschanck
+@Martyrshot
+@praveksharma
+@swilson4
+@vsoftco
+
+## Afterword
+
+*This governance document was based in part of the [Falco Project governance document](https://github.com/falcosecurity/evolution/blob/main/GOVERNANCE.md).
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/LICENSE.txt ===
+The MIT license, the text of which is below, applies to liboqs in general.
+liboqs includes some third party libraries or modules that are licensed
+differently; the corresponding subfolder contains the license that applies in
+that case.
+
+
+Copyright (c) 2016-2024 The Open Quantum Safe project authors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/PLATFORMS.md ===
+# Supported platforms
+
+This file documents the different platforms supported by `liboqs` and therefore defines three different support tiers:
+
+## Support tiers
+
+This classification is roughly based on the [rust platform support tier classification](https://doc.rust-lang.org/beta/rustc/platform-support.html):
+
+### Tier 1
+
+Tier 1 targets can be thought of as "guaranteed to work". The CI system builds and tests binary versions for each tier 1 target to make sure any change does not negatively affect those platforms. Platform-specific build documentation must exist. Tier 1 targets marked with a dagger (†) are additionally tested for constant-time behaviour. The CI system contains automated constant-time testing for each of these starred targets, and all failures are documented in the `tests/constant_time` directory. IMPORTANT: This does not mean that constant-time behaviour is guaranteed on these targets, or that non-constant-time behaviour is limited to documented exceptions. It does, however, mean that `liboqs` developers should track constant-time issues on these platforms.
+
+Tier 1 platforms are also prioritized for security support, as per the [OQS security response process](https://github.com/open-quantum-safe/tsc/blob/main/security/response-process.md).
+
+### Tier 2
+
+Tier 2 targets can be thought of as "guaranteed to build". The `liboqs` CI system contains builds for each tier 2 target; testing may or may not be available (typically depending on CI system platform availability). Therefore, tier 2 targets often work to quite a good degree and patches are always welcome! Tier 2 targets may also have known deficiencies caused by a lack of expertise to fix those on a given platform. Again, help and PRs to move platforms from tier 2 to tier 1 are always welcome.
+
+### Tier 3
+
+Tier 3 targets are those which the `liboqs` codebase has support for, but which the CI system does not build or test automatically, so they may or may not work. Platform-specific build documentation should exist.
+
+## Platform tier policy
+
+Tier 2 and tier 1 targets place work on `liboqs` core project developers as a whole, to avoid breaking the target. The broader `liboqs` community may also feel more inclined to support higher-tier targets in their work. Thus, these tiers require commensurate and ongoing efforts from the maintainers of the target, to demonstrate value and to minimize any disruptions to ongoing `liboqs` development.
+
+This policy defines the requirements for accepting a proposed target at a given level of support.
+
+Each tier builds on all the requirements from the previous tier, unless overridden by a stronger requirement.
+
+Change of tier is subject to approval by the `liboqs` technical governance team.  This team is responsible for reviewing and evaluating the target, based on these requirements and their own judgment. The tea may apply additional requirements, including subjective requirements, such as to deal with issues not foreseen by this policy. (Such requirements may subsequently motivate additions to this policy.)
+
+While these criteria attempt to document the policy, that policy still involves human judgment. Targets must fulfill the spirit of the requirements as well, as determined by the judgment of the approving team. Reviewers and team members evaluating targets and target-specific patches should always use their own best judgment regarding the quality of work, and the suitability of a target for the `liboqs` project. Neither this policy nor any decisions made regarding targets shall create any binding agreement or estoppel by any party.
+
+Before filing an issue or pull request (PR) to introduce or promote a target, the target should already meet the corresponding tier requirements. This does not preclude an existing target's maintainers using issues (on the `liboqs` repository or otherwise) to track requirements that have not yet been met, as appropriate; however, before officially proposing the introduction or promotion of a target, it should meet all of the necessary requirements. A target proposal must quote the corresponding requirements verbatim and respond to them as part of explaining how the target meets those requirements. (For the requirements that simply state that the target or the target developers must not do something, it suffices to acknowledge the requirement.)
+
+Several parts of this policy require providing target-specific documentation. Such documentation should typically appear in a subdirectory of the platform-support section of the `liboqs` manual, with a link from the target's entry in platform support.
+
+Note that a target must have already received approval for the next lower tier, and spent a reasonable amount of time at that tier, before making a proposal for promotion to the next higher tier; this is true even if a target meets the requirements for several tiers at once. This policy leaves the precise interpretation of "reasonable amount of time" up to the approving team; the team may scale the amount of time required based on their confidence in the target and its demonstrated track record at its current tier. At a minimum, multiple stable releases of `liboqs` should typically occur between promotions of a target.
+
+The availability or tier of a target in stable `liboqs` is not a hard stability guarantee about the future availability or tier of that target. Higher-level target tiers are an increasing commitment to the support of a target, and we will take that commitment and potential disruptions into account when evaluating the potential demotion or removal of a target that has been part of a stable release. The promotion or demotion of a target will not generally affect existing stable releases, only current development and future releases.
+
+In this policy, the words "must" and "must not" specify absolute requirements that a target must meet to qualify for a tier. The words "should" and "should not" specify requirements that apply in almost all cases, but for which the approving teams may grant an exception for good reason. The word "may" indicates something entirely optional, and does not indicate guidance or recommendations. This language is based on [IETF RFC 2119](https://datatracker.ietf.org/doc/html/rfc2119).
+
+## Platforms supported
+
+### Tier 1
+
+- x86_64/amd64/x64 for Ubuntu Linux (Noble)†
+- x86_64/amd64/x64 for MacOS (XCode 15)
+- aarch64 for Ubuntu (Noble)
+- aarch64 for MacOS (XCode 15 and 16)
+- armhf/ARM7 and aarch64 emulation on Ubuntu
+
+### Tier 2
+
+- x86_64/amd64/x64 for Windows (Visual Studio Toolchain) 2022 and 2025
+- armeabi-v7a, arm64-v8a, x86, x86_64 for Android
+- aarch64 for Apple iOS and tvOS (CMake `-DPLATFORM=OS64` and `TVOS`)
+- arm64, arm (32 bit), x86, x86_64, riscv32, riscv64 for Zephyr
+
+### Tier 3
+
+- x86 for Windows (Visual Studio Toolchain)
+- ppc641e for Ubuntu (Focal)
+- s390x for Ubuntu (Focal)
+- loongarch64 for Debian Linux (trixie)
+- NVIDIA GPU architectures 70, 75, 80, 86, 89, and 90 with a x86_64 CPU for Linux
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/README.md ===
+liboqs
+======================
+
+[![Main Branch Tests](https://github.com/open-quantum-safe/liboqs/actions/workflows/commit-to-main.yml/badge.svg)](https://github.com/open-quantum-safe/liboqs/actions/workflows/commit-to-main.yml)
+[![Weekly Tests](https://github.com/open-quantum-safe/liboqs/actions/workflows/weekly.yml/badge.svg)](https://github.com/open-quantum-safe/liboqs/actions/workflows/weekly.yml)
+![Travis Build Status](https://img.shields.io/travis/com/open-quantum-safe/liboqs?logo=travis&label=Travis%20CI&labelColor=%23343B42&color=%232EBB4E)
+
+liboqs is an open source C library for quantum-safe cryptographic algorithms.
+
+- [liboqs](#liboqs)
+	- [Overview](#overview)
+	- [Status](#status)
+		- [Supported Algorithms](#supported-algorithms)
+			- [Key encapsulation mechanisms](#key-encapsulation-mechanisms)
+			- [Signature schemes](#signature-schemes)
+		- [Limitations and Security](#limitations-and-security)
+			- [Platform limitations](#platform-limitations)
+	- [Quickstart](#quickstart)
+		- [Linux and Mac](#linux-and-mac)
+		- [Windows](#windows)
+		- [Cross compilation](#cross-compilation)
+	- [Documentation](#documentation)
+	- [Contributing](#contributing)
+	- [License](#license)
+	- [Acknowledgements](#acknowledgements)
+
+## Overview
+
+liboqs provides:
+
+- a collection of open source implementations of quantum-safe key encapsulation mechanism (KEM) and digital signature algorithms; the full list can be found [below](#supported-algorithms)
+- a common API for these algorithms
+- a test harness and benchmarking routines
+
+liboqs is part of the **Open Quantum Safe (OQS)** project, which aims to develop and integrate into applications quantum-safe cryptography to facilitate deployment and testing in real world contexts. In particular, OQS provides prototype integrations of liboqs into protocols like TLS, X.509, and S/MIME, through our [OpenSSL 3 Provider](https://github.com/open-quantum-safe/oqs-provider) and we provide a variety of other [post-quantum-enabled demos](https://github.com/open-quantum-safe/oqs-demos).
+
+The OQS project is supported by the [Post-Quantum Cryptography Alliance](https://pqca.org/) as part of the [Linux Foundation](https://linuxfoundation.org/). More information about the Open Quantum Safe project can be found at [openquantumsafe.org](https://openquantumsafe.org/).
+
+OQS is running a survey to better understand our community. We would like to hear from organizations and individuals about their interest in and use of the Open Quantum Safe project. Please take a few minutes to fill out the survey: https://linuxfoundation.surveymonkey.com/r/oqssurvey
+
+## Status
+
+### Supported Algorithms
+
+Details on each supported algorithm can be found in the [docs/algorithms](https://github.com/open-quantum-safe/liboqs/tree/main/docs/algorithms) folder.
+
+The list below indicates all algorithms currently supported by liboqs, including experimental algorithms and already excluding algorithm variants pruned during the NIST competition, such as Kyber-90s or Dilithium-AES.
+
+The only algorithms in `liboqs` that implement NIST standards are the [`ML-KEM`](https://csrc.nist.gov/pubs/fips/203/final) (final standard) and [`ML-DSA`](https://csrc.nist.gov/pubs/fips/204/final) (final standard) variants with their respective different bit strengths. `liboqs` will retain these algorithm names selected by NIST throughout the finishing stages of the standardization process, so users can rely on their presence going forward. If NIST changes the implementation details of these algorithms, `liboqs` will adjust the implementation so that users are protected from such potential changes.
+
+Falcon and SPHINCS+ have also been [selected for standardization](https://csrc.nist.gov/Projects/post-quantum-cryptography/selected-algorithms-2022), but the `liboqs` implementations of these algorithms are currently tracking Round 3 submissions and not NIST standards drafts.
+
+All names other than `ML-KEM` and `ML-DSA` are subject to change. `liboqs` makes available a [selection mechanism for algorithms on the NIST standards track, continued NIST competition, or purely experimental nature by way of the configuration variable OQS_ALGS_ENABLED](CONFIGURE.md#oQS_ALGS_ENABLED). By default `liboqs` is built supporting all, incl. experimental, PQ algorithms listed below.
+
+#### Key encapsulation mechanisms
+
+<!--- OQS_TEMPLATE_FRAGMENT_LIST_KEXS_START -->
+- **BIKE**: BIKE-L1, BIKE-L3, BIKE-L5
+- **Classic McEliece**: Classic-McEliece-348864†, Classic-McEliece-348864f†, Classic-McEliece-460896†, Classic-McEliece-460896f†, Classic-McEliece-6688128†, Classic-McEliece-6688128f†, Classic-McEliece-6960119†, Classic-McEliece-6960119f†, Classic-McEliece-8192128†, Classic-McEliece-8192128f†
+- **FrodoKEM**: FrodoKEM-640-AES, FrodoKEM-640-SHAKE, FrodoKEM-976-AES, FrodoKEM-976-SHAKE, FrodoKEM-1344-AES, FrodoKEM-1344-SHAKE
+- **HQC**: HQC-128, HQC-192, HQC-256
+- **Kyber**: Kyber512, Kyber768, Kyber1024
+- **ML-KEM**: ML-KEM-512, ML-KEM-768, ML-KEM-1024
+- **NTRU-Prime**: sntrup761
+<!--- OQS_TEMPLATE_FRAGMENT_LIST_KEXS_END -->
+
+#### Signature schemes
+
+<!--- OQS_TEMPLATE_FRAGMENT_LIST_SIGS_START -->
+- **CROSS**: cross-rsdp-128-balanced, cross-rsdp-128-fast, cross-rsdp-128-small†, cross-rsdp-192-balanced, cross-rsdp-192-fast, cross-rsdp-192-small†, cross-rsdp-256-balanced†, cross-rsdp-256-fast, cross-rsdp-256-small†, cross-rsdpg-128-balanced, cross-rsdpg-128-fast, cross-rsdpg-128-small, cross-rsdpg-192-balanced, cross-rsdpg-192-fast, cross-rsdpg-192-small†, cross-rsdpg-256-balanced, cross-rsdpg-256-fast, cross-rsdpg-256-small†
+- **CRYSTALS-Dilithium**: Dilithium2, Dilithium3, Dilithium5
+- **Falcon**: Falcon-512, Falcon-1024, Falcon-padded-512, Falcon-padded-1024
+- **MAYO**: MAYO-1, MAYO-2, MAYO-3, MAYO-5†
+- **ML-DSA**: ML-DSA-44, ML-DSA-65, ML-DSA-87
+- **SPHINCS+-SHA2**: SPHINCS+-SHA2-128f-simple, SPHINCS+-SHA2-128s-simple, SPHINCS+-SHA2-192f-simple, SPHINCS+-SHA2-192s-simple, SPHINCS+-SHA2-256f-simple, SPHINCS+-SHA2-256s-simple
+- **SPHINCS+-SHAKE**: SPHINCS+-SHAKE-128f-simple, SPHINCS+-SHAKE-128s-simple, SPHINCS+-SHAKE-192f-simple, SPHINCS+-SHAKE-192s-simple, SPHINCS+-SHAKE-256f-simple, SPHINCS+-SHAKE-256s-simple
+- **UOV**: OV-Is, OV-Ip, OV-III, OV-V, OV-Is-pkc, OV-Ip-pkc, OV-III-pkc, OV-V-pkc, OV-Is-pkc-skc, OV-Ip-pkc-skc, OV-III-pkc-skc, OV-V-pkc-skc
+<!--- OQS_TEMPLATE_FRAGMENT_LIST_SIGS_END -->
+- **XMSS**: XMSS-SHA2_10_256, XMSS-SHA2_16_256, XMSS-SHA2_20_256, XMSS-SHAKE_10_256, XMSS-SHAKE_16_256, XMSS-SHAKE_20_256, XMSS-SHA2_10_512, XMSS-SHA2_16_512, XMSS-SHA2_20_512, XMSS-SHAKE_10_512, XMSS-SHAKE_16_512, XMSS-SHAKE_20_512, XMSS-SHA2_10_192, XMSS-SHA2_16_192, XMSS-SHA2_20_192, XMSS-SHAKE256_10_192, XMSS-SHAKE256_16_192, XMSS-SHAKE256_20_192, SHAKE256_10_256, SHAKE256_16_256, SHAKE256_20_256, XMSSMT-SHA2_20/2_256, XMSSMT-SHA2_20/4_256, XMSSMT-SHA2_40/2_256, XMSSMT-SHA2_40/4_256, XMSSMT-SHA2_40/8_256, XMSSMT-SHA2_60/3_256, XMSSMT-SHA2_60/6_256, XMSSMT-SHA2_60/12_256, XMSSMT-SHAKE_20/2_256, XMSSMT-SHAKE_20/4_256, XMSSMT-SHAKE_40/2_256, XMSSMT-SHAKE_40/4_256, XMSSMT-SHAKE_40/8_256, XMSSMT-SHAKE_60/3_256, XMSSMT-SHAKE_60/6_256, XMSSMT-SHAKE_60/12_256 
+- **LMS**: LMS_SHA256_H5_W1, LMS_SHA256_H5_W2, LMS_SHA256_H5_W4, LMS_SHA256_H5_W8, LMS_SHA256_H10_W1, LMS_SHA256_H10_W2, LMS_SHA256_H10_W4, LMS_SHA256_H10_W8, LMS_SHA256_H15_W1, LMS_SHA256_H15_W2, LMS_SHA256_H15_W4, LMS_SHA256_H15_W8, LMS_SHA256_H20_W1, LMS_SHA256_H20_W2, LMS_SHA256_H20_W4, LMS_SHA256_H20_W8, LMS_SHA256_H25_W1, LMS_SHA256_H25_W2, LMS_SHA256_H25_W4, LMS_SHA256_H25_W8, LMS_SHA256_H5_W8_H5_W8, LMS_SHA256_H10_W4_H5_W8, LMS_SHA256_H10_W8_H5_W8, LMS_SHA256_H10_W2_H10_W2, LMS_SHA256_H10_W4_H10_W4, LMS_SHA256_H10_W8_H10_W8, LMS_SHA256_H15_W8_H5_W8, LMS_SHA256_H15_W8_H10_W8, LMS_SHA256_H15_W8_H15_W8, LMS_SHA256_H20_W8_H5_W8, LMS_SHA256_H20_W8_H10_W8, LMS_SHA256_H20_W8_H15_W8, LMS_SHA256_H20_W8_H20_W8
+
+Note that for algorithms marked with a dagger (†), liboqs contains at least one implementation that uses a large amount of stack space; this may cause failures when run in threads or in constrained environments. For more information, consult the algorithm information sheets in the [docs/algorithms](https://github.com/open-quantum-safe/liboqs/tree/main/docs/algorithms) folder.
+
+### Limitations and Security
+
+While at the time of this writing there are no vulnerabilities known in any of the quantum-safe algorithms used in this library, caution is advised when deploying quantum-safe algorithms as most of the algorithms and software have not been subject to the same degree of scrutiny as for currently deployed algorithms. Particular attention should be paid to guidance provided by the standards community, especially from the NIST [Post-Quantum Cryptography Standardization](https://csrc.nist.gov/Projects/Post-Quantum-Cryptography/Post-Quantum-Cryptography-Standardization) project.  As research advances, the supported algorithms may see rapid changes in their security, and may even prove insecure against both classical and quantum computers. Moreover, note that the `sntrup761` is only included for interop testing.
+
+liboqs does not intend to "pick winners": algorithm support is informed by the NIST PQC standardization project. We strongly recommend that applications and protocols rely on the outcomes of this effort when deploying post-quantum cryptography.
+
+We realize some parties may want to deploy quantum-safe cryptography prior to the conclusion of the NIST PQC standardization project.  We strongly recommend such attempts make use of so-called **hybrid cryptography**, in which quantum-safe public-key algorithms are used alongside traditional public key algorithms (like RSA or elliptic curves) so that the solution is at least no less secure than existing traditional cryptography.
+
+**WE DO NOT CURRENTLY RECOMMEND RELYING ON THIS LIBRARY IN A PRODUCTION ENVIRONMENT OR TO PROTECT ANY SENSITIVE DATA.** This library is meant to help with research and prototyping.  While we make a best-effort approach to avoid security bugs, this library has not received the level of auditing and analysis that would be necessary to rely on it for high security use.
+
+Please see [SECURITY.md](SECURITY.md#security-policy) for details on how to report a vulnerability and the OQS vulnerability response process.
+
+#### Platform limitations
+
+In order to optimize support effort,
+- not all algorithms are equally well supported on all platforms. In case of questions, it is first advised to review the [documentation files for each algorithm](docs/algorithms).
+- not all compilers are equally well supported. For example, at least v7.1.0 of the GNU compiler is required.
+
+#### Support limitations
+
+This project is not commercially supported. All guidelines and goals for liboqs are reflections of current practices, executed by a community of academic, part-time, and/or voluntary contributors on a best-effort basis and may change at any time. Any entity seeking more reliable commitments is strongly encouraged to join the OQS community and thus enhance the code and support that the community can provide.
+
+
+## Quickstart
+
+### Linux and Mac
+
+1. Install dependencies:
+
+	On Ubuntu:
+
+		 sudo apt install astyle cmake gcc ninja-build libssl-dev python3-pytest python3-pytest-xdist unzip xsltproc doxygen graphviz python3-yaml valgrind
+
+	On macOS, using a package manager of your choice (we've picked Homebrew):
+
+		brew install cmake ninja openssl@3 wget doxygen graphviz astyle valgrind
+		pip3 install pytest pytest-xdist pyyaml
+
+	Using Nix:
+
+	    nix develop
+
+	Note that, if you want liboqs to use OpenSSL for various symmetric crypto algorithms (AES, SHA-2, etc.) then you must have OpenSSL installed (version 3.x recommended; EOL version 1.1.1 also still possible).
+
+2. Get the source:
+
+		git clone -b main https://github.com/open-quantum-safe/liboqs.git
+		cd liboqs
+
+	and build:
+
+		mkdir build && cd build
+		cmake -GNinja ..
+		ninja
+
+Various `cmake` build options to customize the resultant artifacts are available and are [documented in CONFIGURE.md](CONFIGURE.md#options-for-configuring-liboqs-builds). All supported options are also listed in the `.CMake/alg-support.cmake` file, and can be viewed by running `cmake -LAH -N ..` in the `build` directory.
+
+The following instructions assume we are in `build`.
+
+3. By default the main build result is `lib/liboqs.a`, a static library. If you want to build a shared/dynamic library, append [`-DBUILD_SHARED_LIBS=ON`](CONFIGURE.md#bUILD_SHARED_LIBS) to the `cmake -GNinja ..` command above and the result will be `lib/liboqs.so|dylib|dll`. The public headers are located in the `include` directory. There are also a variety of programs built under the `tests` directory:
+
+	- `test_kem`: Simple test harness for key encapsulation mechanisms
+	- `test_sig`: Simple test harness for signature schemes
+	- `test_sig_stfl`: Simple test harness for stateful signature schemes
+	- `test_kem_mem`: Simple test harness for checking memory consumption of key encapsulation mechanisms
+	- `test_sig_mem`: Simple test harness for checking memory consumption of signature schemes
+	- `kat_kem`: Program that generates known answer test (KAT) values for key encapsulation mechanisms using the same procedure as the NIST submission requirements, for checking against submitted KAT values using `tests/test_kat.py`
+	- `kat_sig`: Program that generates known answer test (KAT) values for signature schemes using the same procedure as the NIST submission requirements, for checking against submitted KAT values using `tests/test_kat.py`
+	- `kat_sig_stfl`: Program for checking results against submitted KAT values using `tests/test_kat.py`
+	- `speed_kem`: Benchmarking program for key encapsulation mechanisms; see `./speed_kem --help` for usage instructions
+	- `speed_sig`: Benchmarking program for signature mechanisms; see `./speed_sig --help` for usage instructions
+	- `speed_sig_stfl`: Benchmarking program for stateful signature mechanisms; see `./speed_sig_stfl --help` for usage instructions
+	- `example_kem`: Minimal runnable example showing the usage of the KEM API
+	- `example_sig`: Minimal runnable example showing the usage of the signature API
+	- `example_sig_stfl`: Minimal runnable example showing the usage of the stateful signature API
+	- `test_aes`, `test_sha3`: Simple test harnesses for crypto sub-components
+	- `test_portability`: Simple test harnesses for checking cross-CPU code portability; requires presence of `qemu`; proper operation validated only on Ubuntu
+
+	The complete test suite can be run using
+
+		ninja run_tests
+
+4. To generate HTML documentation of the API, run:
+
+		ninja gen_docs
+
+	Then open `docs/html/index.html` in your web browser.
+
+4. `ninja install` can be run to install the built library and `include` files to a location of choice, which can be specified by passing the `-DCMAKE_INSTALL_PREFIX=<dir>` option to `cmake` at configure time. Alternatively, `ninja package` can be run to create an install package.
+
+5. `ninja uninstall` can be run to remove all installation files.
+
+
+### Windows
+
+Binaries can be generated using Visual Studio 2019 with the [CMake Tools](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cmake-tools) extension installed. The same options as explained above for Linux/macOS can be used and build artifacts are generated in the specified `build` folders.
+
+If you want to create Visual Studio build files, e.g., if not using `ninja`, be sure to _not_ pass the parameter `-GNinja` to the `cmake` command as exemplified above. You can then build all components using `msbuild`, e.g. as follows: `msbuild ALL_BUILD.vcxproj` and install all artifacts e.g. using this command `msbuild INSTALL.vcxproj`.
+
+
+### Cross compilation
+
+You can cross compile liboqs for various platforms. Detailed information is available [in the Wiki](https://github.com/open-quantum-safe/liboqs/wiki/Platform-specific-notes-for-building-liboqs#cross-compiling).
+
+## Documentation
+
+More detailed information on building, optional build parameters, example applications, coding conventions and more can be found in the [wiki](https://github.com/open-quantum-safe/liboqs/wiki).
+
+## Contributing
+
+Contributions that meet the acceptance criteria are gratefully welcomed. See our [Contributing Guide](https://github.com/open-quantum-safe/liboqs/wiki/Contributing-Guide) for more details.
+
+## License
+
+liboqs is licensed under the MIT License; see [LICENSE.txt](https://github.com/open-quantum-safe/liboqs/blob/main/LICENSE.txt) for details.
+
+liboqs includes some third party libraries or modules that are licensed differently; the corresponding subfolder contains the license that applies in that case.  In particular:
+
+- `.CMake/CMakeDependentOption.cmake`: BSD 3-Clause License
+- `src/common/common.c`: includes portions which are Apache License v2.0
+- `src/common/crypto/aes/aes_c.c`: public domain or any OSI-approved license
+- `src/common/crypto/aes/aes*_ni.c`: public domain
+- `src/common/crypto/sha2/sha2_c.c`: public domain
+- `src/common/crypto/sha3/xkcp_low` : CC0 (public domain), except `brg_endian.h` and `KeccakP-1600-AVX2.s`
+- `src/common/crypto/sha3/xkcp_low/.../brg_endian.h` : BSD 3-Clause License
+- `src/common/crypto/sha3/xkcp_low/.../KeccakP-1600-AVX2.s` : BSD-like [CRYPTOGAMS license](http://www.openssl.org/~appro/cryptogams/)
+- `src/common/rand/rand_nist.c`: See file
+- `src/kem/bike/additional`: Apache License v2.0
+- `src/kem/classic_mceliece/pqclean_*`: public domain
+- `src/kem/kyber/pqcrystals-*`: public domain (CC0) or Apache License v2.0
+- `src/kem/kyber/pqclean_*`: public domain (CC0), and public domain (CC0) or Apache License v2.0, and public domain (CC0) or MIT, and MIT
+- `src/kem/kyber/libjade_*` public domain (CC0) or Apache License v2.
+- `src/kem/ml_kem/mlkem-native_*`: Apache License v2.0
+- `src/sig/dilithium/pqcrystals-*`: public domain (CC0) or Apache License v2.0
+- `src/sig/dilithium/pqclean_*`: public domain (CC0), and public domain (CC0) or Apache License v2.0, and public domain (CC0) or MIT, and MIT
+-  src/sig/falcon/pqclean_\*\_aarch64 : Apache License v2.0
+- `src/sig/mayo/*`: Apache License v2.0
+- `src/sig/ml_dsa/pqcrystals-*`: public domain (CC0) or Apache License v2.0
+- `src/sig/sphincs/pqclean_*`: CC0 (public domain)
+
+## Acknowledgements
+
+The OQS project is supported by the [Post-Quantum Cryptography Alliance](https://pqca.org/) as part of the [Linux Foundation](https://linuxfoundation.org/).
+
+The OQS project was founded by Douglas Stebila and Michele Mosca at the University of Waterloo.  [Contributors to liboqs](https://github.com/open-quantum-safe/liboqs/blob/main/CONTRIBUTORS) include individual contributors, academics and researchers, and various companies, including Amazon Web Services, Cisco Systems, evolutionQ, IBM Research, Microsoft Research, SandboxAQ, and softwareQ.
+
+Financial support for the development of Open Quantum Safe has been provided by Amazon Web Services, the Canadian Centre for Cyber Security, Cisco, the Unitary Fund, the NGI Assure Fund, and VeriSign Inc.
+
+Research projects which developed specific components of OQS have been supported by various research grants, including funding from the Natural Sciences and Engineering Research Council of Canada (NSERC); see the source papers for funding acknowledgments.
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/RELEASE.md ===
+liboqs version 0.13.0
+=====================
+
+About
+-----
+
+The **Open Quantum Safe (OQS) project** has the goal of developing and prototyping quantum-resistant cryptography.  More information on OQS can be found on our website: https://openquantumsafe.org/ and on Github at https://github.com/open-quantum-safe/.  
+
+**liboqs** is an open source C library for quantum-resistant cryptographic algorithms.  Details about liboqs can be found in [README.md](https://github.com/open-quantum-safe/liboqs/blob/main/README.md).  See in particular limitations on intended use.
+
+liboqs can be used with the following Open Quantum Safe application integrations:
+
+- **oqs-provider**: A standalone prototype [OpenSSL 3 provider](https://www.openssl.org/docs/manmaster/man7/provider.html) enabling liboqs-based quantum-safe and hybrid key authentication and exchange for TLS 1.3, X.509 certificate generation and CMS operations.
+- **OQS-BoringSSL**: A prototype integration of liboqs-based authentication and key exchange into TLS 1.3 in our fork of BoringSSL; see https://github.com/open-quantum-safe/boringssl.
+- **OQS-OpenSSH**: A prototype integration of liboqs-based authentication and key exchange into Secure Shell (SSH) version 2 in our fork of OpenSSH; see https://github.com/open-quantum-safe/openssh.
+
+Several [demos](https://github.com/open-quantum-safe/oqs-demos) are available for using the above libraries in applications, including Apache, Chromium, curl, haproxy, nginx, and Wireshark.
+
+liboqs can also be used in the following programming languages via language-specific wrappers:
+
+- C++, via https://github.com/open-quantum-safe/liboqs-cpp
+- Go, via https://github.com/open-quantum-safe/liboqs-go
+- Java, via https://github.com/open-quantum-safe/liboqs-java
+- Python 3, via https://github.com/open-quantum-safe/liboqs-python
+- Rust, via https://github.com/open-quantum-safe/liboqs-rust
+
+Release notes
+=============
+
+This is version 0.13.0 of liboqs. It was released on April 16, 2025.
+
+This release improves support for NIST Additional Signatures Round 2 candidates: CROSS and MAYO implementations are updated and support is added for UOV. This release also adds a new KEM API for deterministic key generation (only supported by ML-KEM at the moment). Finally, this release adds support for ML-KEM implementations from 2 new sources: formally verified portable C, AVX2, and AArch64 implementations from [PQCP's mlkem-native](https://github.com/pq-code-package/mlkem-native) and a GPU accelerated CUDA implementation from [Nvidia cuPQC](https://developer.nvidia.com/cupqc). 
+
+OQS is running a survey to better understand our community. We would like to hear from organizations and individuals about their interest in and use of the Open Quantum Safe project. Please take a few minutes to fill out the survey: https://linuxfoundation.surveymonkey.com/r/oqssurvey
+
+What's New
+----------
+
+This release continues from the 0.12.0 release of liboqs.
+
+### Key encapsulation mechanisms
+
+- New API: Added a deterministic key generation and API for KEMs (only ML-KEM supported at the moment).
+- ML-KEM: Changed the default ML-KEM implementation to [PQCP's mlkem-native](https://github.com/pq-code-package/mlkem-native). There are three variants: Portable C, AVX2, and AArch64. Large parts of these implementations are formally verified: all of the C code is verified for memory and type safety using [CBMC](https://github.com/diffblue/cbmc) and the functional correctness of the core AArch64 assembly routines is verified using [HOL-Light](https://github.com/jrh13/hol-light). 
+- ML-KEM: Added support for the ML-KEM implementation from [Nvidia cuPQC](https://developer.nvidia.com/cupqc), a GPU accelerated cryptography library.
+- ML-KEM: Implementation from mlkem-native upstream updated to add Pair-wise Consistency Test (PCT) and Intel CET support.
+- ML-KEM: Improved testing of ML-KEM keys.
+- HQC: Disabled HQC by default until [a new security flaw](https://groups.google.com/a/list.nist.gov/g/pqc-forum/c/Wiu4ZQo3fP8) is fixed.
+
+### Digital signature schemes
+
+- ML-DSA: Improved testing for ML-DSA.
+- CROSS: Updated to NIST Additional Signatures Round 2 version.
+- MAYO: Updated to NIST Additional Signatures Round 2 version.
+- UOV: Added support for UOV algorithm from NIST Additional Signatures Round 2.
+
+### Other changes
+
+- Added support for loongarch64 architecture.
+
+---
+
+Detailed changelog
+------------------
+
+## What's Changed
+* Bump version to 0.12.1-dev by @dstebila in https://github.com/open-quantum-safe/liboqs/pull/2015
+* Add loongarch64 support by @zhaixiaojuan in https://github.com/open-quantum-safe/liboqs/pull/2010
+* Minor changes to ML_DSA ACVP tests by @abhinav-thales in https://github.com/open-quantum-safe/liboqs/pull/2007
+* Update upload-artifact action to v4 by @dstebila in https://github.com/open-quantum-safe/liboqs/pull/2017
+* Remove hardcoded build paths & modify basic workflow to build in random path by @iyanmv in https://github.com/open-quantum-safe/liboqs/pull/2019
+* Trigger liboqs-java and liboqs-rust downstream CI by @SWilson4 in https://github.com/open-quantum-safe/liboqs/pull/2021
+* #1830 update scorecard to v5 (gh action 2.4.0) by @planetf1 in https://github.com/open-quantum-safe/liboqs/pull/1890
+* Update PQClean commit and delete patch for HQC by @SWilson4 in https://github.com/open-quantum-safe/liboqs/pull/2026
+* Bump jinja2 from 3.1.4 to 3.1.5 in /scripts/copy_from_upstream in the pip group by @dependabot in https://github.com/open-quantum-safe/liboqs/pull/2036
+* Avoid unresolved symbols from libcrypto when compiled with OQS_DLOPEN_OPENSSL by @ueno in https://github.com/open-quantum-safe/liboqs/pull/2043
+* Update to public Ubuntu 24.04 ARM runner by @SWilson4 in https://github.com/open-quantum-safe/liboqs/pull/2050
+* NVIDIA: Adding cuPQC as a backend for ML-KEM. by @stevenireeves in https://github.com/open-quantum-safe/liboqs/pull/2044
+* Update ACVP vectors for KEM and DSA by @abhinav-thales in https://github.com/open-quantum-safe/liboqs/pull/2051
+* CI: Check unresolved symbols when compiled with OQS_DLOPEN_OPENSSL by @ueno in https://github.com/open-quantum-safe/liboqs/pull/2058
+* Fix failing zephyr CI workflows, pinning v0.27.4 by @bhess in https://github.com/open-quantum-safe/liboqs/pull/2063
+* Update sig_stfl Doxygen documentation by @pablo-gf in https://github.com/open-quantum-safe/liboqs/pull/2059
+* Import ML-KEM from mlkem-native/PQ code package by @bhess in https://github.com/open-quantum-safe/liboqs/pull/2041
+* Update example files by @SWilson4 in https://github.com/open-quantum-safe/liboqs/pull/2071
+* GitHub runner updates by @SWilson4 in https://github.com/open-quantum-safe/liboqs/pull/2069
+* Disable cupqc-buildcheck by @praveksharma in https://github.com/open-quantum-safe/liboqs/pull/2075
+* Add threat model by @dstebila in https://github.com/open-quantum-safe/liboqs/pull/2033
+* Update CROSS to version 2.0 by @rtjk in https://github.com/open-quantum-safe/liboqs/pull/2078
+* improving CONTRIBUTING.md for maintainability [skip ci] by @baentsch in https://github.com/open-quantum-safe/liboqs/pull/2081
+* Ensure that building against liboqs build directory works by @levitte in https://github.com/open-quantum-safe/liboqs/pull/2086
+* Added alg_version details to test output by @pablo-gf in https://github.com/open-quantum-safe/liboqs/pull/2080
+* Add checks for ML-KEM keys by @abhinav-thales in https://github.com/open-quantum-safe/liboqs/pull/2009
+* Update actions/cache to v4.2.2 by @mkannwischer in https://github.com/open-quantum-safe/liboqs/pull/2093
+* Add Nix flake by @aidenfoxivey in https://github.com/open-quantum-safe/liboqs/pull/1970
+* Update MAYO to NIST round 2 by @bhess in https://github.com/open-quantum-safe/liboqs/pull/2095
+* Update mlkem-native to v1.0.0-beta by @mkannwischer in https://github.com/open-quantum-safe/liboqs/pull/2092
+* Add references to security response process by @SWilson4 in https://github.com/open-quantum-safe/liboqs/pull/2077
+* Bump version to 0.13.0-dev [skip ci] by @SWilson4 in https://github.com/open-quantum-safe/liboqs/pull/2099
+* Add UOV  by @mkannwischer in https://github.com/open-quantum-safe/liboqs/pull/2094
+* Add bitflip test for trivial SUF-CMA forgeries by @rtjk in https://github.com/open-quantum-safe/liboqs/pull/2090
+* Update MAYO version in algorithm datasheet by @bhess in https://github.com/open-quantum-safe/liboqs/pull/2103
+* Add DeriveKeyPair API by @SWilson4 in https://github.com/open-quantum-safe/liboqs/pull/2070
+* Update nist-round in UOV and MAYO data sheet by @bhess in https://github.com/open-quantum-safe/liboqs/pull/2105
+* build: search unistd.h separately from sys/random.h for getentropy by @mkroening in https://github.com/open-quantum-safe/liboqs/pull/2104
+* Add support caveat by @SWilson4 in https://github.com/open-quantum-safe/liboqs/pull/2114
+* Temporarily disable HQC by @dstebila in https://github.com/open-quantum-safe/liboqs/pull/2122
+* Fix PR workflow runs by @SWilson4 in https://github.com/open-quantum-safe/liboqs/pull/2123
+
+## New Contributors
+* @zhaixiaojuan made their first contribution in https://github.com/open-quantum-safe/liboqs/pull/2010
+* @stevenireeves made their first contribution in https://github.com/open-quantum-safe/liboqs/pull/2044
+* @pablo-gf made their first contribution in https://github.com/open-quantum-safe/liboqs/pull/2059
+* @levitte made their first contribution in https://github.com/open-quantum-safe/liboqs/pull/2086
+* @mkannwischer made their first contribution in https://github.com/open-quantum-safe/liboqs/pull/2093
+* @mkroening made their first contribution in https://github.com/open-quantum-safe/liboqs/pull/2104
+
+**Full Changelog**: https://github.com/open-quantum-safe/liboqs/compare/0.12.0...0.13.0
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/SECURITY.md ===
+# Security Policy
+
+## Supported Versions
+
+We only support the most recent release.
+
+Using any code prior to 0.12.0 is strongly discouraged due to a [known security vulnerability in HQC](https://github.com/open-quantum-safe/liboqs/security/advisories/GHSA-gpf4-vrrw-r8v7).
+
+| Version | Supported          |
+| ------- | ------------------ |
+| 0.13.0  | :white_check_mark: |
+| < 0.13  | :x:                |
+
+## Reporting a Vulnerability
+
+Please follow [this information to report a vulnerability](https://openquantumsafe.org/liboqs/security.html#reporting-security-bugs).
+
+## Threat Model
+
+Some timing-based side-channel attacks are within the scope of our threat model. OQS tests for secret-dependent branches and memory accesses on Linux on x86\_64. All test failures are documented as either "passes," which we have assessed to be false positives, or "issues," which may constitute non–constant-time behaviour. The [algorithm datasheets](https://github.com/open-quantum-safe/liboqs/tree/main/docs/algorithms) indicate whether or not an implementation passes our constant-time tests, as well as whether or not it is expected to pass. Details about passes and issues are available in the [tests/constant_time directory](https://github.com/open-quantum-safe/liboqs/tree/main/tests/constant_time). These tests do not encompass all classes of non–constant-time behaviour; for example, they do not detect possible variable-time instructions, such as `DIV`. Reports of non–constant-time behaviour that fall outside this scope will be considered on a case-by-case basis, with a priority on [Tier 1 platforms](https://github.com/open-quantum-safe/liboqs/blob/main/PLATFORMS.md#tier-1).
+
+The following types of attacks are outside the scope of our threat model:
+
+- same physical system side channel
+- CPU / hardware flaws
+- physical fault injection attacks (including Rowhammer-style attacks)
+- physical observation side channels (such as power consumption, electromagnetic emissions)
+
+Mitigations for security issues outside the stated threat model may still be applied depending on the nature of the issue and the mitigation.
+
+(Based in part on https://openssl-library.org/policies/general/security-policy/index.html)
+
+## Security Response Process
+
+Security reports for liboqs will be handled in accordance with the [OQS security response process](https://github.com/open-quantum-safe/tsc/blob/main/security/response-process.md). Please also see the general [support disclaimer](README.md#support-limitations) for liboqs.
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/.github/actionlint.yaml ===
+# Configuration variables in array of strings defined in your repository or organization
+# From https://github.com/rhysd/actionlint/blob/v1.7.7/docs/config.md:
+# "When an array is set, actionlint will check vars properties strictly. An empty array means no variable is allowed."
+config-variables:
+  # - DEFAULT_RUNNER
+  # - JOB_NAME
+  # - ENVIRONMENT_STAGE
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/.github/pull_request_template.md ===
+<!-- Please give a brief explanation of the purpose of this pull request. -->
+
+<!-- Does this PR resolve any issue?  If so, please reference it using automatic-closing keywords like "Fixes #123." -->
+
+<!-- Any PR adding a new feature is expected to contain a test; the test should be part of CI testing, preferably within the ".github/workflows" directory tree. Please add an explanation to the PR if/when (why) this cannot be done. -->
+
+<!-- Please answer the following questions to help manage version and changes across projects. -->
+
+* [ ] Does this PR change the input/output behaviour of a cryptographic algorithm (i.e., does it change known answer test values)?  (If so, a version bump will be required from *x.y.z* to *x.(y+1).0*.)
+* [ ] Does this PR change the list of algorithms available -- either adding, removing, or renaming? Does this PR otherwise change an API? (If so, PRs in fully supported downstream projects dependent on these, i.e., [oqs-provider](https://github.com/open-quantum-safe/oqs-provider) will also need to be ready for review and merge by the time this is merged.)
+
+<!-- Once your pull request is ready for review and passing continuous integration tests, please convert from a draft PR to a normal PR, and request a review from one of the OQS core team members. -->
+
+
+
+=== /home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/.github/ISSUE_TEMPLATE/bug_report.md ===
+---
+name: Bug report
+about: Create a report to help us improve
+title: ''
+labels: ''
+assignees: ''
+
+---
+
+**Describe the bug**
+A clear and concise description of what the bug is.
+
+**To Reproduce**
+Steps to reproduce the behavior:
+1. Go to '...'
+2. Click on '....'
+3. Scroll down to '....'
+4. See error
+
+**Expected behavior**
+A clear and concise description of what you expected to happen.
+
+**Screenshots**
+If applicable, add screenshots to help explain your problem.
+
+**Environment (please complete the following information):**
+ - OS: [e.g. Ubuntu 20]
+ - OpenSSL version [e.g., 3.0.2]
+ - Compiler version used [e.g., clang 9.0.0]
+ - Build variables used [e.g., "-DOQS_ALGS_ENABLED=STD"]
+ - liboqs version [e.g. 0.7.2 or main branch]
+
+**Additional context**
+Add any other context about the problem here.

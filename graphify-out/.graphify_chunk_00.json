@@ -1,0 +1,744 @@
+{
+  "nodes": [
+    {
+      "id": "foretias",
+      "label": "Foretias",
+      "description": "Free, Open-source Resilient Time Integrity Attestation Service. Decentralized time-integrity attestation service that cryptographically proves a message existed at a specific tick in a specific calendar.",
+      "file_type": "document",
+      "source_file": "README.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "chronomatter",
+      "label": "Chronomatter (Chronos fidelius authenticus)",
+      "description": "Autonomous ticking, stamping, verification component. Owns keypair generation, signing, and verification. Each tick has its own Ed25519 keypair; previous private key is disabled when tick advances.",
+      "file_type": "document",
+      "source_file": "README.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "calendar",
+      "label": "Calendar (Chronos fidelius grapha)",
+      "description": "Calendar data, persistence, mutual attestation scheduling component.",
+      "file_type": "document",
+      "source_file": "README.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "communerd",
+      "label": "Communerd (Chronos fidelius locutus)",
+      "description": "All P2P communication component — DHT, gossipsub, peer discovery. Only Communerd communicates with extra-family peers.",
+      "file_type": "document",
+      "source_file": "README.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "timefamilyserver",
+      "label": "TimeFamilyServer (Chronos fidelius adunatrix)",
+      "description": "Orchestrator holding Arc<Chronomatter>, Arc<Calendar>, and Option<Arc<Communerd>>, exposing JSON-RPC and HTTP endpoints for stamp, verify, and calendar queries.",
+      "file_type": "document",
+      "source_file": "README.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "foretis",
+      "label": "Foretis",
+      "description": "Cryptographically signed attestation containing message hash, tick number, signature, and the server's unique TBID. Self-contained JSON object.",
+      "file_type": "document",
+      "source_file": "HOWTO.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "tick",
+      "label": "Tick",
+      "description": "Discrete time unit in the Foretias calendar. Each tick has its own Ed25519 keypair. A Foretis stamped at tick n cannot be forged from the past.",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "chronon",
+      "label": "Chronon",
+      "description": "Time period between ticks, configurable in nanoseconds (default 60s). Controls daemon tick frequency.",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "tbid",
+      "label": "TBID (Time-Being ID)",
+      "description": "Unique identifier derived from a TimeBeing's public key. Used to identify the server that issued a Foretis stamp.",
+      "file_type": "concept",
+      "source_file": "HOWTO.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "tbn",
+      "label": "TBN (Time-Being Name)",
+      "description": "Human-readable identifier prefixed with 'tf-' followed by the TBID hex string.",
+      "file_type": "concept",
+      "source_file": "HOWTO.md",
+      "confidence_score": 0.95
+    },
+    {
+      "id": "ed25519",
+      "label": "Ed25519",
+      "description": "Elliptic curve digital signature scheme via libsodium. Used for per-tick keypairs, stamp signatures, and identity generation.",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "noise_protocol",
+      "label": "Noise_XX Protocol",
+      "description": "Encrypted handshake protocol for PtP connections between Foretias nodes. Used for stamp/verify RPC over direct TCP.",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "libp2p",
+      "label": "libp2p",
+      "description": "Networking layer for P2P communication. Provides DHT (Kademlia), GossipSub, identify, ping, and request_response protocols with Noise encryption.",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "kademlia_dht",
+      "label": "Kademlia DHT",
+      "description": "Distributed Hash Table for peer discovery with private namespace isolation. Used for auto-discovering peers in the P2P network.",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "mutual_attestation",
+      "label": "Mutual Attestation",
+      "description": "Cross-signing process where peers verify each other's calendar entries. A stamp from one peer becomes verifiable from another through calendar cross-referencing.",
+      "file_type": "concept",
+      "source_file": "HOWTO.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "external_attestation",
+      "label": "External Attestation",
+      "description": "Attestation from a peer stored in TickRecord.external_attestations. Verified before storage; unverified attestations are never appended to the calendar.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "c11_core",
+      "label": "C11 Core",
+      "description": "Verified cryptographic primitives in C11: Ed25519 (libsodium), P-256, SHA-256, BLAKE3, Noise protocol, Merkle trees, FROST, nullifier, RNG mixing, memzero. Builds static lib foretias_core.",
+      "file_type": "code",
+      "source_file": "p2p/core/CMakeLists.txt",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "foretias_core_engine",
+      "label": "foretias-core (core-engine)",
+      "description": "Rust crate providing safe wrappers over C11 FFI via bindgen. Contains CryptoServer trait, domain types (tick, foretis, calendar), Chronomatter logic, config, collision, epoch, probity modules.",
+      "file_type": "code",
+      "source_file": "AGENTS.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "foretias_node",
+      "label": "foretias-node",
+      "description": "Rust crate for server and CLI binary. Contains TimeFamilyServer, Communerd (libp2p), calendar store, metrics, probity. Binary entry: serve, stamp, verify, prove-verification, inspect-attestations.",
+      "file_type": "code",
+      "source_file": "AGENTS.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "foretias_python",
+      "label": "foretias-python",
+      "description": "Rust crate for PyO3 Python bindings. Produces foretias-p2p pip package via maturin. Exposes PyForetis, PyTickRecord, PyCalendar, PyTimeFamilyServer, PyCryptoServer.",
+      "file_type": "code",
+      "source_file": "AGENTS.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "foretias_java",
+      "label": "foretias-java",
+      "description": "Rust crate for JNI bindings for Java. Maven package org.foretias:foretias-java:0.2.0.",
+      "file_type": "code",
+      "source_file": "AGENTS.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "python_shim",
+      "label": "Python Shim (foretias)",
+      "description": "Thin Python re-export layer. CLI entry 'foretis' delegates to Rust via PyO3. Contains cli.py, thin_client.py, _version.py.",
+      "file_type": "code",
+      "source_file": "AGENTS.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "cryptoserver_trait",
+      "label": "CryptoServer Trait",
+      "description": "Rust trait abstracting cryptographic operations. SoftwareCryptoServer is the current backend. Keys are in-memory only with zeroize on drop.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "privkey_handle",
+      "label": "PrivKeyHandle",
+      "description": "C11 core handle for private keys. Provides zeroize on drop to prevent private-key exfiltration. Tick keypairs regenerated every tick.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "dht_peer_source",
+      "label": "DhtPeerSource",
+      "description": "DHT-backed peer discovery component. Arc<RwLock<HashMap<PeerId, PeerAddr>>>. MAX_PEERS cap of 256 to prevent DHT eclipse attacks.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "encrypted_jsonl_calendar_store",
+      "label": "EncryptedJsonlCalendarStore",
+      "description": "Encrypted calendar persistence format with per-block AEAD authentication tag (ChaCha20-Poly1305). Replaces plaintext JSON format in v0.5.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "peer_pool",
+      "label": "PeerPool",
+      "description": "Manages peer connections and liveness pings. start_liveness_pings() detects dead peers. Daemon tick advances on timer, not peer responses.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "json_rpc_handlers",
+      "label": "JSON-RPC Handlers",
+      "description": "Inbound request handlers for stamp, verify, calendar queries. Mitigations: MAX_CONTENT_BYTES (1GB), MAX_CALENDAR_SLICE_COUNT (10000), echo field for replay protection.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "peer_manager_script",
+      "label": "start_local_peers.py",
+      "description": "Interactive Python peer manager script. Spawns N foretias servers with unique identities, RPC ports, and calendars. Provides REPL for status, stamp, verify, kill commands.",
+      "file_type": "code",
+      "source_file": "HOWTO.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "custom_base64_encoding",
+      "label": "Custom Base64 Display Encoding",
+      "description": "Display-only base64 encoding using alphabet [a-zA-Z0-9|_] for JSON output. 64 unique characters, no padding. Internal wire format and storage remain unchanged.",
+      "file_type": "concept",
+      "source_file": ".opencode/plans/1778469701657-happy-river.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "libsodium",
+      "label": "libsodium",
+      "description": "C library providing Ed25519 signatures, hashing, and AEAD primitives. Linked by C11 core.",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "liboqs",
+      "label": "liboqs",
+      "description": "Open Quantum Safe library providing post-quantum cryptography: Kyber (KEM), Dilithium (signatures). Integrated via core-engine build.rs.",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "pyo3",
+      "label": "PyO3",
+      "description": "Rust-to-Python binding framework. Used by foretias-python crate to expose Rust functionality to Python via foretias-p2p package.",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "maturin",
+      "label": "maturin",
+      "description": "Build tool for Rust-Python packages. Produces foretias-p2p pip wheel from foretias-python crate.",
+      "file_type": "concept",
+      "source_file": "AGENTS.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "bindgen",
+      "label": "bindgen",
+      "description": "Rust FFI binding generator. Core-engine build.rs runs bindgen over foretias_core.h to generate Rust bindings for C11 core.",
+      "file_type": "concept",
+      "source_file": "AGENTS.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "ci_pipeline",
+      "label": "CI Pipeline",
+      "description": "GitHub Actions workflow on alpha/mvp branches. Four jobs: c11-tests, rust-tests (needs c11-tests), python-tests (needs rust-tests), lint (parallel). C11 build cached across jobs.",
+      "file_type": "code",
+      "source_file": ".github/workflows/ci.yml",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "release_pipeline",
+      "label": "Release Pipeline",
+      "description": "GitHub Actions workflow triggered on v* tags. Builds Python package with hatch, checks with twine, publishes to PyPI via trusted publisher or API token.",
+      "file_type": "code",
+      "source_file": ".github/workflows/release.yml",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "network_observer_attacker",
+      "label": "Network Observer",
+      "description": "Attacker with passive read access to all TCP traffic. High impact on JSON-RPC content confidentiality. libp2p transport is encrypted via Noise, so P2P control plane is opaque.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "active_network_attacker",
+      "label": "Active Network Attacker",
+      "description": "Attacker with full MITM on TCP. Can inject, drop, modify, replay packets. Cannot break libp2p Noise handshake or forge Ed25519 signatures. Medium impact.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "compromised_peer_attacker",
+      "label": "Compromised Peer",
+      "description": "Legitimate peer with valid keys behaving maliciously. Can send forged requests, refuse to attest, or collude. Medium-high impact. Cross-signature verification limits single-peer damage.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "content_replay_threat",
+      "label": "Content Replay Attack",
+      "description": "Attacker captures /stamp JSON-RPC response and replays with different content. Mitigated by echo field encoding requester identity + tick number.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "stamp_flood_threat",
+      "label": "Stamp Flood (DoS)",
+      "description": "High volume of stamp requests to exhaust CPU or job queue. Mitigated by two-layer rate limit, MAX_JOB_QUEUE_DEPTH=64, timer-driven tick advance.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "dht_eclipse_threat",
+      "label": "DHT Eclipse Attack",
+      "description": "Attacker controls majority of a node's Kademlia peer table, isolating from honest peers. Mitigated by private namespace key, bootstrap list, MAX_PEERS cap.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "sybil_rng_threat",
+      "label": "Sybil via RNG Failure",
+      "description": "Weak or predictable RNG produces colliding TBIDs. Mitigated by rng_mix.c multi-source entropy mixing. v0.7 adds explicit collision detection.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "calendar_file_tampering_threat",
+      "label": "Calendar File Tampering",
+      "description": "Disk access modifies plaintext calendar file. Mitigated in v0.5 by EncryptedJsonlCalendarStore with per-block AEAD tag.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "private_key_exfiltration_threat",
+      "label": "Private-Key Exfiltration via Disk",
+      "description": "Disk read recovers tick private keys. Mitigated: keys never written to disk, PrivKeyHandle zeroize on drop, keypairs regenerated every tick.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "tick_rate_exhaustion_threat",
+      "label": "Tick-Rate Exhaustion",
+      "description": "Forces victim to advance tick counter rapidly via stamp flood. Mitigated: timer-driven daemon, not stamp-driven. Inbound stamps rate-limited.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "pypci_trusted_publisher",
+      "label": "PyPI Trusted Publisher",
+      "description": "GitHub Actions integration with PyPI. When v* tag pushed, PyPI trusts the GitHub Actions run and publishes without API token. Alternative: PYPI_API_TOKEN secret.",
+      "file_type": "concept",
+      "source_file": ".github/workflows/publish-setup.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "infrastructure_task_python_rust_migration",
+      "label": "Python-to-Rust Migration (Task 6)",
+      "description": "XL effort (40-80 hours) to make Python use ONLY Rust. Current PyO3 bindings are 30% feature-complete. Requires Rust tick rotation, MA signing, daemon, Inquirer, persistence, Config, dormant load, 80+ test rewrites.",
+      "file_type": "rationale",
+      "source_file": "docs/superpowers/plans/2026-04-27-infrastructure-prioritization.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "infrastructure_task_c11_tests",
+      "label": "C11 Unit Tests (Task 4)",
+      "description": "M effort (2-3 hours). 14 test files for all C source files using CMocka. Covers identity, signing, hashing, noise, merkle, FROST, nullifier, RNG, memzero.",
+      "file_type": "rationale",
+      "source_file": "docs/superpowers/plans/2026-04-27-infrastructure-prioritization.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "infrastructure_task_rust_hardening",
+      "label": "Rust Hardening Tests (Task 5)",
+      "description": "M effort (1-2 hours). Defensive programming tests: CryptoServer backend, hash functions, Foretis stamp/verify, calendar integrity, error handling, PyO3 bindings.",
+      "file_type": "rationale",
+      "source_file": "docs/superpowers/plans/2026-04-27-infrastructure-prioritization.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "fortias_foretias_rename",
+      "label": "Fortias to Foretias Rename",
+      "description": "Project rename: fortias→foretias, fortis→foretis across two repos. Case-preserving direct string replacement. Affects C sources, Rust sources, Python sources, spec files, CMakeLists, Cargo.toml.",
+      "file_type": "rationale",
+      "source_file": "docs/superpowers/plans/2026-05-04-fortias-foretias-rename.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "chrono_chained_attestation",
+      "label": "Chrono Chained Attestation",
+      "description": "Forward/backward Foretis signatures in each TickRecord form a chained attestation. integrity_check() verifies the chain. A Foretis stamped at tick n cannot be forged from the past.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "resilience_fault_tolerance",
+      "label": "Resilience / Fault Tolerance",
+      "description": "Foretias survives catastrophic network failure. Killing 50% or 90% of peers still allows verification because attestations are replicated via mutual attestation across the decentralized calendar.",
+      "file_type": "concept",
+      "source_file": "HOWTO.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "gossipsub_deferred",
+      "label": "GossipSub (Deferred)",
+      "description": "P2P message propagation layer planned for v0.6. Not yet shipped. Will include mesh size and flood-publish caps for DoS protection. ProbityReport gossip also deferred to v0.6.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "json_rpc_no_tls",
+      "label": "JSON-RPC No TLS (Residual Risk)",
+      "description": "JSON-RPC over TCP has no Noise or TLS layer by design. Network observer reads stamp content and calendar queries. Primary threat (content replay) mitigated by echo fields. TLS addition deferred.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "c11_test_all",
+      "label": "test_all (C11 Test Binary)",
+      "description": "Single test executable compiling 14 test source files: test_all, test_memzero, test_rng, test_version, test_ed25519, test_sha256, test_merkle, test_nullifier, test_p256_stub, test_blake3_stub, test_noise, test_frost_stub, test_legacy_hash, test_privkey.",
+      "file_type": "code",
+      "source_file": "p2p/core/tests/CMakeLists.txt",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "c11_source_files",
+      "label": "C11 Core Source Files",
+      "description": "18 C source files: version, memzero, rng_mix, identity_ed25519, identity_p256, signing_ed25519, signing_p256, hash_sha256, hash_blake3, hash_legacy_insecure_md5, hash_legacy_insecure_sha1, noise_xx, merkle, frost_ed25519, nullifier, privkey.",
+      "file_type": "code",
+      "source_file": "p2p/core/CMakeLists.txt",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "chronosidae_taxonomy",
+      "label": "Chronosidae Taxonomy",
+      "description": "Time beings classification: Family Chronosidae, Subfamily Chronosinae, Tribe Chronosini, Subtribe Chronosina, Genus Chronos, Species Chronos fidelius. Subspecies: authenticus (Chronomatter), grapha (Calendar), adunatrix (Time Family), locutus (Communerd).",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "alpha_branch",
+      "label": "Alpha Branch",
+      "description": "Center of development. CI runs on push/PR to alpha and mvp branches. Worktree plans merge to alpha.",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "sccache_build_caching",
+      "label": "sccache Build Caching",
+      "description": "Rust compilation cache for external crates (libp2p, etc.). Set RUSTC_WRAPPER=sccache. Cannot cache incrementally-compiled workspace members or proc-macros.",
+      "file_type": "concept",
+      "source_file": "AGENTS.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "cmake_parallel_build",
+      "label": "CMAKE_BUILD_PARALLEL_LEVEL",
+      "description": "Environment variable for parallel CMake builds of oqs-sys (liboqs). Defaults to CPU count if unset. Without it, foretias-core builds take 15-30 minutes instead of 2-5 minutes.",
+      "file_type": "concept",
+      "source_file": "AGENTS.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "libp2p_feature_minimization",
+      "label": "libp2p Feature Minimization",
+      "description": "Enable only required libp2p features (tcp, noise, yamux, gossipsub, kad, identify, ping, request-response) to reduce build time by 20-25%. libp2p has 38 feature flags, none enabled by default.",
+      "file_type": "concept",
+      "source_file": "AGENTS.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "two_layer_identity",
+      "label": "Two-Layer Identity",
+      "description": "libp2p PeerId (transport layer, Noise protocol) + application TBID (Foretias identity). Noise handshake authenticates transport PeerId; application layer verifies Foretias signatures against peer's TBID public key chain.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "daemon_loop",
+      "label": "Daemon Loop",
+      "description": "Timer-driven tick advance in Chronomatter. start_daemon() runs on chronon interval, not on peer responses or stamp requests. Provides floor for tick-rate exhaustion mitigation.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "worktree_planning",
+      "label": "Worktree Branch Planning",
+      "description": "PLAN.md files document worktree lifecycle: create worktree, implement, verify, merge to alpha, cleanup. Path: ${HOME}/tmp/foretias-worktrees/{SPEC_NAME}_${RANDOM}.",
+      "file_type": "concept",
+      "source_file": "AGENTS.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "project_segmentation",
+      "label": "Project Segmentation",
+      "description": "Hierarchy: Major (large feature) > Phase (implementation stage) > Stage (sub-phase) > Step (actionable unit) > Task (small well-defined job). Used for scoping and organization.",
+      "file_type": "concept",
+      "source_file": "AGENTS.md",
+      "confidence_score": 1.0
+    }
+  ],
+  "edges": [
+    {"source": "foretias", "target": "chronomatter", "relation": "has_component", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "foretias", "target": "calendar", "relation": "has_component", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "foretias", "target": "communerd", "relation": "has_component", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "timefamilyserver", "target": "chronomatter", "relation": "holds_arc", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "timefamilyserver", "target": "calendar", "relation": "holds_arc", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "timefamilyserver", "target": "communerd", "relation": "holds_optional_arc", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "timefamilyserver", "target": "foretias", "relation": "is_orchestrator_for", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "foretias", "target": "timefamilyserver", "relation": "has_orchestrator", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "foretias", "target": "foretis", "relation": "produces", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "chronomatter", "target": "tick", "relation": "advances", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "tick", "target": "ed25519", "relation": "uses_keypair", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "chronomatter", "target": "chronon", "relation": "ticks_every", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "foretis", "target": "tbid", "relation": "contains", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "foretis", "target": "ed25519", "relation": "signed_with", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "foretis", "target": "tick", "relation": "stamped_at", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "communerd", "target": "libp2p", "relation": "uses", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "communerd", "target": "kademlia_dht", "relation": "uses_for_discovery", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "communerd", "target": "mutual_attestation", "relation": "performs", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "communerd", "target": "gossipsub_deferred", "relation": "will_use", "evidence": "EXTRACTED", "confidence_score": 0.95},
+    {"source": "mutual_attestation", "target": "external_attestation", "relation": "produces", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "calendar", "target": "external_attestation", "relation": "stores_in_tick", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "calendar", "target": "encrypted_jsonl_calendar_store", "relation": "persisted_as", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "foretias", "target": "c11_core", "relation": "has_layer", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "foretias", "target": "foretias_core_engine", "relation": "has_layer", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "foretias", "target": "foretias_node", "relation": "has_layer", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "foretias", "target": "foretias_python", "relation": "has_layer", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "foretias", "target": "foretias_java", "relation": "has_layer", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "foretias", "target": "python_shim", "relation": "has_layer", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "c11_core", "target": "libsodium", "relation": "links", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "c11_core", "target": "liboqs", "relation": "links", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "foretias_core_engine", "target": "c11_core", "relation": "wraps_via_bindgen", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "foretias_node", "target": "foretias_core_engine", "relation": "depends_on", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "foretias_node", "target": "libp2p", "relation": "depends_on", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "foretias_python", "target": "foretias_core_engine", "relation": "depends_on", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "foretias_python", "target": "foretias_node", "relation": "depends_on", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "foretias_java", "target": "foretias_core_engine", "relation": "depends_on", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "python_shim", "target": "foretias_python", "relation": "delegates_to", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "foretias_core_engine", "target": "cryptoserver_trait", "relation": "defines", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "foretias_core_engine", "target": "chronomatter", "relation": "implements", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "foretias_node", "target": "communerd", "relation": "implements", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "foretias_node", "target": "timefamilyserver", "relation": "implements", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "foretias_node", "target": "json_rpc_handlers", "relation": "implements", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "communerd", "target": "dht_peer_source", "relation": "uses", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "communerd", "target": "peer_pool", "relation": "uses", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "foretias_python", "target": "pyo3", "relation": "uses", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "foretias_python", "target": "maturin", "relation": "built_with", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "foretias_core_engine", "target": "bindgen", "relation": "uses", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "c11_core", "target": "ed25519", "relation": "provides", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "c11_core", "target": "noise_protocol", "relation": "provides", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "c11_core", "target": "privkey_handle", "relation": "provides", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "c11_core", "target": "c11_source_files", "relation": "contains", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "c11_core", "target": "c11_test_all", "relation": "tested_by", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "foretias_node", "target": "noise_protocol", "relation": "uses_for_ptp", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "libp2p", "target": "noise_protocol", "relation": "uses_for_encryption", "evidence": "EXTRACTED", "confidence_score": 0.95},
+    {"source": "libp2p", "target": "kademlia_dht", "relation": "provides", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "peer_manager_script", "target": "foretias_node", "relation": "spawns", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "peer_manager_script", "target": "mutual_attestation", "relation": "demonstrates", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "peer_manager_script", "target": "resilience_fault_tolerance", "relation": "demonstrates", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "resilience_fault_tolerance", "target": "mutual_attestation", "relation": "depends_on", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "custom_base64_encoding", "target": "foretis", "relation": "formats_for_display", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "custom_base64_encoding", "target": "c11_core", "relation": "implemented_in", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "custom_base64_encoding", "target": "foretias_core_engine", "relation": "wrapped_in", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "custom_base64_encoding", "target": "foretias_node", "relation": "integrated_in_cli", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "chronomatter", "target": "daemon_loop", "relation": "runs", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "daemon_loop", "target": "chronon", "relation": "fires_every", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "chronomatter", "target": "privkey_handle", "relation": "manages", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "chronomatter", "target": "chrono_chained_attestation", "relation": "maintains", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "chrono_chained_attestation", "target": "foretis", "relation": "chains_via", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "network_observer_attacker", "target": "json_rpc_no_tls", "relation": "exploits", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "active_network_attacker", "target": "content_replay_threat", "relation": "executes", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "active_network_attacker", "target": "stamp_flood_threat", "relation": "executes", "evidence": "INFERRED", "confidence_score": 0.85},
+    {"source": "compromised_peer_attacker", "target": "sybil_rng_threat", "relation": "exploits", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "compromised_peer_attacker", "target": "tick_rate_exhaustion_threat", "relation": "executes", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "compromised_peer_attacker", "target": "dht_eclipse_threat", "relation": "executes", "evidence": "INFERRED", "confidence_score": 0.85},
+    {"source": "content_replay_threat", "target": "json_rpc_handlers", "relation": "mitigated_by_echo", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "stamp_flood_threat", "target": "chronomatter", "relation": "mitigated_by_queue_cap", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "dht_eclipse_threat", "target": "dht_peer_source", "relation": "mitigated_by_max_peers_cap", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "sybil_rng_threat", "target": "c11_core", "relation": "mitigated_by_rng_mix", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "calendar_file_tampering_threat", "target": "encrypted_jsonl_calendar_store", "relation": "mitigated_by", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "private_key_exfiltration_threat", "target": "privkey_handle", "relation": "mitigated_by_zeroize", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "tick_rate_exhaustion_threat", "target": "daemon_loop", "relation": "mitigated_by_timer_driven", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "two_layer_identity", "target": "libp2p", "relation": "transport_peer_id", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "two_layer_identity", "target": "tbid", "relation": "application_identity", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "communerd", "target": "two_layer_identity", "relation": "enforces", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "release_pipeline", "target": "pypci_trusted_publisher", "relation": "uses", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "release_pipeline", "target": "python_shim", "relation": "publishes", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "ci_pipeline", "target": "c11_core", "relation": "tests", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "ci_pipeline", "target": "foretias_core_engine", "relation": "tests", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "ci_pipeline", "target": "foretias_node", "relation": "tests", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "ci_pipeline", "target": "python_shim", "relation": "tests", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "infrastructure_task_python_rust_migration", "target": "foretias_python", "relation": "requires_rewriting", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "infrastructure_task_python_rust_migration", "target": "python_shim", "relation": "affects", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "infrastructure_task_c11_tests", "target": "c11_core", "relation": "tests", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "infrastructure_task_rust_hardening", "target": "foretias_core_engine", "relation": "tests", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "fortias_foretias_rename", "target": "foretias", "relation": "renames_to", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "fortias_foretias_rename", "target": "c11_core", "relation": "affects", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "fortias_foretias_rename", "target": "foretias_core_engine", "relation": "affects", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "fortias_foretias_rename", "target": "foretias_node", "relation": "affects", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "fortias_foretias_rename", "target": "python_shim", "relation": "affects", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "tbn", "target": "tbid", "relation": "is_prefixed_form_of", "evidence": "EXTRACTED", "confidence_score": 0.95},
+    {"source": "foretias", "target": "chronosidae_taxonomy", "relation": "classified_as", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "chronosidae_taxonomy", "target": "chronomatter", "relation": "subspecies_authenticus", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "chronosidae_taxonomy", "target": "calendar", "relation": "subspecies_grapha", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "chronosidae_taxonomy", "target": "communerd", "relation": "subspecies_locutus", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "chronosidae_taxonomy", "target": "timefamilyserver", "relation": "subspecies_adunatrix", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "ci_pipeline", "target": "alpha_branch", "relation": "triggers_on", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "foretias_core_engine", "target": "sccache_build_caching", "relation": "benefits_from", "evidence": "EXTRACTED", "confidence_score": 0.95},
+    {"source": "foretias_core_engine", "target": "cmake_parallel_build", "relation": "benefits_from", "evidence": "EXTRACTED", "confidence_score": 0.95},
+    {"source": "foretias_node", "target": "libp2p_feature_minimization", "relation": "applies", "evidence": "EXTRACTED", "confidence_score": 0.95},
+    {"source": "foretias", "target": "worktree_planning", "relation": "uses_for_development", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "foretias", "target": "project_segmentation", "relation": "uses_for_scoping", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "gossipsub_deferred", "target": "communerd", "relation": "will_be_added_to", "evidence": "EXTRACTED", "confidence_score": 0.95},
+    {"source": "json_rpc_no_tls", "target": "json_rpc_handlers", "relation": "affects", "evidence": "EXTRACTED", "confidence_score": 1.0},
+    {"source": "encrypted_jsonl_calendar_store", "target": "calendar", "relation": "stores", "evidence": "EXTRACTED", "confidence_score": 1.0}
+  ],
+  "hyperedges": [
+    {
+      "nodes": ["foretias_core_engine", "foretias_node", "foretias_python", "foretias_java"],
+      "relation": "rust_workspace_members",
+      "description": "All Rust crates in the p2p/ Cargo workspace",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "nodes": ["c11_core", "foretias_core_engine", "foretias_node", "foretias_python", "foretias_java"],
+      "relation": "build_dependency_chain",
+      "description": "Build order: C11 core first, then core-engine, then foretias-node, then foretias-python and foretias-java",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "nodes": ["ci_pipeline", "c11_test_all", "foretias_core_engine", "foretias_node", "python_shim"],
+      "relation": "ci_test_pipeline",
+      "description": "Sequential CI: c11-tests → rust-tests → python-tests, with lint running in parallel",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "nodes": ["chronomatter", "calendar", "communerd"],
+      "relation": "intra_family_communication",
+      "description": "Three time beings communicate via direct method calls within TimeFamilyServer. Only Communerd communicates externally.",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "nodes": ["network_observer_attacker", "active_network_attacker", "compromised_peer_attacker"],
+      "relation": "attacker_model_hierarchy",
+      "description": "Three attacker levels with increasing capability: passive observer, active MITM, compromised legitimate peer",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "nodes": ["content_replay_threat", "stamp_flood_threat", "dht_eclipse_threat", "sybil_rng_threat", "calendar_file_tampering_threat", "private_key_exfiltration_threat", "tick_rate_exhaustion_threat"],
+      "relation": "threat_catalogue",
+      "description": "All threats identified in v0.5 threat model with their mitigations",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "nodes": ["peer_manager_script", "foretias_node", "mutual_attestation", "resilience_fault_tolerance", "kademlia_dht"],
+      "relation": "howto_demo_flow",
+      "description": "HOWTO.md three escalating demos: single server, 100-node peering with DHT, kill 50% and verify resilience",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "nodes": ["custom_base64_encoding", "c11_core", "foretias_core_engine", "foretias_node", "foretias_python"],
+      "relation": "custom_base64_implementation_layers",
+      "description": "Four-layer architecture: C11 encode/decode, Rust FFI wrapper, display formatter, CLI integration (Rust + Python + PyO3)",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "nodes": ["infrastructure_task_c11_tests", "infrastructure_task_rust_hardening", "infrastructure_task_python_rust_migration"],
+      "relation": "infrastructure_dependency_graph",
+      "description": "Tasks 1-5 are independent and parallel. Task 6 (Python→Rust migration) depends on everything and requires substantial Rust rewrite",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "nodes": ["foretias_node", "noise_protocol", "libp2p"],
+      "relation": "peer_transport_layers",
+      "description": "Three transport layers: libp2p Direct (request_response/yamux, libp2p-noise), Noise_XX TCP (custom, C11), libp2p swarm (Kademlia+GossipSub)",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "nodes": ["json_rpc_handlers", "json_rpc_no_tls", "content_replay_threat", "stamp_flood_threat"],
+      "relation": "json_rpc_security_surface",
+      "description": "JSON-RPC attack surface: no TLS, replay attacks, stamp floods, oversized requests. Mitigated by echo fields, rate limits, MAX_CONTENT_BYTES.",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "nodes": ["fortias_foretias_rename", "c11_core", "foretias_core_engine", "foretias_node", "foretias_python", "python_shim"],
+      "relation": "rename_scope",
+      "description": "Rename affects all layers: C header and sources, Rust sources and configs, Python sources and tests, spec files, build configs",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

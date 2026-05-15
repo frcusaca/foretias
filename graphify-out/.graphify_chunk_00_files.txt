@@ -1,0 +1,13 @@
+/home/hcbusy/webhash/foretias/HOWTO.md
+/home/hcbusy/webhash/foretias/README.md
+/home/hcbusy/webhash/foretias/AGENTS.md
+/home/hcbusy/webhash/foretias/.github/workflows/ci.yml
+/home/hcbusy/webhash/foretias/.github/workflows/publish-setup.md
+/home/hcbusy/webhash/foretias/.github/workflows/release.yml
+/home/hcbusy/webhash/foretias/.opencode/plans/1778440853148-curious-mountain.md
+/home/hcbusy/webhash/foretias/.opencode/plans/1778469701657-happy-river.md
+/home/hcbusy/webhash/foretias/docs/threat_model_v0_5.md
+/home/hcbusy/webhash/foretias/docs/superpowers/plans/2026-04-27-infrastructure-prioritization.md
+/home/hcbusy/webhash/foretias/docs/superpowers/plans/2026-05-04-fortias-foretias-rename.md
+/home/hcbusy/webhash/foretias/p2p/core/CMakeLists.txt
+/home/hcbusy/webhash/foretias/p2p/core/tests/CMakeLists.txt

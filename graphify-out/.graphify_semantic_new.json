@@ -1,0 +1,5764 @@
+{
+  "nodes": [
+    {
+      "id": "foretias",
+      "label": "Foretias",
+      "description": "Free, Open-source Resilient Time Integrity Attestation Service. Decentralized time-integrity attestation service that cryptographically proves a message existed at a specific tick in a specific calendar.",
+      "file_type": "document",
+      "source_file": "README.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "chronomatter",
+      "label": "Chronomatter (Chronos fidelius authenticus)",
+      "description": "Autonomous ticking, stamping, verification component. Owns keypair generation, signing, and verification. Each tick has its own Ed25519 keypair; previous private key is disabled when tick advances.",
+      "file_type": "document",
+      "source_file": "README.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "calendar",
+      "label": "Calendar (Chronos fidelius grapha)",
+      "description": "Calendar data, persistence, mutual attestation scheduling component.",
+      "file_type": "document",
+      "source_file": "README.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "communerd",
+      "label": "Communerd (Chronos fidelius locutus)",
+      "description": "All P2P communication component — DHT, gossipsub, peer discovery. Only Communerd communicates with extra-family peers.",
+      "file_type": "document",
+      "source_file": "README.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "timefamilyserver",
+      "label": "TimeFamilyServer (Chronos fidelius adunatrix)",
+      "description": "Orchestrator holding Arc<Chronomatter>, Arc<Calendar>, and Option<Arc<Communerd>>, exposing JSON-RPC and HTTP endpoints for stamp, verify, and calendar queries.",
+      "file_type": "document",
+      "source_file": "README.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "foretis",
+      "label": "Foretis",
+      "description": "Cryptographically signed attestation containing message hash, tick number, signature, and the server's unique TBID. Self-contained JSON object.",
+      "file_type": "document",
+      "source_file": "HOWTO.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "tick",
+      "label": "Tick",
+      "description": "Discrete time unit in the Foretias calendar. Each tick has its own Ed25519 keypair. A Foretis stamped at tick n cannot be forged from the past.",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "chronon",
+      "label": "Chronon",
+      "description": "Time period between ticks, configurable in nanoseconds (default 60s). Controls daemon tick frequency.",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "tbid",
+      "label": "TBID (Time-Being ID)",
+      "description": "Unique identifier derived from a TimeBeing's public key. Used to identify the server that issued a Foretis stamp.",
+      "file_type": "concept",
+      "source_file": "HOWTO.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "tbn",
+      "label": "TBN (Time-Being Name)",
+      "description": "Human-readable identifier prefixed with 'tf-' followed by the TBID hex string.",
+      "file_type": "concept",
+      "source_file": "HOWTO.md",
+      "confidence_score": 0.95
+    },
+    {
+      "id": "ed25519",
+      "label": "Ed25519",
+      "description": "Elliptic curve digital signature scheme via libsodium. Used for per-tick keypairs, stamp signatures, and identity generation.",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "noise_protocol",
+      "label": "Noise_XX Protocol",
+      "description": "Encrypted handshake protocol for PtP connections between Foretias nodes. Used for stamp/verify RPC over direct TCP.",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "libp2p",
+      "label": "libp2p",
+      "description": "Networking layer for P2P communication. Provides DHT (Kademlia), GossipSub, identify, ping, and request_response protocols with Noise encryption.",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "kademlia_dht",
+      "label": "Kademlia DHT",
+      "description": "Distributed Hash Table for peer discovery with private namespace isolation. Used for auto-discovering peers in the P2P network.",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "mutual_attestation",
+      "label": "Mutual Attestation",
+      "description": "Cross-signing process where peers verify each other's calendar entries. A stamp from one peer becomes verifiable from another through calendar cross-referencing.",
+      "file_type": "concept",
+      "source_file": "HOWTO.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "external_attestation",
+      "label": "External Attestation",
+      "description": "Attestation from a peer stored in TickRecord.external_attestations. Verified before storage; unverified attestations are never appended to the calendar.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "c11_core",
+      "label": "C11 Core",
+      "description": "Verified cryptographic primitives in C11: Ed25519 (libsodium), P-256, SHA-256, BLAKE3, Noise protocol, Merkle trees, FROST, nullifier, RNG mixing, memzero. Builds static lib foretias_core.",
+      "file_type": "code",
+      "source_file": "p2p/core/CMakeLists.txt",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "foretias_core_engine",
+      "label": "foretias-core (core-engine)",
+      "description": "Rust crate providing safe wrappers over C11 FFI via bindgen. Contains CryptoServer trait, domain types (tick, foretis, calendar), Chronomatter logic, config, collision, epoch, probity modules.",
+      "file_type": "code",
+      "source_file": "AGENTS.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "foretias_node",
+      "label": "foretias-node",
+      "description": "Rust crate for server and CLI binary. Contains TimeFamilyServer, Communerd (libp2p), calendar store, metrics, probity. Binary entry: serve, stamp, verify, prove-verification, inspect-attestations.",
+      "file_type": "code",
+      "source_file": "AGENTS.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "foretias_python",
+      "label": "foretias-python",
+      "description": "Rust crate for PyO3 Python bindings. Produces foretias-p2p pip package via maturin. Exposes PyForetis, PyTickRecord, PyCalendar, PyTimeFamilyServer, PyCryptoServer.",
+      "file_type": "code",
+      "source_file": "AGENTS.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "foretias_java",
+      "label": "foretias-java",
+      "description": "Rust crate for JNI bindings for Java. Maven package org.foretias:foretias-java:0.2.0.",
+      "file_type": "code",
+      "source_file": "AGENTS.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "python_shim",
+      "label": "Python Shim (foretias)",
+      "description": "Thin Python re-export layer. CLI entry 'foretis' delegates to Rust via PyO3. Contains cli.py, thin_client.py, _version.py.",
+      "file_type": "code",
+      "source_file": "AGENTS.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "cryptoserver_trait",
+      "label": "CryptoServer Trait",
+      "description": "Rust trait abstracting cryptographic operations. SoftwareCryptoServer is the current backend. Keys are in-memory only with zeroize on drop.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "privkey_handle",
+      "label": "PrivKeyHandle",
+      "description": "C11 core handle for private keys. Provides zeroize on drop to prevent private-key exfiltration. Tick keypairs regenerated every tick.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "dht_peer_source",
+      "label": "DhtPeerSource",
+      "description": "DHT-backed peer discovery component. Arc<RwLock<HashMap<PeerId, PeerAddr>>>. MAX_PEERS cap of 256 to prevent DHT eclipse attacks.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "encrypted_jsonl_calendar_store",
+      "label": "EncryptedJsonlCalendarStore",
+      "description": "Encrypted calendar persistence format with per-block AEAD authentication tag (ChaCha20-Poly1305). Replaces plaintext JSON format in v0.5.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "peer_pool",
+      "label": "PeerPool",
+      "description": "Manages peer connections and liveness pings. start_liveness_pings() detects dead peers. Daemon tick advances on timer, not peer responses.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "json_rpc_handlers",
+      "label": "JSON-RPC Handlers",
+      "description": "Inbound request handlers for stamp, verify, calendar queries. Mitigations: MAX_CONTENT_BYTES (1GB), MAX_CALENDAR_SLICE_COUNT (10000), echo field for replay protection.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "peer_manager_script",
+      "label": "start_local_peers.py",
+      "description": "Interactive Python peer manager script. Spawns N foretias servers with unique identities, RPC ports, and calendars. Provides REPL for status, stamp, verify, kill commands.",
+      "file_type": "code",
+      "source_file": "HOWTO.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "custom_base64_encoding",
+      "label": "Custom Base64 Display Encoding",
+      "description": "Display-only base64 encoding using alphabet [a-zA-Z0-9|_] for JSON output. 64 unique characters, no padding. Internal wire format and storage remain unchanged.",
+      "file_type": "concept",
+      "source_file": ".opencode/plans/1778469701657-happy-river.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "libsodium",
+      "label": "libsodium",
+      "description": "C library providing Ed25519 signatures, hashing, and AEAD primitives. Linked by C11 core.",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "liboqs",
+      "label": "liboqs",
+      "description": "Open Quantum Safe library providing post-quantum cryptography: Kyber (KEM), Dilithium (signatures). Integrated via core-engine build.rs.",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "pyo3",
+      "label": "PyO3",
+      "description": "Rust-to-Python binding framework. Used by foretias-python crate to expose Rust functionality to Python via foretias-p2p package.",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "maturin",
+      "label": "maturin",
+      "description": "Build tool for Rust-Python packages. Produces foretias-p2p pip wheel from foretias-python crate.",
+      "file_type": "concept",
+      "source_file": "AGENTS.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "bindgen",
+      "label": "bindgen",
+      "description": "Rust FFI binding generator. Core-engine build.rs runs bindgen over foretias_core.h to generate Rust bindings for C11 core.",
+      "file_type": "concept",
+      "source_file": "AGENTS.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "ci_pipeline",
+      "label": "CI Pipeline",
+      "description": "GitHub Actions workflow on alpha/mvp branches. Four jobs: c11-tests, rust-tests (needs c11-tests), python-tests (needs rust-tests), lint (parallel). C11 build cached across jobs.",
+      "file_type": "code",
+      "source_file": ".github/workflows/ci.yml",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "release_pipeline",
+      "label": "Release Pipeline",
+      "description": "GitHub Actions workflow triggered on v* tags. Builds Python package with hatch, checks with twine, publishes to PyPI via trusted publisher or API token.",
+      "file_type": "code",
+      "source_file": ".github/workflows/release.yml",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "network_observer_attacker",
+      "label": "Network Observer",
+      "description": "Attacker with passive read access to all TCP traffic. High impact on JSON-RPC content confidentiality. libp2p transport is encrypted via Noise, so P2P control plane is opaque.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "active_network_attacker",
+      "label": "Active Network Attacker",
+      "description": "Attacker with full MITM on TCP. Can inject, drop, modify, replay packets. Cannot break libp2p Noise handshake or forge Ed25519 signatures. Medium impact.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "compromised_peer_attacker",
+      "label": "Compromised Peer",
+      "description": "Legitimate peer with valid keys behaving maliciously. Can send forged requests, refuse to attest, or collude. Medium-high impact. Cross-signature verification limits single-peer damage.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "content_replay_threat",
+      "label": "Content Replay Attack",
+      "description": "Attacker captures /stamp JSON-RPC response and replays with different content. Mitigated by echo field encoding requester identity + tick number.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "stamp_flood_threat",
+      "label": "Stamp Flood (DoS)",
+      "description": "High volume of stamp requests to exhaust CPU or job queue. Mitigated by two-layer rate limit, MAX_JOB_QUEUE_DEPTH=64, timer-driven tick advance.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "dht_eclipse_threat",
+      "label": "DHT Eclipse Attack",
+      "description": "Attacker controls majority of a node's Kademlia peer table, isolating from honest peers. Mitigated by private namespace key, bootstrap list, MAX_PEERS cap.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "sybil_rng_threat",
+      "label": "Sybil via RNG Failure",
+      "description": "Weak or predictable RNG produces colliding TBIDs. Mitigated by rng_mix.c multi-source entropy mixing. v0.7 adds explicit collision detection.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "calendar_file_tampering_threat",
+      "label": "Calendar File Tampering",
+      "description": "Disk access modifies plaintext calendar file. Mitigated in v0.5 by EncryptedJsonlCalendarStore with per-block AEAD tag.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "private_key_exfiltration_threat",
+      "label": "Private-Key Exfiltration via Disk",
+      "description": "Disk read recovers tick private keys. Mitigated: keys never written to disk, PrivKeyHandle zeroize on drop, keypairs regenerated every tick.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "tick_rate_exhaustion_threat",
+      "label": "Tick-Rate Exhaustion",
+      "description": "Forces victim to advance tick counter rapidly via stamp flood. Mitigated: timer-driven daemon, not stamp-driven. Inbound stamps rate-limited.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "pypci_trusted_publisher",
+      "label": "PyPI Trusted Publisher",
+      "description": "GitHub Actions integration with PyPI. When v* tag pushed, PyPI trusts the GitHub Actions run and publishes without API token. Alternative: PYPI_API_TOKEN secret.",
+      "file_type": "concept",
+      "source_file": ".github/workflows/publish-setup.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "infrastructure_task_python_rust_migration",
+      "label": "Python-to-Rust Migration (Task 6)",
+      "description": "XL effort (40-80 hours) to make Python use ONLY Rust. Current PyO3 bindings are 30% feature-complete. Requires Rust tick rotation, MA signing, daemon, Inquirer, persistence, Config, dormant load, 80+ test rewrites.",
+      "file_type": "rationale",
+      "source_file": "docs/superpowers/plans/2026-04-27-infrastructure-prioritization.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "infrastructure_task_c11_tests",
+      "label": "C11 Unit Tests (Task 4)",
+      "description": "M effort (2-3 hours). 14 test files for all C source files using CMocka. Covers identity, signing, hashing, noise, merkle, FROST, nullifier, RNG, memzero.",
+      "file_type": "rationale",
+      "source_file": "docs/superpowers/plans/2026-04-27-infrastructure-prioritization.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "infrastructure_task_rust_hardening",
+      "label": "Rust Hardening Tests (Task 5)",
+      "description": "M effort (1-2 hours). Defensive programming tests: CryptoServer backend, hash functions, Foretis stamp/verify, calendar integrity, error handling, PyO3 bindings.",
+      "file_type": "rationale",
+      "source_file": "docs/superpowers/plans/2026-04-27-infrastructure-prioritization.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "fortias_foretias_rename",
+      "label": "Fortias to Foretias Rename",
+      "description": "Project rename: fortias→foretias, fortis→foretis across two repos. Case-preserving direct string replacement. Affects C sources, Rust sources, Python sources, spec files, CMakeLists, Cargo.toml.",
+      "file_type": "rationale",
+      "source_file": "docs/superpowers/plans/2026-05-04-fortias-foretias-rename.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "chrono_chained_attestation",
+      "label": "Chrono Chained Attestation",
+      "description": "Forward/backward Foretis signatures in each TickRecord form a chained attestation. integrity_check() verifies the chain. A Foretis stamped at tick n cannot be forged from the past.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "resilience_fault_tolerance",
+      "label": "Resilience / Fault Tolerance",
+      "description": "Foretias survives catastrophic network failure. Killing 50% or 90% of peers still allows verification because attestations are replicated via mutual attestation across the decentralized calendar.",
+      "file_type": "concept",
+      "source_file": "HOWTO.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "gossipsub_deferred",
+      "label": "GossipSub (Deferred)",
+      "description": "P2P message propagation layer planned for v0.6. Not yet shipped. Will include mesh size and flood-publish caps for DoS protection. ProbityReport gossip also deferred to v0.6.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "json_rpc_no_tls",
+      "label": "JSON-RPC No TLS (Residual Risk)",
+      "description": "JSON-RPC over TCP has no Noise or TLS layer by design. Network observer reads stamp content and calendar queries. Primary threat (content replay) mitigated by echo fields. TLS addition deferred.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "c11_test_all",
+      "label": "test_all (C11 Test Binary)",
+      "description": "Single test executable compiling 14 test source files: test_all, test_memzero, test_rng, test_version, test_ed25519, test_sha256, test_merkle, test_nullifier, test_p256_stub, test_blake3_stub, test_noise, test_frost_stub, test_legacy_hash, test_privkey.",
+      "file_type": "code",
+      "source_file": "p2p/core/tests/CMakeLists.txt",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "c11_source_files",
+      "label": "C11 Core Source Files",
+      "description": "18 C source files: version, memzero, rng_mix, identity_ed25519, identity_p256, signing_ed25519, signing_p256, hash_sha256, hash_blake3, hash_legacy_insecure_md5, hash_legacy_insecure_sha1, noise_xx, merkle, frost_ed25519, nullifier, privkey.",
+      "file_type": "code",
+      "source_file": "p2p/core/CMakeLists.txt",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "chronosidae_taxonomy",
+      "label": "Chronosidae Taxonomy",
+      "description": "Time beings classification: Family Chronosidae, Subfamily Chronosinae, Tribe Chronosini, Subtribe Chronosina, Genus Chronos, Species Chronos fidelius. Subspecies: authenticus (Chronomatter), grapha (Calendar), adunatrix (Time Family), locutus (Communerd).",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "alpha_branch",
+      "label": "Alpha Branch",
+      "description": "Center of development. CI runs on push/PR to alpha and mvp branches. Worktree plans merge to alpha.",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "sccache_build_caching",
+      "label": "sccache Build Caching",
+      "description": "Rust compilation cache for external crates (libp2p, etc.). Set RUSTC_WRAPPER=sccache. Cannot cache incrementally-compiled workspace members or proc-macros.",
+      "file_type": "concept",
+      "source_file": "AGENTS.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "cmake_parallel_build",
+      "label": "CMAKE_BUILD_PARALLEL_LEVEL",
+      "description": "Environment variable for parallel CMake builds of oqs-sys (liboqs). Defaults to CPU count if unset. Without it, foretias-core builds take 15-30 minutes instead of 2-5 minutes.",
+      "file_type": "concept",
+      "source_file": "AGENTS.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "libp2p_feature_minimization",
+      "label": "libp2p Feature Minimization",
+      "description": "Enable only required libp2p features (tcp, noise, yamux, gossipsub, kad, identify, ping, request-response) to reduce build time by 20-25%. libp2p has 38 feature flags, none enabled by default.",
+      "file_type": "concept",
+      "source_file": "AGENTS.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "two_layer_identity",
+      "label": "Two-Layer Identity",
+      "description": "libp2p PeerId (transport layer, Noise protocol) + application TBID (Foretias identity). Noise handshake authenticates transport PeerId; application layer verifies Foretias signatures against peer's TBID public key chain.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "daemon_loop",
+      "label": "Daemon Loop",
+      "description": "Timer-driven tick advance in Chronomatter. start_daemon() runs on chronon interval, not on peer responses or stamp requests. Provides floor for tick-rate exhaustion mitigation.",
+      "file_type": "concept",
+      "source_file": "docs/threat_model_v0_5.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "worktree_planning",
+      "label": "Worktree Branch Planning",
+      "description": "PLAN.md files document worktree lifecycle: create worktree, implement, verify, merge to alpha, cleanup. Path: ${HOME}/tmp/foretias-worktrees/{SPEC_NAME}_${RANDOM}.",
+      "file_type": "concept",
+      "source_file": "AGENTS.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "project_segmentation",
+      "label": "Project Segmentation",
+      "description": "Hierarchy: Major (large feature) > Phase (implementation stage) > Stage (sub-phase) > Step (actionable unit) > Task (small well-defined job). Used for scoping and organization.",
+      "file_type": "concept",
+      "source_file": "AGENTS.md",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "liboqs_liboqs",
+      "label": "liboqs",
+      "file_type": "document",
+      "source_file": "p2p/core-engine/deps/liboqs/README.md",
+      "rationale": "Open Quantum Safe library — open-source library of post-quantum cryptographic algorithms"
+    },
+    {
+      "id": "liboqs_pqc_algorithms",
+      "label": "Post-Quantum Cryptographic Algorithms",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/README.md",
+      "rationale": "Category of algorithms resistant to quantum computer attacks, implemented in liboqs"
+    },
+    {
+      "id": "liboqs_kem",
+      "label": "Key Encapsulation Mechanism",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/CMakeLists.txt",
+      "rationale": "KEM algorithm category in liboqs (kyber, ml_kem, bike, frodokem, ntruprime, classic_mceliece, hqc)"
+    },
+    {
+      "id": "liboqs_sig",
+      "label": "Digital Signature Schemes",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/CMakeLists.txt",
+      "rationale": "Signature algorithm category in liboqs (dilithium, ml_dsa, falcon, sphincs, mayo, cross, uov)"
+    },
+    {
+      "id": "liboqs_sig_stfl",
+      "label": "Stateful Hash-Based Signatures",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/CONFIGURE.md",
+      "rationale": "Stateful signature schemes (XMSS, LMS) disabled by default; key/signature generation gated behind HAZARDOUS_EXPERIMENTAL flag"
+    },
+    {
+      "id": "liboqs_kyber",
+      "label": "Kyber KEM",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/CMakeLists.txt",
+      "rationale": "NIST-standardized KEM algorithm (now ML-KEM)"
+    },
+    {
+      "id": "liboqs_ml_kem",
+      "label": "ML-KEM",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/CMakeLists.txt",
+      "rationale": "NIST FIPS 203 standardized KEM, successor to Kyber"
+    },
+    {
+      "id": "liboqs_dilithium",
+      "label": "Dilithium Signature",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/CMakeLists.txt",
+      "rationale": "NIST-standardized signature scheme"
+    },
+    {
+      "id": "liboqs_ml_dsa",
+      "label": "ML-DSA",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/CMakeLists.txt",
+      "rationale": "NIST FIPS 204 standardized signature scheme, successor to Dilithium"
+    },
+    {
+      "id": "liboqs_falcon",
+      "label": "Falcon Signature",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/CMakeLists.txt",
+      "rationale": "NIST alternative standardized signature scheme"
+    },
+    {
+      "id": "liboqs_sphincs",
+      "label": "SPHINCS+ Signature",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/CMakeLists.txt",
+      "rationale": "NIST alternative stateless hash-based signature scheme"
+    },
+    {
+      "id": "liboqs_xmss",
+      "label": "XMSS Stateful Signature",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/CONFIGURE.md",
+      "rationale": "Stateful hash-based signature, disabled by default"
+    },
+    {
+      "id": "liboqs_lms",
+      "label": "LMS Stateful Signature",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/CONFIGURE.md",
+      "rationale": "Stateful hash-based signature, disabled by default"
+    },
+    {
+      "id": "liboqs_cmake_build",
+      "label": "CMake Build System",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/CMakeLists.txt",
+      "rationale": "CMake-based build configuration for liboqs (v0.13.0), C11 standard, supports multiple architectures"
+    },
+    {
+      "id": "liboqs_ci_workflows",
+      "label": "GitHub Actions CI Workflows",
+      "file_type": "document",
+      "source_file": "p2p/core-engine/deps/liboqs/CI.md",
+      "rationale": "CI system using reusable GitHub Actions workflows: push, pr, commit-to-main, weekly, release"
+    },
+    {
+      "id": "liboqs_platform_tests",
+      "label": "Platform-Specific Tests",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/CI.md",
+      "rationale": "Tests for android, apple, macos, linux, windows, zephyr platforms"
+    },
+    {
+      "id": "liboqs_travis_ci",
+      "label": "Travis CI (IBM Platforms)",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/.travis.yml",
+      "rationale": "Travis CI builds for IBM Power (ppc64le) and s390x; currently disabled pending issue #1888"
+    },
+    {
+      "id": "liboqs_constant_time_testing",
+      "label": "Constant-Time Testing",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/CONFIGURE.md",
+      "rationale": "Valgrind-based testing for secret-dependent control flow via OQS_ENABLE_TEST_CONSTANT_TIME"
+    },
+    {
+      "id": "liboqs_fuzz_testing",
+      "label": "Fuzz Testing",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/CONFIGURE.md",
+      "rationale": "Libfuzzer-based fuzz test suite, available with Clang compiler via OQS_BUILD_FUZZ_TESTS"
+    },
+    {
+      "id": "liboqs_libjade",
+      "label": "Libjade Formal Verification",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/CONFIGURE.md",
+      "rationale": "Formally verified implementations via Jasmin compiler (proven in Coq). Provides Kyber512, Kyber768. Linux/Darwin x86_64 only"
+    },
+    {
+      "id": "liboqs_cupqc",
+      "label": "NVIDIA cuPQC GPU Backend",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/CONFIGURE.md",
+      "rationale": "GPU-accelerated PQC via NVIDIA cuPQC library. Currently supports ML-KEM only"
+    },
+    {
+      "id": "liboqs_openssl_integration",
+      "label": "OpenSSL Integration",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/CMakeLists.txt",
+      "rationale": "Optional OpenSSL backend for AES, SHA-2, SHA-3. Supports dlopen for deferred loading"
+    },
+    {
+      "id": "liboqs_downstream_oqs_provider",
+      "label": "OQS OpenSSL3 Provider",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/CI.md",
+      "rationale": "Downstream project depending on liboqs: open-quantum-safe/oqs-provider"
+    },
+    {
+      "id": "liboqs_downstream_boringssl",
+      "label": "OQS-BoringSSL",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/CI.md",
+      "rationale": "Downstream project depending on liboqs: open-quantum-safe/boringssl"
+    },
+    {
+      "id": "liboqs_downstream_openssh",
+      "label": "OQS-OpenSSH",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/CI.md",
+      "rationale": "Downstream project depending on liboqs: open-quantum-safe/openssh"
+    },
+    {
+      "id": "liboqs_downstream_bindings",
+      "label": "liboqs Language Bindings",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/CI.md",
+      "rationale": "Downstream bindings: liboqs-cpp, liboqs-go, liboqs-python"
+    },
+    {
+      "id": "liboqs_governance",
+      "label": "OQS Governance Model",
+      "file_type": "document",
+      "source_file": "p2p/core-engine/deps/liboqs/GOVERNANCE.md",
+      "rationale": "Lazy consensus decision-making. Roles: User, Community Member, Contributor, Committer, Maintainer"
+    },
+    {
+      "id": "liboqs_oqs_algs_enabled",
+      "label": "OQS_ALGS_ENABLED Presets",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/CONFIGURE.md",
+      "rationale": "Preset algorithm sets: STD (NIST standardized), NIST_R4 (round 4), NIST_SIG_ONRAMP (additional signatures), All"
+    },
+    {
+      "id": "liboqs_dist_build",
+      "label": "Distribution Build Mode",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/CONFIGURE.md",
+      "rationale": "OQS_DIST_BUILD enables run-time CPU feature detection for cross-microarchitecture compatibility"
+    },
+    {
+      "id": "liboqs_scorecard",
+      "label": "OpenSSF Scorecard Analysis",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/CI.md",
+      "rationale": "OpenSSF scorecard security analysis integrated into CI (scorecard.yml)"
+    },
+    {
+      "id": "foretias_foretias_project",
+      "label": "Foretias Project",
+      "file_type": "document",
+      "source_file": "README.md",
+      "rationale": "Free, Open-source Resilient Time Integrity Attestation Service. Backdate-proof digital timestamping via cryptographic key rotation"
+    },
+    {
+      "id": "foretias_chronomatter",
+      "label": "Chronomatter",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "rationale": "Chronos fidelius authenticus — autonomous ticking, stamping, verification component"
+    },
+    {
+      "id": "foretias_calendar",
+      "label": "Calendar",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "rationale": "Chronos fidelius grapha — calendar data, persistence, mutual attestation scheduling"
+    },
+    {
+      "id": "foretias_communerd",
+      "label": "Communerd",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "rationale": "Chronos fidelius locutus — all P2P communication: DHT, gossipsub, peer discovery"
+    },
+    {
+      "id": "foretias_timefamily_server",
+      "label": "TimeFamilyServer",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "rationale": "Orchestrator holding Arc<Chronomatter>, Arc<Calendar>, Option<Arc<Communerd>>. Exposes JSON-RPC and HTTP endpoints"
+    },
+    {
+      "id": "foretias_c11_core",
+      "label": "C11 Cryptographic Core",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "rationale": "Verified cryptographic primitives: Ed25519 (libsodium), SHA-256, BLAKE3, Noise protocol, Merkle trees, FROST"
+    },
+    {
+      "id": "foretias_core_engine",
+      "label": "foretias-core (Rust)",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "rationale": "Rust safe wrappers over C11 FFI via bindgen. Domain types, CryptoServer trait"
+    },
+    {
+      "id": "foretias_ed25519_key_rotation",
+      "label": "Ed25519 Key Rotation",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "rationale": "Each calendar tick has its own Ed25519 keypair; previous private key is disabled when tick advances. Makes stamps backdate-proof"
+    },
+    {
+      "id": "foretias_chronon",
+      "label": "Chronon Period",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "rationale": "Tick period in nanoseconds (default 60s). Configurable via --chronon-ns flag"
+    },
+    {
+      "id": "foretias_stamp_command",
+      "label": "stamp Command",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "rationale": "Stamp content against a running server. Supports inline message or file input"
+    },
+    {
+      "id": "foretias_verify_command",
+      "label": "verify Command",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "rationale": "Server-side verification of content against a Foretis"
+    },
+    {
+      "id": "foretias_prove_verification",
+      "label": "prove-verification Command",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "rationale": "Client-side proof: fetches calendar slice from remote TimeBeing and verifies locally"
+    },
+    {
+      "id": "foretias_inspect_attestations",
+      "label": "inspect-attestations Command",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "rationale": "Offline verification of external attestations in persisted calendar. Re-runs signature, hash, and echo verification"
+    },
+    {
+      "id": "foretias_dht_namespace",
+      "label": "DHT Namespace",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "rationale": "Kademlia protocol isolation via private namespace (default: mainnet)"
+    },
+    {
+      "id": "foretias_mutual_attestation",
+      "label": "Mutual Attestation",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "rationale": "Peers attest each other's stamps at configurable frequency (--mutually-attest-every-chronons)"
+    },
+    {
+      "id": "foretias_v01_local_server",
+      "label": "v0.1 Local Server",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "rationale": "Local server with JSON-RPC stamp/verify (C11 core + Rust + PyO3)"
+    },
+    {
+      "id": "foretias_v02_p2p_attestation",
+      "label": "v0.2 P2P Mutual Attestation",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "rationale": "P2P mutual attestation between statically configured peers"
+    },
+    {
+      "id": "foretias_v03_dht_discovery",
+      "label": "v0.3 DHT Peer Discovery",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "rationale": "DHT peer discovery via Kademlia with private namespace"
+    },
+    {
+      "id": "foretias_chronos_classification",
+      "label": "Chronos Taxonomy",
+      "file_type": "concept",
+      "source_file": "README.md",
+      "rationale": "Time beings classification: Family Chronosidae, Species Chronos fidelius. Subspecies: authenticus (Chronomatter), grapha (Calendar), adunatrix (Time Family), locutus (Communerd)"
+    },
+    {
+      "id": "liboqs_coding_style",
+      "label": "Google Code Style (astyle)",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/CONTRIBUTING.md",
+      "rationale": "Modified Google code formatting style enforced via astyle tool in CI"
+    },
+    {
+      "id": "liboqs_actionlint",
+      "label": "actionlint CI Validation",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/CONTRIBUTING.md",
+      "rationale": "GitHub Actions workflows validated with actionlint during basic.yml job"
+    },
+    {
+      "id": "liboqs_embedded_build",
+      "label": "Embedded Build Mode",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/CONFIGURE.md",
+      "rationale": "OQS_EMBEDDED_BUILD excludes standard library calls for bare-metal environments. Requires custom RNG callback"
+    },
+    {
+      "id": "liboqs_sanitizers",
+      "label": "Clang Sanitizers",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/CONFIGURE.md",
+      "rationale": "AddressSanitizer, MemorySanitizer, UndefinedBehaviorSanitizer, ThreadSanitizer, LeakSanitizer"
+    },
+    {
+      "id": "liboqs_liboqs",
+      "label": "liboqs",
+      "description": "Open Quantum Safe library providing post-quantum cryptographic primitives (KEM, signatures, stateful signatures)",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/",
+      "properties": {
+        "organization": "open-quantum-safe",
+        "language": "C",
+        "build_system": "CMake/Ninja"
+      }
+    },
+    {
+      "id": "liboqs_android_workflow",
+      "label": "android build workflow",
+      "description": "GitHub Actions workflow for building liboqs on Android across ABIs (armeabi-v7a, arm64-v8a, x86, x86_64)",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/.github/workflows/android.yml",
+      "properties": {
+        "ab": [
+          "armeabi-v7a",
+          "arm64-v8a",
+          "x86",
+          "x86_64"
+        ],
+        "stfl_options": [
+          "ON",
+          "OFF"
+        ]
+      }
+    },
+    {
+      "id": "liboqs_apple_workflow",
+      "label": "apple build workflow",
+      "description": "GitHub Actions workflow for building liboqs on iOS (OS64) and tvOS platforms",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/.github/workflows/apple.yml",
+      "properties": {
+        "platforms": [
+          "OS64",
+          "TVOS"
+        ],
+        "openssl": false
+      }
+    },
+    {
+      "id": "liboqs_basic_workflow",
+      "label": "basic checks workflow",
+      "description": "GitHub Actions workflow for basic validation: workflow syntax (actionlint), code conventions (pytest), upstream integration state, minimal build, C++ linking, fuzz build, Nix flake",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/.github/workflows/basic.yml",
+      "properties": {
+        "checks": [
+          "workflowcheck",
+          "stylecheck",
+          "upstreamcheck",
+          "buildcheck",
+          "cppcheck",
+          "fuzzbuildcheck",
+          "nixflakecheck"
+        ]
+      }
+    },
+    {
+      "id": "liboqs_platforms_workflow",
+      "label": "platforms workflow",
+      "description": "Meta-workflow orchestrating platform tests: Android, iOS, Linux, macOS, Windows, Zephyr",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/.github/workflows/platforms.yml",
+      "properties": {
+        "sub_workflows": [
+          "android",
+          "ios",
+          "linux",
+          "macos",
+          "windows",
+          "zephyr"
+        ]
+      }
+    },
+    {
+      "id": "liboqs_linux_workflow",
+      "label": "linux tests workflow",
+      "description": "Comprehensive Linux CI matrix covering arm64, alpine, Ubuntu Noble/Jammy, clang, sanitizers, OpenSSL variants, shared libs, cross-compilation, scan-build",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/.github/workflows/linux.yml",
+      "properties": {
+        "variants": [
+          "arm64",
+          "alpine",
+          "alpine-libjade",
+          "noble-nistr4",
+          "noble-nistonramp",
+          "jammy-std-openssl3",
+          "address-sanitizer",
+          "scan-build",
+          "cross-compile-windows"
+        ]
+      }
+    },
+    {
+      "id": "liboqs_macos_workflow",
+      "label": "macos tests workflow",
+      "description": "macOS CI matrix covering macos-13/14/15, gcc-14, no-openssl, shared libs, libjade builds",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/.github/workflows/macos.yml",
+      "properties": {
+        "os_versions": [
+          "macos-13",
+          "macos-14",
+          "macos-15"
+        ]
+      }
+    },
+    {
+      "id": "liboqs_windows_workflow",
+      "label": "windows tests workflow",
+      "description": "Windows CI for ARM64 and x86/amd64 on windows-2022/2025 runners",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/.github/workflows/windows.yml",
+      "properties": {
+        "architectures": [
+          "arm64",
+          "x86",
+          "amd64"
+        ],
+        "runners": [
+          "windows-2022",
+          "windows-2025"
+        ]
+      }
+    },
+    {
+      "id": "liboqs_zephyr_workflow",
+      "label": "zephyr tests workflow",
+      "description": "Zephyr RTOS integration tests for liboqs signature and KEM samples",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/.github/workflows/zephyr.yml",
+      "properties": {
+        "zephyr_versions": [
+          "v3.4.0",
+          "v3.7.0"
+        ]
+      }
+    },
+    {
+      "id": "liboqs_extended_workflow",
+      "label": "extended tests workflow",
+      "description": "Extended CI tests: constant-time testing (generic/extensions) and NIST KAT tests",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/.github/workflows/extended.yml",
+      "properties": {
+        "test_types": [
+          "constant_time",
+          "nist_kat"
+        ]
+      }
+    },
+    {
+      "id": "liboqs_downstream_basic_workflow",
+      "label": "downstream basic CI workflow",
+      "description": "Triggers CI on downstream projects: OQS-BoringSSL, OQS-OpenSSH, oqs-provider, liboqs-cpp, liboqs-go, liboqs-python, liboqs-java, liboqs-rust",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/.github/workflows/downstream-basic.yml",
+      "properties": {
+        "downstream_projects": [
+          "OQS-BoringSSL",
+          "OQS-OpenSSH",
+          "oqs-provider",
+          "liboqs-cpp",
+          "liboqs-go",
+          "liboqs-python",
+          "liboqs-java",
+          "liboqs-rust"
+        ]
+      }
+    },
+    {
+      "id": "liboqs_downstream_release_workflow",
+      "label": "downstream release tests workflow",
+      "description": "Triggers oqs-provider release tests using liboqs release tag and tracker branch",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/.github/workflows/downstream-release.yml"
+    },
+    {
+      "id": "liboqs_pr_workflow",
+      "label": "pull request workflow",
+      "description": "PR test pipeline: basic checks, then platform tests and scorecard (conditional on basic-checks passing)",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/.github/workflows/pr.yml"
+    },
+    {
+      "id": "liboqs_push_workflow",
+      "label": "push tests workflow",
+      "description": "Push test pipeline: basic checks required; full/extended/downstream tests triggered by commit message tags ([full tests], [extended tests], [trigger downstream])",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/.github/workflows/push.yml",
+      "properties": {
+        "commit_tags": [
+          "[full tests]",
+          "[extended tests]",
+          "[trigger downstream]"
+        ]
+      }
+    },
+    {
+      "id": "liboqs_commit_to_main_workflow",
+      "label": "main branch workflow",
+      "description": "On push to main: runs platform tests, scorecard, and basic downstream CI triggers",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/.github/workflows/commit-to-main.yml"
+    },
+    {
+      "id": "liboqs_release_workflow",
+      "label": "release workflow",
+      "description": "On release published: runs extended tests and downstream release tests",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/.github/workflows/release.yml"
+    },
+    {
+      "id": "liboqs_weekly_workflow",
+      "label": "weekly workflow",
+      "description": "Weekly scheduled tests: scorecard and extended tests (runs every Sunday at 00:05)",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/.github/workflows/weekly.yml"
+    },
+    {
+      "id": "liboqs_scorecard_workflow",
+      "label": "scorecard supply-chain security workflow",
+      "description": "OpenSSF Scorecard analysis for supply-chain security, publishes results to OpenSSF REST API",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/.github/workflows/scorecard.yml",
+      "properties": {
+        "tool": "ossf/scorecard-action",
+        "publish_results": true
+      }
+    },
+    {
+      "id": "liboqs_fuzzing",
+      "label": "Fuzzing documentation",
+      "description": "Fuzz testing methodology for liboqs using libfuzzer. Covers KEM and signature algorithms with sanitizer integration (address, UB)",
+      "file_type": "document",
+      "source_file": "p2p/core-engine/deps/liboqs/docs/FUZZING.md",
+      "properties": {
+        "fuzzer": "libfuzzer",
+        "sanitizers": [
+          "fuzzer-no-link",
+          "address",
+          "UBSan"
+        ]
+      }
+    },
+    {
+      "id": "liboqs_fuzz_sig_covered",
+      "label": "Fuzz-covered signature algorithms",
+      "description": "Signature algorithms with active fuzz tests: dilithium, falcon, mayo, ml_dsa, sphincs",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/docs/FUZZING.md",
+      "properties": {
+        "status": "fuzzed",
+        "algorithms": [
+          "dilithium",
+          "falcon",
+          "mayo",
+          "ml_dsa",
+          "sphincs"
+        ]
+      }
+    },
+    {
+      "id": "liboqs_fuzz_sig_pending",
+      "label": "Fuzz-pending signature algorithms",
+      "description": "Signature algorithms without fuzz tests yet: stateful LMS, XMSS, and sig_stfl framework",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/docs/FUZZING.md",
+      "properties": {
+        "status": "pending",
+        "algorithms": [
+          "lms",
+          "xmss",
+          "sig_stfl"
+        ]
+      }
+    },
+    {
+      "id": "liboqs_fuzz_kem_pending",
+      "label": "Fuzz-pending KEM algorithms",
+      "description": "KEM algorithms without fuzz tests: bike, classic_mceliece, frodokem, hqc, kyber, ml_kem, ntruprime",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/docs/FUZZING.md",
+      "properties": {
+        "status": "pending",
+        "algorithms": [
+          "bike",
+          "classic_mceliece",
+          "frodokem",
+          "hqc",
+          "kyber",
+          "ml_kem",
+          "ntruprime"
+        ]
+      }
+    },
+    {
+      "id": "liboqs_procedures",
+      "label": "Procedures documentation",
+      "description": "Code maintenance procedures: pinned dependency management for Python (pip-compile with hashes) and GitHub Actions (pin-github-action with commit SHAs)",
+      "file_type": "document",
+      "source_file": "p2p/core-engine/deps/liboqs/docs/PROCEDURES.md",
+      "properties": {
+        "pinned_tools": [
+          "pip-compile",
+          "pin-github-action"
+        ],
+        "open_ssaf_recommendation": "pin dependencies for reproducibility and security"
+      }
+    },
+    {
+      "id": "liboqs_copy_from_upstream",
+      "label": "copy_from_upstream script",
+      "description": "Script to copy algorithm implementations from upstream NIST reference implementations. Verified in CI to leave repository clean",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/.github/workflows/basic.yml",
+      "properties": {
+        "modes": [
+          "copy",
+          "libjade"
+        ]
+      }
+    },
+    {
+      "id": "liboqs_libjade_integration",
+      "label": "libjade build integration",
+      "description": "Alternative implementation backend for liboqs algorithms. Build flag DOQS_LIBJADE_BUILD=ON with minimal algorithm list from LIBJADE_ALG_LIST variable",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/.github/workflows/linux.yml",
+      "properties": {
+        "build_flag": "DOQS_LIBJADE_BUILD",
+        "algorithm_filter": "LIBJADE_ALG_LIST"
+      }
+    },
+    {
+      "id": "liboqs_stateful_sig_flags",
+      "label": "Stateful signature build flags",
+      "description": "CMake flags for stateful hash-based signatures: LMS, XMSS, and key/sig generation (marked HAZARDOUS_EXPERIMENTAL)",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/.github/workflows/linux.yml",
+      "properties": {
+        "flags": [
+          "OQS_ENABLE_SIG_STFL_LMS",
+          "OQS_ENABLE_SIG_STFL_XMSS",
+          "OQS_HAZARDOUS_EXPERIMENTAL_ENABLE_SIG_STFL_KEY_SIG_GEN"
+        ]
+      }
+    },
+    {
+      "id": "liboqs_algorithm_sets",
+      "label": "Algorithm set presets",
+      "description": "CMake presets for algorithm selection: NIST_R4 (NIST Round 4), NIST_SIG_ONRAMP (NIST onramp signatures), STD (standard)",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/.github/workflows/linux.yml",
+      "properties": {
+        "presets": [
+          "NIST_R4",
+          "NIST_SIG_ONRAMP",
+          "STD"
+        ]
+      }
+    },
+    {
+      "id": "liboqs_ci_containers",
+      "label": "CI Docker containers",
+      "description": "Pre-built CI containers: ci-ubuntu-latest, ci-ubuntu-jammy, ci-alpine-amd64, ci-debian-buster variants",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/.github/workflows/linux.yml",
+      "properties": {
+        "images": [
+          "openquantumsafe/ci-ubuntu-latest",
+          "openquantumsafe/ci-ubuntu-jammy",
+          "openquantumsafe/ci-alpine-amd64"
+        ]
+      }
+    },
+    {
+      "id": "liboqs_constant_time_testing",
+      "label": "Constant-time testing",
+      "description": "Tests for constant-time execution properties. Skip SPHINCS+-SHA s-simple and SPHINCS+-SHAKE variants which are not constant-time",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/.github/workflows/extended.yml",
+      "properties": {
+        "build_flag": "OQS_ENABLE_TEST_CONSTANT_TIME",
+        "skipped_algorithms": [
+          "SPHINCS+-SHA*-s-simple",
+          "SPHINCS+-SHAKE-*"
+        ]
+      }
+    },
+    {
+      "id": "liboqs_nist_kat",
+      "label": "NIST Known Answer Tests",
+      "description": "NIST KAT validation tests for all PQC algorithms against NIST reference vectors",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/.github/workflows/extended.yml",
+      "properties": {
+        "test_filter": "test_kat_all"
+      }
+    },
+    {
+      "id": "foretias_liboqs_dependency",
+      "label": "foretias liboqs dependency",
+      "description": "foretias depends on liboqs via core-engine's build.rs which compiles the C library. Provides PQC primitives for post-quantum cryptography integration",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/",
+      "properties": {
+        "dependency_type": "embedded_submodule",
+        "integration": "CMake + bindgen FFI"
+      }
+    },
+    {
+      "id": "liboqs_python_ci_deps",
+      "label": "Python CI dependencies",
+      "description": "Pinned Python dependencies for CI: pytest, pytest-xdist, pyyaml, colorama, execnet, packaging, pluggy",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/.github/workflows/requirements.txt",
+      "properties": {
+        "packages": [
+          "pytest==8.1.1",
+          "pytest-xdist==3.5.0",
+          "pyyaml==6.0.1"
+        ]
+      }
+    },
+    {
+      "id": "liboqs_openssl_integration",
+      "label": "OpenSSL integration options",
+      "description": "CMake options for OpenSSL integration: use OpenSSL for AES, SHA2, SHA3; dlopen OpenSSL dynamically; or build without OpenSSL entirely",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/.github/workflows/linux.yml",
+      "properties": {
+        "flags": [
+          "OQS_USE_OPENSSL",
+          "OQS_USE_AES_OPENSSL",
+          "OQS_USE_SHA2_OPENSSL",
+          "OQS_USE_SHA3_OPENSSL",
+          "OQS_DLOPEN_OPENSSL"
+        ]
+      }
+    },
+    {
+      "id": "liboqs_minimal_build",
+      "label": "Minimal build mode",
+      "description": "CMake option to build only specific algorithms (e.g., KEM_ml_kem_768;SIG_ml_dsa_65) for faster CI",
+      "file_type": "concept",
+      "source_file": "p2p/core-engine/deps/liboqs/.github/workflows/basic.yml",
+      "properties": {
+        "flag": "OQS_MINIMAL_BUILD",
+        "format": "KEM_<name>;SIG_<name>"
+      }
+    },
+    {
+      "id": "kem_binary",
+      "label": "Key Encapsulation Mechanism",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "Cryptographic primitive for secure key exchange between two parties",
+        "category": "public_key_cryptography"
+      }
+    },
+    {
+      "id": "kem_assumption_qc_mdpc",
+      "label": "QC-MDPC",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "Quasi-Cyclic Moderate Density Parity-Check codes",
+        "category": "cryptographic_assumption"
+      }
+    },
+    {
+      "id": "kem_assumption_goppa_codes",
+      "label": "Binary Goppa Codes",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "Niederreiter dual version of McEliece public key encryption",
+        "category": "cryptographic_assumption"
+      }
+    },
+    {
+      "id": "kem_assumption_lwe",
+      "label": "LWE",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "Learning With Errors problem",
+        "category": "cryptographic_assumption"
+      }
+    },
+    {
+      "id": "kem_assumption_hqc_syndrome",
+      "label": "Syndrome Decoding (HQC)",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "Syndrome decoding of structured codes using Hamming Quasi-Cyclic approach",
+        "category": "cryptographic_assumption"
+      }
+    },
+    {
+      "id": "kem_assumption_module_lwe",
+      "label": "Module LWE+R",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "Module Learning With Errors plus Ring-LWE with base ring Z[x]/(3329, x^256+1)",
+        "category": "cryptographic_assumption"
+      }
+    },
+    {
+      "id": "kem_assumption_ntru",
+      "label": "NTRU",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "NTRU lattice-based cryptographic assumption",
+        "category": "cryptographic_assumption"
+      }
+    },
+    {
+      "id": "kem_security_ind_cpa",
+      "label": "IND-CPA",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "Indistinguishability under Chosen Plaintext Attack",
+        "category": "security_model"
+      }
+    },
+    {
+      "id": "kem_security_ind_cca2",
+      "label": "IND-CCA2",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "Indistinguishability under Adaptive Chosen Ciphertext Attack",
+        "category": "security_model"
+      }
+    },
+    {
+      "id": "kem_algo_bike",
+      "label": "BIKE",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "BIKE KEM algorithm family",
+        "spec_version": "5.1",
+        "website": "http://bikesuite.org/",
+        "nist_round": 4,
+        "primary_source": "https://github.com/awslabs/bike-kem",
+        "license": "Apache-2.0",
+        "shared_secret_bytes": 32
+      }
+    },
+    {
+      "id": "kem_algo_bike_l1",
+      "label": "BIKE-L1",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 1,
+        "pk_bytes": 1541,
+        "sk_bytes": 5223,
+        "ct_bytes": 1573
+      }
+    },
+    {
+      "id": "kem_algo_bike_l3",
+      "label": "BIKE-L3",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 3,
+        "pk_bytes": 3083,
+        "sk_bytes": 10105,
+        "ct_bytes": 3115
+      }
+    },
+    {
+      "id": "kem_algo_bike_l5",
+      "label": "BIKE-L5",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 5,
+        "pk_bytes": 5122,
+        "sk_bytes": 16494,
+        "ct_bytes": 5154
+      }
+    },
+    {
+      "id": "kem_algo_classic_mceliece",
+      "label": "Classic McEliece",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "Classic McEliece KEM algorithm family",
+        "spec_version": "SUPERCOP-20221025",
+        "website": "https://classic.mceliece.org",
+        "nist_round": 3,
+        "primary_source": "PQClean",
+        "license": "Public domain",
+        "shared_secret_bytes": 32,
+        "advisories": [
+          "Parameter sets 460896, 460896f, 6960119, 6960119f fail memory leak testing on x86-64 with clang -O2/-O3",
+          "Implementation may not be constant-time"
+        ]
+      }
+    },
+    {
+      "id": "kem_algo_classic_mceliece_348864",
+      "label": "Classic-McEliece-348864",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 1,
+        "pk_bytes": 261120,
+        "sk_bytes": 6492,
+        "ct_bytes": 96,
+        "large_stack": true
+      }
+    },
+    {
+      "id": "kem_algo_classic_mceliece_460896",
+      "label": "Classic-McEliece-460896",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 3,
+        "pk_bytes": 524160,
+        "sk_bytes": 13608,
+        "ct_bytes": 156,
+        "large_stack": true
+      }
+    },
+    {
+      "id": "kem_algo_classic_mceliece_6688128",
+      "label": "Classic-McEliece-6688128",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 5,
+        "pk_bytes": 1044992,
+        "sk_bytes": 13932,
+        "ct_bytes": 208,
+        "large_stack": true
+      }
+    },
+    {
+      "id": "kem_algo_classic_mceliece_8192128",
+      "label": "Classic-McEliece-8192128",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 5,
+        "pk_bytes": 1357824,
+        "sk_bytes": 14120,
+        "ct_bytes": 208,
+        "large_stack": true
+      }
+    },
+    {
+      "id": "kem_algo_frodokem",
+      "label": "FrodoKEM",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "FrodoKEM algorithm family",
+        "spec_version": "NIST Round 3 submission",
+        "website": "https://frodokem.org/",
+        "nist_round": 3,
+        "primary_source": "https://github.com/microsoft/PQCrypto-LWEKE",
+        "license": "MIT"
+      }
+    },
+    {
+      "id": "kem_algo_frodokem_640",
+      "label": "FrodoKEM-640",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 1,
+        "pk_bytes": 9616,
+        "sk_bytes": 19888,
+        "ct_bytes": 9720,
+        "shared_secret_bytes": 16,
+        "variants": [
+          "AES",
+          "SHAKE"
+        ]
+      }
+    },
+    {
+      "id": "kem_algo_frodokem_976",
+      "label": "FrodoKEM-976",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 3,
+        "pk_bytes": 15632,
+        "sk_bytes": 31296,
+        "ct_bytes": 15744,
+        "shared_secret_bytes": 24,
+        "variants": [
+          "AES",
+          "SHAKE"
+        ]
+      }
+    },
+    {
+      "id": "kem_algo_frodokem_1344",
+      "label": "FrodoKEM-1344",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 5,
+        "pk_bytes": 21520,
+        "sk_bytes": 43088,
+        "ct_bytes": 21632,
+        "shared_secret_bytes": 32,
+        "variants": [
+          "AES",
+          "SHAKE"
+        ]
+      }
+    },
+    {
+      "id": "kem_algo_hqc",
+      "label": "HQC",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "HQC KEM algorithm family",
+        "spec_version": "2023-04-30",
+        "website": "https://pqc-hqc.org/",
+        "nist_round": 4,
+        "primary_source": "PQClean",
+        "license": "Public domain",
+        "shared_secret_bytes": 64
+      }
+    },
+    {
+      "id": "kem_algo_hqc_128",
+      "label": "HQC-128",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 1,
+        "pk_bytes": 2249,
+        "sk_bytes": 2305,
+        "ct_bytes": 4433
+      }
+    },
+    {
+      "id": "kem_algo_hqc_192",
+      "label": "HQC-192",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 3,
+        "pk_bytes": 4522,
+        "sk_bytes": 4586,
+        "ct_bytes": 8978
+      }
+    },
+    {
+      "id": "kem_algo_hqc_256",
+      "label": "HQC-256",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 5,
+        "pk_bytes": 7245,
+        "sk_bytes": 7317,
+        "ct_bytes": 14421
+      }
+    },
+    {
+      "id": "kem_algo_kyber",
+      "label": "Kyber",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "Kyber KEM algorithm family (pre-standardization name)",
+        "spec_version": "NIST Round 3 submission",
+        "website": "https://pq-crystals.org/",
+        "nist_round": 3,
+        "primary_source": "https://github.com/pq-crystals/kyber",
+        "license": "CC0-1.0 or Apache-2.0",
+        "shared_secret_bytes": 32,
+        "has_formally_verified_impl": true
+      }
+    },
+    {
+      "id": "kem_algo_kyber_512",
+      "label": "Kyber512",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 1,
+        "pk_bytes": 800,
+        "sk_bytes": 1632,
+        "ct_bytes": 768
+      }
+    },
+    {
+      "id": "kem_algo_kyber_768",
+      "label": "Kyber768",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 3,
+        "pk_bytes": 1184,
+        "sk_bytes": 2400,
+        "ct_bytes": 1088
+      }
+    },
+    {
+      "id": "kem_algo_kyber_1024",
+      "label": "Kyber1024",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 5,
+        "pk_bytes": 1568,
+        "sk_bytes": 3168,
+        "ct_bytes": 1568
+      }
+    },
+    {
+      "id": "kem_impl_libjade",
+      "label": "libjade",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "Formally-verified implementation of Kyber/ML-KEM",
+        "source": "https://github.com/formosa-crypto/libjade",
+        "license": "CC0-1.0 OR Apache-2.0",
+        "platforms": [
+          "x86_64"
+        ],
+        "variants": [
+          "ref",
+          "avx2"
+        ]
+      }
+    },
+    {
+      "id": "kem_algo_ml_kem",
+      "label": "ML-KEM",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "ML-KEM - NIST FIPS 203 final standard (standardized name for Kyber)",
+        "spec_version": "ML-KEM (FIPS 203)",
+        "website": "https://pq-crystals.org/kyber/ and https://csrc.nist.gov/pubs/fips/203",
+        "nist_round": "FIPS203",
+        "primary_source": "https://github.com/pq-code-package/mlkem-native",
+        "license": "CC0-1.0 or Apache-2.0",
+        "shared_secret_bytes": 32,
+        "keypair_seed_bytes": 64,
+        "has_cuda_impl": true
+      }
+    },
+    {
+      "id": "kem_algo_ml_kem_512",
+      "label": "ML-KEM-512",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 1,
+        "pk_bytes": 800,
+        "sk_bytes": 1632,
+        "ct_bytes": 768,
+        "keypair_seed_bytes": 64
+      }
+    },
+    {
+      "id": "kem_algo_ml_kem_768",
+      "label": "ML-KEM-768",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 3,
+        "pk_bytes": 1184,
+        "sk_bytes": 2400,
+        "ct_bytes": 1088,
+        "keypair_seed_bytes": 64
+      }
+    },
+    {
+      "id": "kem_algo_ml_kem_1024",
+      "label": "ML-KEM-1024",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 5,
+        "pk_bytes": 1568,
+        "sk_bytes": 3168,
+        "ct_bytes": 1568,
+        "keypair_seed_bytes": 64
+      }
+    },
+    {
+      "id": "kem_impl_cupqc",
+      "label": "cupqc-cuda",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "GPU-accelerated CUDA implementation of ML-KEM",
+        "source": "https://github.com/praveksharma/cupqc-mlkem",
+        "license": "Apache-2.0",
+        "platform": "CUDA"
+      }
+    },
+    {
+      "id": "kem_algo_ntruprime",
+      "label": "NTRU-Prime",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "NTRU-Prime KEM algorithm family",
+        "spec_version": "supercop-20200826",
+        "website": "https://ntruprime.cr.yp.to",
+        "nist_round": 3,
+        "primary_source": "PQClean",
+        "license": "Public domain",
+        "shared_secret_bytes": 32
+      }
+    },
+    {
+      "id": "kem_algo_sntrup761",
+      "label": "sntrup761",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "nist_level": 2,
+        "pk_bytes": 1158,
+        "sk_bytes": 1763,
+        "ct_bytes": 1039
+      }
+    },
+    {
+      "id": "kem_common_pqclean",
+      "label": "PQClean",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "PQClean reference implementation framework used as primary source for multiple KEM algorithms",
+        "source": "https://github.com/PQClean/PQClean"
+      }
+    },
+    {
+      "id": "kem_common_liboqs",
+      "label": "liboqs",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "Open source C library for quantum-safe cryptographic algorithms, provides common-crypto primitives (AES, SHA2, SHA3) used by KEM implementations",
+        "provides": [
+          "AES",
+          "SHA2",
+          "SHA3"
+        ]
+      }
+    },
+    {
+      "id": "nist_pqc_level_1",
+      "label": "NIST PQC Level 1",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "Security level equivalent to AES-128",
+        "equivalent": "AES-128"
+      }
+    },
+    {
+      "id": "nist_pqc_level_2",
+      "label": "NIST PQC Level 2",
+      "type": "concept",
+      "confidence": 0.95,
+      "source": "INFERRED",
+      "file_type": "document",
+      "properties": {
+        "description": "Intermediate security level between Level 1 and Level 3",
+        "used_by": [
+          "sntrup761"
+        ]
+      }
+    },
+    {
+      "id": "nist_pqc_level_3",
+      "label": "NIST PQC Level 3",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "Security level equivalent to AES-192",
+        "equivalent": "AES-192"
+      }
+    },
+    {
+      "id": "nist_pqc_level_5",
+      "label": "NIST PQC Level 5",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "Security level equivalent to SHA-512",
+        "equivalent": "SHA-512"
+      }
+    },
+    {
+      "id": "kem_impl_platform_x86_avx2",
+      "label": "x86_64 AVX2",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "Optimized implementation platform using AVX2, BMI2, POPCNT CPU extensions",
+        "category": "cpu_acceleration"
+      }
+    },
+    {
+      "id": "kem_impl_platform_aarch64",
+      "label": "ARM64_V8",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "ARM64 V8 architecture platform for KEM implementations",
+        "category": "cpu_platform"
+      }
+    },
+    {
+      "id": "kem_impl_platform_cuda",
+      "label": "CUDA",
+      "type": "concept",
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "file_type": "document",
+      "properties": {
+        "description": "GPU acceleration platform for ML-KEM via cupqc-cuda",
+        "category": "gpu_acceleration"
+      }
+    },
+    {
+      "id": "liboqs_src_cmake",
+      "label": "liboqs src CMakeLists",
+      "description": "Top-level CMake build for liboqs src: aggregates KEM, SIG, and stateful signature object libraries into oqs and oqs-internal targets",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_oqs_library",
+      "label": "oqs library target",
+      "description": "Main liboqs library combining KEM, signature, stateful signature, and common crypto object files. Versioned with SOVERSION 7",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_oqs_internal_library",
+      "label": "oqs-internal library target",
+      "description": "Internal static library for test programs only, with default C visibility",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_common_cmake",
+      "label": "liboqs common CMakeLists",
+      "description": "Build configuration for common crypto primitives: AES (OpenSSL or native with AES-NI/ARM crypto), SHA-2 (OpenSSL or native), SHA-3 (OpenSSL or XKCP), FIPS202 shims, random number generation",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/common/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_common_aes",
+      "label": "Common AES implementations",
+      "description": "AES support via OpenSSL, or native C implementation with AES-NI (x86) and ARMv8 crypto extensions",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/common/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_common_sha2",
+      "label": "Common SHA-2 implementations",
+      "description": "SHA-2 support via OpenSSL or native C implementation with ARMv8 crypto extensions",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/common/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_common_sha3_xkcp",
+      "label": "SHA-3 XKCP low-level",
+      "description": "KeccakP-1600 SHA-3 implementation from XKCP: plain 64-bit and AVX2-optimized variants, single and 4-way serial",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/common/sha3/xkcp_low/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_copy_xkcp_cmake",
+      "label": "copy_from_xkcp CMakeLists",
+      "description": "Script template for XKCP SHA-3 low-level KeccakP-1600 build with plain64 and AVX2 variants",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/scripts/copy_from_xkcp/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_copy_upstream_kem_template",
+      "label": "copy_from_upstream KEM Jinja2 template",
+      "description": "Jinja2 CMake template for generating KEM family build files from algorithm metadata. Handles common deps, scheme implementations, compile flags, CUDA, libjade fragments",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/scripts/copy_from_upstream/src/kem/family/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_copy_upstream_sig_template",
+      "label": "copy_from_upstream SIG Jinja2 template",
+      "description": "Jinja2 CMake template for generating signature scheme family build files. Handles common deps, implementations, compile flags for AVX2/ARM",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/scripts/copy_from_upstream/src/sig/family/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_kem_bike",
+      "label": "BIKE KEM",
+      "description": "Bit Flipping Key Encapsulation Mechanism. Levels L1, L3, L5. Round 4 spec with biased sampling. Constant-time QC-MDPC code-based crypto with AVX2, AVX512, PCLMULQDQ, VPCLMULQDQ optimizations",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/bike/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_kem_bike_r4_readme",
+      "label": "BIKE r4 README",
+      "description": "DGK team optimized BIKE implementation. NIST R4 candidate. Constant-time, no secret-dependent branches or memory access. Supports SHA3/SHAKE and BIND_PK_AND_M security flags. Performance benchmarks on Intel Xeon with/without vector-PCLMUL",
+      "file_type": "document",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/bike/additional_r4/README.md",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_kem_bike_gf2x",
+      "label": "BIKE GF2X polynomial algebra",
+      "description": "Binary polynomial operations for BIKE: inversion, Karatsuba squaring, multiplication, base multiplication. Optimized for AVX2/AVX512/PCLMUL/VPCLMUL",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/bike/CMakeLists.txt",
+      "confidence": 0.95
+    },
+    {
+      "id": "liboqs_kem_bike_sampling",
+      "label": "BIKE error vector sampling",
+      "description": "Biased sampling for private key and error vectors. Rejection sampling replaced since June 2022 to mitigate timing attacks by Guo et al.",
+      "file_type": "concept",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/bike/additional_r4/README.md",
+      "confidence": 0.95
+    },
+    {
+      "id": "liboqs_kem_frodokem",
+      "label": "FrodoKEM KEM",
+      "description": "Module-LWE based KEM. Variants: 640, 976, 1344 with AES or SHAKE symmetric primitives. AVX2-optimized implementations",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/frodokem/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_kem_classic_mceliece",
+      "label": "Classic McEliece KEM",
+      "description": "Code-based KEM. 10 parameter sets (348864 through 8192128) with clean and AVX2 implementations. Uses PQClean reference with AES-256-CTR, Berlekamp-Massey, FFT, syndrome decoding",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/classic_mceliece/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_kem_hqc",
+      "label": "HQC KEM",
+      "description": "Quasi-cyclic code-based KEM. Security levels 128, 192, 256. Clean implementations with FFT, Reed-Muller, Reed-Solomon codes, SHAKE PRF",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/hqc/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_kem_kyber",
+      "label": "Kyber KEM",
+      "description": "Module-LWE KEM (pre-standardization name). Levels 512 (K=2), 768 (K=3), 1024 (K=4). Reference, AVX2, and AArch64 implementations. NTT, polynomial arithmetic, IND-CPA. Also includes libjade Jasmin implementations",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/kyber/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_kem_ml_kem",
+      "label": "ML-KEM KEM (NIST FIPS 203)",
+      "description": "NIST-standardized Module-Lattice KEM (final standard). Levels 512 (K=2), 768 (K=3), 1024 (K=4). Reference C, x86_64 AVX2, AArch64 NEON, and CUDA implementations. NTT-based polynomial arithmetic, IND-CPA, compression, sampling",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/ml_kem/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_ml_kem_aarch64_backend",
+      "label": "ML-KEM AArch64 NEON backend",
+      "description": "Auto-generated ARM NEON assembly for ML-KEM via SLOTHY superoptimizer. Derived from Neon NTT research by Becker et al. Covers NTT, INTT, polynomial operations, rejection sampling. Used for ML-KEM-512, 768, 1024",
+      "file_type": "document",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/ml_kem/mlkem-native_ml-kem-512_aarch64/mlkem/native/aarch64/README.md",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_ml_kem_x86_backend",
+      "label": "ML-KEM x86_64 AVX2 backend",
+      "description": "Native x86_64 arithmetic backend from the official Kyber team AVX2 implementation. NTT, base multiplication, rejection sampling, compression",
+      "file_type": "document",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/ml_kem/mlkem-native_ml-kem-512_x86_64/mlkem/native/x86_64/README.md",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_ml_kem_cuda_backend",
+      "label": "ML-KEM CUDA backend",
+      "description": "GPU-accelerated ML-KEM via cupqc library. compute_70 architecture, device link-time optimization",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/ml_kem/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_kem_ntruprime",
+      "label": "NTRU-Prime KEM",
+      "description": "NTRU-Prime sntrup761. Clean and AVX2 implementations with NTT-based polynomial multiplication. Included for interop testing only",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/ntruprime/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_sig_cross",
+      "label": "CROSS signature scheme",
+      "description": "Experimental hash-based signature. rsdp (randomized) and rsdpg (generic) variants at 128, 192, 256 bit security. balanced, fast, small modes. AVX2 optimizations. Common components: merkle trees, seed trees, CSPRNG, signing",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/sig/cross/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_sig_dilithium",
+      "label": "Dilithium signature (pre-standardization)",
+      "description": "Module-lattice signature (CRYSTALS-Dilithium). Levels 2, 3, 5. Reference, AVX2, AArch64 implementations. NTT, polynomial/vector arithmetic, packing, rounding, randomized signing",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/sig/dilithium/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_pqclean_shims",
+      "label": "PQClean shims",
+      "description": "Common shim layer providing FIPS202 (SHA-3) and FIPS202x4 implementations used across all PQClean-based algorithm implementations",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/common/CMakeLists.txt",
+      "confidence": 0.95
+    },
+    {
+      "id": "liboqs_neon_ntt_research",
+      "label": "Neon NTT research",
+      "description": "Research paper: Faster Dilithium, Kyber, and Saber on Cortex-A72 and Apple M1 by Becker, Hwang, Kannwischer, Yang, Yang. Foundation for AArch64 ML-KEM backend",
+      "file_type": "rationale",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/ml_kem/mlkem-native_ml-kem-512_aarch64/mlkem/native/aarch64/README.md",
+      "confidence": 0.95
+    },
+    {
+      "id": "liboqs_slothy_superoptimizer",
+      "label": "SLOTHY superoptimizer",
+      "description": "Constraint-solving based assembly superoptimizer used to generate auditable high-performance assembly from clean source. Part of ML-KEM AArch64 backend pipeline",
+      "file_type": "concept",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/ml_kem/mlkem-native_ml-kem-512_aarch64/mlkem/native/aarch64/README.md",
+      "confidence": 0.95
+    },
+    {
+      "id": "liboqs_bike_bgf_decoder",
+      "label": "BIKE BGF decoder",
+      "description": "Constant-time QC-MDPC decoder with negligible failure rate. Several shades of gray approach by Drucker, Gueron, Kostic",
+      "file_type": "concept",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/bike/additional_r4/README.md",
+      "confidence": 0.95
+    },
+    {
+      "id": "liboqs_build_oqs_enable_flags",
+      "label": "OQS_ENABLE feature flags",
+      "description": "CMake configuration variables controlling which algorithms are compiled. Pattern: OQS_ENABLE_KEM_<family>_<scheme>[_<impl>]. Enables conditional compilation of algorithm object libraries",
+      "file_type": "concept",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_kyber_libjade",
+      "label": "Kyber libjade Jasmin implementations",
+      "description": "Jasmin-verified Kyber implementations via libjade. Constant-time verified assembly for Kyber-512 and Kyber-768, reference and AVX2 variants",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/kyber/CMakeLists.txt",
+      "confidence": 1.0
+    },
+    {
+      "id": "liboqs_openSSL_dependency",
+      "label": "OpenSSL dependency",
+      "description": "Optional OpenSSL integration for AES, SHA-2, SHA-3. Supports static link or dlopen. Affects common crypto and BIKE implementations",
+      "file_type": "concept",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/common/CMakeLists.txt",
+      "confidence": 0.95
+    },
+    {
+      "id": "liboqs_memory_secure_clear",
+      "label": "Secure memory clearing",
+      "description": "Platform detection for explicit_bzero, explicit_memset, memset_s to ensure secure erasure of sensitive crypto material",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/common/CMakeLists.txt",
+      "confidence": 0.95
+    },
+    {
+      "id": "liboqs_aligned_malloc",
+      "label": "Aligned memory allocation",
+      "description": "Platform detection for aligned_alloc, posix_memalign, memalign for SIMD-optimized crypto operations requiring aligned buffers",
+      "file_type": "code",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/common/CMakeLists.txt",
+      "confidence": 0.95
+    },
+    {
+      "id": "liboqs_timing_attack_bike",
+      "label": "BIKE rejection sampling timing attack",
+      "description": "Timing vulnerability in BIKE rejection sampling identified by Guo et al. (TCHES 2022). Mitigated in Round 4 with isochronous biased sampling since June 2022",
+      "file_type": "concept",
+      "source_file": "/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/kem/bike/additional_r4/README.md",
+      "confidence": 0.95
+    },
+    {
+      "id": "liboqs_sig_falcon",
+      "label": "FALCON Signature Scheme",
+      "description": "Lattice-based digital signature scheme using NTT/Fast Fourier Transform over polynomial rings. Variants: 512, 1024, padded_512, padded_1024. Implementations: ref (clean C), avx2 (SSE), aarch64 (NEON/NTT).",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/src/sig/falcon/CMakeLists.txt",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "liboqs_sig_mayo",
+      "label": "MAYO Signature Scheme",
+      "description": "Multivariate quadratic signature scheme. Variants: MAYO_1 through MAYO_5. Implementations: opt, avx2, neon. Uses arithmetic, params, api modules.",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/src/sig/mayo/CMakeLists.txt",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "liboqs_sig_ml_dsa",
+      "label": "ML-DSA Signature Scheme",
+      "description": "NIST-standardized module-lattice-based digital signature (FIPS 204 / Dilithium). Variants: 44 (level 2), 65 (level 3), 87 (level 5). Implementations: ref (clean C), avx2 (SSE assembly). Core modules: ntt, packing, poly, polyvec, reduce, rounding, sign, symmetric-shake.",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/src/sig/ml_dsa/CMakeLists.txt",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "liboqs_sig_sphincs",
+      "label": "SPHINCS+ Signature Scheme",
+      "description": "Stateless hash-based signature scheme. Hash variants: sha2, shake. Security levels: 128, 192, 256. Parameter sets: f (fast), s (small). Implementations: clean (ref C), avx2 (SSE). Core modules: address, fors, hash, merkle, sign, thash, utils, wots.",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/src/sig/sphincs/CMakeLists.txt",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "liboqs_sig_uov",
+      "label": "UOV Signature Scheme",
+      "description": "Unbalanced Oil and Vinegar multivariate signature scheme. Parameter variants: Is (16/160/64), Ip (256/112/44), III (256/184/72), V (256/244/96). Modes: pkc (public key crypto), skc (secret key crypto). Implementations: ref, neon, avx2. Core modules: blas_matrix, ov, ov_keypair, ov_publicmap, sign, utils_hash, utils_prng.",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/src/sig/uov/CMakeLists.txt",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "liboqs_sig_stfl_lms",
+      "label": "LMS Stateful Signature",
+      "description": "Leighton-Micali hash-based stateful signature scheme. Cisco Systems implementation (MIT licensed). Core modules: hss (hash-based signature scheme), lm (Leighton-Micali OTS), endian, hash. Single-threaded signing.",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/src/sig_stfl/lms/CMakeLists.txt",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "liboqs_sig_stfl_xmss",
+      "label": "XMSS Stateful Signature",
+      "description": "Extended Hash-Based Signature scheme. Hash functions: sha256, shake128, sha512, shake256. Tree heights: h10, h16, h20. Security variants: _192, _256. XMSSMT (multi-tree) variants: h20_2, h40_2, h40_4, h40_8, h60_3, h60_6, h60_12. Core modules: core_hash, hash_address, params, utils, wots, xmss_commons, xmss_core_fast.",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/src/sig_stfl/xmss/CMakeLists.txt",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "liboqs_sig_stfl_xmssmt",
+      "label": "XMSSMT Multi-Tree Signatures",
+      "description": "Multi-tree variant of XMSS with parallel tree signing. SHA256 and SHAKE128 hash families. Tree height/arity combinations: h20_2/4, h40_2/4/8, h60_3/6/12.",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/src/sig_stfl/xmss/CMakeLists.txt",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85
+    },
+    {
+      "id": "liboqs_pqclean_shims",
+      "label": "PQClean Shims",
+      "description": "Common include directory providing shim headers used by all PQClean-based signature implementations (FALCON, MAYO, ML-DSA, SPHINCS+, UOV). Standardizes API across PQClean implementations.",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/src/sig/*/CMakeLists.txt",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95
+    },
+    {
+      "id": "liboqs_tests",
+      "label": "liboqs Test Suite",
+      "description": "Comprehensive test infrastructure: KEM tests (example, kat, test, test_mem, speed, vectors), SIG tests (example, fuzz, kat, test, test_mem, speed, vectors), SIG_STFL tests (kat, test, speed). Optional Valgrind-based constant-time detection. Python pytest harness with parallel execution.",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/tests/CMakeLists.txt",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "liboqs_test_constant_time",
+      "label": "Constant-Time Test Detection",
+      "description": "Valgrind-based detection of non-constant-time behavior in cryptographic operations. Enabled via OQS_ENABLE_TEST_CONSTANT_TIME option. Incompatible with non-debug builds.",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/tests/CMakeLists.txt",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "liboqs_test_fuzz",
+      "label": "Fuzz Testing",
+      "description": "LLVM libFuzzer-based fuzzing for signature APIs. Enabled with OQS_BUILD_FUZZ_TESTS and Clang compiler. Target: fuzz_test_sig.",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/tests/CMakeLists.txt",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "liboqs_test_kat",
+      "label": "Known Answer Tests",
+      "description": "KAT (Known Answer Tests) for KEM, SIG, and SIG_STFL algorithms. Validates implementations against NIST-standard test vectors. Includes intermediate value vector tests.",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/tests/CMakeLists.txt",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "liboqs_zephyr",
+      "label": "Zephyr RTOS Port",
+      "description": "liboqs integration as Zephyr RTOS module. Kconfig-based algorithm selection. Supports 32-bit ARM, 64-bit ARM, x86, x86_64, Native Posix architectures. Requires custom RNG callback via OQS_randombytes_custom_algorithm(). Embedded build: OQS_BUILD_ONLY_LIB, OQS_EMBEDDED_BUILD.",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/zephyr/CMakeLists.txt",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "liboqs_zephyr_kconfig",
+      "label": "Zephyr Kconfig Integration",
+      "description": "Configurable KEM and SIG algorithm enablement via CONFIG_LIBOQS_ENABLE_* options. NIST-standardized algorithms (ML-KEM, ML-DSA) enabled by default. Other algorithms disabled by default. CROSS variants with large stack usage disabled.",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/zephyr/CMakeLists.txt",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "liboqs_zephyr_samples",
+      "label": "Zephyr Sample Applications",
+      "description": "Two sample apps: KEMs (liboqs_kems) and Signatures (liboqs_signatures). Integration platforms: qemu_x86, qemu_cortex_a53, qemu_riscv32, qemu_riscv64. Console harness with 'Test done' verification.",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/zephyr/samples/*/CMakeLists.txt",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "foretias_python_bindings",
+      "label": "foretias-p2p Python Bindings",
+      "description": "Python bindings for Foretias P2P attestation engine via PyO3. Provides PyCryptoServer and related classes for signing/verification from Python. Built with maturin.",
+      "file_type": "document",
+      "source_file": "p2p/foretias-python/README.md",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "liboqs_cpu_optimizations",
+      "label": "CPU Architecture Optimizations",
+      "description": "Common optimization variants across all signature schemes: ref (portable C), avx2 (x86 SIMD with -mavx2, -mpopcnt), neon (ARM SIMD), aarch64 (ARM64-specific with NTT). AVX2 variants often include multiplication table optimizations (-D_MUL_WITH_MULTAB_).",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/src/sig/*/CMakeLists.txt",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85
+    },
+    {
+      "id": "liboqs_signature_categories",
+      "label": "Signature Scheme Categories",
+      "description": "liboqs organizes signatures into two categories: stateless (SIG) and stateful (SIG_STFL). Stateless: FALCON, MAYO, ML-DSA, SPHINCS+, UOV. Stateful: LMS, XMSS, XMSSMT. Stateless schemes do not require signer state tracking; stateful schemes require counter management.",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/src/sig*/CMakeLists.txt",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95
+    },
+    {
+      "id": "lms_license_cisco",
+      "label": "LMS Cisco License",
+      "description": "LMS implementation derived from Cisco Systems code (2017), MIT license. Separate licensing from rest of liboqs which uses MIT/Apache-2.0/CC0-1.0 combinations.",
+      "file_type": "document",
+      "source_file": "p2p/core-engine/deps/liboqs/src/sig_stfl/lms/external/license.txt",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "liboqs_object_library_pattern",
+      "label": "CMake Object Library Pattern",
+      "description": "All signature implementations use CMake OBJECT libraries with conditional compilation flags. Object libraries are aggregated into category-level variables (FALCON_OBJS, MAYO_OBJS, etc.) via PARENT_SCOPE. Enables selective inclusion of algorithm variants.",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/src/sig/*/CMakeLists.txt",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95
+    },
+    {
+      "id": "ml_dsa_dilithium_mode",
+      "label": "ML-DSA Dilithium Mode Mapping",
+      "description": "ML-DSA parameter mapping: ml_dsa_44 uses DILITHIUM_MODE=2, ml_dsa_65 uses DILITHIUM_MODE=3, ml_dsa_87 uses DILITHIUM_MODE=5. Corresponds to NIST security levels 2, 3, 5.",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/src/sig/ml_dsa/CMakeLists.txt",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "uov_parameter_naming",
+      "label": "UOV Parameter Convention",
+      "description": "UOV variants encode parameters in name: ov_Is (n=16, m=160, o=64), ov_Ip (n=256, m=112, o=44), ov_III (n=256, m=184, o=72), ov_V (n=256, m=244, o=96). Mode suffixes: pkc (public-key), skc (secret-key). Pre-quantum security levels: I (lowest) through V (highest).",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/src/sig/uov/CMakeLists.txt",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85
+    },
+    {
+      "id": "xmss_hash_param_mapping",
+      "label": "XMSS Hash Parameter Mapping",
+      "description": "XMSS compile-time hash selection: HASH=1 (sha256 128-bit), HASH=2 (shake256 192-bit), HASH=3 (sha256 256-bit), HASH=4 (shake128 256-bit), HASH=5 (shake256 256-bit), HASH=6 (sha512), HASH=7 (shake256 256-bit). Combined with XMSS_PARAMS_NAMESPACE for each variant.",
+      "file_type": "code",
+      "source_file": "p2p/core-engine/deps/liboqs/src/sig_stfl/xmss/CMakeLists.txt",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    }
+  ],
+  "edges": [
+    {
+      "source": "foretias",
+      "target": "chronomatter",
+      "relation": "has_component",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias",
+      "target": "calendar",
+      "relation": "has_component",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias",
+      "target": "communerd",
+      "relation": "has_component",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "timefamilyserver",
+      "target": "chronomatter",
+      "relation": "holds_arc",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "timefamilyserver",
+      "target": "calendar",
+      "relation": "holds_arc",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "timefamilyserver",
+      "target": "communerd",
+      "relation": "holds_optional_arc",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "timefamilyserver",
+      "target": "foretias",
+      "relation": "is_orchestrator_for",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias",
+      "target": "timefamilyserver",
+      "relation": "has_orchestrator",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias",
+      "target": "foretis",
+      "relation": "produces",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "chronomatter",
+      "target": "tick",
+      "relation": "advances",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "tick",
+      "target": "ed25519",
+      "relation": "uses_keypair",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "chronomatter",
+      "target": "chronon",
+      "relation": "ticks_every",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretis",
+      "target": "tbid",
+      "relation": "contains",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretis",
+      "target": "ed25519",
+      "relation": "signed_with",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretis",
+      "target": "tick",
+      "relation": "stamped_at",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "communerd",
+      "target": "libp2p",
+      "relation": "uses",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "communerd",
+      "target": "kademlia_dht",
+      "relation": "uses_for_discovery",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "communerd",
+      "target": "mutual_attestation",
+      "relation": "performs",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "communerd",
+      "target": "gossipsub_deferred",
+      "relation": "will_use",
+      "evidence": "EXTRACTED",
+      "confidence_score": 0.95
+    },
+    {
+      "source": "mutual_attestation",
+      "target": "external_attestation",
+      "relation": "produces",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "calendar",
+      "target": "external_attestation",
+      "relation": "stores_in_tick",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "calendar",
+      "target": "encrypted_jsonl_calendar_store",
+      "relation": "persisted_as",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias",
+      "target": "c11_core",
+      "relation": "has_layer",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias",
+      "target": "foretias_core_engine",
+      "relation": "has_layer",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias",
+      "target": "foretias_node",
+      "relation": "has_layer",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias",
+      "target": "foretias_python",
+      "relation": "has_layer",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias",
+      "target": "foretias_java",
+      "relation": "has_layer",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias",
+      "target": "python_shim",
+      "relation": "has_layer",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "c11_core",
+      "target": "libsodium",
+      "relation": "links",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "c11_core",
+      "target": "liboqs",
+      "relation": "links",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_core_engine",
+      "target": "c11_core",
+      "relation": "wraps_via_bindgen",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_node",
+      "target": "foretias_core_engine",
+      "relation": "depends_on",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_node",
+      "target": "libp2p",
+      "relation": "depends_on",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_python",
+      "target": "foretias_core_engine",
+      "relation": "depends_on",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_python",
+      "target": "foretias_node",
+      "relation": "depends_on",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_java",
+      "target": "foretias_core_engine",
+      "relation": "depends_on",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "python_shim",
+      "target": "foretias_python",
+      "relation": "delegates_to",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_core_engine",
+      "target": "cryptoserver_trait",
+      "relation": "defines",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_core_engine",
+      "target": "chronomatter",
+      "relation": "implements",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_node",
+      "target": "communerd",
+      "relation": "implements",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_node",
+      "target": "timefamilyserver",
+      "relation": "implements",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_node",
+      "target": "json_rpc_handlers",
+      "relation": "implements",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "communerd",
+      "target": "dht_peer_source",
+      "relation": "uses",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "communerd",
+      "target": "peer_pool",
+      "relation": "uses",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_python",
+      "target": "pyo3",
+      "relation": "uses",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_python",
+      "target": "maturin",
+      "relation": "built_with",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_core_engine",
+      "target": "bindgen",
+      "relation": "uses",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "c11_core",
+      "target": "ed25519",
+      "relation": "provides",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "c11_core",
+      "target": "noise_protocol",
+      "relation": "provides",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "c11_core",
+      "target": "privkey_handle",
+      "relation": "provides",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "c11_core",
+      "target": "c11_source_files",
+      "relation": "contains",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "c11_core",
+      "target": "c11_test_all",
+      "relation": "tested_by",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_node",
+      "target": "noise_protocol",
+      "relation": "uses_for_ptp",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "libp2p",
+      "target": "noise_protocol",
+      "relation": "uses_for_encryption",
+      "evidence": "EXTRACTED",
+      "confidence_score": 0.95
+    },
+    {
+      "source": "libp2p",
+      "target": "kademlia_dht",
+      "relation": "provides",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "peer_manager_script",
+      "target": "foretias_node",
+      "relation": "spawns",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "peer_manager_script",
+      "target": "mutual_attestation",
+      "relation": "demonstrates",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "peer_manager_script",
+      "target": "resilience_fault_tolerance",
+      "relation": "demonstrates",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "resilience_fault_tolerance",
+      "target": "mutual_attestation",
+      "relation": "depends_on",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "custom_base64_encoding",
+      "target": "foretis",
+      "relation": "formats_for_display",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "custom_base64_encoding",
+      "target": "c11_core",
+      "relation": "implemented_in",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "custom_base64_encoding",
+      "target": "foretias_core_engine",
+      "relation": "wrapped_in",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "custom_base64_encoding",
+      "target": "foretias_node",
+      "relation": "integrated_in_cli",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "chronomatter",
+      "target": "daemon_loop",
+      "relation": "runs",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "daemon_loop",
+      "target": "chronon",
+      "relation": "fires_every",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "chronomatter",
+      "target": "privkey_handle",
+      "relation": "manages",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "chronomatter",
+      "target": "chrono_chained_attestation",
+      "relation": "maintains",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "chrono_chained_attestation",
+      "target": "foretis",
+      "relation": "chains_via",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "network_observer_attacker",
+      "target": "json_rpc_no_tls",
+      "relation": "exploits",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "active_network_attacker",
+      "target": "content_replay_threat",
+      "relation": "executes",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "active_network_attacker",
+      "target": "stamp_flood_threat",
+      "relation": "executes",
+      "evidence": "INFERRED",
+      "confidence_score": 0.85
+    },
+    {
+      "source": "compromised_peer_attacker",
+      "target": "sybil_rng_threat",
+      "relation": "exploits",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "compromised_peer_attacker",
+      "target": "tick_rate_exhaustion_threat",
+      "relation": "executes",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "compromised_peer_attacker",
+      "target": "dht_eclipse_threat",
+      "relation": "executes",
+      "evidence": "INFERRED",
+      "confidence_score": 0.85
+    },
+    {
+      "source": "content_replay_threat",
+      "target": "json_rpc_handlers",
+      "relation": "mitigated_by_echo",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "stamp_flood_threat",
+      "target": "chronomatter",
+      "relation": "mitigated_by_queue_cap",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "dht_eclipse_threat",
+      "target": "dht_peer_source",
+      "relation": "mitigated_by_max_peers_cap",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "sybil_rng_threat",
+      "target": "c11_core",
+      "relation": "mitigated_by_rng_mix",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "calendar_file_tampering_threat",
+      "target": "encrypted_jsonl_calendar_store",
+      "relation": "mitigated_by",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "private_key_exfiltration_threat",
+      "target": "privkey_handle",
+      "relation": "mitigated_by_zeroize",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "tick_rate_exhaustion_threat",
+      "target": "daemon_loop",
+      "relation": "mitigated_by_timer_driven",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "two_layer_identity",
+      "target": "libp2p",
+      "relation": "transport_peer_id",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "two_layer_identity",
+      "target": "tbid",
+      "relation": "application_identity",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "communerd",
+      "target": "two_layer_identity",
+      "relation": "enforces",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "release_pipeline",
+      "target": "pypci_trusted_publisher",
+      "relation": "uses",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "release_pipeline",
+      "target": "python_shim",
+      "relation": "publishes",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "ci_pipeline",
+      "target": "c11_core",
+      "relation": "tests",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "ci_pipeline",
+      "target": "foretias_core_engine",
+      "relation": "tests",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "ci_pipeline",
+      "target": "foretias_node",
+      "relation": "tests",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "ci_pipeline",
+      "target": "python_shim",
+      "relation": "tests",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "infrastructure_task_python_rust_migration",
+      "target": "foretias_python",
+      "relation": "requires_rewriting",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "infrastructure_task_python_rust_migration",
+      "target": "python_shim",
+      "relation": "affects",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "infrastructure_task_c11_tests",
+      "target": "c11_core",
+      "relation": "tests",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "infrastructure_task_rust_hardening",
+      "target": "foretias_core_engine",
+      "relation": "tests",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "fortias_foretias_rename",
+      "target": "foretias",
+      "relation": "renames_to",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "fortias_foretias_rename",
+      "target": "c11_core",
+      "relation": "affects",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "fortias_foretias_rename",
+      "target": "foretias_core_engine",
+      "relation": "affects",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "fortias_foretias_rename",
+      "target": "foretias_node",
+      "relation": "affects",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "fortias_foretias_rename",
+      "target": "python_shim",
+      "relation": "affects",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "tbn",
+      "target": "tbid",
+      "relation": "is_prefixed_form_of",
+      "evidence": "EXTRACTED",
+      "confidence_score": 0.95
+    },
+    {
+      "source": "foretias",
+      "target": "chronosidae_taxonomy",
+      "relation": "classified_as",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "chronosidae_taxonomy",
+      "target": "chronomatter",
+      "relation": "subspecies_authenticus",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "chronosidae_taxonomy",
+      "target": "calendar",
+      "relation": "subspecies_grapha",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "chronosidae_taxonomy",
+      "target": "communerd",
+      "relation": "subspecies_locutus",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "chronosidae_taxonomy",
+      "target": "timefamilyserver",
+      "relation": "subspecies_adunatrix",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "ci_pipeline",
+      "target": "alpha_branch",
+      "relation": "triggers_on",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_core_engine",
+      "target": "sccache_build_caching",
+      "relation": "benefits_from",
+      "evidence": "EXTRACTED",
+      "confidence_score": 0.95
+    },
+    {
+      "source": "foretias_core_engine",
+      "target": "cmake_parallel_build",
+      "relation": "benefits_from",
+      "evidence": "EXTRACTED",
+      "confidence_score": 0.95
+    },
+    {
+      "source": "foretias_node",
+      "target": "libp2p_feature_minimization",
+      "relation": "applies",
+      "evidence": "EXTRACTED",
+      "confidence_score": 0.95
+    },
+    {
+      "source": "foretias",
+      "target": "worktree_planning",
+      "relation": "uses_for_development",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias",
+      "target": "project_segmentation",
+      "relation": "uses_for_scoping",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "gossipsub_deferred",
+      "target": "communerd",
+      "relation": "will_be_added_to",
+      "evidence": "EXTRACTED",
+      "confidence_score": 0.95
+    },
+    {
+      "source": "json_rpc_no_tls",
+      "target": "json_rpc_handlers",
+      "relation": "affects",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "encrypted_jsonl_calendar_store",
+      "target": "calendar",
+      "relation": "stores",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_liboqs",
+      "target": "liboqs_pqc_algorithms",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_liboqs",
+      "target": "liboqs_cmake_build",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_liboqs",
+      "target": "liboqs_ci_workflows",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_liboqs",
+      "target": "liboqs_governance",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_pqc_algorithms",
+      "target": "liboqs_kem",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_pqc_algorithms",
+      "target": "liboqs_sig",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_pqc_algorithms",
+      "target": "liboqs_sig_stfl",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_kem",
+      "target": "liboqs_kyber",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_kem",
+      "target": "liboqs_ml_kem",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_sig",
+      "target": "liboqs_dilithium",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_sig",
+      "target": "liboqs_ml_dsa",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_sig",
+      "target": "liboqs_falcon",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_sig",
+      "target": "liboqs_sphincs",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_sig_stfl",
+      "target": "liboqs_xmss",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_sig_stfl",
+      "target": "liboqs_lms",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_ml_kem",
+      "target": "liboqs_kyber",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.95
+    },
+    {
+      "source": "liboqs_ml_dsa",
+      "target": "liboqs_dilithium",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.95
+    },
+    {
+      "source": "liboqs_ci_workflows",
+      "target": "liboqs_platform_tests",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_ci_workflows",
+      "target": "liboqs_travis_ci",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_ci_workflows",
+      "target": "liboqs_scorecard",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_ci_workflows",
+      "target": "liboqs_downstream_oqs_provider",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_ci_workflows",
+      "target": "liboqs_downstream_boringssl",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_ci_workflows",
+      "target": "liboqs_downstream_openssh",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_ci_workflows",
+      "target": "liboqs_downstream_bindings",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_cmake_build",
+      "target": "liboqs_openssl_integration",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_cmake_build",
+      "target": "liboqs_dist_build",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_cmake_build",
+      "target": "liboqs_embedded_build",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_cmake_build",
+      "target": "liboqs_libjade",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_cmake_build",
+      "target": "liboqs_cupqc",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_cmake_build",
+      "target": "liboqs_sanitizers",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_cmake_build",
+      "target": "liboqs_oqs_algs_enabled",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_liboqs",
+      "target": "liboqs_constant_time_testing",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_liboqs",
+      "target": "liboqs_fuzz_testing",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_liboqs",
+      "target": "liboqs_coding_style",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_liboqs",
+      "target": "liboqs_actionlint",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_libjade",
+      "target": "liboqs_kyber",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_cupqc",
+      "target": "liboqs_ml_kem",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_foretias_project",
+      "target": "liboqs_liboqs",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_foretias_project",
+      "target": "foretias_timefamily_server",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_timefamily_server",
+      "target": "foretias_chronomatter",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_timefamily_server",
+      "target": "foretias_calendar",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_timefamily_server",
+      "target": "foretias_communerd",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_chronomatter",
+      "target": "foretias_ed25519_key_rotation",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_chronomatter",
+      "target": "foretias_chronon",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_chronomatter",
+      "target": "foretias_stamp_command",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_chronomatter",
+      "target": "foretias_verify_command",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_communerd",
+      "target": "foretias_dht_namespace",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_communerd",
+      "target": "foretias_mutual_attestation",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_foretias_project",
+      "target": "foretias_c11_core",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_core_engine",
+      "target": "foretias_c11_core",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_foretias_project",
+      "target": "foretias_core_engine",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_core_engine",
+      "target": "liboqs_liboqs",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_foretias_project",
+      "target": "foretias_v01_local_server",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_foretias_project",
+      "target": "foretias_v02_p2p_attestation",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_foretias_project",
+      "target": "foretias_v03_dht_discovery",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_v02_p2p_attestation",
+      "target": "foretias_mutual_attestation",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_v03_dht_discovery",
+      "target": "foretias_dht_namespace",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_foretias_project",
+      "target": "foretias_chronos_classification",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_chronos_classification",
+      "target": "foretias_chronomatter",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_chronos_classification",
+      "target": "foretias_calendar",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_chronos_classification",
+      "target": "foretias_communerd",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_foretias_project",
+      "target": "foretias_prove_verification",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_foretias_project",
+      "target": "foretias_inspect_attestations",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_ed25519_key_rotation",
+      "target": "foretias_chronon",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.95
+    },
+    {
+      "source": "foretias_prove_verification",
+      "target": "foretias_calendar",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "foretias_inspect_attestations",
+      "target": "foretias_calendar",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "source": "liboqs_platforms_workflow",
+      "target": "liboqs_android_workflow",
+      "relation": "orchestrates",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_platforms_workflow",
+      "target": "liboqs_apple_workflow",
+      "relation": "orchestrates",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_platforms_workflow",
+      "target": "liboqs_linux_workflow",
+      "relation": "orchestrates",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_platforms_workflow",
+      "target": "liboqs_macos_workflow",
+      "relation": "orchestrates",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_platforms_workflow",
+      "target": "liboqs_windows_workflow",
+      "relation": "orchestrates",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_platforms_workflow",
+      "target": "liboqs_zephyr_workflow",
+      "relation": "orchestrates",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_pr_workflow",
+      "target": "liboqs_basic_workflow",
+      "relation": "triggers",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_pr_workflow",
+      "target": "liboqs_platforms_workflow",
+      "relation": "triggers_after",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_pr_workflow",
+      "target": "liboqs_scorecard_workflow",
+      "relation": "triggers_after",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_commit_to_main_workflow",
+      "target": "liboqs_platforms_workflow",
+      "relation": "triggers",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_commit_to_main_workflow",
+      "target": "liboqs_scorecard_workflow",
+      "relation": "triggers",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_commit_to_main_workflow",
+      "target": "liboqs_downstream_basic_workflow",
+      "relation": "triggers",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_push_workflow",
+      "target": "liboqs_basic_workflow",
+      "relation": "triggers",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_push_workflow",
+      "target": "liboqs_platforms_workflow",
+      "relation": "triggers_conditional",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_push_workflow",
+      "target": "liboqs_extended_workflow",
+      "relation": "triggers_conditional",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_push_workflow",
+      "target": "liboqs_downstream_release_workflow",
+      "relation": "triggers_conditional",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_release_workflow",
+      "target": "liboqs_extended_workflow",
+      "relation": "triggers",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_release_workflow",
+      "target": "liboqs_downstream_release_workflow",
+      "relation": "triggers",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_weekly_workflow",
+      "target": "liboqs_scorecard_workflow",
+      "relation": "triggers",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_weekly_workflow",
+      "target": "liboqs_extended_workflow",
+      "relation": "triggers",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_extended_workflow",
+      "target": "liboqs_constant_time_testing",
+      "relation": "executes",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_extended_workflow",
+      "target": "liboqs_nist_kat",
+      "relation": "executes",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_downstream_basic_workflow",
+      "target": "liboqs_liboqs",
+      "relation": "upstream_of_downstream",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_fuzzing",
+      "target": "liboqs_fuzz_sig_covered",
+      "relation": "covers",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_fuzzing",
+      "target": "liboqs_fuzz_sig_pending",
+      "relation": "pending_coverage",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_fuzzing",
+      "target": "liboqs_fuzz_kem_pending",
+      "relation": "pending_coverage",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_fuzzing",
+      "target": "liboqs_basic_workflow",
+      "relation": "fuzz_build_tested_in",
+      "confidence_score": 0.95,
+      "evidence": "INFERRED"
+    },
+    {
+      "source": "liboqs_basic_workflow",
+      "target": "liboqs_copy_from_upstream",
+      "relation": "validates",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_linux_workflow",
+      "target": "liboqs_libjade_integration",
+      "relation": "tests",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_linux_workflow",
+      "target": "liboqs_openssl_integration",
+      "relation": "tests",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_linux_workflow",
+      "target": "liboqs_stateful_sig_flags",
+      "relation": "tests",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_linux_workflow",
+      "target": "liboqs_algorithm_sets",
+      "relation": "tests",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_linux_workflow",
+      "target": "liboqs_ci_containers",
+      "relation": "uses",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_basic_workflow",
+      "target": "liboqs_minimal_build",
+      "relation": "uses",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_procedures",
+      "target": "liboqs_python_ci_deps",
+      "relation": "governs",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_procedures",
+      "target": "liboqs_liboqs",
+      "relation": "maintains",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "foretias_liboqs_dependency",
+      "target": "liboqs_liboqs",
+      "relation": "depends_on",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "foretias_liboqs_dependency",
+      "target": "liboqs_fuzzing",
+      "relation": "inherits_security_practices",
+      "confidence_score": 0.75,
+      "evidence": "INFERRED"
+    },
+    {
+      "source": "liboqs_macos_workflow",
+      "target": "liboqs_libjade_integration",
+      "relation": "tests",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "liboqs_basic_workflow",
+      "target": "liboqs_fuzzing",
+      "relation": "builds_and_runs_fuzz",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED"
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_binary",
+      "label": "is_a",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_binary",
+      "label": "is_a",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_binary",
+      "label": "is_a",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_binary",
+      "label": "is_a",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_binary",
+      "label": "is_a",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_binary",
+      "label": "is_a",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_binary",
+      "label": "is_a",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_assumption_qc_mdpc",
+      "label": "based_on",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_assumption_goppa_codes",
+      "label": "based_on",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_assumption_lwe",
+      "label": "based_on",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_assumption_hqc_syndrome",
+      "label": "based_on",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_assumption_module_lwe",
+      "label": "based_on",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_assumption_module_lwe",
+      "label": "based_on",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_assumption_ntru",
+      "label": "based_on",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_security_ind_cpa",
+      "label": "provides_security",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_security_ind_cca2",
+      "label": "provides_security",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_security_ind_cca2",
+      "label": "provides_security",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_security_ind_cca2",
+      "label": "provides_security",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_security_ind_cca2",
+      "label": "provides_security",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_security_ind_cca2",
+      "label": "provides_security",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_security_ind_cca2",
+      "label": "provides_security",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_algo_bike_l1",
+      "label": "has_variant",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_algo_bike_l3",
+      "label": "has_variant",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_algo_bike_l5",
+      "label": "has_variant",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_algo_classic_mceliece_348864",
+      "label": "has_variant",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_algo_classic_mceliece_460896",
+      "label": "has_variant",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_algo_classic_mceliece_6688128",
+      "label": "has_variant",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_algo_classic_mceliece_8192128",
+      "label": "has_variant",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_algo_frodokem_640",
+      "label": "has_variant",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_algo_frodokem_976",
+      "label": "has_variant",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_algo_frodokem_1344",
+      "label": "has_variant",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_algo_hqc_128",
+      "label": "has_variant",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_algo_hqc_192",
+      "label": "has_variant",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_algo_hqc_256",
+      "label": "has_variant",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_algo_kyber_512",
+      "label": "has_variant",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_algo_kyber_768",
+      "label": "has_variant",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_algo_kyber_1024",
+      "label": "has_variant",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_algo_ml_kem_512",
+      "label": "has_variant",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_algo_ml_kem_768",
+      "label": "has_variant",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_algo_ml_kem_1024",
+      "label": "has_variant",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_algo_sntrup761",
+      "label": "has_variant",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_algo_ml_kem",
+      "label": "standardized_as",
+      "confidence": 1.0,
+      "properties": {
+        "standard": "NIST FIPS 203",
+        "note": "Kyber was renamed to ML-KEM upon NIST standardization"
+      }
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_algo_ml_kem_512",
+      "label": "standardized_as",
+      "confidence": 1.0,
+      "properties": {
+        "note": "Identical parameters, renamed for standardization"
+      }
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_algo_ml_kem_768",
+      "label": "standardized_as",
+      "confidence": 1.0,
+      "properties": {
+        "note": "Identical parameters, renamed for standardization"
+      }
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_algo_ml_kem_1024",
+      "label": "standardized_as",
+      "confidence": 1.0,
+      "properties": {
+        "note": "Identical parameters, renamed for standardization"
+      }
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "nist_pqc_level_1",
+      "label": "targets_level",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "nist_pqc_level_3",
+      "label": "targets_level",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "nist_pqc_level_5",
+      "label": "targets_level",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "nist_pqc_level_1",
+      "label": "targets_level",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "nist_pqc_level_3",
+      "label": "targets_level",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "nist_pqc_level_5",
+      "label": "targets_level",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "nist_pqc_level_5",
+      "label": "targets_level",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "nist_pqc_level_1",
+      "label": "targets_level",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "nist_pqc_level_3",
+      "label": "targets_level",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "nist_pqc_level_5",
+      "label": "targets_level",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "nist_pqc_level_1",
+      "label": "targets_level",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "nist_pqc_level_3",
+      "label": "targets_level",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "nist_pqc_level_5",
+      "label": "targets_level",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "nist_pqc_level_1",
+      "label": "targets_level",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "nist_pqc_level_3",
+      "label": "targets_level",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "nist_pqc_level_5",
+      "label": "targets_level",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "nist_pqc_level_1",
+      "label": "targets_level",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "nist_pqc_level_3",
+      "label": "targets_level",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "nist_pqc_level_5",
+      "label": "targets_level",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "nist_pqc_level_2",
+      "label": "targets_level",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_common_pqclean",
+      "label": "implements_via",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_common_pqclean",
+      "label": "implements_via",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_common_pqclean",
+      "label": "implements_via",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_common_liboqs",
+      "label": "uses_common_crypto",
+      "confidence": 1.0,
+      "properties": {
+        "primitives": [
+          "AES"
+        ]
+      }
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_common_liboqs",
+      "label": "uses_common_crypto",
+      "confidence": 1.0,
+      "properties": {
+        "primitives": [
+          "AES",
+          "SHA3"
+        ]
+      }
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_common_liboqs",
+      "label": "uses_common_crypto",
+      "confidence": 1.0,
+      "properties": {
+        "primitives": [
+          "AES",
+          "SHA3"
+        ]
+      }
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_common_liboqs",
+      "label": "uses_common_crypto",
+      "confidence": 1.0,
+      "properties": {
+        "primitives": [
+          "SHA3"
+        ]
+      }
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_common_liboqs",
+      "label": "uses_common_crypto",
+      "confidence": 1.0,
+      "properties": {
+        "primitives": [
+          "SHA3"
+        ]
+      }
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_common_liboqs",
+      "label": "uses_common_crypto",
+      "confidence": 1.0,
+      "properties": {
+        "primitives": [
+          "SHA3"
+        ]
+      }
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_common_liboqs",
+      "label": "uses_common_crypto",
+      "confidence": 1.0,
+      "properties": {
+        "primitives": [
+          "AES",
+          "SHA2"
+        ]
+      }
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_impl_libjade",
+      "label": "has_verified_impl",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_impl_cupqc",
+      "label": "has_gpu_impl",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_impl_platform_cuda",
+      "label": "runs_on",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_impl_platform_x86_avx2",
+      "label": "optimized_for",
+      "confidence": 1.0,
+      "properties": {
+        "cpu_extensions": [
+          "AVX2",
+          "AVX512",
+          "PCLMUL",
+          "SSE2"
+        ]
+      }
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_impl_platform_x86_avx2",
+      "label": "optimized_for",
+      "confidence": 1.0,
+      "properties": {
+        "cpu_extensions": [
+          "AVX2",
+          "POPCNT",
+          "BMI1"
+        ]
+      }
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_impl_platform_x86_avx2",
+      "label": "optimized_for",
+      "confidence": 1.0,
+      "properties": {
+        "cpu_extensions": [
+          "AVX2"
+        ]
+      }
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_impl_platform_x86_avx2",
+      "label": "optimized_for",
+      "confidence": 1.0,
+      "properties": {
+        "cpu_extensions": [
+          "AVX2",
+          "BMI2",
+          "POPCNT"
+        ]
+      }
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_impl_platform_aarch64",
+      "label": "optimized_for",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_impl_platform_x86_avx2",
+      "label": "optimized_for",
+      "confidence": 1.0,
+      "properties": {
+        "cpu_extensions": [
+          "AVX2",
+          "BMI2",
+          "POPCNT"
+        ]
+      }
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_impl_platform_aarch64",
+      "label": "optimized_for",
+      "confidence": 1.0
+    },
+    {
+      "source": "EXTRACTED",
+      "target": "kem_impl_platform_x86_avx2",
+      "label": "optimized_for",
+      "confidence": 1.0,
+      "properties": {
+        "cpu_extensions": [
+          "AVX2"
+        ]
+      }
+    },
+    {
+      "source": "liboqs_src_cmake",
+      "target": "liboqs_oqs_library",
+      "relation": "builds",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_src_cmake",
+      "target": "liboqs_oqs_internal_library",
+      "relation": "builds",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_src_cmake",
+      "target": "liboqs_common_cmake",
+      "relation": "includes_subdir",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_src_cmake",
+      "target": "liboqs_kem_bike",
+      "relation": "conditionally_includes",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_src_cmake",
+      "target": "liboqs_kem_frodokem",
+      "relation": "conditionally_includes",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_src_cmake",
+      "target": "liboqs_kem_classic_mceliece",
+      "relation": "conditionally_includes",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_src_cmake",
+      "target": "liboqs_kem_hqc",
+      "relation": "conditionally_includes",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_src_cmake",
+      "target": "liboqs_kem_kyber",
+      "relation": "conditionally_includes",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_src_cmake",
+      "target": "liboqs_kem_ml_kem",
+      "relation": "conditionally_includes",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_src_cmake",
+      "target": "liboqs_kem_ntruprime",
+      "relation": "conditionally_includes",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_src_cmake",
+      "target": "liboqs_sig_dilithium",
+      "relation": "conditionally_includes",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_src_cmake",
+      "target": "liboqs_sig_cross",
+      "relation": "conditionally_includes",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_build_oqs_enable_flags",
+      "target": "liboqs_src_cmake",
+      "relation": "controls",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_oqs_library",
+      "target": "liboqs_common_cmake",
+      "relation": "links",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_oqs_library",
+      "target": "liboqs_kem_ml_kem",
+      "relation": "links",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_oqs_library",
+      "target": "liboqs_sig_dilithium",
+      "relation": "links",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_common_cmake",
+      "target": "liboqs_common_aes",
+      "relation": "provides",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_common_cmake",
+      "target": "liboqs_common_sha2",
+      "relation": "provides",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_common_cmake",
+      "target": "liboqs_common_sha3_xkcp",
+      "relation": "includes_subdir",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_common_cmake",
+      "target": "liboqs_pqclean_shims",
+      "relation": "provides",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_common_cmake",
+      "target": "liboqs_openSSL_dependency",
+      "relation": "optionally_uses",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_common_cmake",
+      "target": "liboqs_memory_secure_clear",
+      "relation": "provides",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_common_cmake",
+      "target": "liboqs_aligned_malloc",
+      "relation": "provides",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_copy_xkcp_cmake",
+      "target": "liboqs_common_sha3_xkcp",
+      "relation": "generates",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_copy_upstream_kem_template",
+      "target": "liboqs_kem_ml_kem",
+      "relation": "generates_cmake_for",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_copy_upstream_kem_template",
+      "target": "liboqs_kem_kyber",
+      "relation": "generates_cmake_for",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_copy_upstream_kem_template",
+      "target": "liboqs_kem_classic_mceliece",
+      "relation": "generates_cmake_for",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_copy_upstream_kem_template",
+      "target": "liboqs_kem_hqc",
+      "relation": "generates_cmake_for",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_copy_upstream_sig_template",
+      "target": "liboqs_sig_dilithium",
+      "relation": "generates_cmake_for",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_copy_upstream_sig_template",
+      "target": "liboqs_sig_cross",
+      "relation": "generates_cmake_for",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_kem_ml_kem",
+      "target": "liboqs_ml_kem_aarch64_backend",
+      "relation": "has_backend",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_kem_ml_kem",
+      "target": "liboqs_ml_kem_x86_backend",
+      "relation": "has_backend",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_kem_ml_kem",
+      "target": "liboqs_ml_kem_cuda_backend",
+      "relation": "has_backend",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_ml_kem_aarch64_backend",
+      "target": "liboqs_neon_ntt_research",
+      "relation": "derived_from",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_ml_kem_aarch64_backend",
+      "target": "liboqs_slothy_superoptimizer",
+      "relation": "generated_by",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_ml_kem_x86_backend",
+      "target": "liboqs_kem_kyber",
+      "relation": "from_team",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_kem_bike",
+      "target": "liboqs_kem_bike_r4_readme",
+      "relation": "documented_by",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_kem_bike",
+      "target": "liboqs_kem_bike_gf2x",
+      "relation": "uses",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_kem_bike",
+      "target": "liboqs_kem_bike_sampling",
+      "relation": "uses",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_kem_bike",
+      "target": "liboqs_bike_bgf_decoder",
+      "relation": "uses",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_kem_bike_sampling",
+      "target": "liboqs_timing_attack_bike",
+      "relation": "mitigates",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_kem_kyber",
+      "target": "liboqs_kyber_libjade",
+      "relation": "has_verified_impl",
+      "confidence": 1.0
+    },
+    {
+      "source": "liboqs_kem_ml_kem",
+      "target": "liboqs_kem_kyber",
+      "relation": "is_standardized_version_of",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_pqclean_shims",
+      "target": "liboqs_kem_ml_kem",
+      "relation": "used_by",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_pqclean_shims",
+      "target": "liboqs_kem_kyber",
+      "relation": "used_by",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_pqclean_shims",
+      "target": "liboqs_kem_classic_mceliece",
+      "relation": "used_by",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_pqclean_shims",
+      "target": "liboqs_kem_hqc",
+      "relation": "used_by",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_pqclean_shims",
+      "target": "liboqs_sig_dilithium",
+      "relation": "used_by",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_pqclean_shims",
+      "target": "liboqs_sig_cross",
+      "relation": "used_by",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_pqclean_shims",
+      "target": "liboqs_kem_ntruprime",
+      "relation": "used_by",
+      "confidence": 0.95
+    },
+    {
+      "source": "liboqs_sig_falcon",
+      "target": "liboqs_cpu_optimizations",
+      "relation": "uses",
+      "description": "FALCON variants leverage ref, avx2, and aarch64 optimizations"
+    },
+    {
+      "source": "liboqs_sig_falcon",
+      "target": "liboqs_pqclean_shims",
+      "relation": "depends_on",
+      "description": "FALCON implementations include pqclean_shims"
+    },
+    {
+      "source": "liboqs_sig_mayo",
+      "target": "liboqs_cpu_optimizations",
+      "relation": "uses",
+      "description": "MAYO variants leverage opt, avx2, and neon optimizations"
+    },
+    {
+      "source": "liboqs_sig_mayo",
+      "target": "liboqs_pqclean_shims",
+      "relation": "depends_on",
+      "description": "MAYO implementations include pqclean_shims"
+    },
+    {
+      "source": "liboqs_sig_ml_dsa",
+      "target": "liboqs_cpu_optimizations",
+      "relation": "uses",
+      "description": "ML-DSA variants leverage ref and avx2 optimizations with assembly"
+    },
+    {
+      "source": "liboqs_sig_ml_dsa",
+      "target": "liboqs_pqclean_shims",
+      "relation": "depends_on",
+      "description": "ML-DSA implementations include pqclean_shims"
+    },
+    {
+      "source": "liboqs_sig_ml_dsa",
+      "target": "ml_dsa_dilithium_mode",
+      "relation": "implements",
+      "description": "ML-DSA maps to Dilithium mode parameters"
+    },
+    {
+      "source": "liboqs_sig_sphincs",
+      "target": "liboqs_cpu_optimizations",
+      "relation": "uses",
+      "description": "SPHINCS+ variants leverage clean and avx2 optimizations"
+    },
+    {
+      "source": "liboqs_sig_sphincs",
+      "target": "liboqs_pqclean_shims",
+      "relation": "depends_on",
+      "description": "SPHINCS+ implementations include pqclean_shims"
+    },
+    {
+      "source": "liboqs_sig_uov",
+      "target": "liboqs_cpu_optimizations",
+      "relation": "uses",
+      "description": "UOV variants leverage ref, neon, and avx2 optimizations"
+    },
+    {
+      "source": "liboqs_sig_uov",
+      "target": "liboqs_pqclean_shims",
+      "relation": "depends_on",
+      "description": "UOV implementations include pqclean_shims"
+    },
+    {
+      "source": "liboqs_sig_uov",
+      "target": "uov_parameter_naming",
+      "relation": "follows",
+      "description": "UOV uses standardized parameter naming convention"
+    },
+    {
+      "source": "liboqs_sig_stfl_lms",
+      "target": "lms_license_cisco",
+      "relation": "licensed_under",
+      "description": "LMS implementation uses Cisco MIT license"
+    },
+    {
+      "source": "liboqs_sig_stfl_xmss",
+      "target": "xmss_hash_param_mapping",
+      "relation": "uses",
+      "description": "XMSS uses hash parameter compile-time mapping"
+    },
+    {
+      "source": "liboqs_sig_stfl_xmss",
+      "target": "liboqs_sig_stfl_xmssmt",
+      "relation": "extends",
+      "description": "XMSSMT extends XMSS with multi-tree parallel signing"
+    },
+    {
+      "source": "liboqs_signature_categories",
+      "target": "liboqs_sig_falcon",
+      "relation": "classifies",
+      "description": "FALCON is stateless signature"
+    },
+    {
+      "source": "liboqs_signature_categories",
+      "target": "liboqs_sig_mayo",
+      "relation": "classifies",
+      "description": "MAYO is stateless signature"
+    },
+    {
+      "source": "liboqs_signature_categories",
+      "target": "liboqs_sig_ml_dsa",
+      "relation": "classifies",
+      "description": "ML-DSA is stateless signature"
+    },
+    {
+      "source": "liboqs_signature_categories",
+      "target": "liboqs_sig_sphincs",
+      "relation": "classifies",
+      "description": "SPHINCS+ is stateless signature"
+    },
+    {
+      "source": "liboqs_signature_categories",
+      "target": "liboqs_sig_uov",
+      "relation": "classifies",
+      "description": "UOV is stateless signature"
+    },
+    {
+      "source": "liboqs_signature_categories",
+      "target": "liboqs_sig_stfl_lms",
+      "relation": "classifies",
+      "description": "LMS is stateful signature"
+    },
+    {
+      "source": "liboqs_signature_categories",
+      "target": "liboqs_sig_stfl_xmss",
+      "relation": "classifies",
+      "description": "XMSS is stateful signature"
+    },
+    {
+      "source": "liboqs_tests",
+      "target": "liboqs_sig_falcon",
+      "relation": "tests",
+      "description": "Test suite validates all signature schemes"
+    },
+    {
+      "source": "liboqs_tests",
+      "target": "liboqs_sig_ml_dsa",
+      "relation": "tests",
+      "description": "Test suite validates ML-DSA"
+    },
+    {
+      "source": "liboqs_tests",
+      "target": "liboqs_sig_stfl_lms",
+      "relation": "tests",
+      "description": "SIG_STFL tests validate stateful signatures"
+    },
+    {
+      "source": "liboqs_tests",
+      "target": "liboqs_sig_stfl_xmss",
+      "relation": "tests",
+      "description": "SIG_STFL tests validate XMSS"
+    },
+    {
+      "source": "liboqs_test_constant_time",
+      "target": "liboqs_tests",
+      "relation": "part_of",
+      "description": "Constant-time detection is optional test feature"
+    },
+    {
+      "source": "liboqs_test_fuzz",
+      "target": "liboqs_tests",
+      "relation": "part_of",
+      "description": "Fuzz testing is optional test feature"
+    },
+    {
+      "source": "liboqs_test_kat",
+      "target": "liboqs_tests",
+      "relation": "part_of",
+      "description": "KAT is part of test suite"
+    },
+    {
+      "source": "liboqs_zephyr",
+      "target": "liboqs_sig_ml_dsa",
+      "relation": "can_enable",
+      "description": "Zephyr port can enable ML-DSA via Kconfig"
+    },
+    {
+      "source": "liboqs_zephyr",
+      "target": "liboqs_sig_falcon",
+      "relation": "can_enable",
+      "description": "Zephyr port can enable FALCON via Kconfig"
+    },
+    {
+      "source": "liboqs_zephyr",
+      "target": "liboqs_sig_sphincs",
+      "relation": "can_enable",
+      "description": "Zephyr port can enable SPHINCS via Kconfig"
+    },
+    {
+      "source": "liboqs_zephyr",
+      "target": "liboqs_sig_uov",
+      "relation": "can_enable",
+      "description": "Zephyr port can enable UOV via Kconfig"
+    },
+    {
+      "source": "liboqs_zephyr",
+      "target": "liboqs_sig_mayo",
+      "relation": "can_enable",
+      "description": "Zephyr port can enable MAYO via Kconfig"
+    },
+    {
+      "source": "liboqs_zephyr",
+      "target": "liboqs_zephyr_kconfig",
+      "relation": "uses",
+      "description": "Zephyr port uses Kconfig for configuration"
+    },
+    {
+      "source": "liboqs_zephyr",
+      "target": "liboqs_zephyr_samples",
+      "relation": "provides",
+      "description": "Zephyr port provides sample applications"
+    },
+    {
+      "source": "liboqs_object_library_pattern",
+      "target": "liboqs_sig_falcon",
+      "relation": "builds",
+      "description": "Object library pattern used for FALCON build"
+    },
+    {
+      "source": "liboqs_object_library_pattern",
+      "target": "liboqs_sig_mayo",
+      "relation": "builds",
+      "description": "Object library pattern used for MAYO build"
+    },
+    {
+      "source": "liboqs_object_library_pattern",
+      "target": "liboqs_sig_ml_dsa",
+      "relation": "builds",
+      "description": "Object library pattern used for ML-DSA build"
+    },
+    {
+      "source": "liboqs_object_library_pattern",
+      "target": "liboqs_sig_sphincs",
+      "relation": "builds",
+      "description": "Object library pattern used for SPHINCS+ build"
+    },
+    {
+      "source": "liboqs_object_library_pattern",
+      "target": "liboqs_sig_uov",
+      "relation": "builds",
+      "description": "Object library pattern used for UOV build"
+    },
+    {
+      "source": "liboqs_object_library_pattern",
+      "target": "liboqs_sig_stfl_lms",
+      "relation": "builds",
+      "description": "Object library pattern used for LMS build"
+    },
+    {
+      "source": "liboqs_object_library_pattern",
+      "target": "liboqs_sig_stfl_xmss",
+      "relation": "builds",
+      "description": "Object library pattern used for XMSS build"
+    },
+    {
+      "source": "foretias_python_bindings",
+      "target": "liboqs_sig_ml_dsa",
+      "relation": "may_bind",
+      "description": "Python bindings may expose signature functionality including ML-DSA"
+    }
+  ],
+  "hyperedges": [
+    {
+      "nodes": [
+        "foretias_core_engine",
+        "foretias_node",
+        "foretias_python",
+        "foretias_java"
+      ],
+      "relation": "rust_workspace_members",
+      "description": "All Rust crates in the p2p/ Cargo workspace",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "nodes": [
+        "c11_core",
+        "foretias_core_engine",
+        "foretias_node",
+        "foretias_python",
+        "foretias_java"
+      ],
+      "relation": "build_dependency_chain",
+      "description": "Build order: C11 core first, then core-engine, then foretias-node, then foretias-python and foretias-java",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "nodes": [
+        "ci_pipeline",
+        "c11_test_all",
+        "foretias_core_engine",
+        "foretias_node",
+        "python_shim"
+      ],
+      "relation": "ci_test_pipeline",
+      "description": "Sequential CI: c11-tests → rust-tests → python-tests, with lint running in parallel",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "nodes": [
+        "chronomatter",
+        "calendar",
+        "communerd"
+      ],
+      "relation": "intra_family_communication",
+      "description": "Three time beings communicate via direct method calls within TimeFamilyServer. Only Communerd communicates externally.",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "nodes": [
+        "network_observer_attacker",
+        "active_network_attacker",
+        "compromised_peer_attacker"
+      ],
+      "relation": "attacker_model_hierarchy",
+      "description": "Three attacker levels with increasing capability: passive observer, active MITM, compromised legitimate peer",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "nodes": [
+        "content_replay_threat",
+        "stamp_flood_threat",
+        "dht_eclipse_threat",
+        "sybil_rng_threat",
+        "calendar_file_tampering_threat",
+        "private_key_exfiltration_threat",
+        "tick_rate_exhaustion_threat"
+      ],
+      "relation": "threat_catalogue",
+      "description": "All threats identified in v0.5 threat model with their mitigations",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "nodes": [
+        "peer_manager_script",
+        "foretias_node",
+        "mutual_attestation",
+        "resilience_fault_tolerance",
+        "kademlia_dht"
+      ],
+      "relation": "howto_demo_flow",
+      "description": "HOWTO.md three escalating demos: single server, 100-node peering with DHT, kill 50% and verify resilience",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "nodes": [
+        "custom_base64_encoding",
+        "c11_core",
+        "foretias_core_engine",
+        "foretias_node",
+        "foretias_python"
+      ],
+      "relation": "custom_base64_implementation_layers",
+      "description": "Four-layer architecture: C11 encode/decode, Rust FFI wrapper, display formatter, CLI integration (Rust + Python + PyO3)",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "nodes": [
+        "infrastructure_task_c11_tests",
+        "infrastructure_task_rust_hardening",
+        "infrastructure_task_python_rust_migration"
+      ],
+      "relation": "infrastructure_dependency_graph",
+      "description": "Tasks 1-5 are independent and parallel. Task 6 (Python→Rust migration) depends on everything and requires substantial Rust rewrite",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "nodes": [
+        "foretias_node",
+        "noise_protocol",
+        "libp2p"
+      ],
+      "relation": "peer_transport_layers",
+      "description": "Three transport layers: libp2p Direct (request_response/yamux, libp2p-noise), Noise_XX TCP (custom, C11), libp2p swarm (Kademlia+GossipSub)",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "nodes": [
+        "json_rpc_handlers",
+        "json_rpc_no_tls",
+        "content_replay_threat",
+        "stamp_flood_threat"
+      ],
+      "relation": "json_rpc_security_surface",
+      "description": "JSON-RPC attack surface: no TLS, replay attacks, stamp floods, oversized requests. Mitigated by echo fields, rate limits, MAX_CONTENT_BYTES.",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "nodes": [
+        "fortias_foretias_rename",
+        "c11_core",
+        "foretias_core_engine",
+        "foretias_node",
+        "foretias_python",
+        "python_shim"
+      ],
+      "relation": "rename_scope",
+      "description": "Rename affects all layers: C header and sources, Rust sources and configs, Python sources and tests, spec files, build configs",
+      "evidence": "EXTRACTED",
+      "confidence_score": 1.0
+    },
+    {
+      "id": "liboqs_ci_pipeline",
+      "label": "liboqs CI pipeline",
+      "nodes": [
+        "liboqs_basic_workflow",
+        "liboqs_platforms_workflow",
+        "liboqs_extended_workflow",
+        "liboqs_scorecard_workflow",
+        "liboqs_downstream_basic_workflow"
+      ],
+      "relation": "composable_workflow_units",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED",
+      "description": "All CI workflows can be composed together via workflow_call. pr.yml, push.yml, commit-to-main.yml, release.yml, and weekly.yml each compose different subsets."
+    },
+    {
+      "source": "liboqs_linux_workflow",
+      "label": "Linux CI build matrix",
+      "nodes": [
+        "liboqs_liboqs",
+        "liboqs_openssl_integration",
+        "liboqs_libjade_integration",
+        "liboqs_stateful_sig_flags",
+        "liboqs_algorithm_sets",
+        "liboqs_ci_containers",
+        "liboqs_nist_kat",
+        "liboqs_minimal_build"
+      ],
+      "relation": "build_matrix_components",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED",
+      "description": "Linux CI tests various combinations of OpenSSL integration, libjade, stateful signatures, algorithm sets, and build modes."
+    },
+    {
+      "id": "liboqs_fuzz_ecosystem",
+      "label": "Fuzz testing ecosystem",
+      "nodes": [
+        "liboqs_fuzzing",
+        "liboqs_fuzz_sig_covered",
+        "liboqs_fuzz_sig_pending",
+        "liboqs_fuzz_kem_pending",
+        "liboqs_basic_workflow"
+      ],
+      "relation": "fuzz_testing_infrastructure",
+      "confidence_score": 0.95,
+      "evidence": "INFERRED",
+      "description": "Fuzz testing covers 5 sig algorithms currently, with KEM and stateful sig fuzzing pending. basic.yml includes fuzzbuildcheck job."
+    },
+    {
+      "id": "liboqs_downstream_ecosystem",
+      "label": "Downstream project ecosystem",
+      "nodes": [
+        "liboqs_liboqs",
+        "liboqs_downstream_basic_workflow",
+        "liboqs_downstream_release_workflow"
+      ],
+      "relation": "upstream_downstream_dependency_chain",
+      "confidence_score": 1.0,
+      "evidence": "EXTRACTED",
+      "description": "liboqs is the upstream for 8 downstream projects (BoringSSL, OpenSSH, oqs-provider, C++, Go, Python, Java, Rust bindings). Changes trigger their CI automatically."
+    },
+    {
+      "label": "code_family_code_based",
+      "nodes": [
+        "kem_algo_bike",
+        "kem_algo_classic_mceliece",
+        "kem_algo_hqc"
+      ],
+      "confidence": 0.85,
+      "source": "INFERRED",
+      "properties": {
+        "description": "Code-based cryptography family: BIKE (QC-MDPC), Classic McEliece (binary Goppa), HQC (syndrome decoding)"
+      }
+    },
+    {
+      "label": "lattice_family",
+      "nodes": [
+        "kem_algo_frodokem",
+        "kem_algo_kyber",
+        "kem_algo_ml_kem",
+        "kem_algo_ntruprime"
+      ],
+      "confidence": 0.95,
+      "source": "INFERRED",
+      "properties": {
+        "description": "Lattice-based cryptography family: FrodoKEM (LWE), Kyber/ML-KEM (Module LWE+R), NTRU-Prime (NTRU)"
+      }
+    },
+    {
+      "label": "nist_standard_final",
+      "nodes": [
+        "kem_algo_ml_kem",
+        "kem_algo_ml_kem_512",
+        "kem_algo_ml_kem_768",
+        "kem_algo_ml_kem_1024"
+      ],
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "properties": {
+        "description": "ML-KEM is the only KEM in liboqs implementing a NIST final standard (FIPS 203)"
+      }
+    },
+    {
+      "label": "nist_round_4_candidates",
+      "nodes": [
+        "kem_algo_bike",
+        "kem_algo_hqc"
+      ],
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "properties": {
+        "description": "Algorithms that advanced to NIST Round 4"
+      }
+    },
+    {
+      "label": "large_stack_warning",
+      "nodes": [
+        "kem_algo_classic_mceliece",
+        "kem_algo_classic_mceliece_348864",
+        "kem_algo_classic_mceliece_460896",
+        "kem_algo_classic_mceliece_6688128",
+        "kem_algo_classic_mceliece_8192128"
+      ],
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "properties": {
+        "description": "Classic McEliece variants have large stack usage that may cause failures in threads or constrained environments"
+      }
+    },
+    {
+      "label": "constant_time_advisory",
+      "nodes": [
+        "kem_algo_classic_mceliece",
+        "kem_algo_classic_mceliece_348864",
+        "kem_algo_classic_mceliece_460896",
+        "kem_algo_classic_mceliece_6688128",
+        "kem_algo_classic_mceliece_8192128"
+      ],
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "properties": {
+        "description": "Classic McEliece implementations may not be constant-time; memory leak issues with clang -O2/-O3 on x86-64"
+      }
+    },
+    {
+      "label": "constant_time_verified",
+      "nodes": [
+        "kem_algo_bike",
+        "kem_algo_frodokem",
+        "kem_algo_hqc",
+        "kem_algo_kyber",
+        "kem_algo_ml_kem"
+      ],
+      "confidence": 0.95,
+      "source": "INFERRED",
+      "properties": {
+        "description": "Algorithms with claimed AND valgrind-verified no-secret-dependent-branching across all parameter sets (clean implementations)"
+      }
+    },
+    {
+      "label": "shared_parameter_sizes_kyber_mlkem",
+      "nodes": [
+        "kem_algo_kyber_512",
+        "kem_algo_ml_kem_512",
+        "kem_algo_kyber_768",
+        "kem_algo_ml_kem_768",
+        "kem_algo_kyber_1024",
+        "kem_algo_ml_kem_1024"
+      ],
+      "confidence": 1.0,
+      "source": "EXTRACTED",
+      "properties": {
+        "description": "Kyber and ML-KEM parameter pairs have identical key/ciphertext sizes - ML-KEM adds keypair_seed_bytes field"
+      }
+    },
+    {
+      "label": "smallest_public_key_sizes",
+      "nodes": [
+        "kem_algo_kyber_512",
+        "kem_algo_ml_kem_512",
+        "kem_algo_sntrup761"
+      ],
+      "confidence": 0.85,
+      "source": "INFERRED",
+      "properties": {
+        "description": "Kyber512/ML-KEM-512 (800 bytes) and sntrup761 (1158 bytes) have the smallest public keys among Level 1-2 KEMs, vs BIKE-L1 (1541), HQC-128 (2249), FrodoKEM-640 (9616), Classic-McEliece-348864 (261120)"
+      }
+    },
+    {
+      "label": "interop_only",
+      "nodes": [
+        "kem_algo_ntruprime",
+        "kem_algo_sntrup761"
+      ],
+      "confidence": 0.85,
+      "source": "INFERRED",
+      "properties": {
+        "description": "sntrup761 is included in liboqs only for interop testing, not recommended for production"
+      }
+    },
+    {
+      "nodes": [
+        "liboqs_kem_bike",
+        "liboqs_kem_frodokem",
+        "liboqs_kem_classic_mceliece",
+        "liboqs_kem_hqc",
+        "liboqs_kem_kyber",
+        "liboqs_kem_ml_kem",
+        "liboqs_kem_ntruprime"
+      ],
+      "relation": "all_kem_algorithms",
+      "description": "Complete set of key encapsulation mechanisms in liboqs",
+      "confidence": 1.0
+    },
+    {
+      "nodes": [
+        "liboqs_sig_cross",
+        "liboqs_sig_dilithium"
+      ],
+      "relation": "signature_algorithms_in_chunk",
+      "description": "Signature schemes covered in this build chunk (full liboqs also includes Falcon, SPHINCS+, MAYO, UOV, ML-DSA, XMSS, LMS)",
+      "confidence": 1.0
+    },
+    {
+      "nodes": [
+        "liboqs_kem_ml_kem",
+        "liboqs_ml_kem_aarch64_backend",
+        "liboqs_ml_kem_x86_backend",
+        "liboqs_ml_kem_cuda_backend"
+      ],
+      "relation": "ml_kem_multi_platform",
+      "description": "ML-KEM implementations spanning reference C, x86_64 AVX2, AArch64 NEON, and CUDA GPU backends",
+      "confidence": 1.0
+    },
+    {
+      "nodes": [
+        "liboqs_kem_kyber",
+        "liboqs_kyber_libjade",
+        "liboqs_ml_kem_x86_backend"
+      ],
+      "relation": "kyber_ml_kem_family",
+      "description": "Kyber and ML-KEM share algorithmic lineage; Kyber team provides AVX2 backend, libjade provides verified assembly",
+      "confidence": 0.95
+    },
+    {
+      "nodes": [
+        "liboqs_kem_bike",
+        "liboqs_kem_bike_gf2x",
+        "liboqs_kem_bike_sampling",
+        "liboqs_bike_bgf_decoder",
+        "liboqs_timing_attack_bike"
+      ],
+      "relation": "bike_security_architecture",
+      "description": "BIKE's security model: QC-MDPC codes, GF2X arithmetic, constant-time BGF decoding, isochronous biased sampling to prevent timing attacks",
+      "confidence": 0.95
+    },
+    {
+      "nodes": [
+        "liboqs_common_aes",
+        "liboqs_common_sha2",
+        "liboqs_common_sha3_xkcp",
+        "liboqs_openSSL_dependency",
+        "liboqs_pqclean_shims"
+      ],
+      "relation": "symmetric_crypto_stack",
+      "description": "Symmetric primitive layer: AES/SHA2/SHA3 with OpenSSL or native fallbacks, plus FIPS202 shims for PQClean compatibility",
+      "confidence": 0.95
+    },
+    {
+      "nodes": [
+        "liboqs_copy_upstream_kem_template",
+        "liboqs_copy_upstream_sig_template",
+        "liboqs_copy_xkcp_cmake"
+      ],
+      "relation": "build_generation_pipeline",
+      "description": "Automated CMake generation: Jinja2 templates produce per-algorithm CMakeLists from metadata, XKCP template produces SHA-3 builds",
+      "confidence": 0.95
+    },
+    {
+      "nodes": [
+        "liboqs_common_sha3_xkcp",
+        "liboqs_copy_xkcp_cmake",
+        "liboqs_pqclean_shims"
+      ],
+      "relation": "sha3_keccak_chain",
+      "description": "SHA-3 build chain: XKCP KeccakP-1600 low-level -> common SHA-3 wrappers -> FIPS202 PQClean shims",
+      "confidence": 0.95
+    },
+    {
+      "nodes": [
+        "liboqs_sig_falcon",
+        "liboqs_sig_mayo",
+        "liboqs_sig_ml_dsa",
+        "liboqs_sig_sphincs",
+        "liboqs_sig_uov",
+        "liboqs_sig_stfl_lms",
+        "liboqs_sig_stfl_xmss"
+      ],
+      "relation": "pqc_signature_family",
+      "description": "All PQC signature schemes in liboqs, organized as stateless (SIG) and stateful (SIG_STFL) categories, each with multiple parameter variants and CPU-optimized implementations"
+    },
+    {
+      "nodes": [
+        "liboqs_sig_falcon",
+        "liboqs_sig_mayo",
+        "liboqs_sig_ml_dsa",
+        "liboqs_sig_sphincs",
+        "liboqs_sig_uov"
+      ],
+      "relation": "pqclean_implementations",
+      "description": "Signatures built from PQClean reference implementations, all sharing pqclean_shims common headers and the object library build pattern"
+    },
+    {
+      "nodes": [
+        "liboqs_sig_stfl_lms",
+        "liboqs_sig_stfl_xmss",
+        "liboqs_sig_stfl_xmssmt"
+      ],
+      "relation": "stateful_signature_group",
+      "description": "Stateful hash-based signatures requiring counter management, with LMS from Cisco and XMSS/XMSSMT from NIST standardization"
+    },
+    {
+      "nodes": [
+        "liboqs_tests",
+        "liboqs_test_constant_time",
+        "liboqs_test_fuzz",
+        "liboqs_test_kat"
+      ],
+      "relation": "testing_infrastructure",
+      "description": "Complete testing ecosystem: functional tests, known-answer tests, memory tests, speed benchmarks, fuzzing, and constant-time verification"
+    },
+    {
+      "nodes": [
+        "liboqs_zephyr",
+        "liboqs_zephyr_kconfig",
+        "liboqs_zephyr_samples"
+      ],
+      "relation": "zephyr_integration",
+      "description": "Zephyr RTOS integration package: module definition, Kconfig options, and sample applications for embedded PQC"
+    },
+    {
+      "nodes": [
+        "liboqs_sig_ml_dsa",
+        "liboqs_sig_sphincs",
+        "liboqs_sig_stfl_lms",
+        "liboqs_sig_stfl_xmss"
+      ],
+      "relation": "nist_standardized",
+      "description": "Algorithms with NIST standardization status: ML-DSA (FIPS 204), SPHINCS+ (FIPS 205), LMS (FIPS 205), XMSS (FIPS 205)"
+    }
+  ],
+  "input_tokens": 43332,
+  "output_tokens": 12000
+}

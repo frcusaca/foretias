@@ -1,0 +1,17 @@
+/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/sig/falcon/CMakeLists.txt
+/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/sig/mayo/CMakeLists.txt
+/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/sig/ml_dsa/CMakeLists.txt
+/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/sig/sphincs/CMakeLists.txt
+/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/sig/uov/CMakeLists.txt
+/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/sig_stfl/lms/CMakeLists.txt
+/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/sig_stfl/lms/external/license.txt
+/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/src/sig_stfl/xmss/CMakeLists.txt
+/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/tests/CMakeLists.txt
+/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/zephyr/CMakeLists.txt
+/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/zephyr/README.md
+/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/zephyr/module.yml
+/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/zephyr/samples/KEMs/CMakeLists.txt
+/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/zephyr/samples/KEMs/sample.yaml
+/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/zephyr/samples/Signatures/CMakeLists.txt
+/home/hcbusy/webhash/foretias/p2p/core-engine/deps/liboqs/zephyr/samples/Signatures/sample.yaml
+/home/hcbusy/webhash/foretias/p2p/foretias-python/README.md

@@ -146,7 +146,7 @@ impl SignOps for SoftwareCryptoServer {
     }
 
     fn signature_algorithm(&self) -> SignatureAlgorithm {
-        SignatureAlgorithm::SPHINCS_SHA2_128S
+        SignatureAlgorithm::Ed25519
     }
 
     fn sign_with(&self, msg: &[u8], alg: SignatureAlgorithm) -> Result<SignatureBytes, CryptoError> {

@@ -254,10 +254,10 @@ mod handshake_matching {
     }
 
     #[test]
-    fn default_algorithm_is_sphincs() {
+    fn default_algorithm_is_ed25519() {
         let server = make_server();
         let default_alg = server.signature_algorithm();
-        assert_eq!(default_alg, SignatureAlgorithm::SPHINCS_SHA2_128S);
+        assert_eq!(default_alg, SignatureAlgorithm::Ed25519);
     }
 }
 
@@ -375,8 +375,8 @@ mod full_integration {
             .collect();
 
         for (i, server) in servers.iter().enumerate() {
-            assert_eq!(server.signature_algorithm(), SignatureAlgorithm::SPHINCS_SHA2_128S,
-                "Server {} should default to SPHINCS+", i);
+            assert_eq!(server.signature_algorithm(), SignatureAlgorithm::Ed25519,
+                "Server {} should default to Ed25519", i);
         }
     }
 

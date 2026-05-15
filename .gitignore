@@ -64,4 +64,6 @@ p2p/target/
 p2p/Cargo.lock
 p2p/core/build_test/
 mcp.*
-.worktrees/
+.worktrees
+.sisyphus
+
