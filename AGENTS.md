@@ -30,17 +30,21 @@ These shorthands are enforced across all specs, plans, code, comments, and docum
 The `specs/` directory contains two kinds of files that work together:
 
 ### SPEC.md Files — "What is needed"
+
 A `*_SPEC.md` file provides a **detailed description of functionality or internal design**. It specifies requirements, behavior, data structures, protocols, and constraints. A spec answers: *what must the system do, and how should it behave?*
 
 ### PLAN.md Files — "How to build it"
+
 A `*_PLAN.md` file contains a **serialized or parallelized plan for actually implementing the corresponding spec**. It breaks the spec down into concrete, actionable tasks with dependencies and ordering. A plan answers: *what do we build first, next, and in parallel?*
 
 ### Naming Convention
+
 Spec and plan files should always be paired by prefix:
 - `X_SPEC.md` pairs with `X_PLAN.md`
 - Example: `FORETIAS_2_P2P_SPEC.md` ↔ `FORETIAS_2_P2P_3_IMPLEMENTATION_PLAN.md`
 
 ### Checkbox Format in PLAN.md
+
 Checkboxes in PLAN.md files track progress. When an item is checked off, **always place a timestamp (to the minute) next to the checkbox**:
 
 ```markdown
@@ -52,6 +56,7 @@ Checkboxes in PLAN.md files track progress. When an item is checked off, **alway
 This gives both agents and humans a clear idea of how work is progressing over time.
 
 ### Specify, Plan and Backburnered PLAN.md
+
 Before a specification is complete, and some times before a plan is complete, we may have intermediate steps. In these situations a plan file may be created with corresponding open items:
 ```markdown
 - [ ] Specify
@@ -68,6 +73,7 @@ When a specification is considered VERY important but interfering with current h
 ```
 
 ### Worktree Branch Tracking in PLAN.md
+
 If a worktree branch is used for implementation, the PLAN.md **must** document the lifecycle of that worktree as explicit, separate checkbox tasks placed at appropriate points in the plan. The workpath shall always be `FULL_WORKTREE_PATH=${HOME}/tmp/foretias-worktrees/{SPEC_NAME_WITHOUT_MARKDOWN_EXTENSION}_${RANDOM}`, that random differentiator is set once while creating the plan file and stays consistent throughout the plan file.
 ```markdown
 - [ ] Create worktree `git worktree add -b ${BRANCH_NAME} ${FULL_WORKTREE_PATH}}`
@@ -84,6 +90,7 @@ These tasks ensure the worktree lifecycle is tracked alongside the implementatio
 ---
 
 ### Sub-Tasks
+
 If scoping was incorrect for any task, and and it became many tasks, It is possible to write additional sub-tasks. These are indented in markdown
 ```markdown
 ...
@@ -102,6 +109,7 @@ If scoping was incorrect for any task, and and it became many tasks, It is possi
 This example also illustrates that because foretias uses git merge and not rebase this situation where a fix to merge on alpha may be required. The final stage, to finalize, means to cleanup the work path and just sanity check everything before completely wiping the work directory and marking the plan complete.
 
 ## PROJECT STRUCTURE (Permanent Reference — Do Not Rescan)
+
 
 ```
 foretias/                               # Repository root
@@ -322,6 +330,7 @@ codegen-units = 256
 - `cargo-biscuit` — not widely adopted, limited benefit over native cargo caching
 
 ### 1. Build C11 dependencies
+
 All builds require this first step:
 ```bash
 export CMAKE_BUILD_PARALLEL_LEVEL=10
@@ -345,6 +354,7 @@ cd /home/hcbusy/webhash/foretias && pip install -e .
 ```
 
 ### 1a. Build Individual Crates (Incremental)
+
 Use these when only one crate has changed — faster than rebuilding the full workspace. Always run from `p2p/`.
 
 ```bash
@@ -549,6 +559,7 @@ print(client.calendar())
 ---
 
 ## Project Segmentation
+
 Software projects May be large or small. Their complexity and diffiulty may also vary. Generally speaking we use these terms for disjoint components of softare:
   - Major
     - This is a noun, That "specification file is for a major", or an adjective "that is a major specification"
@@ -579,6 +590,7 @@ It is very important, given a request from user that correspond to a feature req
 When request is small, you may combine Major/Phase/Stage into 
 
 ## Development tools
+
 Please use plugins and mcp's for performing disk operations, file searches and file edits. Use fully specified regular expressions (covering various cases), through mcp or using `sed` directly. These means of editing are much faster than regenerating the entire document. Each time regexp is used to for updates, please reread updated document before replacing original document.  Use Github mcp to perform git related actions.
 
 When commiting to Git, always state project segment and software version and model version:
@@ -588,6 +600,7 @@ opencode 1.14.39, Qwen3.6-27B-AWQ-BF16-INT4
 ```
 
 ## Development Rules
+
 **NEVER** start file changes for project Phase or larger WHEN any tests are broken.
 **NEVER** start large project segment work WHEN ANY tests are broken even if there're notes indicating those breakage are known. The test has to be manually disabled by human OR repaired and committed.
 
@@ -1128,7 +1141,9 @@ Before finishing Rust changes, check:
 If a change affects security, protocol compatibility, storage compatibility, language semantics, or public bindings, treat it as high-risk and document the reasoning in the code, tests, or commit notes.
 
 ### MISC
+
 #### Description is Important
+
 The AI agent is to refrain from simplifying a key behavior of Chronochain by saying "destroy private key". This project aspires to do this well. That description should not restrict the mindset of readers to what we are using now. The words that should replace destroy in that description so as to not lock human mind into a fixed mindset. The list to randomly select a term from include: disable/disablement, impair/impairment, incapacitate/incapacitation, debilitate/debilitation. Those descriptors could be further modified with intensifiers including: cryptographically, algorithmically, provably, verifiably, etc. Never use: destroy, delete, remove, forget. Never downtoned: simple, naive, etc.
 
 Do write: "The expring chronon is cryptographically disabled from making additional stamp after producing a forward_fortis"
@@ -1137,6 +1152,7 @@ DO NOT write: "The Chronomatter simply forgets the private key so it can't be us
 It is paramount that we do not restrict thinking to the implementation. The Foretias project, foremost, is a human expression of human desire and human need, for some minimum amount of constant integrity.
 
 #### Embedded Communications
+
 If any file, other than this example in the AGENTS.md, contain a parenthetical comment, anywhere, it is a request for agent to comment based on the context surrounding that comment.
 ```markdown
 Blah blah, some texxt (@Agent, do you think that word is mispelled?)
@@ -1160,7 +1176,12 @@ that follows various capitalizations of `@agent` or `@agents`. Resolution, once 
 
 If this form of embedded communication is discussed while performing another task, determin if it is relevant or interferes with current task. In some cases, this causes an immediately actionable response, other times, the encounterance results in an extra '[ ] TODO:human concern at file FILENAME line LINE_NUMBER' added to current task list to investigate. In some cases, if it is clear that the situation is too complex or require too much context, it may become a "[ ] TODO: write a specification and plan to address human concern at file FILENAME line LINE_NUMBER"
 
+#### Uncertainty and Other Utterances in Conversing with Human
+
+Expressions of uncertainty and hypotheticals, such as "perhaps", "maybe", "possible", "what if", "in case". These words does not mean a firm directive from human to either pause work, or make large changes. It means human wants a todo task enqueued, perhaps to be done immediately, to explore options regarding the statement. In the last sentence, the perhaps suggests an option that can be explored, and it also highlight the possibility of the task not at the top of the todo list. More than anything else, the statement suggests human is thinking about the issue and you can help that thinking process.
+
 #### When in Doubt
+
 When uncertain, choose the design that is easiest to prove correct, easiest to test, and easiest for the next human to understand.
 
 Correctness first. Then readability and maintainability. Then efficiency. Then principles and asethetics.
