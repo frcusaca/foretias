@@ -28,6 +28,9 @@ impl TickObserver for NoOpObserver {
 
 pub mod jsonrpc;
 pub mod handlers;
+pub mod config;
+
+pub use config::ForetiasServerConfig;
 
 pub struct TimeFamilyServer {
     chronomatter: Arc<Chronomatter>,
@@ -116,6 +119,24 @@ impl TimeFamilyServer {
     pub fn with_communerd(mut self, config: CommunerdConfig) -> Self {
         self.communerd = Some(Arc::new(Communerd::new(config)));
         self
+    }
+
+    pub fn with_config(config: ForetiasServerConfig) -> Result<Self, NodeError> {
+        let mut server = Self::new_with_config(
+            &config.listen_addr,
+            config.chronon_ns(),
+            config.persist_path().cloned(),
+            None,
+        )?;
+        server.communerd = Some(Arc::new(Communerd::new(CommunerdConfig {
+            mutual_attest: foretias_core::config::MutualAttestConfig {
+                peers: config.p2p.ptp.peers.clone(),
+                every_n_chronons: 1,
+                request_timeout_secs: config.p2p.ptp.timeout_secs,
+            },
+            ..Default::default()
+        })));
+        Ok(server)
     }
 
     pub fn get_tbid(&self) -> Tbid {

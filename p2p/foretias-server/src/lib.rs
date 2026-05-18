@@ -8,3 +8,5 @@ pub mod metrics;
 pub mod calendar_store;
 pub mod probity;
 pub mod replication_logger;
+
+pub use foretias_client::{Foretias, ForetiasError, ForetiasStatus, ClientLevel, noise_json_rpc, PtPError};

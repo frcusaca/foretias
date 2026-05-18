@@ -119,7 +119,7 @@ impl BinBasedLru {
 
     /// Evict Unused entries until there is room for `incoming_bytes`.
     pub fn evict_to_fit(&self, incoming_bytes: u64) -> Result<(), NodeError> {
-        if self.max_bytes >= UNLIMITED_BUDGET {
+        if self.max_bytes == UNLIMITED_BUDGET {
             return Ok(());
         }
         while self.current_bytes.load(Ordering::Relaxed) + incoming_bytes > self.max_bytes {

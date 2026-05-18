@@ -1,0 +1,666 @@
+//! Foretias — unified library API for Foretias stamping and verification.
+//!
+//! Supports three instantiation modes:
+//! - **Level 1 (Standalone):** `Foretias::new()` — pure in-memory, no network
+//! - **Level 2 (PtP Networked):** `Foretias::connect()` — C11 Noise_XX over TCP
+//! - **Level 3 (P2P Full):** `Foretias::join()` — libp2P swarm with DHT/gossipsub
+//!
+//! All three levels expose the same operation surface: `stamp`, `verify`,
+//! `prove_verification`, `calendar_slice`, plus identity accessors.
+
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Duration;
+
+use foretias_core::chronomatter::Chronomatter;
+use foretias_core::crypto_server::{self, CryptoServer, ForetiasCurve};
+use foretias_core::error::{CryptoError, NodeError};
+use foretias_core::foretias::callbacks::TickObserver;
+use foretias_core::foretias::tick::{CalendarLookup, Foretis, TickRecord};
+use foretias_core::foretias::types::Tbid;
+
+use crate::calendar::Calendar;
+use crate::config::{ForetiasConfig, StandaloneConfig, PtpConfig, P2pConfig};
+use crate::noise_ptp::{noise_json_rpc, PtPError};
+
+/// Error type for Foretias operations.
+#[derive(Debug)]
+pub enum ForetiasError {
+    Crypto(String),
+    Dormant(String),
+    Io(String),
+    Network(String),
+    Internal(String),
+}
+
+impl std::fmt::Display for ForetiasError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ForetiasError::Crypto(msg) => write!(f, "Foretias crypto error: {}", msg),
+            ForetiasError::Dormant(msg) => write!(f, "Foretias dormant error: {}", msg),
+            ForetiasError::Io(msg) => write!(f, "Foretias I/O error: {}", msg),
+            ForetiasError::Network(msg) => write!(f, "Foretias network error: {}", msg),
+            ForetiasError::Internal(msg) => write!(f, "Foretias internal error: {}", msg),
+        }
+    }
+}
+
+impl std::error::Error for ForetiasError {}
+
+impl From<NodeError> for ForetiasError {
+    fn from(e: NodeError) -> Self {
+        match e {
+            NodeError::Crypto(e) => ForetiasError::Crypto(e.to_string()),
+            NodeError::Dormant(e) => ForetiasError::Dormant(e),
+            NodeError::Io(e) => ForetiasError::Io(e.to_string()),
+            NodeError::Internal(e) => ForetiasError::Internal(e),
+            _ => ForetiasError::Internal(e.to_string()),
+        }
+    }
+}
+
+impl From<CryptoError> for ForetiasError {
+    fn from(e: CryptoError) -> Self {
+        ForetiasError::Crypto(e.to_string())
+    }
+}
+
+impl From<PtPError> for ForetiasError {
+    fn from(e: PtPError) -> Self {
+        match e {
+            PtPError::Connect(msg) => ForetiasError::Network(msg),
+            PtPError::Timeout => ForetiasError::Network("PtP request timeout".into()),
+            PtPError::Noise(msg) => ForetiasError::Network(msg),
+            PtPError::Decode(msg) => ForetiasError::Network(msg),
+            PtPError::Rpc { code, message } => ForetiasError::Network(format!("RPC {}: {}", code, message)),
+        }
+    }
+}
+
+/// Status information for a Foretias instance.
+#[derive(Debug, Clone)]
+pub struct ForetiasStatus {
+    pub is_dormant: bool,
+    pub peer_count: usize,
+    pub current_tick: u64,
+    pub dht_connected: bool,
+    pub gossipsub_subscribed: bool,
+}
+
+/// Client level — determines capabilities and network access.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClientLevel {
+    Standalone,
+    Ptp,
+    P2p,
+}
+
+/// Configuration for joining the P2P mesh (Level 3).
+#[derive(Debug, Clone)]
+pub struct P2pJoinConfig {
+    pub tbn: String,
+    pub known_peers: Vec<String>,
+    pub dht_namespace: String,
+    pub persist_path: Option<PathBuf>,
+}
+
+pub struct StandaloneState {
+    pub chronomatter: Arc<Chronomatter>,
+    pub calendar: Arc<Calendar>,
+    pub crypto: Arc<dyn CryptoServer>,
+}
+
+pub struct PtpState {
+    pub standalone: StandaloneState,
+    pub peers: Vec<String>,
+    pub timeout_secs: u64,
+}
+
+pub struct P2pState {
+    pub ptp: PtpState,
+    #[allow(dead_code)]
+    pub p2p_config: P2pJoinConfig,
+}
+
+pub enum ForetiasInner {
+    Standalone(StandaloneState),
+    Ptp(PtpState),
+    P2p(P2pState),
+}
+
+impl ForetiasInner {
+    fn chronomatter(&self) -> Arc<Chronomatter> {
+        match self {
+            ForetiasInner::Standalone(state) => state.chronomatter.clone(),
+            ForetiasInner::Ptp(state) => state.standalone.chronomatter.clone(),
+            ForetiasInner::P2p(state) => state.ptp.standalone.chronomatter.clone(),
+        }
+    }
+
+    fn calendar(&self) -> Arc<Calendar> {
+        match self {
+            ForetiasInner::Standalone(state) => state.calendar.clone(),
+            ForetiasInner::Ptp(state) => state.standalone.calendar.clone(),
+            ForetiasInner::P2p(state) => state.ptp.standalone.calendar.clone(),
+        }
+    }
+}
+
+pub struct Foretias {
+    level: ClientLevel,
+    inner: ForetiasInner,
+    persist_path: Option<PathBuf>,
+}
+
+impl Foretias {
+    pub fn new(tbn: String, persist_path: Option<PathBuf>) -> Result<Self, ForetiasError> {
+        let chronon_ns = 60_000_000_000u64;
+        let calendar = Arc::new(Calendar::new(Tbid::default(), &tbn));
+        let mut cm = Chronomatter::new(chronon_ns, Arc::clone(&calendar) as Arc<dyn TickObserver>)?;
+
+        struct NoOpMutualAttest;
+        impl foretias_core::foretias::callbacks::MutualAttestObserver for NoOpMutualAttest {
+            fn on_mutual_attest_sent(&self) {}
+            fn on_mutual_attest_ok(&self) {}
+            fn on_mutual_attest_failed(&self) {}
+        }
+        cm.set_mutual_attest_observer(Arc::new(NoOpMutualAttest) as Arc<dyn foretias_core::foretias::callbacks::MutualAttestObserver>);
+
+        let (tbid, tbn_from_cm) = (cm.get_tbid(), cm.get_tbn().to_string());
+        let binding = calendar.inner();
+        let mut cal_inner = binding.write();
+        cal_inner.tbid = tbid;
+        cal_inner.tbn = tbn_from_cm;
+
+        let crypto: Arc<dyn CryptoServer> = Arc::from(crypto_server::new_software(ForetiasCurve::Ed25519)?);
+        let state = StandaloneState {
+            chronomatter: Arc::new(cm),
+            calendar,
+            crypto,
+        };
+
+        Ok(Self {
+            level: ClientLevel::Standalone,
+            inner: ForetiasInner::Standalone(state),
+            persist_path,
+        })
+    }
+
+    pub fn from_persist(path: PathBuf) -> Result<Self, ForetiasError> {
+        let path_str = path.to_string_lossy().to_string();
+        let crypto: Arc<dyn CryptoServer> = Arc::from(crypto_server::new_software(ForetiasCurve::Ed25519)?);
+
+        struct NoOpObserver;
+        impl TickObserver for NoOpObserver {
+            fn on_tick_advance(&self, _tick_number: foretias_core::foretias::types::TickNumber, _public_key: &[u8], _tick_record: &TickRecord) {}
+        }
+
+        let mut cm = Chronomatter::from_calendar(&path_str, crypto.clone(), Arc::new(NoOpObserver))?;
+        struct NoOpMutualAttest;
+        impl foretias_core::foretias::callbacks::MutualAttestObserver for NoOpMutualAttest {
+            fn on_mutual_attest_sent(&self) {}
+            fn on_mutual_attest_ok(&self) {}
+            fn on_mutual_attest_failed(&self) {}
+        }
+        cm.set_mutual_attest_observer(Arc::new(NoOpMutualAttest) as Arc<dyn foretias_core::foretias::callbacks::MutualAttestObserver>);
+
+        let calendar = Arc::new(Calendar::from_persisted(&path_str)?);
+        let state = StandaloneState {
+            chronomatter: Arc::new(cm),
+            calendar,
+            crypto,
+        };
+
+        Ok(Self {
+            level: ClientLevel::Standalone,
+            inner: ForetiasInner::Standalone(state),
+            persist_path: Some(path),
+        })
+    }
+
+    pub fn connect(
+        tbn: String,
+        peer_addrs: Vec<String>,
+        timeout_secs: u64,
+        persist_path: Option<PathBuf>,
+    ) -> Result<Self, ForetiasError> {
+        let standalone = Self::create_standalone_state(&tbn)?;
+        let state = PtpState {
+            standalone,
+            peers: peer_addrs,
+            timeout_secs,
+        };
+        Ok(Self {
+            level: ClientLevel::Ptp,
+            inner: ForetiasInner::Ptp(state),
+            persist_path,
+        })
+    }
+
+    pub fn connect_one(tbn: String, peer_addr: String, persist_path: Option<PathBuf>) -> Result<Self, ForetiasError> {
+        Self::connect(tbn, vec![peer_addr], 30, persist_path)
+    }
+
+    pub async fn join(config: P2pJoinConfig) -> Result<Self, ForetiasError> {
+        let standalone = Self::create_standalone_state(&config.tbn)?;
+        let ptp = PtpState {
+            standalone,
+            peers: config.known_peers.clone(),
+            timeout_secs: 30,
+        };
+        let state = P2pState {
+            ptp,
+            p2p_config: config,
+        };
+        Ok(Self {
+            level: ClientLevel::P2p,
+            inner: ForetiasInner::P2p(state),
+            persist_path: None,
+        })
+    }
+
+    /// Create from configuration — level determined by config variant.
+    pub async fn with_config(config: ForetiasConfig) -> Result<Self, ForetiasError> {
+        match config {
+            ForetiasConfig::Standalone(cfg) => Self::with_config_standalone(cfg),
+            ForetiasConfig::Ptp(cfg) => Ok(Self::with_config_ptp(cfg)),
+            ForetiasConfig::P2p(cfg) => Self::with_config_p2p(cfg).await,
+        }
+    }
+
+    fn with_config_standalone(cfg: StandaloneConfig) -> Result<Self, ForetiasError> {
+        Self::new(cfg.tbn, cfg.persist_path)
+    }
+
+    fn with_config_ptp(cfg: PtpConfig) -> Self {
+        Self::connect(
+            cfg.standalone.tbn,
+            cfg.peers,
+            cfg.timeout_secs,
+            cfg.standalone.persist_path,
+        )
+        .expect("PtpConfig construction failed")
+    }
+
+    async fn with_config_p2p(cfg: P2pConfig) -> Result<Self, ForetiasError> {
+        let standalone = Self::create_standalone_state(&cfg.ptp.standalone.tbn)?;
+        let ptp = PtpState {
+            standalone,
+            peers: cfg.ptp.peers,
+            timeout_secs: cfg.ptp.timeout_secs,
+        };
+        let p2p_config = P2pJoinConfig {
+            tbn: cfg.ptp.standalone.tbn,
+            known_peers: cfg.known_servers,
+            dht_namespace: cfg.dht_namespace,
+            persist_path: cfg.ptp.standalone.persist_path.clone(),
+        };
+        let state = P2pState {
+            ptp,
+            p2p_config,
+        };
+        Ok(Self {
+            level: ClientLevel::P2p,
+            inner: ForetiasInner::P2p(state),
+            persist_path: cfg.ptp.standalone.persist_path,
+        })
+    }
+
+    pub async fn stamp(&self, content: &[u8], echo: String) -> Result<Foretis, ForetiasError> {
+        let echo = if echo.is_empty() {
+            Self::client_echo()
+        } else {
+            echo
+        };
+        match self.level {
+            ClientLevel::Standalone => self.stamp_standalone(content, &echo).await,
+            ClientLevel::Ptp | ClientLevel::P2p => self.stamp_remote(content, &echo).await,
+        }
+    }
+
+    async fn stamp_standalone(&self, content: &[u8], echo: &str) -> Result<Foretis, ForetiasError> {
+        let cm = self.inner.chronomatter();
+        if cm.is_dormant() {
+            return Err(ForetiasError::Dormant(
+                "client is dormant — cannot stamp".into(),
+            ));
+        }
+        let foretis = cm.stamp(content.to_vec(), echo.to_string())?;
+        if let Some(ref path) = self.persist_path {
+            let _ = self.save_calendar(path);
+        }
+        Ok(foretis)
+    }
+
+    pub async fn verify(&self, content: &[u8], foretis: &Foretis) -> Result<bool, ForetiasError> {
+        match self.level {
+            ClientLevel::Standalone => {
+                let cm = self.inner.chronomatter();
+                let calendar = self.inner.calendar();
+                let result = cm.verify(foretis, &content.to_vec(), calendar.as_ref())?;
+                Ok(result)
+            }
+            ClientLevel::Ptp | ClientLevel::P2p => self.verify_remote(content, foretis).await,
+        }
+    }
+
+    pub async fn prove_verification(
+        &self,
+        content: &[u8],
+        foretis: &Foretis,
+    ) -> Result<VerificationReport, ForetiasError> {
+        let calendar = self.inner.calendar();
+        let tick_number = foretis.tick_number;
+        let records = calendar
+            .get(tick_number, 2)
+            .map_err(ForetiasError::from)?;
+        let verified = self.verify(content, foretis).await?;
+        Ok(VerificationReport {
+            verified,
+            tick_number,
+            calendar_records: records,
+            foretis: foretis.clone(),
+            method: "prove_verification".into(),
+        })
+    }
+
+    pub async fn calendar_slice(
+        &self,
+        start: u64,
+        count: u64,
+    ) -> Result<Vec<TickRecord>, ForetiasError> {
+        match self.level {
+            ClientLevel::Standalone => {
+                let calendar = self.inner.calendar();
+                let records = calendar
+                    .get(start, count as usize)
+                    .map_err(ForetiasError::from)?;
+                Ok(records)
+            }
+            ClientLevel::Ptp | ClientLevel::P2p => self.calendar_slice_remote(start, count).await,
+        }
+    }
+
+    pub fn public_key(&self) -> Option<[u8; 32]> {
+        self.inner.chronomatter().latest_public_key()
+    }
+
+    pub fn tbid(&self) -> String {
+        self.inner.chronomatter().get_tbid().to_hex()
+    }
+
+    pub fn tbn(&self) -> String {
+        self.inner.chronomatter().get_tbn().to_string()
+    }
+
+    pub fn status(&self) -> ForetiasStatus {
+        let cm = self.inner.chronomatter();
+        ForetiasStatus {
+            is_dormant: cm.is_dormant(),
+            peer_count: match self.level {
+                ClientLevel::Standalone => 0,
+                ClientLevel::Ptp => match &self.inner {
+                    ForetiasInner::Ptp(state) => state.peers.len(),
+                    _ => 0,
+                },
+                ClientLevel::P2p => 0,
+            },
+            current_tick: cm.current_tick(),
+            dht_connected: self.level == ClientLevel::P2p,
+            gossipsub_subscribed: self.level == ClientLevel::P2p,
+        }
+    }
+
+    pub fn level(&self) -> ClientLevel {
+        self.level
+    }
+
+    pub fn current_tick(&self) -> u64 {
+        self.inner.chronomatter().current_tick()
+    }
+
+    fn save_calendar(&self, path: &PathBuf) -> Result<(), ForetiasError> {
+        let calendar = self.inner.calendar();
+        let path_str = path.to_string_lossy().to_string();
+        calendar.save(&path_str)?;
+        Ok(())
+    }
+
+    fn create_standalone_state(tbn: &str) -> Result<StandaloneState, ForetiasError> {
+        let chronon_ns = 60_000_000_000u64;
+        let calendar = Arc::new(Calendar::new(Tbid::default(), tbn));
+        let mut cm = Chronomatter::new(chronon_ns, Arc::clone(&calendar) as Arc<dyn TickObserver>)?;
+        struct NoOpMutualAttest;
+        impl foretias_core::foretias::callbacks::MutualAttestObserver for NoOpMutualAttest {
+            fn on_mutual_attest_sent(&self) {}
+            fn on_mutual_attest_ok(&self) {}
+            fn on_mutual_attest_failed(&self) {}
+        }
+        cm.set_mutual_attest_observer(Arc::new(NoOpMutualAttest) as Arc<dyn foretias_core::foretias::callbacks::MutualAttestObserver>);
+        let (tbid, tbn_from_cm) = (cm.get_tbid(), cm.get_tbn().to_string());
+        let binding = calendar.inner();
+        let mut cal_inner = binding.write();
+        cal_inner.tbid = tbid;
+        cal_inner.tbn = tbn_from_cm;
+        let crypto: Arc<dyn CryptoServer> = Arc::from(crypto_server::new_software(ForetiasCurve::Ed25519)?);
+        Ok(StandaloneState {
+            chronomatter: Arc::new(cm),
+            calendar,
+            crypto,
+        })
+    }
+
+    fn primary_peer(&self) -> Option<&str> {
+        match &self.inner {
+            ForetiasInner::Ptp(state) => state.peers.first().map(|s| s.as_str()),
+            ForetiasInner::P2p(state) => state.ptp.peers.first().map(|s| s.as_str()),
+            _ => None,
+        }
+    }
+
+    fn timeout(&self) -> Duration {
+        let secs = match &self.inner {
+            ForetiasInner::Ptp(state) => state.timeout_secs,
+            ForetiasInner::P2p(state) => state.ptp.timeout_secs,
+            _ => 30,
+        };
+        Duration::from_secs(secs)
+    }
+
+    async fn stamp_remote(&self, content: &[u8], echo: &str) -> Result<Foretis, ForetiasError> {
+        let Some(peer) = self.primary_peer() else {
+            return Err(ForetiasError::Network("no peer configured".into()));
+        };
+        let content_hex = hex::encode(content);
+        let params = serde_json::json!({
+            "content": content_hex,
+            "echo": echo,
+        });
+        let result = noise_json_rpc(peer, "stamp", params, self.timeout()).await?;
+        let foretis: Foretis = serde_json::from_value(result)
+            .map_err(|e| ForetiasError::Network(format!("stamp deserialization failed: {}", e)))?;
+        Ok(foretis)
+    }
+
+    async fn verify_remote(&self, content: &[u8], foretis: &Foretis) -> Result<bool, ForetiasError> {
+        let Some(peer) = self.primary_peer() else {
+            return Err(ForetiasError::Network("no peer configured".into()));
+        };
+        let content_hex = hex::encode(content);
+        let params = serde_json::json!({
+            "content": content_hex,
+            "foretis": foretis,
+        });
+        let result = noise_json_rpc(peer, "verify", params, self.timeout()).await?;
+        let valid = result.get("valid")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        Ok(valid)
+    }
+
+    async fn calendar_slice_remote(&self, start: u64, count: u64) -> Result<Vec<TickRecord>, ForetiasError> {
+        let Some(peer) = self.primary_peer() else {
+            return Err(ForetiasError::Network("no peer configured".into()));
+        };
+        let params = serde_json::json!({
+            "cal_tick_start": start,
+            "count": count,
+        });
+        let result = noise_json_rpc(peer, "get_calendar_slice", params, self.timeout()).await?;
+        let records: Vec<TickRecord> = serde_json::from_value(result)
+            .map_err(|e| ForetiasError::Network(format!("calendar slice deserialization failed: {}", e)))?;
+        Ok(records)
+    }
+
+    fn client_echo() -> String {
+        let now_ns = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos() as u64;
+        format!("UE+{}ns", now_ns)
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct VerificationReport {
+    pub verified: bool,
+    pub tick_number: u64,
+    pub calendar_records: Vec<TickRecord>,
+    pub foretis: Foretis,
+    pub method: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn foretias_new_creates_valid_client() {
+        let client = Foretias::new("test-client".into(), None).unwrap();
+        assert_eq!(client.level(), ClientLevel::Standalone);
+        assert!(!client.status().is_dormant);
+        assert_eq!(client.status().peer_count, 0);
+        assert!(!client.tbid().is_empty());
+        assert!(!client.tbn().is_empty());
+    }
+
+    #[test]
+    fn foretias_stamp_produces_valid_foretis() {
+        let client = Foretias::new("stamp-test".into(), None).unwrap();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let foretis = rt.block_on(async {
+            client.stamp(b"hello world", "test-echo".into()).await.unwrap()
+        });
+        assert_eq!(foretis.tick_number, 1);
+        assert_eq!(foretis.echo, "test-echo");
+        assert!(!foretis.tbn.is_empty());
+        assert!(!foretis.content_hash.is_empty());
+        assert!(!foretis.signature.is_empty());
+    }
+
+    #[test]
+    fn foretias_stamp_verify_roundtrip() {
+        let client = Foretias::new("roundtrip-test".into(), None).unwrap();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let content = b"test content";
+            let foretis = client.stamp(content, "echo".into()).await.unwrap();
+            let verified = client.verify(content, &foretis).await.unwrap();
+            assert!(verified, "valid stamp should verify successfully");
+        });
+    }
+
+    #[test]
+    fn foretias_wrong_content_fails_verification() {
+        let client = Foretias::new("verify-test".into(), None).unwrap();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let foretis = client.stamp(b"original", "echo".into()).await.unwrap();
+            let verified = client.verify(b"tampered", &foretis).await.unwrap();
+            assert!(!verified, "wrong content should fail verification");
+        });
+    }
+
+    #[test]
+    fn foretias_multiple_stamps_distinct_ticks() {
+        let client = Foretias::new("multi-stamp".into(), None).unwrap();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let f1 = client.stamp(b"first", "echo1".into()).await.unwrap();
+            let f2 = client.stamp(b"second", "echo2".into()).await.unwrap();
+            assert_ne!(f1.content_hash, f2.content_hash);
+            assert_eq!(f1.echo, "echo1");
+            assert_eq!(f2.echo, "echo2");
+        });
+    }
+
+    #[test]
+    fn foretias_calendar_reflects_stamps() {
+        let client = Foretias::new("calendar-test".into(), None).unwrap();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            client.stamp(b"a", "e1".into()).await.unwrap();
+            client.stamp(b"b", "e2".into()).await.unwrap();
+            let records = client.calendar_slice(0, 10).await.unwrap();
+            assert!(!records.is_empty());
+        });
+    }
+
+    #[test]
+    fn foretias_identity_accessors() {
+        let client = Foretias::new("identity-test".into(), None).unwrap();
+        assert!(!client.tbid().is_empty());
+        assert!(!client.tbn().is_empty());
+        let _ = client.public_key();
+    }
+
+    #[test]
+    fn foretias_persistence_roundtrip() {
+        let path = PathBuf::from("/tmp/foretias-thinclient-persist-test.json");
+        let persist_dir = path.parent().unwrap();
+        std::fs::create_dir_all(persist_dir).ok();
+        let client = Foretias::new("persist-test".into(), Some(path.clone())).unwrap();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            client.stamp(b"persist me", "echo".into()).await.unwrap();
+        });
+        assert!(path.exists(), "calendar file should be persisted");
+        let loaded = Foretias::from_persist(path.clone()).unwrap();
+        assert!(loaded.status().is_dormant);
+        assert_eq!(loaded.level(), ClientLevel::Standalone);
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn foretias_dormant_cannot_stamp() {
+        let path = PathBuf::from("/tmp/foretias-thinclient-dormant-test.json");
+        let client = Foretias::new("dormant-source".into(), Some(path.clone())).unwrap();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            client.stamp(b"before dormant", "echo".into()).await.unwrap();
+        });
+        let dormant = Foretias::from_persist(path.clone()).unwrap();
+        assert!(dormant.status().is_dormant);
+        let result = rt.block_on(async {
+            dormant.stamp(b"should fail", "echo".into()).await
+        });
+        assert!(matches!(result, Err(ForetiasError::Dormant(_))));
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn foretias_foretis_serialization_roundtrip() {
+        let client = Foretias::new("serialize-test".into(), None).unwrap();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let foretis = client.stamp(b"serialize me", "echo".into()).await.unwrap();
+            let json = serde_json::to_string(&foretis).unwrap();
+            let deserialized: Foretis = serde_json::from_str(&json).unwrap();
+            assert_eq!(foretis.tick_number, deserialized.tick_number);
+            assert_eq!(foretis.content_hash, deserialized.content_hash);
+            assert_eq!(foretis.signature, deserialized.signature);
+            assert_eq!(foretis.tbid, deserialized.tbid);
+            assert_eq!(foretis.echo, deserialized.echo);
+        });
+    }
+}
