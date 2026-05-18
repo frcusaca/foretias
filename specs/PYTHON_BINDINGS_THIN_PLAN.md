@@ -1,5 +1,7 @@
 # Python Bindings Thin Wrapper — Implementation Plan
 
+- [x] backburnered
+
 Corresponding spec: `PYTHON_BINDINGS_THIN_SPEC.md`
 
 ## Pre-condition

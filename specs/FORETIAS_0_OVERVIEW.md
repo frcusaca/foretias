@@ -16,7 +16,7 @@
 
 **Before writing any code, AI Coding Specialist MUST:**
 
-1. **Read `foretias-v1.md`** in the project root (the Foretias v1 Product and Technical Specification). This defines Time Being, Tick, Calendar, Chronomatter, Foretis, and TimeFamily.
+1. **Read `foretias-v1.md`** in the project root (the Foretias v1 Product and Technical Specification). This defines Time Being, Chronon, Calendar, Chronomatter, Foretis, and TimeFamily.
 
 2. **Read this document completely.** It defines the cross-cutting invariants and the milestone roadmap.
 
@@ -52,7 +52,7 @@ The existing Python prototype's "dormant" state (load calendar from disk, verify
 
 If two running entities ever hold the same `tbid`/PeerID (near-impossible under good RNG, possible under VM-clone / RNG-failure), both terminate.
 
-**"Terminate" means:** Becomes dormant--answers requests but do not stamp or create new ticks. The dormant agent always will flag in it's response that the responding time agent is dormant.
+**"Terminate" means:** Becomes dormant--answers requests but do not stamp or create new chronons. The dormant agent always will flag in it's response that the responding time agent is dormant.
 
 Detection uses signed heartbeats (see `FORETIAS_P2P_SPEC.md` Part 10). Escalation to the liege is stubbed as `mail_liege("help")` — liege infrastructure comes from FOSITAS application logic (stable-marriage matching between peers).
 
@@ -141,13 +141,13 @@ Existing Python prototype uses Ed25519 throughout. This is preserved. P-256 supp
 
 The existing Python prototype defines:
 
-- **Tick semantics** (forward_foretis, backward_foretis, auto-attestation)
-- **Foretis format** (tick_number, content_hash, signature, tbid, echo, tbn)
+- **Chronon semantics** (forward_foretis, backward_foretis, auto-attestation)
+- **Foretis format** (chronon_number, content_hash, signature, tbid, echo, tbn)
 - **Calendar structure** (append-only, integrity check via `_verify_pair`)
 - **TimeFamily orchestration** (Chronomatter + Calendar)
 - **Verification flow**
 
-**AI Coding Specialist must preserve all of these semantics exactly.** Do not redesign them. The Rust/C11 work in `FORETIAS_MVP_SPEC.md` is infrastructure — it replaces the crypto primitive layer and adds the networking/P2P layers, but the Foretias tick/foretis/calendar semantics are unchanged.
+**AI Coding Specialist must preserve all of these semantics exactly.** Do not redesign them. The Rust/C11 work in `FORETIAS_MVP_SPEC.md` is infrastructure — it replaces the crypto primitive layer and adds the networking/P2P layers, but the Foretias chronon/foretis/calendar semantics are unchanged.
 
 ---
 
@@ -221,7 +221,7 @@ foretias/                                  EXISTING — Python package root
 │   │       │
 │   │       ├── foretias/                  Foretias domain types — bridge to Python
 │   │       │   ├── mod.rs
-│   │       │   ├── tick.rs               TickRecord, stamp, tick, verify
+│   │       │   ├── tick.rs               ChrononRecord, stamp, tick, verify
 │   │       │   ├── foretis.rs             Foretis type
 │   │       │   ├── calendar.rs           Calendar (plaintext v0.1; encrypted v0.7+)
 │   │       │   └── timefamily.rs         TimeFamily orchestrator (Rust side)
@@ -324,7 +324,7 @@ foretias/                                  EXISTING — Python package root
 1. **Time Family Server Process.** Runs a Foretias `TimeFamily` in a standalone process, listens on a local TCP ports, answering to JSON-RPC 2.0 requests:
    - `stamp(content_bytes) -> StampResponse`
    - `verify(content_bytes, Foretis) -> VerifyResponse`
-   - `get_calendar_slice(cal_tbid, cal_tick_start, count) -> [TickRecord,TickRecord]` # Recall this can return 1 or two tick records depending on whether cal_tick_start's chronon duration has elapsed or not.
+   - `get_calendar_slice(cal_tbid, cal_tick_start, count) -> [ChrononRecord,ChrononRecord]` # Recall this can return 1 or two chronon records depending on whether cal_tick_start's chronon duration has elapsed or not.
 
 2. ** Rust UI ** 
    - CLI server: `foretias serve` reading configurations from a configurable path such as `/.config/foretias/foretias.settings.json` port, version, various default configurations will be written to this configuration file.
@@ -383,7 +383,7 @@ The existing Python prototype conflates several concerns that we need to separat
 | `Calendar`                 | Stays — gains encrypted-JSONL persistence option | Old plaintext JSON supported for back-compat |
 | `_timebeing.py` pure functions | Stays — but calls crypto-server for ops    | Pure functional signatures preserved          |
 | `crypto.py`                | Becomes a thin wrapper over `foretias_p2p`      | Directly imports the Rust crypto-server       |
-| `models.py` (TickRecord, Foretis) | Stays                                     | Binary layout matches Rust-side types         |
+| `models.py` (ChrononRecord, Foretis) | Stays                                     | Binary layout matches Rust-side types         |
 | Persistence                | Encrypted JSONL in `calendar_store/` (v0.7+)    | Old path kept as a compat shim                |
 | Identity (`tbid`)          | Generated by CryptoServer on startup           | No longer accepts user-supplied tbid in prod  |
 
@@ -419,8 +419,8 @@ Sub-milestones (see Part 2 for detailed acceptance criteria; full implementation
 
 - **v0.1.1** — Review existing Python code; confirm all existing Python tests pass as-is. No new code.
 - **v0.1.2** — Extract core functional behavior into C11 under `foretias/p2p/core/`. Skeleton with CMakeLists.txt, then Ed25519 + P-256 identity/signing, SHA-256 + BLAKE3 hashing, Noise_XX (both curves), Merkle, FROST, nullifier, RNG, memzero, legacy MD5/SHA-1 with warning banners. Every test in `ctest` passes.
-- **v0.1.3** — Implement time-being and time-family persistence and mutable logic in Rust under `foretias/p2p/node/src/`: `Cargo.toml` + `build.rs` compile the C11 core; safe Rust wrappers with `Drop` impls; `SoftwareCryptoServer` implementing the `CryptoServer` trait; Rust `TickRecord` / `Foretis` / `Calendar` / `TimeFamily` mirroring Python semantics. Cross-verification test: Python stamp → Rust verify and Rust stamp → Python verify.
-- **v0.1.4** — Implement `TimeFamilyServer` application with Rust CLI: `foretias serve` (reads `~/.config/foretias/foretias.settings.json`), `foretias stamp`, `foretias verify`. JSON-RPC 2.0 surface: `stamp(content) -> StampResponse`, `verify(content, Foretis) -> VerifyResponse`, `get_calendar_slice(cal_tbid, cal_tick_start, count) -> [TickRecord, TickRecord]`. Each client invocation is a fresh, single-query time being; client receives time-family contact info up front (pre-DHT). Responses include a `dormant` flag per Part 0.2.
+- **v0.1.3** — Implement time-being and time-family persistence and mutable logic in Rust under `foretias/p2p/node/src/`: `Cargo.toml` + `build.rs` compile the C11 core; safe Rust wrappers with `Drop` impls; `SoftwareCryptoServer` implementing the `CryptoServer` trait; Rust `ChrononRecord` / `Foretis` / `Calendar` / `TimeFamily` mirroring Python semantics. Cross-verification test: Python stamp → Rust verify and Rust stamp → Python verify.
+- **v0.1.4** — Implement `TimeFamilyServer` application with Rust CLI: `foretias serve` (reads `~/.config/foretias/foretias.settings.json`), `foretias stamp`, `foretias verify`. JSON-RPC 2.0 surface: `stamp(content) -> StampResponse`, `verify(content, Foretis) -> VerifyResponse`, `get_calendar_slice(cal_tbid, cal_tick_start, count) -> [ChrononRecord, ChrononRecord]`. Each client invocation is a fresh, single-query time being; client receives time-family contact info up front (pre-DHT). Responses include a `dormant` flag per Part 0.2.
 - **v0.1.5** — Test the Rust CLI: 3-process integration test (server + stamp client + verify client). Replicate the unit-test surface as integration sanity tests on the same machine.
 - **v0.1.6** — Implement the Python CLI mirroring the Rust one, calling the Rust `foretias_p2p` crate through PyO3 (via maturin). `FORETIAS_USE_NATIVE=1` switches the existing `foretias.TimeFamily` Python API to delegate to the native crate.
 - **v0.1.7** — Test the Python CLI: replicate v0.1.5's 3-process integration test through the Python CLI; run the existing Python unit-test suite under both pure-Python and native modes.
@@ -635,7 +635,7 @@ clean:
 
 6. **Ask about human decision points.** The `@human` comments in this doc flag decisions that need user input. Do not guess at those; ask.
 
-7. **Use the existing Foretias terminology.** TimeBeing, TimeFamily, Chronomatter, Calendar, Foretis, tick. Do not invent new vocabulary.
+7. **Use the existing Foretias terminology.** TimeBeing, TimeFamily, Chronomatter, Calendar, Foretis, chronon. Do not invent new vocabulary.
 
 8. **Feature flags for custom plugins.** All custom-plugin code must be behind cargo features and compile-gated. The software backend always compiles.
 

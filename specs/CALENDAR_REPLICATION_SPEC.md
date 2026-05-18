@@ -8,10 +8,10 @@
 
 ## 1. Overview
 
-The calendar replication service enables Time Beings to share calendar data (TickRecords) across peers. Three distinct features compose this service:
+The calendar replication service enables Time Beings to share calendar data (ChrononRecords) across peers. Three distinct features compose this service:
 
 1. **Time Family Stamp Routing** — Ask any peer in the time family to stamp content; use DHT to locate the owner when calendar data is missing.
-2. **One-Way Calendar Mirror** — Request another calendar to ship and continuously mirror its TickRecords.
+2. **One-Way Calendar Mirror** — Request another calendar to ship and continuously mirror its ChrononRecords.
 3. **Mutual Calendar Mirroring** — Two calendars actively maintain mirrored copies of each other's data with bidirectional correctness guarantees.
 
 All replication uses **PtP JSON-RPC connections** over the existing `PeerTransport` layer. No new transport protocol is introduced.
@@ -25,10 +25,10 @@ All replication uses **PtP JSON-RPC connections** over the existing `PeerTranspo
 | **Source Calendar** | The calendar whose data is being mirrored (the "original") |
 | **Mirror Calendar** | The calendar that stores a replicated copy |
 | **Mirrored TBID** | A TBID whose calendar data is stored as a mirror (not the mirror calendar's own TBID) |
-| **Tick Count** | Total number of TickRecords in a calendar |
-| **Hash Sanity** | Fast completeness check: SHA-256 of concatenated tick numbers |
+| **Chronon Count** | Total number of ChrononRecords in a calendar |
+| **Hash Sanity** | Fast completeness check: SHA-256 of concatenated chronon numbers |
 | **Catchup** | Initial bulk transfer to bring a mirror up to date |
-| **Stream** | Continuous delta delivery of new ticks after catchup |
+| **Stream** | Continuous delta delivery of new chronons after catchup |
 
 ---
 
@@ -84,7 +84,7 @@ A Time Being wants to stamp content but may not have the target TBID's calendar 
 
 ### 4.1 Problem
 
-A calendar wants to obtain a complete copy of another calendar's TickRecords for local caching (accelerated verification, redundancy).
+A calendar wants to obtain a complete copy of another calendar's ChrononRecords for local caching (accelerated verification, redundancy).
 
 ### 4.2 Mirror Acceptance Policy
 
@@ -93,11 +93,11 @@ A calendar wants to obtain a complete copy of another calendar's TickRecords for
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `max_mirrored_tbids` | 64 | Maximum distinct TBIDs this calendar will mirror |
-| `max_mirror_ticks_per_tbid` | 100000 | Maximum ticks stored per mirrored TBID |
+| `max_mirror_chrons_per_tbid` | 100000 | Maximum chronons stored per mirrored TBID |
 
 A mirror request is accepted if:
 - `mirrored_tbids.len() < max_mirrored_tbids`
-- Total mirrored ticks + requested calendar tick count < some global cap
+- Total mirrored chronons + requested calendar chronon count < some global cap
 
 **Reject otherwise** with `{"error": "mirror_limit_exceeded"}`.
 
@@ -114,42 +114,42 @@ Source → Mirror: mirror_reject { reason }
 
 **`hash_sanity` computation**:
 ```
-SHA-256( tick_number_1 || tick_number_2 || ... || tick_number_n )
+SHA-256( chronon_number_1 || chronon_number_2 || ... || chronon_number_n )
 ```
-where `||` is byte concatenation of each tick_number as big-endian u64.
+where `||` is byte concatenation of each chronon_number as big-endian u64.
 
-This allows the mirror to verify completeness after catchup without fetching every tick's full signature.
+This allows the mirror to verify completeness after catchup without fetching every chronon's full signature.
 
 #### Phase 2: Initial Ship (Catchup)
 
 Source ships the full calendar in batches:
 
 ```
-Source → Mirror: ship_batch { start_tick, records: [TickRecord] }
+Source → Mirror: ship_batch { start_tick, records: [ChrononRecord] }
    ... (repeat until complete)
 Mirror → Source: ship_ack { confirmed_up_to_tick }
 ```
 
-**Batch size**: Configurable, default 1000 TickRecords per batch.
+**Batch size**: Configurable, default 1000 ChrononRecords per batch.
 
 **Verification during catchup**:
-- Mirror verifies `verify_pair()` on each consecutive tick pair from the source calendar
-- Mirror computes its own `hash_sanity` on received tick numbers
+- Mirror verifies `verify_pair()` on each consecutive chronon pair from the source calendar
+- Mirror computes its own `hash_sanity` on received chronon numbers
 - After all batches received, mirror compares its `hash_sanity` against the one from `mirror_accept`
 - **Mismatch → abort mirror, log `ERROR:hash_sanity_mismatch`**
 
 #### Phase 3: Stream Mode (Continuous)
 
-Once catchup completes, source pushes new ticks as they arrive:
+Once catchup completes, source pushes new chronons as they arrive:
 
 ```
-Source → Mirror: stream_tick { tick_record: TickRecord }
-Mirror → Source: stream_ack { tick_number }
+Source → Mirror: stream_tick { tick_record: ChrononRecord }
+Mirror → Source: stream_ack { chronon_number }
 ```
 
 - Uses the existing PtP connection (no new connection needed)
-- Source sends `stream_tick` whenever Chronomatter produces a new tick
-- Mirror stores tick, verifies pair, acks
+- Source sends `stream_chronon` whenever Chronomatter produces a new chronon
+- Mirror stores chronon, verifies pair, acks
 - **If ack not received within 5s → source retries once, then logs `ERROR:stream_acked_timeout`**
 
 ### 4.4 New RPC Methods
@@ -159,10 +159,10 @@ Mirror → Source: stream_ack { tick_number }
 | `mirror_request` | Mirror → Source | Request to mirror a calendar |
 | `mirror_accept` | Source → Mirror | Accept with tick_count, latest_tick, hash_sanity |
 | `mirror_reject` | Source → Mirror | Reject with reason |
-| `ship_batch` | Source → Mirror | Batch of TickRecords for catchup |
+| `ship_batch` | Source → Mirror | Batch of ChrononRecords for catchup |
 | `ship_ack` | Mirror → Source | Acknowledge received batch |
-| `stream_tick` | Source → Mirror | Single new tick (stream phase) |
-| `stream_ack` | Mirror → Source | Acknowledge streamed tick |
+| `stream_chronon` | Source → Mirror | Single new chronon (stream phase) |
+| `stream_ack` | Mirror → Source | Acknowledge streamed chronon |
 
 ### 4.5 Data Storage
 
@@ -177,8 +177,8 @@ Each mirrored calendar has its own JSONL file. The mirror calendar's `CalendarLo
 **New trait extension**:
 ```rust
 pub trait MirrorStore: Send + Sync {
-    fn get_mirrored(&self, tbid: &[u8; 16], tick_number: u64, count: usize) -> Result<Vec<TickRecord>, NodeError>;
-    fn insert_mirrored(&self, tbid: &[u8; 16], record: TickRecord) -> Result<(), NodeError>;
+    fn get_mirrored(&self, tbid: &[u8; 16], chronon_number: u64, count: usize) -> Result<Vec<ChrononRecord>, NodeError>;
+    fn insert_mirrored(&self, tbid: &[u8; 16], record: ChrononRecord) -> Result<(), NodeError>;
     fn list_mirrored_tbids(&self) -> Vec<[u8; 16]>;
     fn mirror_tick_count(&self, tbid: &[u8; 16]) -> u64;
 }
@@ -224,9 +224,9 @@ Both sides maintain correctness through periodic reconciliation:
 
 | Check | Interval | Action on Mismatch |
 |-------|----------|-------------------|
-| Tick count comparison | Every 60s | Request missing range |
+| Chronon count comparison | Every 60s | Request missing range |
 | Hash sanity spot-check | Every 300s | Full re-catchup from divergence point |
-| Random tick verification | Every 600s (1 random tick) | Re-fetch and verify_pair |
+| Random chronon verification | Every 600s (1 random chronon) | Re-fetch and verify_pair |
 
 **Reconciliation RPC**:
 ```json
@@ -255,7 +255,7 @@ Response from peer:
 
 **Reconciliation outcomes**:
 - `in_sync` → no action
-- `behind` → stream missing ticks
+- `behind` → stream missing chronons
 - `ahead` → peer will fetch from me
 - `diverged` → full re-catchup from `divergence_tick`
 
@@ -268,7 +268,7 @@ Response from peer:
 | Direction | Connection Type | Purpose |
 |-----------|----------------|---------|
 | Mirror → Source | Persistent TCP JSON-RPC | Request, catchup, stream reception, reconciliation |
-| Source → Mirror | Same connection (bidirectional) | Ship batches, stream ticks |
+| Source → Mirror | Same connection (bidirectional) | Ship batches, stream chronons |
 
 The same JSON-RPC connection handles all phases. Connection established on `mirror_request`, maintained throughout mirror lifetime.
 
@@ -302,7 +302,7 @@ All replication activity writes to per-peer log files:
 {"ts": "<ISO8601>", "level": "INFO|ERROR|WARN", "event": "mirror_request_sent", "tbid": "<hex>", "peer": "<addr>"}
 {"ts": "<ISO8601>", "level": "ERROR", "event": "hash_sanity_mismatch", "expected": "<hex>", "got": "<hex>", "tbid": "<hex>"}
 {"ts": "<ISO8601>", "level": "ERROR", "event": "connection_timeout", "peer": "<addr>", "phase": "catchup"}
-{"ts": "<ISO8601>", "level": "ERROR", "event": "verify_mismatch", "tbid": "<hex>", "tick": 12345}
+{"ts": "<ISO8601>", "level": "ERROR", "event": "verify_mismatch", "tbid": "<hex>", "chronon": 12345}
 {"ts": "<ISO8601>", "level": "ERROR", "event": "tbid_not_found_in_dht", "tbid": "<hex>"}
 {"ts": "<ISO8601>", "level": "ERROR", "event": "verify_incorrect_answer", "expected": true, "got": false, "tbid": "<hex>"}
 ```
@@ -316,7 +316,7 @@ grep "ERROR:" ~/.foretias/logs/*/replication.log | sort | uniq -c
 **Events that generate ERROR lines**:
 - Connection timeout during catchup or stream
 - Hash sanity mismatch after catchup
-- `verify_pair` failure on received tick
+- `verify_pair` failure on received chronon
 - DHT lookup returns no result for target TBID
 - Verify returns unexpected result
 - Mirror rejection (policy)
@@ -350,7 +350,7 @@ pub struct ReplicationConfig {
 | Connection drops during catchup | Retry from last `ship_ack` |
 | Connection drops during stream | Reconnect, request delta since last `stream_ack` |
 | Hash sanity mismatch | Abort mirror, remove mirrored data, log ERROR |
-| `verify_pair` failure on received tick | Reject tick, request re-send, log ERROR |
+| `verify_pair` failure on received chronon | Reject chronon, request re-send, log ERROR |
 | Peer unreachable for 5 reconciliation cycles | Mark mirror stale, log ERROR, do not auto-retry |
 | Mirror limit exceeded | Reject request, return `mirror_reject` |
 

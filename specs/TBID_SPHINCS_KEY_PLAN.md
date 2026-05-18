@@ -1,11 +1,11 @@
 # TBID as Dual-Key Identity (Ed25519 + SLH-DSA-SHA2-256f) — Implementation Plan
 
 **Parent SPEC:** `TBID_SPHINCS_KEY_SPEC.md`
-**Status:** Plan — ready for implementation
-**Date:** 2026-05-08
+**Status:** Completed — merged to alpha (2026-05-10)
+**Date:** 2026-05-08 (draft) / 2026-05-10 (merged)
 **Scope:** Change `Tbid` from `[u8; 16]` to OOP struct (96B), generate from dual-key keypair, sign genesis tick
-**Worktree:** `FULL_WORKTREE_PATH=${HOME}/tmp/foretias-worktrees/TBID_SPHINCS_KEY_3580`
-**Branch:** `tbid-dual-key-v1`
+**Worktree:** `${HOME}/tmp/foretias-worktrees/TBID_SPHINCS_KEY_3580` (deleted after merge)
+**Branch:** `tbid-dual-key-v1` (merged into mvp, then alpha)
 
 ---
 
@@ -202,16 +202,12 @@ After Task 1.1, `cargo check` will list every file/line that needs updating. Fix
 
 ---
 
-## Phase 4 — PyO3 Bindings & Test Fixtures
+## Phase 4 — Test Fixtures
 
-**Goal:** Update all language bindings and test data.
+**Goal:** Update test data. Python/Java bindings skipped — backburnered per `SCOPE_REDUCTION_SPEC`.
 
-### Task 4.1 — Update PyO3 Python Bindings
-- **File:** `foretias-python/src/lib.rs`
-- `PyTimeFamily.tbid` → use `Tbid` struct (serializes to dict or hex string)
-- `get_tbid()` validation → "tbid must be 96 bytes"
-- Generation → dual-key keypair
-- **Verification:** `cargo test -p foretias-python` passes
+### Task 4.1 — [SKIPPED] Update PyO3 Python Bindings
+- **Reason:** `foretias-python` backburnered per `SCOPE_REDUCTION_SPEC`. Reintroduce when Python bindings are restored.
 
 ### Task 4.2 — Update Rust Test Fixtures
 - **Files:** All test modules with TBID literals
@@ -219,16 +215,11 @@ After Task 1.1, `cargo check` will list every file/line that needs updating. Fix
 - Consider helper: `fn test_tbid() -> Tbid { Tbid { ed25519_pub: [0xAB; 32], slh_dsa_pub: [0xAB; 64] } }`
 - **Verification:** `cargo test --workspace` — all tests pass
 
-### Task 4.3 — Update Python Shim Tests
-- **File:** `tests/test_shim.py`
-- Update any TBID size assertions
-- **Verification:** `pytest tests/ -v` — 25 pass
+### Task 4.3 — [SKIPPED] Update Python Shim Tests
+- **Reason:** `tests/test_shim.py` backburnered per `SCOPE_REDUCTION_SPEC`.
 
-### Task 4.4 — Update Java Bindings
-- **Files:** `foretias-java/src/main/java/foretias/Crypto.java`, `Cli.java`
-- `generateTbid()` → 96 bytes
-- Help text → "96-byte TBID (hex)"
-- **Verification:** `./build.sh` + `IntegrationTest` passes
+### Task 4.4 — [SKIPPED] Update Java Bindings
+- **Reason:** `foretias-java` backburnered per `SCOPE_REDUCTION_SPEC`. Reintroduce when Java bindings are restored.
 
 ---
 
@@ -244,13 +235,11 @@ After Task 1.1, `cargo check` will list every file/line that needs updating. Fix
 - **Command:** `cd p2p && cargo test --workspace`
 - **Verification:** 0 failures
 
-### Task 5.3 — Python Shim Test
-- **Command:** `cd /home/hcbusy/webhash/foretias && python -m pytest tests/ -v`
-- **Verification:** 25 pass
+### Task 5.3 — [SKIPPED] Python Shim Test
+- **Reason:** `tests/test_shim.py` backburnered per `SCOPE_REDUCTION_SPEC`.
 
-### Task 5.4 — Python Bindings Test
-- **Command:** `cd p2p/foretias-python && pytest tests/python/ -v`
-- **Verification:** All pass
+### Task 5.4 — [SKIPPED] Python Bindings Test
+- **Reason:** `foretias-python` backburnered per `SCOPE_REDUCTION_SPEC`.
 
 ### Task 5.5 — CI Pipeline Update
 - **File:** `.github/workflows/ci.yml`
@@ -288,15 +277,15 @@ Phase 3 — Communerd & Calendar Upgrades
 [x](2026-05-10 13:44) M17 Calendar module updated
 
 Phase 4 — Bindings & Test Fixtures
-[x](2026-05-10 13:44) M18 PyO3 bindings updated
+[x](2026-05-10 13:44) M18 PyO3 bindings updated — [SKIPPED: backburnered per SCOPE_REDUCTION_SPEC]
 [x](2026-05-10 13:44) M19 Rust test fixtures updated
-[x](2026-05-10 13:44) M20 Python shim tests updated
-[x](2026-05-10 13:44) M21 Java bindings updated
+[x](2026-05-10 13:44) M20 Python shim tests updated — [SKIPPED: backburnered per SCOPE_REDUCTION_SPEC]
+[x](2026-05-10 13:44) M21 Java bindings updated — [SKIPPED: backburnered per SCOPE_REDUCTION_SPEC]
 
 Phase 5 — Integration & CI
 [x](2026-05-10 13:44) M22 C11 tests pass (including test_tbid.c)
 [x](2026-05-10 13:44) M23 cargo test --workspace passes
-[x](2026-05-10 13:44) M24 pytest tests/ passes (25 tests)
+[x](2026-05-10 13:44) M24 pytest tests/ passes (25 tests) — [SKIPPED: backburnered per SCOPE_REDUCTION_SPEC]
 [x](2026-05-10 13:44) M25 CI pipeline green
 [x](2026-05-10 13:44) M26 Merge tbid-dual-key-v1 to alpha
 ```

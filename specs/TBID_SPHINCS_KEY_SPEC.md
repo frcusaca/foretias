@@ -1,8 +1,8 @@
 # TBID as Dual-Key Identity (Ed25519 + SLH-DSA-SHA2-256f) — Specification
 
-**Version:** v0.3
-**Status:** Draft — ready for implementation
-**Date:** 2026-05-08
+**Version:** v0.4
+**Status:** Completed — merged to alpha (2026-05-10)
+**Date:** 2026-05-08 (draft) / 2026-05-10 (merged)
 **Prerequisites:** Ed25519 via libsodium (C11), SLH-DSA-SHA2-256f via liboqs (`SPHINCS+-SHA2-256f-simple`)
 
 ---
@@ -429,8 +429,8 @@ When nodes discover each other via DHT, they exchange `tb_version` as part of `P
 | DHT keys | Longer hex path (192 chars) | No (no length limit) |
 | `tbid_handshake.rs` | OOP struct replaces `[u8; 16]` | No (internal protocol) |
 | `auto_attestation_blob` | Uses tbid as hex string | No (String, length agnostic) |
-| PyO3 bindings | `PyTimeFamily.tbid` struct change | Yes (recompile) |
-| Java bindings | `generateTbid()` 16B→96B | Yes (recompile) |
+| PyO3 bindings | [SKIPPED — backburnered per SCOPE_REDUCTION_SPEC] | N/A |
+| Java bindings | [SKIPPED — backburnered per SCOPE_REDUCTION_SPEC] | N/A |
 | Test fixtures | All TBID literals need update | No (tests update) |
 | Persisted calendars | JSON has old tbid format | Yes (must discard) |
 | C11 `FORETIAS_SIG_MAX_SIG_BYTES` | 8192 → 65536 | Yes (buffer sizes) |
@@ -444,10 +444,9 @@ This is a **v0.2 breaking change**. No backward compatibility is maintained:
 
 1. All existing persisted calendars are discarded (they used 16-byte random TBIDs)
 2. All DHT records are re-registered (new TBID keys)
-3. All Python/Java bindings are recompiled (new TBID sizes)
-4. The `Tbid` OOP struct is the single source of truth — all hardcoded `[u8; 16]` TBID sites are replaced
-5. `tb_version` defaults to 1 in all new configurations
-6. C11 `FORETIAS_SIG_MAX_SIG_BYTES` bumped to 65536
+3. The `Tbid` OOP struct is the single source of truth — all hardcoded `[u8; 16]` TBID sites are replaced
+4. `tb_version` defaults to 1 in all new configurations
+5. C11 `FORETIAS_SIG_MAX_SIG_BYTES` bumped to 65536
 
 **Calendar and Communerd share the same TBID.** Both use the `Tbid` struct from `core-engine/src/foretias/types.rs`. When the type changes, both are upgraded simultaneously.
 

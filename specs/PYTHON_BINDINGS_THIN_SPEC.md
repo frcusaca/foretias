@@ -1,5 +1,7 @@
 # Python Bindings Thin Wrapper Specification
 
+- [x] backburnered
+
 ## Purpose
 
 The Python bindings (`foretias-p2p` / `foretias-python`) must be a **zero-logic thin wrapper** around the Rust library. Python code performs **no** protocol work, **no** crypto, **no** network I/O, **no** serialization, and **no** server logic. Every operation delegates directly to the Rust implementation via PyO3 FFI.

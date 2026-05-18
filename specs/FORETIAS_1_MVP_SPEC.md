@@ -15,7 +15,7 @@
 
 Before touching any file in this document:
 
-1. Read `foretias-v1.md` — defines TimeBeing, Tick, Calendar, Chronomatter, Foretis, TimeFamily.
+1. Read `foretias-v1.md` — defines TimeBeing, Chronon, Calendar, Chronomatter, Foretis, TimeFamily.
 2. Read `FORETIAS_OVERVIEW.md` end to end — Parts 0 (invariants), 1 (project structure), 2 (MVP target), 3 (mapping), 14 (milestones).
 3. Read this document end to end.
 4. Scan the existing Python prototype under `foretias/` for current code shape.
@@ -750,7 +750,7 @@ pub fn new_software(curve: ForetiasCurve) -> Result<Box<dyn CryptoServer>, Crypt
 
 ## PART 7 — FORETIAS DOMAIN TYPES IN RUST
 
-These mirror the existing Python types. They exist to let the Rust side carry TickRecord / Foretis / Calendar values natively and to let the Python side either use the Rust types (via PyO3) or keep using the existing pure-Python implementation.
+These mirror the existing Python types. They exist to let the Rust side carry ChrononRecord / Foretis / Calendar values natively and to let the Python side either use the Rust types (via PyO3) or keep using the existing pure-Python implementation.
 
 ### 7.1 `src/foretias/tick.rs`
 
@@ -759,8 +759,8 @@ use serde::{Deserialize, Serialize};
 use crate::core::bindings::*;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TickRecord {
-    pub tick_number:     u64,       // nanoseconds since Unix epoch
+pub struct ChrononRecord {
+    pub chronon_number:     u64,       // nanoseconds since Unix epoch
     pub public_key:      Vec<u8>,   // hex-decoded
     pub forward_foretis:  Vec<u8>,
     pub backward_foretis: Vec<u8>,
@@ -768,7 +768,7 @@ pub struct TickRecord {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Foretis {
-    pub tick_number:     u64,
+    pub chronon_number:     u64,
     pub content_hash:    [u8; 32], // SHA-256
     pub signature:       [u8; 64], // Ed25519 or P-256
     pub tbid:            [u8; 16], // UUID v4 bytes
@@ -779,7 +779,7 @@ pub struct Foretis {
 pub fn stamp(
     server: &dyn CryptoServer,
     tbid:   &[u8; 16],
-    tick_number: u64,
+    chronon_number: u64,
     content: &[u8],
     echo:    &str,
     tbn:     &str,
@@ -787,14 +787,14 @@ pub fn stamp(
     // Mirrors the existing _stamp() in foretias/_timebeing.py
     let mut sig_input = Vec::with_capacity(16 + 8 + content.len());
     sig_input.extend_from_slice(tbid);
-    sig_input.extend_from_slice(&tick_number.to_be_bytes());
+    sig_input.extend_from_slice(&chronon_number.to_be_bytes());
     sig_input.extend_from_slice(content);
 
     let sig = server.sign(&sig_input)?;
     let content_hash = server.sha256(content)?;
 
     Ok(Foretis {
-        tick_number,
+        chronon_number,
         content_hash: content_hash.bytes,
         signature:    sig.bytes,
         tbid:         *tbid,
@@ -817,14 +817,14 @@ pub fn verify(
         return Ok(false);
     }
 
-    // 2. Look up the public key at this tick
-    let records = calendar.get(foretis.tick_number, 1)?;
-    let rec = records.first().ok_or(NodeError::NotFound("tick".into()))?;
+    // 2. Look up the public key at this chronon
+    let records = calendar.get(foretis.chronon_number, 1)?;
+    let rec = records.first().ok_or(NodeError::NotFound("chronon".into()))?;
 
     // 3. Reconstruct signature input
     let mut sig_input = Vec::new();
     sig_input.extend_from_slice(&foretis.tbid);
-    sig_input.extend_from_slice(&foretis.tick_number.to_be_bytes());
+    sig_input.extend_from_slice(&foretis.chronon_number.to_be_bytes());
     sig_input.extend_from_slice(content);
 
     // 4. Verify — assume Ed25519 for now; P-256 path when curve stored in calendar
@@ -838,7 +838,7 @@ pub fn verify(
 }
 
 pub trait CalendarLookup: Send + Sync {
-    fn get(&self, tick_number: u64, count: usize) -> Result<Vec<TickRecord>, NodeError>;
+    fn get(&self, chronon_number: u64, count: usize) -> Result<Vec<ChrononRecord>, NodeError>;
     fn latest(&self) -> Option<u64>;
 }
 ```
@@ -846,12 +846,12 @@ pub trait CalendarLookup: Send + Sync {
 ### 7.2 `src/foretias/calendar.rs`
 
 ```rust
-use super::tick::{TickRecord, CalendarLookup};
+use super::tick::{ChrononRecord, CalendarLookup};
 
 pub struct Calendar {
     tbid:        [u8; 16],
     stamp_tbid:  [u8; 16],
-    ticks:       Vec<TickRecord>,
+    ticks:       Vec<ChrononRecord>,
 }
 
 impl Calendar {
@@ -859,9 +859,9 @@ impl Calendar {
         Self { tbid, stamp_tbid: tbid, ticks: Vec::new() }
     }
 
-    pub fn append(&mut self, record: TickRecord) {
-        assert!(self.ticks.last().map(|r| record.tick_number > r.tick_number).unwrap_or(true),
-                "tick numbers must be strictly ascending");
+    pub fn append(&mut self, record: ChrononRecord) {
+        assert!(self.ticks.last().map(|r| record.chronon_number > r.chronon_number).unwrap_or(true),
+                "chronon numbers must be strictly ascending");
         self.ticks.push(record);
     }
 
@@ -877,16 +877,16 @@ impl Calendar {
 }
 
 impl CalendarLookup for Calendar {
-    fn get(&self, tick_number: u64, count: usize) -> Result<Vec<TickRecord>, NodeError> {
+    fn get(&self, chronon_number: u64, count: usize) -> Result<Vec<ChrononRecord>, NodeError> {
         Ok(self.ticks.iter()
-            .filter(|t| t.tick_number >= tick_number)
+            .filter(|t| t.chronon_number >= chronon_number)
             .take(count)
             .cloned()
             .collect())
     }
 
     fn latest(&self) -> Option<u64> {
-        self.ticks.last().map(|t| t.tick_number)
+        self.ticks.last().map(|t| t.chronon_number)
     }
 }
 ```
@@ -927,14 +927,14 @@ impl TimeFamily {
     ) -> Result<Self, NodeError> {
         let tbid = *uuid::Uuid::new_v4().as_bytes();
         let tbn  = format!("Time Family {}", hex::encode(tbid));
-        // ... initialize genesis tick using server to sign ...
+        // ... initialize genesis chronon using server to sign ...
         // ... spawn ticker thread if !serialized ...
     }
 
     pub fn stamp(&self, content: &[u8], echo: &str) -> Result<Foretis, NodeError> {
-        let tick_number = *self.current_tick.lock();
+        let chronon_number = *self.current_tick.lock();
         crate::foretias::tick::stamp(
-            self.server.as_ref(), &self.tbid, tick_number,
+            self.server.as_ref(), &self.tbid, chronon_number,
             content, echo, &self.tbn,
         )
     }
@@ -977,7 +977,7 @@ from ._foretias_p2p import (
     Node,
     CryptoServer,
     Foretis,
-    TickRecord,
+    ChrononRecord,
     Calendar,
     TimeFamily,
     NodeEvent,
@@ -986,7 +986,7 @@ from ._foretias_p2p import (
 )
 
 __all__ = [
-    "Node", "CryptoServer", "Foretis", "TickRecord", "Calendar",
+    "Node", "CryptoServer", "Foretis", "ChrononRecord", "Calendar",
     "TimeFamily", "NodeEvent", "ProbityReport", "EpochSnapshot",
 ]
 ```
@@ -998,7 +998,7 @@ Expose:
 - `CryptoServer` — construct via `CryptoServer(curve="ed25519")` or `CryptoServer.new_best_available()`
 - `TimeFamily` — Rust-side orchestrator
 - `Node` — the full P2P node
-- `Foretis`, `TickRecord` — data types
+- `Foretis`, `ChrononRecord` — data types
 - `NodeEvent` polling API
 
 Method names match the existing Python API where relevant:

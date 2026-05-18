@@ -67,7 +67,6 @@ typedef enum {
 #define FORETIAS_SIG_ID_SLH_DSA_SHA2_256F "SPHINCS+-SHA2-256f-simple"
 #define FORETIAS_KEM_ID_NOISE_XX          "Noise-XX"
 #define FORETIAS_KEM_ID_MLKEM_768         "ML-KEM-768"
-#define FORETIAS_SIG_ID_SLH_DSA_SHA2_256F "SPHINCS+-SHA2-256f-simple"
 
 /* ── Maximum PQC sizes ────────────────────────────── */
 #define FORETIAS_SIG_MAX_PUBKEY_BYTES   2048   // Dilithium3 pubkey (1952)

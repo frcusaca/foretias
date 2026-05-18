@@ -212,7 +212,7 @@ use parking_lot::RwLock;
 pub struct ProbityStore {
     // per-subject list of reports
     reports: RwLock<HashMap<String, Vec<ProbityReport>>>,
-    // computed scores, refreshed on tick
+    // computed scores, refreshed on chronon
     scores:  RwLock<HashMap<String, f32>>,
     config:  UShapeConfig,
     /// Maximum reports kept per subject to bound memory.
@@ -559,7 +559,7 @@ Each line is base64-encoded ciphertext. Ciphertext is the result of sealing a bl
 pub struct CalendarBlock {
     pub block_id:       u64,           // monotonically increasing
     pub written_at_ns:  u64,
-    pub tick_records:   Vec<TickRecord>,
+    pub tick_records:   Vec<ChrononRecord>,
     pub foretises:       Vec<Foretis>,   // Foretises issued in this block
 }
 ```

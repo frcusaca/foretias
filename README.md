@@ -157,7 +157,8 @@ The `TimeFamilyServer` holds `Arc<Chronomatter>`, `Arc<Calendar>`, and `Option<A
 
 - **C11 core** — Verified cryptographic primitives (Ed25519 via libsodium, SHA-256, BLAKE3, Noise protocol, Merkle trees, FROST)
 - **foretias-core** — Rust safe wrappers over C11 FFI (bindgen), domain types, CryptoServer trait
-- **foretias-node** — Server, CLI binary, Communerd (libp2p), calendar store, metrics
+- **foretias-client** — Thin client library (Standalone, PtP, P2P levels), Foretias OOP struct, calendar, mirror
+- **foretias-server** — Server, CLI binary, Communerd (libp2p), calendar store, metrics
 
 ## Current Features
 

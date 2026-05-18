@@ -16,7 +16,7 @@
 
 ## READING ORDER
 
-1. Read `foretias-v1.md` — defines TimeBeing, Tick, Calendar, Chronomatter, Foretis, TimeFamily.
+1. Read `foretias-v1.md` — defines TimeBeing, Chronon, Calendar, Chronomatter, Foretis, TimeFamily.
 2. Read `FORETIAS_0_OVERVIEW.md` Parts 0-3 — design invariants and project structure.
 3. Read this document end to end.
 4. Scan `p2p/core-engine/src/crypto_server/` and `p2p/core-engine/src/foretias/tick.rs` for current crypto shape.
@@ -80,7 +80,7 @@ No separate Rust binding crate. `build.rs` compiles and links liboqs alongside l
 |------|---------|
 | `SignatureAlgorithm` | Enum identifying the signing algorithm+variant |
 | `KemAlgorithm` | Enum identifying the KEM algorithm+variant |
-| `algorithm_id` | Plain-text string stored in Foretis and TickRecord |
+| `algorithm_id` | Plain-text string stored in Foretis and ChrononRecord |
 | `FORETIAS_SIG_*` | C11 enum constants for signature algorithms |
 | `FORETIAS_KEM_*` | C11 enum constants for KEM algorithms |
 
@@ -295,7 +295,7 @@ pub trait CryptoServer: Send + Sync {
         -> Result<SignatureBytes, CryptoError>;
 
     /// Verifies a signature given the algorithm ID.
-    /// The algorithm ID is carried in the Foretis/TickRecord itself.
+    /// The algorithm ID is carried in the Foretis/ChrononRecord itself.
     fn verify_with(&self,
         pub_key: &PublicKeyBytes,
         alg_id: &str,          // plain text algorithm identifier
@@ -316,7 +316,7 @@ pub trait CryptoServer: Send + Sync {
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Foretis {
-    pub tick_number: u64,
+    pub chronon_number: u64,
     pub content_hash: [u8; 32],
     /// Variable-length signature bytes (algorithm-dependent).
     pub signature: Vec<u8>,
@@ -329,15 +329,15 @@ pub struct Foretis {
 }
 ```
 
-**`TickRecord`** gains `signature_algorithm` on each record:
+**`ChrononRecord`** gains `signature_algorithm` on each record:
 
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TickRecord {
-    pub tick_number: u64,
+pub struct ChrononRecord {
+    pub chronon_number: u64,
     /// Variable-length public key (algorithm-dependent).
     pub public_key: Vec<u8>,
-    /// Plain-text algorithm identifier for this tick's key.
+    /// Plain-text algorithm identifier for this chronon's key.
     pub signature_algorithm: String,
     pub forward_foretis: Vec<u8>,
     pub backward_foretis: Vec<u8>,
@@ -352,22 +352,22 @@ pub struct TickRecord {
 ### 1.8 `stamp()` and `verify()` Function Signature Changes
 
 ```rust
-/// Stamp content under the current tick's key.
+/// Stamp content under the current chronon's key.
 pub fn stamp(
     server: &dyn CryptoServer,
     tbid: &[u8; 16],
-    tick_number: u64,
+    chronon_number: u64,
     content: &[u8],
     echo: &str,
     tbn: &str,
 ) -> Result<Foretis, NodeError> {
-    // sig_input = concat(tbid, tick_number, content) — UNCHANGED
+    // sig_input = concat(tbid, chronon_number, content) — UNCHANGED
     let signature = server.sign(&sig_input)?;
     let content_hash = server.sha256(content)?;
     let sig_alg = server.signature_algorithm().to_string(); // NEW
 
     Ok(Foretis {
-        tick_number,
+        chronon_number,
         content_hash: content_hash.bytes,
         signature: signature.bytes.to_vec(),
         signature_algorithm: sig_alg,  // NEW
@@ -384,20 +384,20 @@ pub fn verify(
 ) -> Result<bool, NodeError> {
     // ... content hash check ...
 
-    let records = calendar.get(foretis.tick_number, 1)?;
-    let rec = records.first().ok_or(NodeError::NotFound("tick"))?;
+    let records = calendar.get(foretis.chronon_number, 1)?;
+    let rec = records.first().ok_or(NodeError::NotFound("chronon"))?;
 
     // RECONCILE ALGORITHMS — NEW
     if rec.signature_algorithm != foretis.signature_algorithm {
         return Err(NodeError::AlgorithmMismatch(
-            format!("tick uses '{}' but Foretis claims '{}'",
+            format!("chronon uses '{}' but Foretis claims '{}'",
                    rec.signature_algorithm, foretis.signature_algorithm)
         ));
     }
 
     let mut sig_input = Vec::new();
     sig_input.extend_from_slice(&foretis.tbid);
-    sig_input.extend_from_slice(&foretis.tick_number.to_be_bytes());
+    sig_input.extend_from_slice(&foretis.chronon_number.to_be_bytes());
     sig_input.extend_from_slice(content);
 
     // VERIFY WITH ALGORITHM — CHANGED
@@ -429,7 +429,7 @@ pub fn new(
 ) -> Result<Self, NodeError>
 ```
 
-The algorithm is baked into every tick record and every Foretis the Chronomatter produces.
+The algorithm is baked into every chronon record and every Foretis the Chronomatter produces.
 
 ### 1.10 Family-Level Algorithm Compatibility Check
 
@@ -782,7 +782,7 @@ foretias serve --sig-algo SPHINCS+-SHA256/128s --kem-algo Noise-XX
 | 1.3 | `Cargo.toml` | Add `cmake = "0.1"` build dependency |
 | 1.4 | `types.rs` | Replace fixed-size aliases with `Vec<u8>` types |
 | 1.5 | `crypto_server/mod.rs` | Extend `CryptoServer` trait with `sign_with()`, `verify_with()`, `signature_algorithm()` |
-| 1.6 | `foretias/tick.rs` | Add `signature_algorithm: String` to `Foretis` and `TickRecord` |
+| 1.6 | `foretias/tick.rs` | Add `signature_algorithm: String` to `Foretis` and `ChrononRecord` |
 | 1.7 | `foretias/tick.rs` | Update `stamp()`, `verify()`, `verify_pair()` for algorithm-aware operations |
 | 1.8 | `config.rs` | Add `signature_algorithm` / `kem_algorithm` fields to `NodeConfig` |
 | 1.9 | `error.rs` | Add `AlgorithmMismatch` error variant |
@@ -902,9 +902,9 @@ if !Path::new("deps/liboqs").exists() {
 
 **Impact on Foretias:**
 - SPHINCS+ signatures are ~256x larger than Ed25519. Calendar storage grows accordingly.
-- SPHINCS+ signing is ~160x slower. Chronomatter tick rate unaffected (key rotation is independent of stamp latency).
+- SPHINCS+ signing is ~160x slower. Chronomatter chronon rate unaffected (key rotation is independent of stamp latency).
 - For `chronon_ns = 60s`, signing latency is negligible.
-- Calendar JSON file with SPHINCS+ will be significantly larger — plan for ~20KB per tick record.
+- Calendar JSON file with SPHINCS+ will be significantly larger — plan for ~20KB per chronon record.
 
 ---
 
@@ -938,13 +938,13 @@ impl SignatureAlgorithm {
   "tbid": "hex-encoded UUID",
   "tbn": "Time Family abc123...",
   "signature_algorithm": "SPHINCS+-SHA256/128s",
-  "ticks": [
+  "chronons": [
     {
-      "tick_number": 1712345678000000000,
+      "chronon_number": 1712345678000000000,
       "signature_algorithm": "SPHINCS+-SHA256/128s",
       "public_key": "hex-encoded 32-byte SPHINCS+ public key",
       "forward_foretis": {
-        "tick_number": ...,
+        "chronon_number": ...,
         "signature": "hex-encoded 7856-byte signature (SPHINCS+)",
         "signature_algorithm": "SPHINCS+-SHA256/128s",
         ...

@@ -16,7 +16,7 @@ All three components (Chronomatter, Calendar, Communerd) are **time beings** wit
 | Component | Owns | Intra-family Interface | Extra-family? |
 |-----------|------|----------------------|---------------|
 | **Chronomatter** (*Chronos fidelis authenticus*) | Autonomous ticking, stamping, verification | Direct method calls; Calendar calls `stamp()`, `verify()` | NO |
-| **Calendar** (*Chronos fidelis grapha*) | Calendar data, persistence (disk), mutual attestation scheduling | Direct method calls; receives tick notification from Chronomatter via callback | NO — routes through Communerd |
+| **Calendar** (*Chronos fidelis grapha*) | Calendar data, persistence (disk), mutual attestation scheduling | Direct method calls; receives chronon notification from Chronomatter via callback | NO — routes through Communerd |
 | **Communerd** | *Chronos fidelis locutus* /KAH-myuh-nerd/) All PtP & P2P communication, transport, RPC | Called by Calendar via direct method calls (`send_to_peer()`, `query_community()`) | **YES** — only component with network access |
 
 **Communerd etymology:** A Communerd is a communard of a Time Family commune where timing information is shared in communal communion between families, AND he's a nerd about communications.
@@ -30,7 +30,7 @@ Members of the same Time Family communicate via **locally specified interfaces**
 // Calendar → Chronomatter: direct method call
 let foretis = chronomatter.stamp(content, echo).await;
 
-// Chronomatter → Calendar: callback on tick advance
+// Chronomatter → Calendar: callback on chronon advance
 calendar.on_tick_advance(tick_record);
 
 // Calendar → Communerd: direct method call
@@ -41,7 +41,7 @@ let response = communerd.send_to_peer(peer_addr, rpc_call).await;
 
 **Only Communerd** has network access. All traffic to/from other Time Families flows through the local Communerd. This includes:
 - Mutual attestation stamping (Calendar calls Communerd to stamp on a peer)
-- Calendar slice queries (Calendar calls Communerd to fetch a peer's tick records)
+- Calendar slice queries (Calendar calls Communerd to fetch a peer's chronon records)
 - Community state queries (any component can ask Communerd about peer liveness, known families, etc.)
 
 ### Key Invariants
@@ -56,15 +56,15 @@ let response = communerd.send_to_peer(peer_addr, rpc_call).await;
 ### Data Flow: Mutual Attestation
 
 ```
-[Chronomatter] advances tick (autonomous timer)
+[Chronomatter] advances chronon (autonomous timer)
     ↓ calls calendar.on_tick_advance(tick_record)
-[Calendar] appends TickRecord to calendar
-    ↓ checks: tick_number % every_n == 0?
-[Calendar] serializes TickRecord → content_hex
-    ↓ forms echo = "ma:{tbid}:{tick}"
+[Calendar] appends ChrononRecord to calendar
+    ↓ checks: chronon_number % every_n == 0?
+[Calendar] serializes ChrononRecord → content_hex
+    ↓ forms echo = "ma:{tbid}:{chronon}"
 [Calendar] calls communerd.send_to_peer(peer, "/stamp", content_hex, echo)
     ↓ Communerd opens TCP → remote /stamp → returns Foretis JSON
-    ↓ Communerd opens TCP → remote /get_calendar_slice → returns attester TickRecord
+    ↓ Communerd opens TCP → remote /get_calendar_slice → returns attester ChrononRecord
 [Calendar] calls chronomatter.verify(foretis, content) → bool
     ↓ verifies: content hash, ed25519 signature, echo match
 [Calendar] stores ExternalAttestation in calendar
@@ -76,7 +76,7 @@ let response = communerd.send_to_peer(peer_addr, rpc_call).await;
 ```
 [External client] → JSON-RPC /stamp → [TimeFamily]
     → [TimeFamily] → [Chronomatter.stamp(content, echo)] → Foretis
-    → [TimeFamily] → [Calendar.append(new_tick)] (if tick advanced)
+    → [TimeFamily] → [Calendar.append(new_chronon)] (if chronon advanced)
     → [TimeFamily] → response to client
 ```
 
@@ -90,7 +90,7 @@ let response = communerd.send_to_peer(peer_addr, rpc_call).await;
 | **Q2** | Architecture | **Full decomposition.** Chronomatter, Calendar, Communerd are time beings with their own TBID. Intra-family = direct method calls. Extra-family = Communerd only. | User: "organize the responsibility of Chronos fidelias... fully separate the concerns." |
 | **Q3** | Rate limiting / version checks | **Defer to v0.5 hardening.** | Not blocking demo, spec places in v0.5. |
 | **Q4** | Atomic flush | **Fix now.** `.tmp` + `rename`. | 15 lines, no downside. |
-| **Q5** | PyO3 bindings | **Update now.** `PyExternalAttestation`, `PyTickRecord.external_attestations`. | Must keep Python tests green. |
+| **Q5** | PyO3 bindings | **Update now.** `PyExternalAttestation`, `PyChrononRecord.external_attestations`. | Must keep Python tests green. |
 | **Q6** | `inspect-attestations` CLI | **Both Rust and Python.** | Mirror existing pattern. |
 | **Q7** | Config | **Both CLI flags + JSON.** | Existing pattern. |
 | **Q8** | Intra-family communication | **Direct method calls / callbacks.** No channels, no broadcast, no message passing. | Low latency, same process, no serialization overhead. |
@@ -142,7 +142,7 @@ pub type Message = Vec<u8>;
 /// Auto-attestation nonce — 16 bytes of entropy.
 pub type AaNonce = [u8; 16];
 
-/// Tick number.
+/// Chronon number.
 pub type TickNumber = u64;
 ```
 
@@ -165,7 +165,7 @@ These are `type` aliases (zero-cost, no runtime difference). They make signature
 - `p2p/core-engine/src/foretias/callbacks.rs` — trait definitions for intra-family interfaces
 
 **Files modified:**
-- `p2p/core-engine/src/foretias/tick.rs` — add `#[serde(default)] pub external_attestations: Vec<ExternalAttestation>` to `TickRecord`
+- `p2p/core-engine/src/foretias/tick.rs` — add `#[serde(default)] pub external_attestations: Vec<ExternalAttestation>` to `ChrononRecord`
 - `p2p/core-engine/src/foretias/calendar.rs` — add `add_external_attestation(local_tick, att)` method
 - `p2p/core-engine/src/foretias/mod.rs` — re-export new types
 - `p2p/core-engine/src/error.rs` — add `TransportConnect`, `TransportTimeout`, `TransportDecode`, `AttestationVerificationFailed` variants
@@ -179,12 +179,12 @@ These are `type` aliases (zero-cost, no runtime difference). They make signature
 ```rust
 // callbacks.rs
 
-/// Called by Chronomatter when a new tick advances.
-/// Calendar implements this to receive tick notifications.
+/// Called by Chronomatter when a new chronon advances.
+/// Calendar implements this to receive chronon notifications.
 #[async_trait::async_trait]
 pub trait TickObserver: Send + Sync {
-    /// Called synchronously on each tick advance.
-    fn on_tick_advance(&self, tick_number: TickNumber, public_key: &PublicKey);
+    /// Called synchronously on each chronon advance.
+    fn on_tick_advance(&self, chronon_number: TickNumber, public_key: &PublicKey);
 }
 
 /// Stamping interface — Chronomatter implements this.
@@ -215,14 +215,14 @@ pub trait PeerMessenger: Send + Sync {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExternalAttestation {
     pub attester_tbid:        String,      // hex-encoded TBID of attesting peer
-    pub foretis:               Foretis,      // B's stamp of A's tick record
-    pub attester_tick_record: TickRecord,  // B's tick at attestation time (for offline re-verify)
+    pub foretis:               Foretis,      // B's stamp of A's chronon record
+    pub attester_chronon_record: ChrononRecord,  // B's chronon at attestation time (for offline re-verify)
     pub received_at_ns:       u64,         // wall-clock receive time
 }
 ```
 
 ```rust
-// tick.rs — add to TickRecord
+// tick.rs — add to ChrononRecord
 #[serde(default)]
 pub external_attestations: Vec<ExternalAttestation>,
 ```
@@ -256,7 +256,7 @@ pub trait PeerTransport: Send + Sync {
     async fn stamp(&self, peer: &PeerAddr, content_hex: &str, echo: &str)
         -> Result<serde_json::Value, TransportError>;
     async fn get_calendar_slice(&self, peer: &PeerAddr, tick_start: u64, count: u64)
-        -> Result<Vec<TickRecord>, TransportError>;
+        -> Result<Vec<ChrononRecord>, TransportError>;
     async fn ping(&self, peer: &PeerAddr) -> Result<(), TransportError>;
 }
 
@@ -300,9 +300,9 @@ pub enum CommunerdRequest {
     },
     GetCalendarSlice {
         peer:      PeerAddr,
-        tick:      u64,
+        chronon:      u64,
         count:     u64,
-        reply_tx:  oneshot::Sender<Result<Vec<TickRecord>, TransportError>>,
+        reply_tx:  oneshot::Sender<Result<Vec<ChrononRecord>, TransportError>>,
     },
     Ping {
         peer:     PeerAddr,
@@ -337,15 +337,15 @@ pub enum CommunerdRequest {
 pub struct Chronomatter {
     /// Chronomatter's own TBID (it's a time being)
     tbid: Tbid,
-    /// Current tick number
+    /// Current chronon number
     current_tick: AtomicU64,
-    /// Per-tick keypair (protected)
+    /// Per-chronon keypair (protected)
     keypair: Mutex<Option<(PrivKeyHandle, PublicKey)>>,
     /// TBN
     tbn: String,
     /// Crypto server
     crypto: Arc<dyn CryptoServer>,
-    /// Callback for tick advance — Calendar implements TickObserver
+    /// Callback for chronon advance — Calendar implements TickObserver
     tick_observer: Arc<dyn TickObserver>,
 }
 ```
@@ -384,18 +384,18 @@ impl Stamper for Chronomatter {
 ```
 
 **Key changes:**
-- `advance_tick()` generates new keypair, destroys old via `zeroize`, creates `TickRecord`
+- `advance_tick()` generates new keypair, destroys old via `zeroize`, creates `ChrononRecord`
 - `stamp()` delegates to existing `stamp()` in `tick.rs`
 - `verify()` delegates to existing `verify()` in `tick.rs`
 - All existing stamp/verify logic stays in `tick.rs` — Chronomatter is the caller
-- Calendar gets notified of tick advances via `TickObserver` callback, NOT broadcast channel
+- Calendar gets notified of chronon advances via `TickObserver` callback, NOT broadcast channel
 - Calendar calls `chronomatter.stamp()` / `chronomatter.verify()` directly — no channels
 
 **Phase 3 tests:**
-- `chronomatter_ticks_on_interval` — two stamps within one chronon share the same tick_number
+- `chronomatter_ticks_on_interval` — two stamps within one chronon share the same chronon_number
 - `chronomatter_stamp_direct_call` — direct method call returns Foretis
 - `chronomatter_verify_direct_call` — direct method call returns bool
-- `chronomatter_key_rotation` — keypair changes on each tick advance
+- `chronomatter_key_rotation` — keypair changes on each chronon advance
 - `chronomatter_tick_callback` — TickObserver receives notification on each advance
 
 ---
@@ -419,7 +419,7 @@ pub struct Calendar {
     /// Calendar's own TBID (it's a time being)
     tbid: Tbid,
     /// In-memory calendar behind RwLock
-    inner: RwLock<CalendarData>,  // CalendarData = { tbid, stamp_tbid, ticks: Vec<TickRecord> }
+    inner: RwLock<CalendarData>,  // CalendarData = { tbid, stamp_tbid, ticks: Vec<ChrononRecord> }
     /// Persistence path
     persist_path: PathBuf,
     /// Flush interval
@@ -437,7 +437,7 @@ pub struct Calendar {
 }
 ```
 
-**Calendar persistence task (only flush — tick handling is via callback):**
+**Calendar persistence task (only flush — chronon handling is via callback):**
 
 ```rust
 async fn run_flush(self: Arc<Self>) {
@@ -463,13 +463,13 @@ async fn run_flush(self: Arc<Self>) {
 
 ```rust
 impl TickObserver for Calendar {
-    fn on_tick_advance(&self, tick_number: TickNumber, _public_key: &PublicKey) {
-        // Check if we should mutual attest this tick
-        if tick_number > 0 && tick_number % self.config.mutual_attest_every_n == 0 {
+    fn on_tick_advance(&self, chronon_number: TickNumber, _public_key: &PublicKey) {
+        // Check if we should mutual attest this chronon
+        if chronon_number > 0 && chronon_number % self.config.mutual_attest_every_n == 0 {
             let this = self.clone();
             // Spawn a lightweight task for the async work
             tokio::spawn(async move {
-                this.execute_mutual_attest(tick_number).await;
+                this.execute_mutual_attest(chronon_number).await;
             });
         }
     }
@@ -479,13 +479,13 @@ impl TickObserver for Calendar {
 **`execute_mutual_attest` — the full flow (direct method calls, no channels):**
 
 ```rust
-async fn execute_mutual_attest(&self, tick_number: TickNumber) {
-    let tick_record = self.get_tick_record(tick_number).unwrap();
+async fn execute_mutual_attest(&self, chronon_number: TickNumber) {
+    let tick_record = self.get_tick_record(chronon_number).unwrap();
 
-    // 1. Serialize TickRecord as content
+    // 1. Serialize ChrononRecord as content
     let content = serde_json::to_vec(&tick_record).unwrap();
     let content_hex = hex::encode(&content);
-    let echo = format!("ma:{}:{}", hex::encode(&self.tbid), tick_record.tick_number);
+    let echo = format!("ma:{}:{}", hex::encode(&self.tbid), tick_record.chronon_number);
 
     // 2. Call Communerd directly (method call, no channel)
     let foretis_val = self.communerd.send_to_peer(
@@ -504,13 +504,13 @@ async fn execute_mutual_attest(&self, tick_number: TickNumber) {
         return;
     });
 
-    // 4. Fetch attester's TickRecord via Communerd
+    // 4. Fetch attester's ChrononRecord via Communerd
     let slice_val = self.communerd.send_to_peer(
         &PeerAddr { json_rpc: peer.clone() },
         "get_calendar_slice",
-        serde_json::json!({"tick_start": foretis.tick_number, "count": 1}),
+        serde_json::json!({"tick_start": foretis.chronon_number, "count": 1}),
     ).await.unwrap_or_default();
-    let attester_tr: TickRecord = /* parse from slice_val */;
+    let attester_tr: ChrononRecord = /* parse from slice_val */;
 
     // 5. Verify via Chronomatter (direct method call)
     let verified = self.chronomatter.verify(&foretis, &content).await.unwrap_or(false);
@@ -532,12 +532,12 @@ async fn execute_mutual_attest(&self, tick_number: TickNumber) {
         attester_tick_record: attester_tr,
         received_at_ns: now_ns(),
     };
-    self.add_external_attestation(tick_number, att).unwrap();
+    self.add_external_attestation(chronon_number, att).unwrap();
 }
 ```
 
 **Phase 4 tests:**
-- `calendar_add_external_attestation` — add + retrieve from specific tick
+- `calendar_add_external_attestation` — add + retrieve from specific chronon
 - `calendar_tick_observer_callback` — receives on_tick_advance, triggers scheduling
 - `mutual_attest_scheduling_respects_every_n` — only triggers on multiples of N
 - `mutual_attest_full_flow` — two in-process TimeFamily instances, mutual attest succeeds
@@ -606,7 +606,7 @@ pub struct TimeFamily {
 1. Create `Chronomatter` with `Arc<dyn TickObserver>` pointing to Calendar
 2. Create `Communerd` → spawn tokio task (liveness pings, peer pool)
 3. Create `Calendar` with `Arc<dyn Stamper>` (Chronomatter) + `Arc<dyn PeerMessenger>` (Communerd)
-4. Spawn Chronomatter's tick timer task
+4. Spawn Chronomatter's chronon timer task
 5. Spawn Calendar's flush task
 6. Return `TimeFamily` holding references to Chronomatter and Calendar
 
@@ -636,9 +636,9 @@ foretias inspect-attestations --calendar <path>
 
 **Implementation:**
 1. Load calendar JSON from path
-2. For each `TickRecord`, for each `ExternalAttestation`:
+2. For each `ChrononRecord`, for each `ExternalAttestation`:
    - Re-run verification (hash + sig + echo)
-   - Print: `tick=N attester=<tbid> attester_tick=N sig=VALID/INVALID`
+   - Print: `chronon=N attester=<tbid> attester_chronon=N sig=VALID/INVALID`
 3. Exit 0 if all valid, exit 1 if any invalid
 
 **Phase 7 tests:**
@@ -651,7 +651,7 @@ foretias inspect-attestations --calendar <path>
 ## PHASE 8: PyO3 Bindings (foretias-python)
 
 **Files modified:**
-- `p2p/foretias-python/src/lib.rs` — add `PyExternalAttestation`, expose `external_attestations` on `PyTickRecord`
+- `p2p/foretias-python/src/lib.rs` — add `PyExternalAttestation`, expose `external_attestations` on `PyChrononRecord`
 
 **New Python type:**
 ```rust
@@ -662,20 +662,20 @@ pub struct PyExternalAttestation {
     #[pyo3(get)]
     pub foretis:               PyForetis,
     #[pyo3(get)]
-    pub attester_tick_record: PyTickRecord,
+    pub attester_tick_record: PyChrononRecord,
     #[pyo3(get)]
     pub received_at_ns:       u64,
 }
 ```
 
-**Update PyTickRecord:**
+**Update PyChrononRecord:**
 ```rust
 #[pyo3(get)]
 pub external_attestations: Vec<PyExternalAttestation>,
 ```
 
 **Phase 8 tests:**
-- Python test: `PyTickRecord.external_attestations` is accessible
+- Python test: `PyChrononRecord.external_attestations` is accessible
 - Python test: `PyExternalAttestation` fields are readable
 
 ---
@@ -739,19 +739,19 @@ Phase 10 (spec & docs)
 
 ```
 [x] v0.2.0  Type aliases (Tbid, PublicKey, Signature, Digest, Message, AaNonce, TickNumber)
-[x] v0.2.1  ExternalAttestation type; TickRecord.external_attestations field
+[x] v0.2.1  ExternalAttestation type; ChrononRecord.external_attestations field
 [x] v0.2.2  Callback traits (TickObserver, PeerMessenger) — note: Stamper trait removed, Chronomatter uses direct pub fn
 [x] v0.2.3  NodeConfig: peers, mutual_attest_every_n, request_timeout_secs
 [x] v0.2.4  Communerd: transport layer, JsonRpcTransport impl (inlined in transport.rs)
 [x] v0.2.5  Communerd: peer pool, liveness ping, RPC execution
 [x] v0.2.6  Chronomatter: extraction from TimeFamilyServer (time being with TBID)
-[x] v0.2.7  Chronomatter: stamp/verify as direct method calls, tick via TickObserver callback
+[x] v0.2.7  Chronomatter: stamp/verify as direct method calls, chronon via TickObserver callback
 [x] v0.2.8  Calendar: extraction as separate component, TickObserver impl
 [x] v0.2.9  Calendar: execute_mutual_attest flow (deferred to v0.3 — Communerd handles stamp_peer directly)
 [x] v0.2.10 Atomic flush (.tmp + rename) + crash recovery
 [x] v0.2.11 TimeFamily orchestrator: Communerd wired into TimeFamilyServer via Option<Arc<Communerd>>
 [x] v0.2.12 CLI: --peer, --mutual-attest-every-chronons, inspect-attestations
-[x] v0.2.13 PyO3: PyExternalAttestation, PyTickRecord.external_attestations
+[x] v0.2.13 PyO3: PyExternalAttestation, PyChrononRecord.external_attestations
 [x] v0.2.14 Unit tests pass (107 total: 62 core + 41 node + 4 integration)
 [x] v0.2.15 Integration test: two_nodes_mutual_attest passes
 [x] v0.2.16 All v0.1 regression tests pass
@@ -785,7 +785,7 @@ Phase 10 (spec & docs)
 | Phase 5 | `a7338a3` | Atomic flush (.tmp + rename) + crash recovery |
 | Phase 6 | `45c7eaa` | Communerd orchestrator integration (Communerd struct, with_config(), liveness pings) |
 | Phase 7 | `a833b56` | CLI + config wiring (--peer, inspect-attestations subcommand) |
-| Phase 8 | `47b3412` | PyO3 bindings (PyExternalAttestation, external_attestations on PyTickRecord) |
+| Phase 8 | `47b3412` | PyO3 bindings (PyExternalAttestation, external_attestations on PyChrononRecord) |
 | Phase 9 | `9d02fd1` | Integration tests (mutual attest, unreachable peer, crash recovery) |
 
 ---
@@ -796,7 +796,7 @@ Phase 10 (spec & docs)
 |------|--------|------------|
 | Chronomatter extraction breaks existing tests | High | Phase 3 tests + immediate regression check |
 | Trait-based intra-family calls add indirection | Low | `#[inline]` on trait methods; same-process calls are cheap |
-| `TickRecord.external_attestations` breaks serde compat | High | `#[serde(default)]` — tested in Phase 1 |
+| `ChrononRecord.external_attestations` breaks serde compat | High | `#[serde(default)]` — tested in Phase 1 |
 | Calendar mutual attest flow edge cases | Medium | Phase 4 tests cover all verification failures |
 | Python binding breakage | Medium | Phase 8 tests + full Python test suite |
-| Tokio select fairness (daemon tick vs stamp requests) | Low | Chronomatter only runs timer; stamp/verify are direct calls, no select |
+| Tokio select fairness (daemon chronon vs stamp requests) | Low | Chronomatter only runs timer; stamp/verify are direct calls, no select |

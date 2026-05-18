@@ -141,7 +141,7 @@ foretias/                               # Repository root
 │                                       # Runtime dep: foretias-p2p (the Rust bindings)
 │
 ├── p2p/                                # Rust + C11 workspace root
-│   ├── Cargo.toml                      # Workspace: core-engine, foretias-node (foretias-python/foretias-java backburnered)
+│   ├── Cargo.toml                      # Workspace: core-engine, foretias-client, foretias-server (foretias-python/foretias-java backburnered)
 │   │
 │   ├── core/                           # C11 verified cryptographic primitives
 │   │   ├── include/
@@ -167,13 +167,23 @@ foretias/                               # Repository root
 │   │       ├── noise.rs                # Noise_XX handshake (Rust-side integration)
 │   │       └── error.rs                # NodeError, CryptoError
 │   │
-│   ├── foretias-node/                  # Rust crate — server + CLI binary (CLI #2)
-│   │   ├── Cargo.toml                  # foretias-node (depends on foretias-core, libp2p, liboqs via core-engine)
+│   ├── foretias-client/                # Rust crate — thin client library (CLI #2)
+│   │   ├── Cargo.toml                  # foretias-client (depends on foretias-core)
+│   │   ├── src/
+│   │   │   ├── lib.rs                  # Re-exports: foretias, calendar, config
+│   │   │   ├── foretias/               # Foretias OOP struct, ForetiasError, ForetiasStatus
+│   │   │   ├── calendar/               # Calendar, mirror, PtP calendar retrieval
+│   │   │   ├── noise_ptp.rs            # Noise_XX PtP client (Standalone/PtP/P2P levels)
+│   │   │   └── config/                 # Containment configs (StandaloneConfig < PtpConfig < P2pConfig)
+│   │   └── tests/                      # Client tests (unit, PtP integration)
+│   │
+│   ├── foretias-server/                # Rust crate — server + CLI binary
+│   │   ├── Cargo.toml                  # foretias-server (depends on foretias-core, foretias-client, libp2p)
 │   │   ├── src/
 │   │   │   ├── lib.rs                  # Re-exports: server, communerd, calendar, calendar_store, metrics, probity
-│   │   │   ├── main.rs                 # CLI #2 (Rust): "foretias" binary — serve/stamp/verify/prove-verification/inspect-attestations
+│   │   │   ├── main.rs                 # CLI (Rust): "foretias" binary — serve/stamp/verify/prove-verification/inspect-attestations
 │   │   │   ├── server/                 # TimeFamilyServer (stamp, verify, integrity_check, daemon, JSON-RPC, HTTP handlers)
-│   │   │   ├── communerd/              # P2P layer: libp2p swarm, DHT, gossipsub, peer pool, mutual attestation
+│   │   │   ├── communerd/              # P2P layer: Communerd tiers (Reader/Server/P2P), libp2p swarm, DHT, gossipsub, peer pool, mutual attestation
 │   │   │   ├── calendar/               # Calendar wrapper
 │   │   │   ├── calendar_store/         # LRU policy, encrypted JSONL persistence
 │   │   │   ├── probity/                # Probity gossip handler
@@ -191,7 +201,7 @@ foretias/                               # Repository root
 
 | # | CLI | Language | Entry | Binary/Command | Location |
 |---|-----|----------|-------|----------------|----------|
-| 1 | Rust "foretias" | Rust (native) | `p2p/foretias-node/src/main.rs` | `foretias` | p2p/ Cargo workspace |
+| 1 | Rust "foretias" | Rust (native) | `p2p/foretias-server/src/main.rs` | `foretias` | p2p/ Cargo workspace |
 
 > **Note:** Python (`foretis`) and Java CLIs are removed from active scope. See `foretias/specs/SCOPE_REDUCTION_SPEC.md` for rationale.
 
@@ -199,11 +209,11 @@ foretias/                               # Repository root
 
 ```
                     ┌─────────────────┐
-                    │   Application   │   (foretias-node CLI)
+                    │   Application   │   (foretias-server CLI)
                     └────────┬────────┘
                              │
                     ┌────────▼────────┐
-                    │  foretias-node  │   Server, JSON-RPC, calendar store
+                    │  foretias-server │   Server, JSON-RPC, calendar store
                     └────────┬────────┘
             ┌─────────────────┼──────────────────┐
             │                 │
@@ -282,7 +292,7 @@ The `foretias-core` crate (oqs-sys/liboqs C library) dominates build time. The f
 
 **1. Enable only required libp2p features** — biggest win (20-25% reduction in initial build time):
 ```toml
-# In foretias-node/Cargo.toml
+# In foretias-server/Cargo.toml
 libp2p = { version = "0.56", default-features = false, features = [
     "tcp", "noise", "yamux", "gossipsub", "kad", "identify", "ping", "request-response"
 ] }
@@ -307,9 +317,9 @@ The shared `CARGO_HOME` registry (`~/.cargo/registry`) is already reused across 
 **4. Pre-build heavy dependencies** — warm the cache before starting work:
 ```bash
 export CMAKE_BUILD_PARALLEL_LEVEL=10
-# Build foretias-core first (takes longest), then only check foretias-node
+# Build foretias-core first (takes longest), then only check foretias-server
 cd p2p && cargo build -p foretias-core
-cd p2p && cargo check -p foretias-node  # Fast after core is cached
+cd p2p && cargo check -p foretias-server  # Fast after core is cached
 ```
 
 **5. Profile optimization for dev builds** — faster incremental compilation:
@@ -338,7 +348,7 @@ cd p2p/core && cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build
 ```bash
 # Do step 1, then
 
-# Step 2: Build Rust workspace (core-engine, foretias-node)
+# Step 2: Build Rust workspace (core-engine, foretias-client, foretias-server)
 cd p2p && cargo build --workspace
 ```
 
@@ -352,21 +362,26 @@ Use these when only one crate has changed — faster than rebuilding the full wo
 # Build only core-engine (safe Rust wrappers over C11 FFI)
 cd p2p && cargo build -p foretias-core
 
-# Build only foretias-node (server + CLI binary)
-cd p2p && cargo build -p foretias-node
+# Build only foretias-client (thin client library)
+cd p2p && cargo build -p foretias-client
+
+# Build only foretias-server (server + CLI binary)
+cd p2p && cargo build -p foretias-server
 
 # Build a single crate in release mode
-cd p2p && cargo build -p foretias-node --release
+cd p2p && cargo build -p foretias-server --release
 
 # Check a single crate without full compilation (fastest validation)
 cd p2p && cargo check -p foretias-core
-cd p2p && cargo check -p foretias-node
+cd p2p && cargo check -p foretias-client
+cd p2p && cargo check -p foretias-server
 ```
 
 **Dependency chain** (build order when multiple crates change):
 1. C11 core (`p2p/core`) — static lib, linked by all Rust crates
 2. `foretias-core` (core-engine) — depends on C11 core via bindgen
-3. `foretias-node` — depends on core-engine
+3. `foretias-client` — depends on core-engine
+4. `foretias-server` — depends on core-engine + foretias-client
 
 If build stalls, and does not resolve after repeating an attempt, you may look at build process using verbose flag.
 This flag is very verbose, so use a subagent to run it and check on progressing output.
@@ -402,18 +417,19 @@ cd p2p/core && cmake --build build --target test_all && ./build/test_all
 
 # Run all tests in one crate:
 cd p2p && cargo test -p foretias-core
-cd p2p && cargo test -p foretias-node
+cd p2p && cargo test -p foretias-server
+cd p2p && cargo test -p foretias-client
 
 # Run a specific test by name (substring match):
-cd p2p && cargo test -p foretias-node -- test_stamp_and_verify_e2e
+cd p2p && cargo test -p foretias-server -- test_stamp_and_verify_e2e
 cd p2p && cargo test -p foretias-core -- ed25519
 cd p2p && cargo test -- calendar_store
 
 # Run only unit tests (exclude integration):
-cd p2p && cargo test -p foretias-node --lib
+cd p2p && cargo test -p foretias-server --lib
 
 # Run only integration tests:
-cd p2p && cargo test -p foretias-node --test integration
+cd p2p && cargo test -p foretias-server --test integration
 
 # Run with output (don't capture stdout):
 cd p2p && cargo test -- --nocapture
