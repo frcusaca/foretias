@@ -14,6 +14,7 @@ use foretias_core::crypto_server;
 use foretias_node::communerd::p2p::swarm::CommunerdRpcHandler;
 use foretias_core::foretias::tick::{TickRecord, CalendarLookup};
 use foretias_node::client::noise_ptp;
+use foretias_node::client::ThinClient;
 
 use foretias_node::server::TimeFamilyServer;
 
@@ -458,17 +459,20 @@ async fn cmd_stamp(
     server_addr: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let content = read_message(message, message_file)?;
-    let content_hex = hex::encode(&content);
     let echo = client_echo();
 
-    let result = json_rpc_call(
-        &server_addr,
-        "stamp",
-        serde_json::json!({"content": content_hex, "echo": echo}),
-    )
-    .await?;
+    let client = ThinClient::connect_one(
+        "cli-stamp".into(),
+        server_addr.clone(),
+        None,
+    )?;
 
-    let output = serde_json::to_string_pretty(&result)?;
+    let foretis = client
+        .stamp(&content, echo)
+        .await
+        .map_err(|e| format!("stamp failed: {}", e))?;
+
+    let output = serde_json::to_string_pretty(&foretis)?;
     match stamp_output {
         Some(path) => std::fs::write(&path, &output).map_err(|e| format!("Failed to write {}: {}", path, e))?,
         None => println!("{}", output),
@@ -486,16 +490,24 @@ async fn cmd_verify(
     server_addr: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let content = read_message(message, message_file)?;
-    let content_hex = hex::encode(&content);
     let foretis_str = read_foretis(foretis, foretis_file)?;
-    let foretis_value: serde_json::Value = serde_json::from_str(&foretis_str)?;
+    let foretis: foretias_core::foretias::tick::Foretis = serde_json::from_str(&foretis_str)?;
 
-    let result = json_rpc_call(
-        &server_addr,
-        "verify",
-        serde_json::json!({"content": content_hex, "foretis": foretis_value, "cross_node": !local_only}),
-    )
-    .await?;
+    let client = ThinClient::connect_one(
+        "cli-verify".into(),
+        server_addr.clone(),
+        None,
+    )?;
+
+    let valid = client
+        .verify(&content, &foretis)
+        .await
+        .map_err(|e| format!("verify failed: {}", e))?;
+
+    let result = serde_json::json!({
+        "valid": valid,
+        "method": if local_only { "local" } else { "remote" },
+    });
 
     let output = serde_json::to_string_pretty(&result)?;
     match verify_output {
@@ -727,6 +739,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match &cli.command {
         Commands::Serve { .. } => init_tracing_with_file()?,
+        Commands::Stamp { .. } | Commands::Verify { .. } | Commands::ProveVerification { .. } => {
+            // No tracing for client commands — stdout must be clean JSON for pipe consumption
+        }
         _ => {
             fmt()
                 .with_target(false)
