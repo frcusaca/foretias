@@ -1,7 +1,9 @@
 # Plan: Terminology Normalization — Auto-Attestation, Mutual Attestation, Chronon Attestation
 
+- [x] backburnered
+
 **Scope:** Step (terminology consistency pass)
-**Status:** Complete — merged to alpha
+**Status:** Backburnered — spec also backburnered
 **Based on:** `TERMINOLOGY_NORMALIZATION_SPEC.md`
 
 ---

@@ -1,5 +1,7 @@
 # Foretias — P2P Sub-Spec 7: Epoch Consensus (v0.8)
 
+- [x] backburnered
+
 **Milestone tag:** `v0.8-epoch-consensus`
 **Prereq:** `v0.7-collision-detection` must be tagged.
 **Next:** `v0.9+` custom-plugin enclave backends (`FORETIAS_9_ENCLAVE_SPEC.md`).

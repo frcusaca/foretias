@@ -1,5 +1,7 @@
 # HTTPS Transport — Implementation Plan
 
+- [x] backburnered
+
 **Pairs with:** `FORETIAS_6_HTTPS_TRANSPORT_SPEC.md`
 
 **Worktree path:** `FULL_WORKTREE_PATH=/home/hcbusy/tmp/foretias-worktrees/FORETIAS_6_HTTPS_TRANSPORT_4821`

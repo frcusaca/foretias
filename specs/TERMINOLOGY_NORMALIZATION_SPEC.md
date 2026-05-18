@@ -1,5 +1,7 @@
 # Spec: Terminology Normalization — Auto-Attestation, Mutual Attestation, Chrononchain
 
+- [x] backburnered
+
 **Scope:** Step (terminology consistency across code, specs, docs)
 **Status:** Draft — ready for human review
 **Pairs with:** `TERMINOLOGY_NORMALIZATION_PLAN.md`

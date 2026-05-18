@@ -1,5 +1,7 @@
 # Foretias — P2P Sub-Spec 4.5: Multi-Purpose DHT Peer Discovery (v0.4.5)
 
+- [x] backburnered
+
 **Milestone tag:** `v0.4.5-dht-multipurpose`
 **Prereq:** `v0.4-dht-discovery` must be tagged.
 **Next:** `FORETIAS_2_P2P_5_hardening.md` (v0.5 — threat model, observability).

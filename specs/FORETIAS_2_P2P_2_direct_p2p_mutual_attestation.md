@@ -1,5 +1,7 @@
 # Foretias — P2P Sub-Spec 1: Direct P2P, Mutual Attestation & Threading Model (v0.2)
 
+- [x] backburnered
+
 **Milestone tag:** `v0.2-direct-p2p-mutual-attestation`
 **Prereq:** `v0.1-local-server-mvp` must be tagged.
 **Next:** `FORETIAS_2_P2P_3_libp2p_handshake.md` (v0.3 — adds libp2p as a second transport alongside this one).

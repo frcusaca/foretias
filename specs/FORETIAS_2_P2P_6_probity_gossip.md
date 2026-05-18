@@ -1,5 +1,7 @@
 # Foretias — P2P Sub-Spec 5: GossipSub, ProbityReport & U-Shape Aggregation (v0.6)
 
+- [x] backburnered
+
 **Milestone tag:** `v0.6-probity-gossip`
 **Prereq:** `v0.5-hardening` must be tagged.
 **Next:** `FORETIAS_2_P2P_7_collision_detection.md` (v0.7 — heartbeats and

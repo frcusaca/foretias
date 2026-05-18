@@ -1,5 +1,7 @@
 # Foretias — P2P Sub-Spec 6: Heartbeats & Identity Collision Detection (v0.7)
 
+- [x] backburnered
+
 **Milestone tag:** `v0.7-collision-detection`
 **Prereq:** `v0.6-probity-gossip` must be tagged.
 **Next:** `FORETIAS_2_P2P_8_epoch_consensus.md` (v0.8 — FROST epoch snapshots).

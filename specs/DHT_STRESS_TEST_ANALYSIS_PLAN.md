@@ -1,8 +1,10 @@
 # DHT Stress Test & Jupyter Analysis — Implementation Plan
 
+- [x] backburnered
+
 **Stage**: DHT Stress Test Hardening & Jupyter Analysis Notebook
 **Parent Major**: DHT Peer Discovery (FORETIAS_2_P2P_4_dht_discovery.md)
-**Status**: Plan — pending human review
+**Status**: Plan — backburnered
 **Date**: 2026-05-06
 **Prereqs**: `dht_stress_test.sh` exists (done), `dht_stress_analysis.py` exists (done), DHT swarm works (done)
 

@@ -1,5 +1,7 @@
 # Foretias — P2P Sub-Spec 4: Hardening, Observability & Encrypted Persistence (v0.5)
 
+- [x] backburnered
+
 **Milestone tag:** `v0.5-hardening`
 **Prereq:** `v0.4-dht-discovery` must be tagged.
 **Next:** `FORETIAS_2_P2P_6_probity_gossip.md` (v0.6 — GossipSub and ProbityReport).

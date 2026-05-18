@@ -1,5 +1,7 @@
 # HTTPS Transport — Specification
 
+- [x] backburnered
+
 **Prefix:** `FORETIAS_6_HTTPS_TRANSPORT`
 **Pairs with:** `FORETIAS_6_HTTPS_TRANSPORT_PLAN.md`
 **Date:** 2026-05-13

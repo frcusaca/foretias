@@ -1,5 +1,7 @@
 # Spec/Plan: Foretias Public Whitepaper
 
+- [x] backburnered
+
 **Scope:** Major — public-facing document
 **Status:** Draft in progress — research phase not yet complete
 

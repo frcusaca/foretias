@@ -1,5 +1,7 @@
 # Spec: Centralize P2P Record Key Definitions and Calendar Supplier Discovery
 
+- [x] backburnered
+
 **Scope:** Major (two phases — key cleanup, then calendar supplier feature)
 **Status:** Draft
 
