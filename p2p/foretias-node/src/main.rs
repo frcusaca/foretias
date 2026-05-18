@@ -6,16 +6,14 @@ use std::sync::Arc;
 
 use clap::{Parser, Subcommand};
 use serde::Deserialize;
-use tokio::io::{AsyncWriteExt};
 use tracing_appender::rolling;
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
 use foretias_core::config::TimeFamilyConfig;
-use foretias_core::core::identity::generate_ed25519_keypair;
 use foretias_core::crypto_server;
 use foretias_node::communerd::p2p::swarm::CommunerdRpcHandler;
 use foretias_core::foretias::tick::{TickRecord, CalendarLookup};
-use foretias_core::noise;
+use foretias_node::client::noise_ptp;
 
 use foretias_node::server::TimeFamilyServer;
 
@@ -548,81 +546,14 @@ async fn cmd_prove_verification(
     Ok(())
 }
 
-/// Validate that a deserialized JSON value conforms to the JSON-RPC 2.0 response schema.
-/// Must be called before trusting any fields from untrusted network data.
-fn validate_jsonrpc_response(response: &serde_json::Value) -> Result<(), String> {
-    // Must be an object
-    if !response.is_object() {
-        return Err("invalid JSON-RPC response: not an object".into());
-    }
-
-    // Must have "jsonrpc" field equal to "2.0"
-    match response.get("jsonrpc").and_then(|v| v.as_str()) {
-        Some("2.0") => (),
-        Some(other) => {
-            return Err(format!("invalid JSON-RPC response: unexpected version {other:?}"));
-        }
-        None => {
-            return Err("invalid JSON-RPC response: missing jsonrpc field".into());
-        }
-    }
-
-    // Must have either "result" or "error"
-    if response.get("result").is_none() && response.get("error").is_none() {
-        return Err("invalid JSON-RPC response: missing both result and error".into());
-    }
-
-    Ok(())
-}
-
 async fn json_rpc_call(
     server: &str,
     method: &str,
     params: serde_json::Value,
 ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-    let request = serde_json::json!({
-        "jsonrpc": "2.0",
-        "method": method,
-        "params": params,
-        "id": 1
-    });
-    let request_bytes = serde_json::to_string(&request)?.into_bytes();
-
-    let stream = tokio::net::TcpStream::connect(server).await?;
-
-    let (_pub_key, priv_key) = generate_ed25519_keypair()?;
-    let (mut session, stream) = noise::noise_handshake(stream, &priv_key.bytes, None, true).await
-        .map_err(|e| format!("noise handshake failed: {}", e))?;
-
-    let (reader, mut writer) = stream.into_split();
-    let mut reader = tokio::io::BufReader::new(reader);
-
-    let ct = session.send(&request_bytes)?;
-    let ct_len = (ct.len() as u32).to_le_bytes();
-    writer.write_all(&ct_len).await?;
-    writer.write_all(&ct).await?;
-    writer.flush().await?;
-
-    let mut len_buf = [0u8; 4];
-    tokio::io::AsyncReadExt::read_exact(&mut reader, &mut len_buf).await?;
-    let resp_len = u32::from_le_bytes(len_buf) as usize;
-    let mut resp_buf = vec![0u8; resp_len];
-    tokio::io::AsyncReadExt::read_exact(&mut reader, &mut resp_buf).await?;
-
-    let plaintext = session.recv(&resp_buf)?;
-    let response: serde_json::Value = serde_json::from_slice(&plaintext)?;
-
-    // Validate JSON-RPC 2.0 response structure before trusting any fields
-    validate_jsonrpc_response(&response)?;
-
-    if let Some(err) = response.get("error") {
-        let msg = err.get("message")
-            .and_then(|m| m.as_str())
-            .unwrap_or("unknown error");
-        return Err(msg.into());
-    }
-
-    Ok(response["result"].clone())
+    noise_ptp::noise_json_rpc(server, method, params, std::time::Duration::from_secs(30))
+        .await
+        .map_err(|e| Box::from(e) as Box<dyn std::error::Error>)
 }
 
 /// Fetch a calendar slice from a remote TimeBeing via get_calendar_slice.
