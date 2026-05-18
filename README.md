@@ -158,12 +158,10 @@ The `TimeFamilyServer` holds `Arc<Chronomatter>`, `Arc<Calendar>`, and `Option<A
 - **C11 core** — Verified cryptographic primitives (Ed25519 via libsodium, SHA-256, BLAKE3, Noise protocol, Merkle trees, FROST)
 - **foretias-core** — Rust safe wrappers over C11 FFI (bindgen), domain types, CryptoServer trait
 - **foretias-node** — Server, CLI binary, Communerd (libp2p), calendar store, metrics
-- **foretias-python** — PyO3 Python bindings (produces `foretias-p2p` pip package)
-- **foretias-java** — JNI bindings for Java
 
 ## Current Features
 
-- **v0.1** — Local server with JSON-RPC stamp/verify (C11 core + Rust + PyO3)
+- **v0.1** — Local server with JSON-RPC stamp/verify (C11 core + Rust)
 - **v0.2** — P2P mutual attestation between statically configured peers
 - **v0.3** — DHT peer discovery via Kademlia with private namespace
 
@@ -177,12 +175,6 @@ cd p2p/core && cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build
 
 # Rust workspace
 cd p2p && cargo build --workspace
-
-# Python bindings
-cd p2p/foretias-python && maturin develop
-
-# Python shim package
-pip install -e .
 ```
 
 ### Test
@@ -193,10 +185,9 @@ cd p2p/core/build && ctest --output-on-failure
 
 # Rust workspace tests
 cd p2p && cargo test --workspace
-
-# Python shim tests
-python -m pytest tests/ -v
 ```
+
+> **Note:** Python (`foretias-python`) and Java (`foretias-java`) bindings are removed from active scope. See `foretias/specs/SCOPE_REDUCTION_SPEC.md` for rationale and future reintroduction plan.
 
 The project uses the `alpha` branch as the center of development.
 
