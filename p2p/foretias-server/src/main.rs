@@ -11,12 +11,11 @@ use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberI
 
 use foretias_core::config::TimeFamilyConfig;
 use foretias_core::crypto_server;
-use foretias_node::communerd::p2p::swarm::CommunerdRpcHandler;
+use foretias_server::communerd::p2p::swarm::CommunerdRpcHandler;
 use foretias_core::foretias::tick::{TickRecord, CalendarLookup};
-use foretias_node::client::noise_ptp;
-use foretias_node::client::ThinClient;
+use foretias_client::{Foretias, noise_json_rpc};
 
-use foretias_node::server::TimeFamilyServer;
+use foretias_server::server::TimeFamilyServer;
 
 #[derive(Parser)]
 #[command(name = "foretias")]
@@ -350,7 +349,7 @@ async fn cmd_serve(
         Some(listen_str.parse()
             .map_err(|e| format!("invalid --p2p-listen {}: {}", listen_str, e))?)
     } else if !known_servers.is_empty() {
-        let port = foretias_node::communerd::p2p::swarm::find_free_port(port_range.clone())
+        let port = foretias_server::communerd::p2p::swarm::find_free_port(port_range.clone())
             .map_err(|e| format!("failed to find free port in {}: {}", p2p_port_range, e))?;
         Some(format!("/ip4/0.0.0.0/tcp/{}", port).parse()
             .map_err(|e| format!("failed to parse auto listen address: {}", e))?)
@@ -461,7 +460,7 @@ async fn cmd_stamp(
     let content = read_message(message, message_file)?;
     let echo = client_echo();
 
-    let client = ThinClient::connect_one(
+    let client = Foretias::connect_one(
         "cli-stamp".into(),
         server_addr.clone(),
         None,
@@ -493,7 +492,7 @@ async fn cmd_verify(
     let foretis_str = read_foretis(foretis, foretis_file)?;
     let foretis: foretias_core::foretias::tick::Foretis = serde_json::from_str(&foretis_str)?;
 
-    let client = ThinClient::connect_one(
+    let client = Foretias::connect_one(
         "cli-verify".into(),
         server_addr.clone(),
         None,
@@ -563,7 +562,7 @@ async fn json_rpc_call(
     method: &str,
     params: serde_json::Value,
 ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-    noise_ptp::noise_json_rpc(server, method, params, std::time::Duration::from_secs(30))
+    noise_json_rpc(server, method, params, std::time::Duration::from_secs(30))
         .await
         .map_err(|e| Box::from(e) as Box<dyn std::error::Error>)
 }

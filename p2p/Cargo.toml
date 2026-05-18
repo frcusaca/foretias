@@ -1,7 +1,8 @@
 [workspace]
 members = [
     "core-engine",
-    "foretias-node",
+    "foretias-client",
+    "foretias-server",
 ]
 resolver = "2"
 

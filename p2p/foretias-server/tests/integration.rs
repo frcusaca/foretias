@@ -188,7 +188,7 @@ fn test_stamp_and_verify_e2e() {
 
 #[tokio::test]
 async fn test_two_nodes_mutual_attest() {
-    use foretias_node::server::TimeFamilyServer;
+    use foretias_server::server::TimeFamilyServer;
 
     let port_a = find_available_port();
     let port_b = find_available_port();
@@ -228,7 +228,7 @@ async fn test_two_nodes_mutual_attest() {
 
     if let Some(com) = server_a.communerd() {
         let result = com.stamp_peer(
-            &foretias_node::communerd::transport::PeerAddr {
+            &foretias_server::communerd::transport::PeerAddr {
                 json_rpc: addr_b.clone(),
                 peer_id: None,
                 last_seen_ns: 0,
@@ -253,7 +253,7 @@ async fn test_two_nodes_mutual_attest() {
 
 #[tokio::test]
 async fn test_peer_unreachable_does_not_crash() {
-    use foretias_node::server::TimeFamilyServer;
+    use foretias_server::server::TimeFamilyServer;
 
     let port = find_available_port();
     let addr = format!("127.0.0.1:{}", port);
@@ -278,7 +278,7 @@ async fn test_peer_unreachable_does_not_crash() {
 
     if let Some(com) = server.communerd() {
         let result = com.stamp_peer(
-            &foretias_node::communerd::transport::PeerAddr {
+            &foretias_server::communerd::transport::PeerAddr {
                 json_rpc: "127.0.0.1:59999".to_string(),
                 peer_id: None,
                 last_seen_ns: 0,
@@ -363,8 +363,8 @@ fn test_crash_recovery_calendar() {
 
 #[tokio::test]
 async fn two_swarms_connect_and_identify() {
-    use foretias_node::communerd::p2p::swarm::build_and_spawn_swarm;
-    use foretias_node::communerd::p2p::events::NetworkEvent;
+    use foretias_server::communerd::p2p::swarm::build_and_spawn_swarm;
+    use foretias_server::communerd::p2p::events::NetworkEvent;
 
     let port_a = find_available_port();
     let port_b = find_available_port();
@@ -426,8 +426,8 @@ async fn two_swarms_connect_and_identify() {
 
 #[tokio::test]
 async fn dht_discovery_three_nodes() {
-    use foretias_node::communerd::p2p::swarm::{build_and_spawn_swarm, SwarmCommand};
-    use foretias_node::communerd::p2p::events::NetworkEvent;
+    use foretias_server::communerd::p2p::swarm::{build_and_spawn_swarm, SwarmCommand};
+    use foretias_server::communerd::p2p::events::NetworkEvent;
 
     let port_a = find_available_port();
     let port_b = find_available_port();
@@ -578,9 +578,9 @@ async fn dht_discovery_three_nodes() {
 
 #[tokio::test]
 async fn gossip_probity_propagation() {
-    use foretias_node::communerd::p2p::swarm::{build_and_spawn_swarm, SwarmCommand};
-    use foretias_node::communerd::p2p::events::NetworkEvent;
-    use foretias_node::probity::ProbityReport;
+    use foretias_server::communerd::p2p::swarm::{build_and_spawn_swarm, SwarmCommand};
+    use foretias_server::communerd::p2p::events::NetworkEvent;
+    use foretias_server::probity::ProbityReport;
 
     let port_a = find_available_port();
     let port_b = find_available_port();
@@ -676,9 +676,9 @@ async fn gossip_probity_propagation() {
 
 #[tokio::test]
 async fn test_libp2p_direct_rpc() {
-    use foretias_node::communerd::p2p::swarm::{build_and_spawn_swarm, CommunerdRpcHandler, SwarmCommand};
-    use foretias_node::communerd::p2p::events::NetworkEvent;
-    use foretias_node::communerd::transport::TransportError;
+    use foretias_server::communerd::p2p::swarm::{build_and_spawn_swarm, CommunerdRpcHandler, SwarmCommand};
+    use foretias_server::communerd::p2p::events::NetworkEvent;
+    use foretias_server::communerd::transport::TransportError;
 
     struct EchoRpcHandler;
 

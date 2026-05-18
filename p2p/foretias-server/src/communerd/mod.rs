@@ -10,6 +10,9 @@ pub mod peer_pool;
 pub mod dht_peer_source;
 pub mod capabilities;
 pub mod p2p;
+pub mod tiers;
+
+pub use tiers::{CommunerdServer, CommunerdP2P};
 
 use std::sync::{Arc, OnceLock};
 use rand::seq::SliceRandom;

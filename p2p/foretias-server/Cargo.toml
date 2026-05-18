@@ -1,10 +1,10 @@
 [package]
-name    = "foretias-node"
-version = "0.4.0"
+name    = "foretias-server"
+version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "foretias_node"
+name = "foretias_server"
 
 [[bin]]
 name = "foretias"
@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 foretias-core = { version = "0.3", path = "../core-engine" }
+foretias-client = { version = "0.1", path = "../foretias-client" }
 
 tokio        = { version = "1", features = ["full"] }
 clap         = { version = "4", features = ["derive"] }

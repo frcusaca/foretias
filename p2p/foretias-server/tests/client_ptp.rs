@@ -6,8 +6,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use foretias_node::client::{ThinClient, ThinClientError};
-use foretias_node::server::TimeFamilyServer;
+use foretias_client::{Foretias, ForetiasError};
+use foretias_server::server::TimeFamilyServer;
 
 fn find_available_port() -> u16 {
     std::net::TcpListener::bind("127.0.0.1:0")
@@ -45,7 +45,7 @@ async fn spawn_server() -> (Arc<TimeFamilyServer>, String) {
 async fn ptp_stamp_and_verify() {
     let (_server, addr) = spawn_server().await;
 
-    let client = ThinClient::connect_one(
+    let client = Foretias::connect_one(
         "ptp-client".into(),
         addr.clone(),
         None,
@@ -71,7 +71,7 @@ async fn ptp_stamp_and_verify() {
 async fn ptp_stamp_verify_roundtrip() {
     let (_server, addr) = spawn_server().await;
 
-    let client = ThinClient::connect_one(
+    let client = Foretias::connect_one(
         "roundtrip-client".into(),
         addr.clone(),
         None,
@@ -101,7 +101,7 @@ async fn ptp_stamp_verify_roundtrip() {
 async fn ptp_calendar_slice() {
     let (_server, addr) = spawn_server().await;
 
-    let client = ThinClient::connect_one(
+    let client = Foretias::connect_one(
         "calendar-client".into(),
         addr.clone(),
         None,
@@ -128,7 +128,7 @@ async fn ptp_calendar_slice() {
 async fn ptp_unreachable_server_returns_error() {
     let addr = "127.0.0.1:59999";
 
-    let client = ThinClient::connect_one(
+    let client = Foretias::connect_one(
         "unreachable-client".into(),
         addr.into(),
         None,
@@ -140,7 +140,7 @@ async fn ptp_unreachable_server_returns_error() {
         .await;
 
     assert!(
-        matches!(result, Err(ThinClientError::Network(_))),
+        matches!(result, Err(ForetiasError::Network(_))),
         "unreachable server should return Network error, got: {result:?}"
     );
 }

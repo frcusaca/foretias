@@ -1,7 +1,7 @@
 //! C11 Noise_XX PtP client — JSON-RPC over encrypted TCP.
 //!
 //! This module provides a library-scoped Noise_XX client that can be used
-//! by the CLI (main.rs) and the ThinClient (Level 2 — PtP Networked).
+//! by the CLI and the Foretias client (Level 2 — PtP Networked).
 //!
 //! Protocol: TCP → Noise_XX handshake → JSON-RPC 2.0 over encrypted channel.
 //! Frame format: 4-byte LE length prefix + ciphertext.
@@ -42,11 +42,6 @@ impl From<foretias_core::error::CryptoError> for PtPError {
     }
 }
 
-/// Perform a single JSON-RPC 2.0 request over C11 Noise_XX encrypted TCP.
-///
-/// This is the core PtP client function used by both the CLI and ThinClient.
-/// Each call creates a fresh TCP connection, performs a Noise_XX handshake,
-/// sends the request, and reads the response.
 pub async fn noise_json_rpc(
     server: &str,
     method: &str,
@@ -78,7 +73,6 @@ pub async fn noise_json_rpc(
         let (reader, mut writer) = stream.into_split();
         let mut reader = tokio::io::BufReader::new(reader);
 
-        // Encrypt and send request with length-prefix framing
         let ct = session.send(&request_bytes)
             .map_err(|e| PtPError::Noise(e.to_string()))?;
         let ct_len = (ct.len() as u32).to_le_bytes();
@@ -89,7 +83,6 @@ pub async fn noise_json_rpc(
         writer.flush().await
             .map_err(|e| PtPError::Connect(e.to_string()))?;
 
-        // Read response with length-prefix framing and decrypt
         let mut len_buf = [0u8; 4];
         AsyncReadExt::read_exact(&mut reader, &mut len_buf).await
             .map_err(|e| PtPError::Connect(e.to_string()))?;
@@ -103,7 +96,6 @@ pub async fn noise_json_rpc(
         let response: serde_json::Value = serde_json::from_slice(&plaintext)
             .map_err(|e| PtPError::Decode(e.to_string()))?;
 
-        // Validate JSON-RPC 2.0 response structure
         validate_jsonrpc_response(&response)
             .map_err(PtPError::Decode)?;
 
@@ -128,7 +120,6 @@ pub async fn noise_json_rpc(
     }
 }
 
-/// Typed variant — deserializes the JSON-RPC result into a Rust type.
 pub async fn noise_json_rpc_typed<T: serde::de::DeserializeOwned>(
     server: &str,
     method: &str,
@@ -140,7 +131,6 @@ pub async fn noise_json_rpc_typed<T: serde::de::DeserializeOwned>(
         .map_err(|e| PtPError::Decode(e.to_string()))
 }
 
-/// Validate JSON-RPC 2.0 response schema.
 fn validate_jsonrpc_response(response: &serde_json::Value) -> Result<(), String> {
     if !response.is_object() {
         return Err("invalid JSON-RPC response: not an object".into());
