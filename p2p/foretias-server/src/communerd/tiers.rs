@@ -52,7 +52,7 @@ impl CommunerdServer {
     }
 
     /// Fetch calendar slice from a remote peer.
-    pub async fn get_calendar_slice(&self, peer: &PeerAddr, tick_start: u64, count: u64) -> Result<Vec<foretias_core::foretias::tick::TickRecord>, super::transport::TransportError> {
+    pub async fn get_calendar_slice(&self, peer: &PeerAddr, tick_start: u64, count: u64) -> Result<Vec<foretias_core::foretias::tick::ChrononRecord>, super::transport::TransportError> {
         self.inner.get_calendar_slice(peer, tick_start, count).await
     }
 
@@ -162,7 +162,7 @@ impl CommunerdP2P {
     }
 
     /// Fetch calendar slice from a remote peer.
-    pub async fn get_calendar_slice(&self, peer: &PeerAddr, tick_start: u64, count: u64) -> Result<Vec<foretias_core::foretias::tick::TickRecord>, super::transport::TransportError> {
+    pub async fn get_calendar_slice(&self, peer: &PeerAddr, tick_start: u64, count: u64) -> Result<Vec<foretias_core::foretias::tick::ChrononRecord>, super::transport::TransportError> {
         self.server.get_calendar_slice(peer, tick_start, count).await
     }
 

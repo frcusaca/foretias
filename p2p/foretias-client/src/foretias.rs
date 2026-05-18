@@ -16,7 +16,7 @@ use foretias_core::chronomatter::Chronomatter;
 use foretias_core::crypto_server::{self, CryptoServer, ForetiasCurve};
 use foretias_core::error::{CryptoError, NodeError};
 use foretias_core::foretias::callbacks::TickObserver;
-use foretias_core::foretias::tick::{CalendarLookup, Foretis, TickRecord};
+use foretias_core::foretias::tick::{CalendarLookup, Foretis, ChrononRecord};
 use foretias_core::foretias::types::Tbid;
 
 use crate::calendar::Calendar;
@@ -192,7 +192,7 @@ impl Foretias {
 
         struct NoOpObserver;
         impl TickObserver for NoOpObserver {
-            fn on_tick_advance(&self, _tick_number: foretias_core::foretias::types::TickNumber, _public_key: &[u8], _tick_record: &TickRecord) {}
+            fn on_tick_advance(&self, _chronon_number: foretias_core::foretias::types::TickNumber, _public_key: &[u8], _tick_record: &ChrononRecord) {}
         }
 
         let mut cm = Chronomatter::from_calendar(&path_str, crypto.clone(), Arc::new(NoOpObserver))?;
@@ -350,14 +350,14 @@ impl Foretias {
         foretis: &Foretis,
     ) -> Result<VerificationReport, ForetiasError> {
         let calendar = self.inner.calendar();
-        let tick_number = foretis.tick_number;
+        let chronon_number = foretis.chronon_number;
         let records = calendar
-            .get(tick_number, 2)
+            .get(chronon_number, 2)
             .map_err(ForetiasError::from)?;
         let verified = self.verify(content, foretis).await?;
         Ok(VerificationReport {
             verified,
-            tick_number,
+            chronon_number,
             calendar_records: records,
             foretis: foretis.clone(),
             method: "prove_verification".into(),
@@ -368,7 +368,7 @@ impl Foretias {
         &self,
         start: u64,
         count: u64,
-    ) -> Result<Vec<TickRecord>, ForetiasError> {
+    ) -> Result<Vec<ChrononRecord>, ForetiasError> {
         match self.level {
             ClientLevel::Standalone => {
                 let calendar = self.inner.calendar();
@@ -498,16 +498,16 @@ impl Foretias {
         Ok(valid)
     }
 
-    async fn calendar_slice_remote(&self, start: u64, count: u64) -> Result<Vec<TickRecord>, ForetiasError> {
+    async fn calendar_slice_remote(&self, start: u64, count: u64) -> Result<Vec<ChrononRecord>, ForetiasError> {
         let Some(peer) = self.primary_peer() else {
             return Err(ForetiasError::Network("no peer configured".into()));
         };
         let params = serde_json::json!({
-            "cal_tick_start": start,
+            "cal_chronon_start": start,
             "count": count,
         });
         let result = noise_json_rpc(peer, "get_calendar_slice", params, self.timeout()).await?;
-        let records: Vec<TickRecord> = serde_json::from_value(result)
+        let records: Vec<ChrononRecord> = serde_json::from_value(result)
             .map_err(|e| ForetiasError::Network(format!("calendar slice deserialization failed: {}", e)))?;
         Ok(records)
     }
@@ -524,8 +524,8 @@ impl Foretias {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct VerificationReport {
     pub verified: bool,
-    pub tick_number: u64,
-    pub calendar_records: Vec<TickRecord>,
+    pub chronon_number: u64,
+    pub calendar_records: Vec<ChrononRecord>,
     pub foretis: Foretis,
     pub method: String,
 }
@@ -551,7 +551,7 @@ mod tests {
         let foretis = rt.block_on(async {
             client.stamp(b"hello world", "test-echo".into()).await.unwrap()
         });
-        assert_eq!(foretis.tick_number, 1);
+        assert_eq!(foretis.chronon_number, 1);
         assert_eq!(foretis.echo, "test-echo");
         assert!(!foretis.tbn.is_empty());
         assert!(!foretis.content_hash.is_empty());
@@ -656,7 +656,7 @@ mod tests {
             let foretis = client.stamp(b"serialize me", "echo".into()).await.unwrap();
             let json = serde_json::to_string(&foretis).unwrap();
             let deserialized: Foretis = serde_json::from_str(&json).unwrap();
-            assert_eq!(foretis.tick_number, deserialized.tick_number);
+            assert_eq!(foretis.chronon_number, deserialized.chronon_number);
             assert_eq!(foretis.content_hash, deserialized.content_hash);
             assert_eq!(foretis.signature, deserialized.signature);
             assert_eq!(foretis.tbid, deserialized.tbid);

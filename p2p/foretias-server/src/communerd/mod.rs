@@ -23,7 +23,7 @@ use foretias_core::core::bindings::ForetiasPubKey32;
 use foretias_core::crypto_server::{CryptoServer, new_software, ForetiasCurve};
 use foretias_core::error::NodeError;
 use foretias_core::foretias::callbacks::{CommunityQuery, CommunityResponse, PeerAddr as CorePeerAddr, PeerMessenger, TransportError as CoreTransportError};
-use foretias_core::foretias::tick::{Foretis, TickRecord};
+use foretias_core::foretias::tick::{Foretis, ChrononRecord};
 use foretias_core::foretias::types::Tbid;
 
 use self::json_rpc_transport::JsonRpcTransport;
@@ -208,7 +208,7 @@ impl Communerd {
         peer: &PeerAddr,
         tick_start: u64,
         count: u64,
-    ) -> Result<Vec<TickRecord>, TransportError> {
+    ) -> Result<Vec<ChrononRecord>, TransportError> {
         if peer.peer_id.is_some() && self.p2p_cmd_tx.get().is_some() {
             match self.libp2p_transport.get_calendar_slice(peer, tick_start, count).await {
                 Ok(r) => {

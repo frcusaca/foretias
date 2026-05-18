@@ -12,7 +12,7 @@ use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberI
 use foretias_core::config::TimeFamilyConfig;
 use foretias_core::crypto_server;
 use foretias_server::communerd::p2p::swarm::CommunerdRpcHandler;
-use foretias_core::foretias::tick::{TickRecord, CalendarLookup};
+use foretias_core::foretias::tick::{ChrononRecord, CalendarLookup};
 use foretias_client::{Foretias, noise_json_rpc};
 
 use foretias_server::server::TimeFamilyServer;
@@ -529,21 +529,21 @@ async fn cmd_prove_verification(
     let foretis_str = read_foretis(foretis, foretis_file)?;
     let foretis_value: serde_json::Value = serde_json::from_str(&foretis_str)?;
 
-    // Extract tick_number from the foretis to fetch the right calendar slice
-    let tick_number = foretis_value.get("tick_number")
+    // Extract chronon_number from the foretis to fetch the right calendar slice
+    let chronon_number = foretis_value.get("chronon_number")
         .and_then(|v| v.as_u64())
-        .ok_or("foretis missing 'tick_number'")?;
+        .ok_or("foretis missing 'chronon_number'")?;
 
     // Fetch the calendar slice needed for local verification
-    let records = fetch_calendar_slice(&server_addr, tick_number, 1).await?;
+    let records = fetch_calendar_slice(&server_addr, chronon_number, 1).await?;
     if records.is_empty() {
-        return Err(format!("no calendar records found for tick {}", tick_number).into());
+        return Err(format!("no calendar records found for tick {}", chronon_number).into());
     }
 
     // Build a minimal proof artifact
     let proof = serde_json::json!({
         "verified_locally": true,
-        "tick_number": tick_number,
+        "chronon_number": chronon_number,
         "calendar_records": records,
         "foretis": foretis_value,
         "method": "prove_verification",
@@ -570,33 +570,33 @@ async fn json_rpc_call(
 /// Fetch a calendar slice from a remote TimeBeing via get_calendar_slice.
 async fn fetch_calendar_slice(
     server: &str,
-    tick_number: u64,
+    chronon_number: u64,
     count: u64,
-) -> Result<Vec<TickRecord>, Box<dyn std::error::Error>> {
+) -> Result<Vec<ChrononRecord>, Box<dyn std::error::Error>> {
     let result = json_rpc_call(
         server,
         "get_calendar_slice",
-        serde_json::json!({"cal_tick_start": tick_number, "count": count}),
+        serde_json::json!({"cal_chronon_start": chronon_number, "count": count}),
     ).await?;
 
     // Validate structure before deserializing from untrusted network data
     let result_array = result.as_array().ok_or(
-        "calendar slice result: expected JSON array of TickRecords",
+        "calendar slice result: expected JSON array of ChrononRecords",
     )?;
     for (i, item) in result_array.iter().enumerate() {
         let obj = item.as_object().ok_or(format!(
-            "calendar slice[{}]: expected TickRecord object", i
+            "calendar slice[{}]: expected ChrononRecord object", i
         ))?;
-        if !obj.contains_key("tick_number")
+        if !obj.contains_key("chronon_number")
             || !obj.contains_key("public_key")
             || !obj.contains_key("forward_foretis")
             || !obj.contains_key("backward_foretis")
         {
-            return Err(format!("calendar slice[{}]: missing required TickRecord fields", i).into());
+            return Err(format!("calendar slice[{}]: missing required ChrononRecord fields", i).into());
         }
     }
 
-    let records: Vec<TickRecord> = serde_json::from_value(result)
+    let records: Vec<ChrononRecord> = serde_json::from_value(result)
         .map_err(|e| format!("failed to parse calendar slice: {}", e))?;
     Ok(records)
 }
@@ -627,7 +627,7 @@ fn cmd_inspect_attestations(calendar_path: String) -> Result<(), Box<dyn std::er
                 Ok(c) => c,
                 Err(e) => {
                     println!("tick={} attester={} sig=INVALID (serialize error: {})",
-                        tick.tick_number, att.attester_tbid, e);
+                        tick.chronon_number, att.attester_tbid, e);
                     invalid_count += 1;
                     continue;
                 }
@@ -639,7 +639,7 @@ fn cmd_inspect_attestations(calendar_path: String) -> Result<(), Box<dyn std::er
                 Ok(v) => v,
                 Err(e) => {
                     println!("tick={} attester={} sig=INVALID (verify error: {})",
-                        tick.tick_number, att.attester_tbid, e);
+                        tick.chronon_number, att.attester_tbid, e);
                     invalid_count += 1;
                     continue;
                 }
@@ -647,11 +647,11 @@ fn cmd_inspect_attestations(calendar_path: String) -> Result<(), Box<dyn std::er
 
             if valid {
                 println!("tick={} attester={} attester_tick={} sig=VALID",
-                    tick.tick_number, att.attester_tbid, att.foretis.tick_number);
+                    tick.chronon_number, att.attester_tbid, att.foretis.chronon_number);
                 valid_count += 1;
             } else {
                 println!("tick={} attester={} attester_tick={} sig=INVALID",
-                    tick.tick_number, att.attester_tbid, att.foretis.tick_number);
+                    tick.chronon_number, att.attester_tbid, att.foretis.chronon_number);
                 invalid_count += 1;
             }
         }
@@ -674,7 +674,7 @@ struct CalendarInspect<'a> {
 }
 
 impl CalendarLookup for CalendarInspect<'_> {
-    fn get(&self, start: u64, count: usize) -> Result<Vec<TickRecord>, foretias_core::error::NodeError> {
+    fn get(&self, start: u64, count: usize) -> Result<Vec<ChrononRecord>, foretias_core::error::NodeError> {
         Ok(self.calendar.ticks.iter()
             .skip(start as usize)
             .take(count)
@@ -683,7 +683,7 @@ impl CalendarLookup for CalendarInspect<'_> {
     }
 
     fn latest(&self) -> Option<u64> {
-        self.calendar.ticks.last().map(|t| t.tick_number)
+        self.calendar.ticks.last().map(|t| t.chronon_number)
     }
 
     fn tbid(&self) -> foretias_core::foretias::types::Tbid {

@@ -207,10 +207,10 @@ async fn cross_node_verify(
         peer_id: owner.peer_id.parse().ok(),
         last_seen_ns: 0,
     };
-    let records = com.get_calendar_slice(&owner_peer, foretis.tick_number, 1).await
+    let records = com.get_calendar_slice(&owner_peer, foretis.chronon_number, 1).await
         .map_err(|e| NodeError::Internal(format!("calendar fetch failed: {}", e)))?;
 
-    let rec = records.first().ok_or_else(|| NodeError::Internal(format!("tick {} not found on owner", foretis.tick_number)))?;
+    let rec = records.first().ok_or_else(|| NodeError::Internal(format!("tick {} not found on owner", foretis.chronon_number)))?;
 
     // Reconcile algorithms
     if rec.signature_algorithm != foretis.signature_algorithm {
@@ -224,7 +224,7 @@ async fn cross_node_verify(
     let cm = server.chronomatter();
     let mut sig_input = Vec::new();
     sig_input.extend_from_slice(&foretis.tbid.raw_bytes());
-    sig_input.extend_from_slice(&foretis.tick_number.to_be_bytes());
+    sig_input.extend_from_slice(&foretis.chronon_number.to_be_bytes());
     sig_input.extend_from_slice(content);
 
     let crypto = cm.crypto_server();
@@ -239,7 +239,9 @@ async fn cross_node_verify(
 pub fn handle_get_calendar_slice(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
     let id = params.get("id").cloned();
 
-    let cal_tick_start = params.get("cal_tick_start")
+    // Accept both new name and legacy name for wire-format compat
+    let cal_chronon_start = params.get("cal_chronon_start")
+        .or_else(|| params.get("cal_tick_start"))
         .and_then(|v| v.as_u64())
         .unwrap_or(0);
 
@@ -254,7 +256,7 @@ pub fn handle_get_calendar_slice(server: &TimeFamilyServer, params: Value) -> Js
 
     let calendar = server.calendar().inner();
     let cal = calendar.read();
-    let records = cal.get(cal_tick_start, count)
+    let records = cal.get(cal_chronon_start, count)
         .map_err(|e| NodeError::Internal(format!("calendar lookup failed: {}", e)));
 
     match records {
@@ -460,7 +462,7 @@ pub fn handle_ship_ack(server: &TimeFamilyServer, params: Value) -> JsonRpcRespo
     let id = params.get("id").cloned();
 
     let tbid = params.get("tbid").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let records: Vec<foretias_core::foretias::tick::TickRecord> =
+    let records: Vec<foretias_core::foretias::tick::ChrononRecord> =
         params.get("records").and_then(|v| serde_json::from_value(v.clone()).ok())
             .unwrap_or_default();
 
@@ -484,8 +486,8 @@ pub fn handle_stream_tick(server: &TimeFamilyServer, params: Value) -> JsonRpcRe
     let id = params.get("id").cloned();
 
     let tbid = params.get("tbid").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let tick_number = params.get("tick_number").and_then(|v| v.as_u64()).unwrap_or(0);
-    let record: foretias_core::foretias::tick::TickRecord =
+    let chronon_number = params.get("chronon_number").and_then(|v| v.as_u64()).unwrap_or(0);
+    let record: foretias_core::foretias::tick::ChrononRecord =
         match params.get("record").and_then(|v| serde_json::from_value(v.clone()).ok()) {
             Some(r) => r,
             None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
@@ -503,18 +505,18 @@ pub fn handle_stream_tick(server: &TimeFamilyServer, params: Value) -> JsonRpcRe
     resp_success(server, id, serde_json::json!({
         "status": "acked",
         "tbid": tbid,
-        "tick_number": tick_number,
+        "chronon_number": chronon_number,
         "tick_count": tick_count,
     }))
 }
 
 pub fn handle_stream_ack(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
     let id = params.get("id").cloned();
-    let tick_number = params.get("tick_number").and_then(|v| v.as_u64()).unwrap_or(0);
+    let chronon_number = params.get("chronon_number").and_then(|v| v.as_u64()).unwrap_or(0);
 
     resp_success(server, id, serde_json::json!({
         "status": "acked",
-        "tick_number": tick_number,
+        "chronon_number": chronon_number,
     }))
 }
 
@@ -657,7 +659,7 @@ mod tests {
         assert!(resp.error.is_none());
         assert!(resp.result.is_some());
         let result = resp.result.unwrap();
-        assert!(result.get("tick_number").is_some());
+        assert!(result.get("chronon_number").is_some());
         assert!(result.get("content_hash").is_some());
         assert!(result.get("signature").is_some());
     }
@@ -738,7 +740,7 @@ mod tests {
             handle_stamp(&server, params);
         }
 
-        let params = serde_json::json!({"cal_tick_start": 0, "count": 10});
+        let params = serde_json::json!({"cal_chronon_start": 0, "count": 10});
         let resp = handle_get_calendar_slice(&server, params);
         assert!(resp.error.is_none());
         let result = resp.result.unwrap();
@@ -749,7 +751,7 @@ mod tests {
     #[test]
     fn handle_get_calendar_slice_exceeds_count_returns_error() {
         let server = make_server();
-        let params = serde_json::json!({"cal_tick_start": 0, "count": 10_001});
+        let params = serde_json::json!({"cal_chronon_start": 0, "count": 10_001});
         let resp = handle_get_calendar_slice(&server, params);
         assert!(resp.error.is_some());
     }

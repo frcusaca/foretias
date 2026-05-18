@@ -115,7 +115,7 @@ mod tests {
             _peer: &PeerAddr,
             _tick_start: u64,
             _count: u64,
-        ) -> Result<Vec<foretias_core::foretias::TickRecord>, crate::communerd::transport::TransportError> {
+        ) -> Result<Vec<foretias_core::foretias::ChrononRecord>, crate::communerd::transport::TransportError> {
             Ok(Vec::new())
         }
 

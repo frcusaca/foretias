@@ -6,7 +6,7 @@ pub mod mirror;
 
 use foretias_core::foretias::callbacks::TickObserver;
 use foretias_core::foretias::tick::CalendarLookup;
-use foretias_core::foretias::{Calendar as CoreCalendar, TickRecord, types::{TickNumber, Tbid}};
+use foretias_core::foretias::{Calendar as CoreCalendar, ChrononRecord, types::{TickNumber, Tbid}};
 use foretias_core::error::NodeError;
 use parking_lot::RwLock;
 use tracing::{debug, info};
@@ -76,19 +76,19 @@ impl Calendar {
 }
 
 impl TickObserver for Calendar {
-    fn on_tick_advance(&self, tick_number: TickNumber, _public_key: &[u8], tick_record: &TickRecord) {
+    fn on_tick_advance(&self, chronon_number: TickNumber, _public_key: &[u8], tick_record: &ChrononRecord) {
         let mut cal = self.inner.write();
         if let Err(e) = cal.append(tick_record.clone()) {
-            tracing::error!(component = "calendar", tbid = %cal.tbid().to_hex(), tick = tick_number.0, "calendar: on_tick_advance failed: {}", e);
+            tracing::error!(component = "calendar", tbid = %cal.tbid().to_hex(), tick = chronon_number.0, "calendar: on_tick_advance failed: {}", e);
         } else {
-            debug!(component = "calendar", tbid = %cal.tbid().to_hex(), tick = tick_number.0, tick_count = cal.ticks.len(), "calendar: heartbeat");
+            debug!(component = "calendar", tbid = %cal.tbid().to_hex(), tick = chronon_number.0, tick_count = cal.ticks.len(), "calendar: heartbeat");
         }
     }
 }
 
 impl CalendarLookup for Calendar {
-    fn get(&self, tick_number: u64, count: usize) -> Result<Vec<TickRecord>, NodeError> {
-        self.inner.read().get(tick_number, count)
+    fn get(&self, chronon_number: u64, count: usize) -> Result<Vec<ChrononRecord>, NodeError> {
+        self.inner.read().get(chronon_number, count)
     }
 
     fn latest(&self) -> Option<u64> {
@@ -108,9 +108,9 @@ impl CalendarLookup for Calendar {
 mod tests {
     use super::*;
 
-    fn make_tick(tick_number: u64) -> TickRecord {
-        TickRecord {
-            tick_number,
+    fn make_tick(chronon_number: u64) -> ChrononRecord {
+        ChrononRecord {
+            chronon_number,
             public_key: vec![0u8; 32].into(),
             signature_algorithm: "Ed25519".to_string(),
             forward_foretis: vec![].into(),
@@ -131,7 +131,7 @@ mod tests {
         assert_eq!(cal.latest(), Some(1));
         let records = cal.get(1, 10).unwrap();
         assert_eq!(records.len(), 1);
-        assert_eq!(records[0].tick_number, 1);
+        assert_eq!(records[0].chronon_number, 1);
     }
 
     #[test]
@@ -153,7 +153,7 @@ mod tests {
         cal.on_tick_advance(TickNumber(3), &[0u8; 32], &make_tick(3));
         let records = cal.get(2, 10).unwrap();
         assert_eq!(records.len(), 2);
-        assert_eq!(records[0].tick_number, 2);
+        assert_eq!(records[0].chronon_number, 2);
     }
 
     #[test]

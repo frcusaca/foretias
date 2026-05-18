@@ -8,7 +8,7 @@ use super::calendar::CalendarConfig;
 pub struct PersistedCalendar {
     /// Non-repeating config metadata
     pub config: CalendarMetadata,
-    /// Append-only tick records (raw JSON from TickRecord)
+    /// Append-only tick records (raw JSON from ChrononRecord)
     pub ticks: Vec<serde_json::Value>,
 }
 

@@ -5,7 +5,7 @@
 //! and that roundtrip serialization preserves all data.
 
 use crate::foretias::encoding::{FTByteVector, FTByteArray, to_json, from_json, to_json_pretty};
-use crate::foretias::tick::{Foretis, TickRecord};
+use crate::foretias::tick::{Foretis, ChrononRecord};
 use crate::foretias::calendar::Calendar;
 use crate::foretias::types::Tbid;
 use crate::foretias::external_attestation::ExternalAttestation;
@@ -43,12 +43,12 @@ fn make_test_foretis() -> Foretis {
     ).expect("valid foretis")
 }
 
-fn make_test_tick_record(tick: u64) -> TickRecord {
+fn make_test_tick_record(tick: u64) -> ChrononRecord {
     let mut nonce = [0u8; 16];
     for i in 0..16 {
         nonce[i] = (tick.wrapping_mul(7).wrapping_add(i as u64)) as u8;
     }
-    TickRecord::new(
+    ChrononRecord::new(
         tick,
         FTByteVector::from(vec![(tick % 256) as u8; 32]),
         "Ed25519".to_string(),
@@ -250,7 +250,7 @@ fn foretis_roundtrip() {
     let f = make_test_foretis();
     let json = to_json(&f).unwrap();
     let decoded: Foretis = from_json(&json).unwrap();
-    assert_eq!(decoded.tick_number, f.tick_number);
+    assert_eq!(decoded.chronon_number, f.chronon_number);
     assert_eq!(decoded.content_hash, f.content_hash);
     assert_eq!(decoded.signature, f.signature);
     assert_eq!(decoded.signature_algorithm, f.signature_algorithm);
@@ -260,7 +260,7 @@ fn foretis_roundtrip() {
     assert_eq!(decoded.time_being_reference_time, f.time_being_reference_time);
 }
 
-// TickRecord
+// ChrononRecord
 #[test]
 fn tick_record_serializes_to_base64_strings() {
     let tr = make_test_tick_record(5);
@@ -275,8 +275,8 @@ fn tick_record_serializes_to_base64_strings() {
 fn tick_record_roundtrip() {
     let tr = make_test_tick_record(7);
     let json = to_json(&tr).unwrap();
-    let decoded: TickRecord = from_json(&json).unwrap();
-    assert_eq!(decoded.tick_number, tr.tick_number);
+    let decoded: ChrononRecord = from_json(&json).unwrap();
+    assert_eq!(decoded.chronon_number, tr.chronon_number);
     assert_eq!(decoded.public_key, tr.public_key);
     assert_eq!(decoded.signature_algorithm, tr.signature_algorithm);
     assert_eq!(decoded.forward_foretis, tr.forward_foretis);
@@ -336,7 +336,7 @@ fn calendar_roundtrip() {
     assert_eq!(decoded.tbn, cal.tbn);
     assert_eq!(decoded.ticks.len(), cal.ticks.len());
     for (a, b) in cal.ticks.iter().zip(decoded.ticks.iter()) {
-        assert_eq!(a.tick_number, b.tick_number);
+        assert_eq!(a.chronon_number, b.chronon_number);
         assert_eq!(a.public_key, b.public_key);
         assert_eq!(a.aa_nonce, b.aa_nonce);
     }
@@ -458,8 +458,8 @@ fn external_attestation_roundtrip() {
     let decoded: ExternalAttestation = from_json(&json).unwrap();
     assert_eq!(decoded.attester_tbid, att.attester_tbid);
     assert_eq!(decoded.received_at_ns, att.received_at_ns);
-    assert_eq!(decoded.foretis.tick_number, att.foretis.tick_number);
-    assert_eq!(decoded.attester_tick_record.tick_number, att.attester_tick_record.tick_number);
+    assert_eq!(decoded.foretis.chronon_number, att.foretis.chronon_number);
+    assert_eq!(decoded.attester_tick_record.chronon_number, att.attester_tick_record.chronon_number);
 }
 
 // ─── Category 3: Cross-Language Canonical Output (4 tests) ──────────
@@ -469,15 +469,15 @@ fn to_json_and_from_json_are_inverses() {
     let f = make_test_foretis();
     let json = to_json(&f).unwrap();
     let decoded: Foretis = from_json(&json).unwrap();
-    assert_eq!(decoded.tick_number, f.tick_number);
+    assert_eq!(decoded.chronon_number, f.chronon_number);
     assert_eq!(decoded.content_hash, f.content_hash);
     assert_eq!(decoded.signature, f.signature);
     assert_eq!(decoded.tbid, f.tbid);
 
     let tr = make_test_tick_record(10);
     let json = to_json(&tr).unwrap();
-    let decoded: TickRecord = from_json(&json).unwrap();
-    assert_eq!(decoded.tick_number, tr.tick_number);
+    let decoded: ChrononRecord = from_json(&json).unwrap();
+    assert_eq!(decoded.chronon_number, tr.chronon_number);
     assert_eq!(decoded.public_key, tr.public_key);
     assert_eq!(decoded.aa_nonce, tr.aa_nonce);
     assert_eq!(decoded.forward_foretis, tr.forward_foretis);
@@ -556,7 +556,7 @@ fn calendar_100_ticks_serialization() {
     let decoded: Calendar = from_json(&json).unwrap();
     assert_eq!(decoded.ticks.len(), 100);
     for i in 0..100 {
-        assert_eq!(decoded.ticks[i].tick_number, cal.ticks[i].tick_number);
+        assert_eq!(decoded.ticks[i].chronon_number, cal.ticks[i].chronon_number);
     }
     // Verify no integer arrays leaked
     let val: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -575,7 +575,7 @@ fn calendar_0_ticks_serialization() {
 
 #[test]
 fn deep_nesting_external_attestation() {
-    // ExternalAttestation contains Foretis + TickRecord — deep nesting
+    // ExternalAttestation contains Foretis + ChrononRecord — deep nesting
     let foretis = make_test_foretis();
     let tick = make_test_tick_record(100);
     let att = ExternalAttestation {
@@ -588,7 +588,7 @@ fn deep_nesting_external_attestation() {
     let decoded: ExternalAttestation = from_json(&json).unwrap();
     assert_eq!(decoded.attester_tbid, att.attester_tbid);
     assert_eq!(decoded.received_at_ns, att.received_at_ns);
-    assert_eq!(decoded.foretis.tick_number, att.foretis.tick_number);
+    assert_eq!(decoded.foretis.chronon_number, att.foretis.chronon_number);
     let val: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_json_has_no_int_arrays(&val);
 }
@@ -599,7 +599,7 @@ fn all_zero_calendars() {
     let tbid = Tbid::from_raw([0u8; 96]);
     let mut cal = Calendar::new(tbid, "zero-cal");
     let zero_nonce: [u8; 16] = [0u8; 16];
-    let tr = TickRecord::new(
+    let tr = ChrononRecord::new(
         1,
         FTByteVector::from(vec![0u8; 32]),
         "Ed25519".to_string(),
@@ -619,10 +619,10 @@ fn all_zero_calendars() {
 
 #[test]
 fn max_slh_dsa_signature_in_tick_record() {
-    // TickRecord with a 49856-byte forward_foretis (max SLH-DSA sig)
+    // ChrononRecord with a 49856-byte forward_foretis (max SLH-DSA sig)
     let mut nonce = [0u8; 16];
     for i in 0..16 { nonce[i] = i as u8; }
-    let tr = TickRecord::new(
+    let tr = ChrononRecord::new(
         1,
         FTByteVector::from(vec![0x01; 32]),
         "SPHINCS+-SHA2-256f-simple".to_string(),
@@ -632,7 +632,7 @@ fn max_slh_dsa_signature_in_tick_record() {
         0,
     ).expect("large tick");
     let json = to_json(&tr).unwrap();
-    let decoded: TickRecord = from_json(&json).unwrap();
+    let decoded: ChrononRecord = from_json(&json).unwrap();
     assert_eq!(decoded.forward_foretis.len(), 49_856);
     assert_eq!(decoded.backward_foretis.len(), 49_856);
     assert_eq!(decoded.signature_algorithm, "SPHINCS+-SHA2-256f-simple");
@@ -643,7 +643,7 @@ fn mimic_spincs_signature_size() {
     // Mimic SPHINCS+-SHA2-128s signature size (7856 bytes)
     let mut nonce = [0u8; 16];
     for i in 0..16 { nonce[i] = (i + 1) as u8; }
-    let tr = TickRecord::new(
+    let tr = ChrononRecord::new(
         2,
         FTByteVector::from(vec![0x02; 32]),
         "SPHINCS+-SHA2-128s-simple".to_string(),
@@ -653,7 +653,7 @@ fn mimic_spincs_signature_size() {
         0,
     ).expect("sphincs tick");
     let json = to_json(&tr).unwrap();
-    let decoded: TickRecord = from_json(&json).unwrap();
+    let decoded: ChrononRecord = from_json(&json).unwrap();
     assert_eq!(decoded.forward_foretis.len(), 7_856);
     assert_eq!(decoded.signature_algorithm, "SPHINCS+-SHA2-128s-simple");
 }
@@ -700,7 +700,7 @@ fn to_json_pretty_produces_valid_output() {
     let f = make_test_foretis();
     let json = to_json_pretty(&f).unwrap();
     let decoded: Foretis = serde_json::from_str(&json).unwrap();
-    assert_eq!(decoded.tick_number, f.tick_number);
+    assert_eq!(decoded.chronon_number, f.chronon_number);
     assert_eq!(decoded.content_hash, f.content_hash);
     assert_eq!(decoded.signature, f.signature);
     assert_eq!(decoded.tbid, f.tbid);

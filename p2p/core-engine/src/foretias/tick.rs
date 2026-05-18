@@ -1,4 +1,4 @@
-//! Foretias domain types: TickRecord, Foretis, and stamp/verify operations.
+//! Foretias domain types: ChrononRecord, Foretis, and stamp/verify operations.
 
 use serde::{Deserialize, Serialize};
 
@@ -9,24 +9,25 @@ use crate::error::NodeError;
 use super::encoding::{FTByteVector, FTByteArray};
 use super::types::Tbid;
 
-/// A single entry in the Calendar, linking consecutive ticks via Foretis attestations.
+/// A single entry in the Calendar, linking consecutive chronons via Foretis attestations.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TickRecord {
-    /// The monotonically increasing tick index.
-    pub tick_number: u64,
-    /// The public key active at this tick.
+pub struct ChrononRecord {
+    /// The monotonically increasing chronon index.
+    #[serde(rename = "tick_number")]
+    pub chronon_number: u64,
+    /// The public key active at this chronon.
     pub public_key: FTByteVector,
-    /// Plain-text algorithm identifier for this tick's key.
+    /// Plain-text algorithm identifier for this chronon's key.
     #[serde(default = "default_sig_algorithm")]
     pub signature_algorithm: String,
-    /// Serialized Foretis attesting forward to the next tick.
+    /// Serialized Foretis attesting forward to the next chronon.
     pub forward_foretis: FTByteVector,
-    /// Serialized Foretis attesting backward to the previous tick.
+    /// Serialized Foretis attesting backward to the previous chronon.
     pub backward_foretis: FTByteVector,
-    /// Cryptographic nonce (16 bytes) used in the auto-attestation blob for this tick pair.
-    /// This prevents replay attacks by ensuring each blob is unique even if the tick data repeats.
+    /// Cryptographic nonce (16 bytes) used in the auto-attestation blob for this chronon pair.
+    /// This prevents replay attacks by ensuring each blob is unique even if the chronon data repeats.
     pub aa_nonce: FTByteArray<16>,
-    /// Number of user-initiated stamps during this tick (excluding auto-attestation itself,
+    /// Number of user-initiated stamps during this chronon (excluding auto-attestation itself,
     /// but including mutual attestations). Persisted for blob reconstruction during verify_pair.
     #[serde(default)]
     pub stamps_per_tick: u64,
@@ -42,13 +43,13 @@ pub struct TickRecord {
     pub tb_version: u32,
 }
 
-impl TickRecord {
-    /// Create a validated TickRecord.
+impl ChrononRecord {
+    /// Create a validated ChrononRecord.
     ///
     /// # Errors
-    /// Returns `NodeError::InvalidInput` if `tick_number` is 0 or `public_key` is empty.
+    /// Returns `NodeError::InvalidInput` if `chronon_number` is 0 or `public_key` is empty.
     pub fn new(
-        tick_number: u64,
+        chronon_number: u64,
         public_key: FTByteVector,
         signature_algorithm: String,
         forward_foretis: FTByteVector,
@@ -56,14 +57,14 @@ impl TickRecord {
         aa_nonce: FTByteArray<16>,
         stamps_per_tick: u64,
     ) -> Result<Self, NodeError> {
-        if tick_number == 0 {
-            return Err(NodeError::InvalidInput("tick_number must be > 0".into()));
+        if chronon_number == 0 {
+            return Err(NodeError::InvalidInput("chronon_number must be > 0".into()));
         }
         if public_key.is_empty() {
             return Err(NodeError::InvalidInput("public_key must not be empty".into()));
         }
         Ok(Self {
-            tick_number,
+            chronon_number,
             public_key,
             signature_algorithm,
             forward_foretis,
@@ -77,20 +78,20 @@ impl TickRecord {
     }
 }
 
-/// A cryptographically signed attestation of content at a specific tick.
+/// A cryptographically signed attestation of content at a specific chronon.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Foretis {
-    /// The tick number at which this attestation was created.
-    pub tick_number: u64,
+    /// The chronon number at which this attestation was created.
+    pub chronon_number: u64,
     /// SHA-256 hash of the attested content.
     pub content_hash: FTByteArray<32>,
-    /// Ed25519 signature over the content and tick metadata.
+    /// Ed25519 signature over the content and chronon metadata.
     pub signature: FTByteVector,
     /// Plain-text algorithm identifier (e.g. "SPHINCS+-SHA2-128s-simple").
     pub signature_algorithm: String,
     /// TimeBeing identifier of the signing node.
     pub tbid: Tbid,
-    /// Echo string identifying the tick (e.g. `"tick-42"`).
+    /// Echo string identifying the chronon (e.g. `"chronon-42"`).
     pub echo: String,
     /// TimeBeing name (human-readable identifier).
     pub tbn: String,
@@ -102,9 +103,9 @@ impl Foretis {
     /// Create a validated Foretis.
     ///
     /// # Errors
-    /// Returns `NodeError::InvalidInput` if `tick_number` is 0 or `signature` is empty.
+    /// Returns `NodeError::InvalidInput` if `chronon_number` is 0 or `signature` is empty.
     pub fn new(
-        tick_number: u64,
+        chronon_number: u64,
         content_hash: FTByteArray<32>,
         signature: FTByteVector,
         signature_algorithm: String,
@@ -113,14 +114,14 @@ impl Foretis {
         tbn: String,
         time_being_reference_time: String,
     ) -> Result<Self, NodeError> {
-        if tick_number == 0 {
-            return Err(NodeError::InvalidInput("tick_number must be > 0".into()));
+        if chronon_number == 0 {
+            return Err(NodeError::InvalidInput("chronon_number must be > 0".into()));
         }
         if signature.is_empty() {
             return Err(NodeError::InvalidInput("signature must not be empty".into()));
         }
         Ok(Self {
-            tick_number,
+            chronon_number,
             content_hash,
             signature,
             signature_algorithm,
@@ -132,14 +133,14 @@ impl Foretis {
     }
 }
 
-/// Trait for looking up TickRecords from a calendar or calendar-like store.
+/// Trait for looking up ChrononRecords from a calendar or calendar-like store.
 ///
 /// Implemented by the Calendar component. Chronomatter uses this for verification
 /// without owning calendar data.
 pub trait CalendarLookup: Send + Sync {
-    /// Retrieves up to `count` tick records starting from `tick_number`.
-    fn get(&self, tick_number: u64, count: usize) -> Result<Vec<TickRecord>, NodeError>;
-    /// Returns the tick number of the most recent record, if any.
+    /// Retrieves up to `count` chronon records starting from `chronon_number`.
+    fn get(&self, chronon_number: u64, count: usize) -> Result<Vec<ChrononRecord>, NodeError>;
+    /// Returns the chronon number of the most recent record, if any.
     fn latest(&self) -> Option<u64>;
     /// Returns the TBID of this calendar's owner.
     fn tbid(&self) -> Tbid;
@@ -152,7 +153,7 @@ pub fn stamp(
     server: &dyn CryptoServer,
     clock: &dyn Clock,
     tbid: &Tbid,
-    tick_number: u64,
+    chronon_number: u64,
     content: &[u8],
     echo: &str,
     tbn: &str,
@@ -160,7 +161,7 @@ pub fn stamp(
     let raw_tbid = tbid.raw_bytes();
     let mut sig_input = Vec::with_capacity(96 + 8 + content.len());
     sig_input.extend_from_slice(&raw_tbid);
-    sig_input.extend_from_slice(&tick_number.to_be_bytes());
+    sig_input.extend_from_slice(&chronon_number.to_be_bytes());
     sig_input.extend_from_slice(content);
 
     let signature = server.sign(&sig_input)?;
@@ -172,7 +173,7 @@ pub fn stamp(
     let time_being_reference_time = format!("UE+{}ns", now_ns);
 
     Ok(Foretis {
-        tick_number,
+        chronon_number,
         content_hash: content_hash.bytes.into(),
         signature: FTByteVector::from(signature.bytes.to_vec()),
         signature_algorithm: sig_alg,
@@ -195,11 +196,11 @@ pub fn verify(
         return Ok(false);
     }
 
-    let records = calendar.get(foretis.tick_number, 1)?;
+    let records = calendar.get(foretis.chronon_number, 1)?;
     let rec = records.first().ok_or(NodeError::NotFound("tick"))?;
 
     // On tick 1, verify the genesis signature first
-    if foretis.tick_number == 1 && !rec.genesis_signature.is_empty() {
+    if foretis.chronon_number == 1 && !rec.genesis_signature.is_empty() {
         let genesis_valid = verify_genesis_signature(&foretis.tbid, rec)?;
         if !genesis_valid {
             return Ok(false);
@@ -209,7 +210,7 @@ pub fn verify(
     // Use the algorithm declared in the Foretis itself for verification
     let mut sig_input = Vec::new();
     sig_input.extend_from_slice(&foretis.tbid.raw_bytes());
-    sig_input.extend_from_slice(&foretis.tick_number.to_be_bytes());
+    sig_input.extend_from_slice(&foretis.chronon_number.to_be_bytes());
     sig_input.extend_from_slice(content);
 
     Ok(server.verify_with(
@@ -222,7 +223,7 @@ pub fn verify(
 
 /// Build auto-attestation blob: tbid || A.tick || A.pk || B.tick || B.pk || stamps_per_tick || nonce
 ///
-/// Returns the signed blob and the 16-byte nonce for storage in TickRecord.
+/// Returns the signed blob and the 16-byte nonce for storage in ChrononRecord.
 /// The nonce ensures each blob is unique, preventing replay attacks.
 /// `stamps_per_tick` counts user-initiated stamps during tick B (excluding auto-attestation itself,
 /// but including mutual attestations). This is knowable only to the Chronomatter that produced the tick.
@@ -249,7 +250,7 @@ pub fn auto_attestation_blob_with_count(
 
 /// Build auto-attestation blob: tbid || A.tick || A.pk || B.tick || B.pk || nonce
 ///
-/// Returns the signed blob and the 16-byte nonce for storage in TickRecord.
+/// Returns the signed blob and the 16-byte nonce for storage in ChrononRecord.
 /// The nonce ensures each blob is unique, preventing replay attacks.
 pub fn auto_attestation_blob(
     tbid: &str,
@@ -268,18 +269,18 @@ pub fn auto_attestation_blob(
 pub fn verify_pair(
     crypto: &dyn CryptoServer,
     tbid_str: &str,
-    prev: &TickRecord,
-    curr: &TickRecord,
+    prev: &ChrononRecord,
+    curr: &ChrononRecord,
 ) -> Result<bool, NodeError> {
     let nonce = curr.aa_nonce;
     let stamps = curr.stamps_per_tick;
     let mut attest_blob = Vec::with_capacity(tbid_str.len() + 8 + prev.public_key.len() + 8 + curr.public_key.len() + 8 + 16);
     attest_blob.extend_from_slice(tbid_str.as_bytes());
-    attest_blob.extend_from_slice(&prev.tick_number.to_be_bytes());
+    attest_blob.extend_from_slice(&prev.chronon_number.to_be_bytes());
     attest_blob.extend_from_slice(&prev.public_key);
-    attest_blob.extend_from_slice(&curr.tick_number.to_be_bytes());
+    attest_blob.extend_from_slice(&curr.chronon_number.to_be_bytes());
     attest_blob.extend_from_slice(&curr.public_key);
-    // Backward compat: pre-v0.9 TickRecords have stamps_per_tick=0 (serde default)
+    // Backward compat: pre-v0.9 ChrononRecords have stamps_per_tick=0 (serde default)
     attest_blob.extend_from_slice(&stamps.to_be_bytes());
     attest_blob.extend_from_slice(&nonce[..]);
 
@@ -302,7 +303,7 @@ pub fn verify_pair(
 
 /// Verify the genesis signature on tick 1.
 ///
-/// Rebuilds the genesis blob from the tick record (tbid_raw || tick_number || public_key),
+/// Rebuilds the genesis blob from the tick record (tbid_raw || chronon_number || public_key),
 /// then verifies both Ed25519 and SLH-DSA signatures against the TBID public key.
 ///
 /// Returns `Ok(true)` if the genesis signature is valid.
@@ -310,9 +311,9 @@ pub fn verify_pair(
 /// Returns `Err` only on internal/crypto errors.
 pub fn verify_genesis_signature(
     tbid: &Tbid,
-    record: &TickRecord,
+    record: &ChrononRecord,
 ) -> Result<bool, NodeError> {
-    if record.tick_number != 1 {
+    if record.chronon_number != 1 {
         return Ok(false);
     }
     if record.genesis_signature.is_empty() {
@@ -324,7 +325,7 @@ pub fn verify_genesis_signature(
 
     let mut genesis_blob = Vec::with_capacity(96 + 8 + record.public_key.len());
     genesis_blob.extend_from_slice(&tbid.raw_bytes());
-    genesis_blob.extend_from_slice(&record.tick_number.to_be_bytes());
+    genesis_blob.extend_from_slice(&record.chronon_number.to_be_bytes());
     genesis_blob.extend_from_slice(&record.public_key);
 
     let pub_bytes = crate::foretias::types::SignatureBytes::from(tbid.raw_bytes());
@@ -362,16 +363,16 @@ mod tests {
     fn make_cal(server: &dyn CryptoServer) -> Calendar {
         let tbid = Tbid::from_raw([0xAA; 96]);
         let mut cal = Calendar::new(tbid, "test-cal");
-        let tick_number = 1;
+        let chronon_number = 1;
         let content = b"init";
-        let foretis = stamp(server, &SystemClock, &tbid, tick_number, content, "init", "test-cal")
+        let foretis = stamp(server, &SystemClock, &tbid, chronon_number, content, "init", "test-cal")
             .expect("stamp init tick");
         let public_key = match server.public_key() {
             crate::crypto_server::PublicKeyBytes::Ed25519(pk) => pk.bytes.to_vec(),
             crate::crypto_server::PublicKeyBytes::P256Compressed(pk) => pk.bytes.to_vec(),
         };
-        cal.append(TickRecord {
-            tick_number,
+        cal.append(ChrononRecord {
+            chronon_number,
             public_key: public_key.into(),
             signature_algorithm: "Ed25519".to_string(),
             forward_foretis: serde_json::to_vec(&foretis).unwrap().into(),
@@ -391,7 +392,7 @@ mod tests {
         let tbid = Tbid::from_raw([1u8; 96]);
         let foretis = stamp(server.as_ref(), &SystemClock, &tbid, 42, b"hello", "echo-42", "tbn")
             .expect("stamp should succeed");
-        assert_eq!(foretis.tick_number, 42);
+        assert_eq!(foretis.chronon_number, 42);
         assert_eq!(foretis.tbid, tbid);
         assert_eq!(foretis.echo, "echo-42");
         assert_eq!(foretis.tbn, "tbn");
@@ -413,7 +414,7 @@ mod tests {
         let server = make_server();
         let tbid = Tbid::from_raw([3u8; 96]);
         let foretis = stamp(server.as_ref(), &SystemClock, &tbid, 1, b"", "empty", "t").unwrap();
-        assert_eq!(foretis.tick_number, 1);
+        assert_eq!(foretis.chronon_number, 1);
         assert!(!foretis.signature.is_empty());
     }
 
@@ -448,8 +449,8 @@ mod tests {
         let server = make_server();
         let tbid = Tbid::from_raw([0xBB; 96]);
         let mut cal = Calendar::new(tbid, "bad-cal");
-        cal.append(TickRecord {
-            tick_number: 1,
+        cal.append(ChrononRecord {
+            chronon_number: 1,
             public_key: vec![0u8; 32].into(),
             signature_algorithm: "Ed25519".to_string(),
             forward_foretis: vec![].into(),
@@ -485,8 +486,8 @@ mod tests {
 
         let sig_alg = "Ed25519".to_string();
 
-        let prev = TickRecord {
-            tick_number: 1,
+        let prev = ChrononRecord {
+            chronon_number: 1,
             public_key: pub_key.to_vec().into(),
             signature_algorithm: sig_alg.clone(),
             forward_foretis: vec![].into(),
@@ -497,8 +498,8 @@ mod tests {
             genesis_signature: vec![].into(),
             tb_version: 0,
         };
-        let curr = TickRecord {
-            tick_number: 2,
+        let curr = ChrononRecord {
+            chronon_number: 2,
             public_key: pub_key.to_vec().into(),
             signature_algorithm: sig_alg.clone(),
             forward_foretis: FTByteVector::from(sig_bytes.clone()),
@@ -529,8 +530,8 @@ mod tests {
         let mut sig_bytes = sig.bytes.to_vec();
         let sig_alg = "Ed25519".to_string();
 
-        let prev = TickRecord {
-            tick_number: 1,
+        let prev = ChrononRecord {
+            chronon_number: 1,
             public_key: pub_key.to_vec().into(),
             signature_algorithm: sig_alg.clone(),
             forward_foretis: vec![].into(),
@@ -541,8 +542,8 @@ mod tests {
             genesis_signature: vec![].into(),
             tb_version: 0,
         };
-        let curr = TickRecord {
-            tick_number: 2,
+        let curr = ChrononRecord {
+            chronon_number: 2,
             public_key: pub_key.to_vec().into(),
             signature_algorithm: sig_alg.clone(),
             forward_foretis: FTByteVector::from(sig_bytes.clone()),
@@ -557,8 +558,8 @@ mod tests {
         assert!(verify_pair(server.as_ref(), &tbid_str, &prev, &curr).unwrap());
 
         sig_bytes[0] ^= 0xFF;
-        let curr_tampered = TickRecord {
-            tick_number: 2,
+        let curr_tampered = ChrononRecord {
+            chronon_number: 2,
             public_key: pub_key.to_vec().into(),
             signature_algorithm: sig_alg,
             forward_foretis: FTByteVector::from(sig_bytes),

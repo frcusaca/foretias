@@ -101,7 +101,7 @@ fn test_stamp_and_verify_e2e() {
     let foretis: Value = serde_json::from_str(stamp_output.trim())
         .expect("Failed to parse Foretis JSON from stamp output");
 
-    assert!(foretis.get("tick_number").is_some(), "Foretis missing tick_number");
+    assert!(foretis.get("chronon_number").is_some(), "Foretis missing chronon_number");
     assert!(foretis.get("content_hash").is_some(), "Foretis missing content_hash");
     assert!(foretis.get("signature").is_some(), "Foretis missing signature");
     assert!(foretis.get("tbid").is_some(), "Foretis missing tbid");
@@ -170,8 +170,8 @@ fn test_stamp_and_verify_e2e() {
     let stamp2_output = String::from_utf8_lossy(&stamp2_result.stdout);
     let foretis2: Value = serde_json::from_str(stamp2_output.trim()).unwrap();
 
-    let tick1 = foretis.get("tick_number").unwrap().as_u64().unwrap();
-    let tick2 = foretis2.get("tick_number").unwrap().as_u64().unwrap();
+    let tick1 = foretis.get("chronon_number").unwrap().as_u64().unwrap();
+    let tick2 = foretis2.get("chronon_number").unwrap().as_u64().unwrap();
     assert_eq!(tick2, tick1 + 1, "Second tick should be tick1 + 1");
 
     let _ = server.kill();
@@ -291,7 +291,7 @@ async fn test_peer_unreachable_does_not_crash() {
 
     let foretis = server.chronomatter().stamp(b"still works".to_vec(), "ok".to_string())
         .expect("Local stamp should work despite unreachable peer");
-    assert!(foretis.tick_number > 0);
+    assert!(foretis.chronon_number > 0);
 
     let _ = handle.abort();
     server.stop_daemon_arc();
@@ -311,8 +311,8 @@ fn test_crash_recovery_calendar() {
     // Create a calendar with 3 ticks
     let mut cal = CoreCalendar::new(Tbid::default(), "crash-test");
     for i in 0..3u64 {
-        let record = foretias_core::foretias::tick::TickRecord {
-            tick_number: i,
+        let record = foretias_core::foretias::tick::ChrononRecord {
+            chronon_number: i,
             public_key: vec![0u8; 32].into(),
             signature_algorithm: "Ed25519".to_string(),
             forward_foretis: vec![].into(),
@@ -332,8 +332,8 @@ fn test_crash_recovery_calendar() {
     // Simulate crash: write a newer state to .tmp (more ticks than main)
     let mut cal2 = CoreCalendar::new(Tbid::default(), "crash-test");
     for i in 0..5u64 {
-        let record = foretias_core::foretias::tick::TickRecord {
-            tick_number: i,
+        let record = foretias_core::foretias::tick::ChrononRecord {
+            chronon_number: i,
             public_key: vec![0u8; 32].into(),
             signature_algorithm: "Ed25519".to_string(),
             forward_foretis: vec![].into(),

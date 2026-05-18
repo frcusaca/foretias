@@ -4,11 +4,11 @@
 //! and short-lived callbacks. No channels, no message passing, no serialization.
 
 use crate::error::NodeError;
-use crate::foretias::tick::{Foretis, TickRecord};
+use crate::foretias::tick::{Foretis, ChrononRecord};
 use crate::foretias::types::{Message, TickNumber};
 
 pub trait TickObserver: Send + Sync {
-    fn on_tick_advance(&self, tick_number: TickNumber, public_key: &[u8], tick_record: &TickRecord);
+    fn on_tick_advance(&self, chronon_number: TickNumber, public_key: &[u8], tick_record: &ChrononRecord);
 }
 
 pub trait Attester: Send + Sync {

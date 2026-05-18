@@ -10,7 +10,7 @@ use foretias_core::chronomatter::Chronomatter;
 use foretias_core::config::CommunerdConfig;
 use foretias_core::core::identity::generate_ed25519_keypair;
 use foretias_core::foretias::callbacks::{TickObserver, MutualAttestObserver};
-use foretias_core::foretias::{TickRecord, types::{TickNumber, Tbid}};
+use foretias_core::foretias::{ChrononRecord, types::{TickNumber, Tbid}};
 use foretias_core::error::NodeError;
 use foretias_core::noise;
 
@@ -23,7 +23,7 @@ use self::jsonrpc::JsonRpcResponse;
 
 struct NoOpObserver;
 impl TickObserver for NoOpObserver {
-    fn on_tick_advance(&self, _tick_number: TickNumber, _public_key: &[u8], _tick_record: &TickRecord) {}
+    fn on_tick_advance(&self, _chronon_number: TickNumber, _public_key: &[u8], _tick_record: &ChrononRecord) {}
 }
 
 pub mod jsonrpc;

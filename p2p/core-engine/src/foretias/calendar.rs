@@ -1,12 +1,12 @@
 //! In-memory Calendar with append-only tick records.
 
-use super::tick::{TickRecord, CalendarLookup, verify_pair};
+use super::tick::{ChrononRecord, CalendarLookup, verify_pair};
 use super::types::Tbid;
 use crate::crypto_server::CryptoServer;
 use crate::error::NodeError;
 use serde::{Deserialize, Serialize};
 
-/// An append-only chronological record of TickRecords belonging to a TimeFamily.
+/// An append-only chronological record of ChrononRecords belonging to a TimeFamily.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Calendar {
     /// TimeBeing identifier of this calendar's owner.
@@ -16,7 +16,7 @@ pub struct Calendar {
     /// Stamp TimeBeing identifier used for attestation.
     pub stamp_tbid: Tbid,
     /// Ordered list of tick records.
-    pub ticks: Vec<TickRecord>,
+    pub ticks: Vec<ChrononRecord>,
 }
 
 impl Calendar {
@@ -31,12 +31,12 @@ impl Calendar {
     }
 
     /// Appends a tick record; returns an error if the tick number is not strictly greater than the last.
-    pub fn append(&mut self, record: TickRecord) -> Result<(), NodeError> {
+    pub fn append(&mut self, record: ChrononRecord) -> Result<(), NodeError> {
         if let Some(last) = self.ticks.last() {
-            if record.tick_number <= last.tick_number {
+            if record.chronon_number <= last.chronon_number {
                 return Err(NodeError::Internal(format!(
                     "tick number {} is not strictly greater than last tick {}",
-                    record.tick_number, last.tick_number
+                    record.chronon_number, last.chronon_number
                 )));
             }
         }
@@ -61,8 +61,8 @@ impl Calendar {
         let start_tick = start.unwrap_or(0);
         let end_tick = end.unwrap_or(u64::MAX);
 
-        let ticks: Vec<&TickRecord> = self.ticks.iter()
-            .filter(|t| t.tick_number >= start_tick && t.tick_number <= end_tick)
+        let ticks: Vec<&ChrononRecord> = self.ticks.iter()
+            .filter(|t| t.chronon_number >= start_tick && t.chronon_number <= end_tick)
             .collect();
 
         if ticks.len() < 2 {
@@ -144,33 +144,33 @@ impl Calendar {
     /// Add an external attestation to a specific tick.
     pub fn add_external_attestation(
         &mut self,
-        tick_number: u64,
+        chronon_number: u64,
         att: super::external_attestation::ExternalAttestation,
     ) -> Result<(), NodeError> {
         for tick in self.ticks.iter_mut() {
-            if tick.tick_number == tick_number {
+            if tick.chronon_number == chronon_number {
                 tick.external_attestations.push(att);
                 return Ok(());
             }
         }
         Err(NodeError::Internal(format!(
             "tick number {} not found for external attestation",
-            tick_number
+            chronon_number
         )))
     }
 }
 
 impl CalendarLookup for Calendar {
-    fn get(&self, tick_number: u64, count: usize) -> Result<Vec<TickRecord>, NodeError> {
+    fn get(&self, chronon_number: u64, count: usize) -> Result<Vec<ChrononRecord>, NodeError> {
         Ok(self.ticks.iter()
-            .filter(|t| t.tick_number >= tick_number)
+            .filter(|t| t.chronon_number >= chronon_number)
             .take(count)
             .cloned()
             .collect())
     }
 
     fn latest(&self) -> Option<u64> {
-        self.ticks.last().map(|t| t.tick_number)
+        self.ticks.last().map(|t| t.chronon_number)
     }
 
     fn tbid(&self) -> Tbid {
@@ -188,9 +188,9 @@ mod tests {
     use crate::crypto_server;
     use std::path::Path;
 
-    fn make_tick(tick_number: u64) -> TickRecord {
-        TickRecord {
-            tick_number,
+    fn make_tick(chronon_number: u64) -> ChrononRecord {
+        ChrononRecord {
+            chronon_number,
             public_key: vec![0u8; 32].into(),
             signature_algorithm: "Ed25519".to_string(),
             forward_foretis: vec![].into(),
@@ -235,8 +235,8 @@ mod tests {
 
         let results = cal.get(2, 10).unwrap();
         assert_eq!(results.len(), 2);
-        assert_eq!(results[0].tick_number, 2);
-        assert_eq!(results[1].tick_number, 3);
+        assert_eq!(results[0].chronon_number, 2);
+        assert_eq!(results[1].chronon_number, 3);
     }
 
     #[test]
@@ -256,8 +256,8 @@ mod tests {
 
         let results = cal.get(1, 2).unwrap();
         assert_eq!(results.len(), 2);
-        assert_eq!(results[0].tick_number, 1);
-        assert_eq!(results[1].tick_number, 2);
+        assert_eq!(results[0].chronon_number, 1);
+        assert_eq!(results[1].chronon_number, 2);
     }
 
     #[test]
@@ -267,7 +267,7 @@ mod tests {
     }
 
     #[test]
-    fn latest_returns_correct_tick_number() {
+    fn latest_returns_correct_chronon_number() {
         let mut cal = Calendar::new(Tbid::from_raw([0u8; 96]), "test");
         cal.append(make_tick(7)).unwrap();
         cal.append(make_tick(14)).unwrap();
@@ -322,8 +322,8 @@ mod tests {
                 (fwd.bytes.to_vec(), bwd.bytes.to_vec(), nonce)
             };
 
-            cal.append(TickRecord {
-                tick_number: i,
+            cal.append(ChrononRecord {
+                chronon_number: i,
                 public_key: keypairs[i as usize].0.to_vec().into(),
                 signature_algorithm: "Ed25519".to_string(),
                 forward_foretis: forward_foretis.into(),
@@ -372,8 +372,8 @@ mod tests {
                 (fwd.bytes.to_vec(), bwd.bytes.to_vec(), nonce)
             };
 
-            cal.append(TickRecord {
-                tick_number: i,
+            cal.append(ChrononRecord {
+                chronon_number: i,
                 public_key: keypairs[i as usize].0.to_vec().into(),
                 signature_algorithm: "Ed25519".to_string(),
                 forward_foretis: forward_foretis.into(),
@@ -392,7 +392,7 @@ mod tests {
     }
 
     #[test]
-    fn latest_tick_number_via_calendar_lookup() {
+    fn latest_chronon_number_via_calendar_lookup() {
         let mut cal = Calendar::new(Tbid::from_raw([0u8; 96]), "test");
         cal.append(make_tick(42)).unwrap();
         assert_eq!(cal.latest(), Some(42));

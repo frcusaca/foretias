@@ -52,7 +52,7 @@ impl CommunerdReader {
         let peer = self.peers.get(peer_idx)
             .ok_or_else(|| PtPError::Connect("peer index out of range".into()))?;
         let params = serde_json::json!({
-            "cal_tick_start": start,
+            "cal_chronon_start": start,
             "count": count,
         });
         noise_json_rpc(peer, "get_calendar_slice", params, self.timeout).await

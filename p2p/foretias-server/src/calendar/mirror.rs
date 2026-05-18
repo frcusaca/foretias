@@ -4,12 +4,12 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use foretias_core::foretias::tick::TickRecord;
+use foretias_core::foretias::tick::ChrononRecord;
 use foretias_core::error::NodeError;
 use parking_lot::RwLock;
 
 pub struct MirrorStore {
-    mirrors: Arc<RwLock<HashMap<String, Vec<TickRecord>>>>,
+    mirrors: Arc<RwLock<HashMap<String, Vec<ChrononRecord>>>>,
     base_dir: PathBuf,
     max_mirrored_tbids: usize,
 }
@@ -39,24 +39,24 @@ impl MirrorStore {
         self.mirrors.read().get(tbid_hex).map(|v| v.len() as u64).unwrap_or(0)
     }
 
-    pub fn insert_mirrored(&self, tbid_hex: &str, record: TickRecord) -> Result<(), NodeError> {
+    pub fn insert_mirrored(&self, tbid_hex: &str, record: ChrononRecord) -> Result<(), NodeError> {
         let mut mirrors = self.mirrors.write();
         let entry = mirrors.entry(tbid_hex.to_string())
             .or_insert_with(Vec::new);
-        if entry.iter().any(|r| r.tick_number == record.tick_number) {
+        if entry.iter().any(|r| r.chronon_number == record.chronon_number) {
             return Ok(());
         }
         entry.push(record);
-        entry.sort_by_key(|r| r.tick_number);
+        entry.sort_by_key(|r| r.chronon_number);
         Ok(())
     }
 
-    pub fn get_mirrored(&self, tbid_hex: &str, tick_number: u64, count: usize) -> Result<Vec<TickRecord>, NodeError> {
+    pub fn get_mirrored(&self, tbid_hex: &str, chronon_number: u64, count: usize) -> Result<Vec<ChrononRecord>, NodeError> {
         let mirrors = self.mirrors.read();
         let records = mirrors.get(tbid_hex)
             .ok_or_else(|| NodeError::NotFound("mirrored calendar"))?;
         Ok(records.iter()
-            .skip_while(|r| r.tick_number < tick_number)
+            .skip_while(|r| r.chronon_number < chronon_number)
             .take(count)
             .cloned()
             .collect())
@@ -69,7 +69,7 @@ impl MirrorStore {
             return None;
         }
         let tick_count = records.len() as u64;
-        let latest_tick = records.last()?.tick_number;
+        let latest_tick = records.last()?.chronon_number;
         let hash_sanity = compute_hash_sanity(records);
         Some((tick_count, latest_tick, hash_sanity))
     }
@@ -86,10 +86,10 @@ impl Clone for MirrorStore {
 }
 
 /// SHA-256 of concatenated tick numbers (big-endian u64 each).
-pub fn compute_hash_sanity(records: &[TickRecord]) -> String {
+pub fn compute_hash_sanity(records: &[ChrononRecord]) -> String {
     let mut data = Vec::with_capacity(records.len() * 8);
     for record in records {
-        data.extend_from_slice(&record.tick_number.to_be_bytes());
+        data.extend_from_slice(&record.chronon_number.to_be_bytes());
     }
     let hash = match foretias_core::core::hashing::sha256(&data) {
         Ok(h) => h,
@@ -102,9 +102,9 @@ pub fn compute_hash_sanity(records: &[TickRecord]) -> String {
 mod tests {
     use super::*;
 
-    fn make_tick(tick_number: u64) -> TickRecord {
-        TickRecord {
-            tick_number,
+    fn make_tick(chronon_number: u64) -> ChrononRecord {
+        ChrononRecord {
+            chronon_number,
             public_key: vec![0u8; 32].into(),
             signature_algorithm: "Ed25519".to_string(),
             forward_foretis: vec![].into(),
@@ -147,8 +147,8 @@ mod tests {
 
         let records = store.get_mirrored("tbid1", 2, 10).unwrap();
         assert_eq!(records.len(), 2);
-        assert_eq!(records[0].tick_number, 2);
-        assert_eq!(records[1].tick_number, 3);
+        assert_eq!(records[0].chronon_number, 2);
+        assert_eq!(records[1].chronon_number, 3);
     }
 
     #[test]
@@ -161,16 +161,16 @@ mod tests {
     }
 
     #[test]
-    fn insert_mirrored_sorts_by_tick_number() {
+    fn insert_mirrored_sorts_by_chronon_number() {
         let store = MirrorStore::new("/tmp/mirror-test", 64);
         store.insert_mirrored("tbid1", make_tick(3)).unwrap();
         store.insert_mirrored("tbid1", make_tick(1)).unwrap();
         store.insert_mirrored("tbid1", make_tick(2)).unwrap();
 
         let records = store.get_mirrored("tbid1", 0, 10).unwrap();
-        assert_eq!(records[0].tick_number, 1);
-        assert_eq!(records[1].tick_number, 2);
-        assert_eq!(records[2].tick_number, 3);
+        assert_eq!(records[0].chronon_number, 1);
+        assert_eq!(records[1].chronon_number, 2);
+        assert_eq!(records[2].chronon_number, 3);
     }
 
     #[test]
@@ -227,7 +227,7 @@ mod tests {
 
     #[test]
     fn compute_hash_sanity_empty_records() {
-        let records: Vec<TickRecord> = vec![];
+        let records: Vec<ChrononRecord> = vec![];
         let hash = compute_hash_sanity(&records);
         assert_eq!(hash, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
     }

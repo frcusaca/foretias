@@ -4,7 +4,7 @@
 //! yamux streams instead of opening fresh TCP+Noise_XX connections.
 
 use async_trait::async_trait;
-use foretias_core::foretias::TickRecord;
+use foretias_core::foretias::ChrononRecord;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
@@ -112,13 +112,13 @@ impl PeerTransport for Libp2pTransport {
         peer: &PeerAddr,
         tick_start: u64,
         count: u64,
-    ) -> Result<Vec<TickRecord>, TransportError> {
+    ) -> Result<Vec<ChrononRecord>, TransportError> {
         let params = serde_json::json!({
-            "cal_tick_start": tick_start,
+            "cal_chronon_start": tick_start,
             "count": count,
         });
         let result = self.rpc_call(peer, "get_calendar_slice", params).await?;
-        let records: Vec<TickRecord> =
+        let records: Vec<ChrononRecord> =
             serde_json::from_value(result).map_err(|e| TransportError::Decode(e.to_string()))?;
         Ok(records)
     }

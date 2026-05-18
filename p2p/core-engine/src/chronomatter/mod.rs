@@ -15,7 +15,7 @@ use crate::crypto_server::{self, CryptoServer};
 use crate::core::identity::PrivKeyHandle;
 use crate::error::NodeError;
 use crate::clock::Clock;
-use crate::foretias::{auto_attestation_blob_with_count, Foretis, TickRecord};
+use crate::foretias::{auto_attestation_blob_with_count, Foretis, ChrononRecord};
 use crate::foretias::encoding::FTByteVector;
 use crate::foretias::tick::CalendarLookup;
 use crate::foretias::callbacks::{TickObserver, MutualAttestObserver};
@@ -193,7 +193,7 @@ impl Chronomatter {
         }
     }
 
-    fn build_tick_record(&self, tick: u64, new_pub: [u8; 32]) -> Result<TickRecord, NodeError> {
+    fn build_tick_record(&self, tick: u64, new_pub: [u8; 32]) -> Result<ChrononRecord, NodeError> {
         if let Some(ref obs) = self.mutual_attest_observer {
             obs.on_mutual_attest_sent();
         }
@@ -228,8 +228,8 @@ impl Chronomatter {
             (Vec::new(), 0u32)
         };
 
-        Ok(TickRecord {
-            tick_number: tick,
+        Ok(ChrononRecord {
+            chronon_number: tick,
             public_key: new_pub.to_vec().into(),
             signature_algorithm: crate::foretias::types::SignatureAlgorithm::Ed25519.to_id_string().to_string(),
             forward_foretis: forward_foretis.into(),
@@ -242,7 +242,7 @@ impl Chronomatter {
         })
     }
 
-    fn notify_observer(&self, tick: u64, pk: &[u8; 32], record: &TickRecord) {
+    fn notify_observer(&self, tick: u64, pk: &[u8; 32], record: &ChrononRecord) {
         self.tick_observer.on_tick_advance(TickNumber(tick), pk, record);
     }
 
@@ -298,7 +298,7 @@ impl Chronomatter {
         let time_being_reference_time = format!("UE+{}ns", now_ns);
 
         let foretis = Foretis {
-            tick_number: tick,
+            chronon_number: tick,
             content_hash: content_hash.bytes.into(),
             signature: FTByteVector::from(sig.bytes.to_vec()),
             signature_algorithm: crate::foretias::types::SignatureAlgorithm::Ed25519.to_id_string().to_string(),
@@ -409,8 +409,8 @@ impl Chronomatter {
         let start_tick = start.unwrap_or(0);
         let end_tick = end.unwrap_or(u64::MAX);
 
-        let filtered: Vec<&TickRecord> = records.iter()
-            .filter(|t| t.tick_number >= start_tick && t.tick_number <= end_tick)
+        let filtered: Vec<&ChrononRecord> = records.iter()
+            .filter(|t| t.chronon_number >= start_tick && t.chronon_number <= end_tick)
             .collect();
 
         if filtered.is_empty() {
@@ -421,7 +421,7 @@ impl Chronomatter {
 
         // Verify genesis signature on tick 1 if present
         if let Some(first) = filtered.first() {
-            if first.tick_number == 1 && !first.genesis_signature.is_empty() {
+            if first.chronon_number == 1 && !first.genesis_signature.is_empty() {
                 let genesis_valid = verify_genesis_signature(&calendar.tbid(), first)?;
                 results.push(genesis_valid);
             }
@@ -453,8 +453,8 @@ mod tests {
         calendar: Arc<RwLock<Calendar>>,
     }
     impl TickObserver for DummyObserver {
-        fn on_tick_advance(&self, tick_number: TickNumber, _public_key: &[u8], tick_record: &TickRecord) {
-            self.last_tick.store(tick_number.0, SeqCst);
+        fn on_tick_advance(&self, chronon_number: TickNumber, _public_key: &[u8], tick_record: &ChrononRecord) {
+            self.last_tick.store(chronon_number.0, SeqCst);
             self.calendar.write().append(tick_record.clone()).unwrap();
         }
     }
@@ -474,7 +474,7 @@ mod tests {
     fn stamp_returns_foretis_with_correct_tick() {
         let (cm, _last, calendar) = make_chronomatter();
         let foretis = cm.stamp(b"hello".to_vec(), "echo".to_string()).unwrap();
-        assert_eq!(foretis.tick_number, 1);
+        assert_eq!(foretis.chronon_number, 1);
         assert_eq!(foretis.echo, "echo");
         assert!(!foretis.signature.is_empty());
         // Calendar received the tick record via observer
@@ -486,8 +486,8 @@ mod tests {
         let (cm, _last, calendar) = make_chronomatter();
         let f1 = cm.stamp(b"one".to_vec(), "e1".to_string()).unwrap();
         let f2 = cm.stamp(b"two".to_vec(), "e2".to_string()).unwrap();
-        assert_eq!(f1.tick_number, 1);
-        assert_eq!(f2.tick_number, 2);
+        assert_eq!(f1.chronon_number, 1);
+        assert_eq!(f2.chronon_number, 2);
         assert_eq!(calendar.read().ticks.len(), 2);
     }
 

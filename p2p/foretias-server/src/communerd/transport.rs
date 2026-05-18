@@ -3,7 +3,7 @@
 //! Implementations handle the actual transport (JSON-RPC over TCP, libp2p, etc.).
 
 use async_trait::async_trait;
-use foretias_core::foretias::TickRecord;
+use foretias_core::foretias::ChrononRecord;
 
 /// Peer address for P2P communication.
 #[derive(Debug, Clone)]
@@ -78,7 +78,7 @@ pub trait PeerTransport: Send + Sync {
         peer: &PeerAddr,
         tick_start: u64,
         count: u64,
-    ) -> Result<Vec<TickRecord>, TransportError>;
+    ) -> Result<Vec<ChrononRecord>, TransportError>;
 
     async fn ping(&self, peer: &PeerAddr) -> Result<(), TransportError>;
 }

@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::tick::TickRecord;
+use super::tick::ChrononRecord;
 
 /// An external attestation from another Time Family.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -12,7 +12,7 @@ pub struct ExternalAttestation {
     /// B's stamp of A's tick record.
     pub foretis: super::tick::Foretis,
     /// B's tick at attestation time (for offline re-verify).
-    pub attester_tick_record: TickRecord,
+    pub attester_tick_record: ChrononRecord,
     /// Wall-clock receive time in nanoseconds.
     pub received_at_ns: u64,
 }
@@ -20,11 +20,11 @@ pub struct ExternalAttestation {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::foretias::tick::TickRecord;
+    use crate::foretias::tick::ChrononRecord;
 
-    fn make_dummy_tick() -> TickRecord {
-        TickRecord {
-            tick_number: 42,
+    fn make_dummy_tick() -> ChrononRecord {
+        ChrononRecord {
+            chronon_number: 42,
             public_key: vec![0u8; 32].into(),
             signature_algorithm: "Ed25519".to_string(),
             forward_foretis: vec![].into(),
@@ -40,7 +40,7 @@ mod tests {
     #[test]
     fn external_attestation_serde_roundtrip() {
         let foretis = crate::foretias::tick::Foretis {
-            tick_number: 42,
+            chronon_number: 42,
             content_hash: [1u8; 32].into(),
             signature: vec![2u8; 64].into(),
             signature_algorithm: "Ed25519".to_string(),

@@ -14,7 +14,7 @@ use std::sync::Arc;
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use foretias_core::crypto_server::{CryptoServer, SealedBlob};
-use foretias_core::foretias::TickRecord;
+use foretias_core::foretias::ChrononRecord;
 use foretias_core::error::NodeError;
 use serde::{Deserialize, Serialize};
 
@@ -26,7 +26,7 @@ pub struct CalendarBlock {
     /// Wall-clock nanoseconds when the block was written.
     pub written_at_ns: u64,
     /// Tick records contained in this block.
-    pub ticks: Vec<TickRecord>,
+    pub ticks: Vec<ChrononRecord>,
 }
 
 /// Encrypted append-only calendar store backed by a JSONL file.
@@ -58,7 +58,7 @@ impl EncryptedJsonlCalendarStore {
     /// The ticks are wrapped in a [`CalendarBlock`], serialized to JSON,
     /// sealed with the node's seal key, CBOR-encoded, base64-encoded,
     /// and appended as a newline-terminated line to the backing file.
-    pub fn append_block(&self, ticks: Vec<TickRecord>) -> Result<(), NodeError> {
+    pub fn append_block(&self, ticks: Vec<ChrononRecord>) -> Result<(), NodeError> {
         let block_id = self.next_block_id.fetch_add(1, Ordering::SeqCst);
         let written_at_ns = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -189,7 +189,7 @@ pub fn migrate_plaintext(
     // Parse as the v0.1 Calendar format (tbid, tbn, ticks)
     #[derive(Deserialize)]
     struct PlaintextCalendar {
-        ticks: Vec<TickRecord>,
+        ticks: Vec<ChrononRecord>,
     }
 
     let cal: PlaintextCalendar = serde_json::from_str(&contents)?;
@@ -213,9 +213,9 @@ mod tests {
         Arc::from(server)
     }
 
-    fn make_tick(tick_number: u64) -> TickRecord {
-        TickRecord {
-            tick_number,
+    fn make_tick(chronon_number: u64) -> ChrononRecord {
+        ChrononRecord {
+            chronon_number,
             public_key: vec![0u8; 32].into(),
             signature_algorithm: "Ed25519".to_string(),
             forward_foretis: vec![].into(),
@@ -248,8 +248,8 @@ mod tests {
         for (i, block) in blocks.iter().enumerate() {
             assert_eq!(block.block_id, i as u64);
             assert_eq!(block.ticks.len(), 2);
-            assert_eq!(block.ticks[0].tick_number, i as u64);
-            assert_eq!(block.ticks[1].tick_number, (i as u64 + 100));
+            assert_eq!(block.ticks[0].chronon_number, i as u64);
+            assert_eq!(block.ticks[1].chronon_number, (i as u64 + 100));
             assert!(block.written_at_ns > 0);
         }
 
@@ -307,8 +307,8 @@ mod tests {
         let blocks = store.read_all().unwrap();
         assert_eq!(blocks.len(), 1);
         assert_eq!(blocks[0].ticks.len(), 2);
-        assert_eq!(blocks[0].ticks[0].tick_number, 1);
-        assert_eq!(blocks[0].ticks[1].tick_number, 2);
+        assert_eq!(blocks[0].ticks[0].chronon_number, 1);
+        assert_eq!(blocks[0].ticks[1].chronon_number, 2);
 
         // Cleanup
         std::fs::remove_file(&plaintext_path).ok();
