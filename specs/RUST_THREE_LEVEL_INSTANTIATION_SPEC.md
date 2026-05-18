@@ -348,7 +348,197 @@ Options:
 
 ---
 
-## 7. RELATIONSHIP TO SCOPE REDUCTION
+## 7. CRATE ARCHITECTURE — Three Libraries, Growing Capabilities
+
+### 7.1 Why Three Crates
+
+The three levels represent a **growing set of capabilities**. A user should import only the code they need:
+
+| Crate | Level | Capabilities | Network Role | Dependencies |
+|-------|-------|--------------|--------------|--------------|
+| `foretias-core` | 1 | In-memory Chronomatter/Calendar, stamp/verify | None — no network | (none) |
+| `foretias-client` | 2 | Level 1 + outbound PtP connections | Client only — initiates connections, never accepts incoming | `foretias-core` |
+| `foretias-server` | 3 | Level 2 + TCP server, JSON-RPC handlers, P2P mesh | Bidirectional — serves PtP requests, optional P2P | `foretias-core`, `foretias-client` |
+
+**Upgrade path:** `foretias-core` → add `foretias-client` → add `foretias-server`. Each crate is independently usable.
+
+### 7.2 Crate Responsibilities
+
+**`foretias-core`** (was `core-engine`):
+- Chronomatter, Calendar, CryptoServer
+- Domain types: `Foretis`, `TickRecord`, `Tbid`, `ProbityReport`
+- Hashing, signing, identity, RNG
+- **No networking whatsoever**
+
+**`foretias-client`** (extracted from `foretias-node/src/client/`):
+- Noise_XX PtP client transport (C11, outbound only)
+- `ForetiasConfig` enum with containment-style configs
+- Unified `Foretias` type with config-driven instantiation
+- Communerd **reader** capability (DHT discovery, outbound P2P — never accepts incoming requests)
+- **Never opens a listening port**
+
+**`foretias-server`** (was `foretias-node` server + CLI):
+- TCP server listener, JSON-RPC handlers
+- `ForetiasServer` type — configurable P2P-on or P2P-off
+- Communerd **server** capability (accepts incoming PtP requests)
+- Communerd **P2P** capability (full mesh, gossipsub, peer pool)
+- CLI binary (`foretias` command)
+
+### 7.3 Containment-Style Configuration
+
+Configuration mirrors the capability growth — each level **contains** its parent:
+
+```rust
+/// Level 1 — Standalone (in-memory, no network)
+pub struct StandaloneConfig {
+    pub tbn: String,
+    pub chronon_ns: u64,
+    pub persist_path: Option<PathBuf>,
+}
+
+/// Level 2 — PtP Networked (outbound connections only)
+/// Contains StandaloneConfig + peer connectivity.
+pub struct PtpConfig {
+    /// Level 1 capabilities (identity, crypto, calendar).
+    pub standalone: StandaloneConfig,
+    /// Known peer addresses to connect to.
+    pub peers: Vec<String>,
+    /// Default request timeout (seconds).
+    pub timeout_secs: u64,
+}
+
+/// Level 3 — P2P Full (client-side mesh participation)
+/// Contains PtpConfig + DHT namespace + known servers.
+pub struct P2pConfig {
+    /// Level 2 capabilities (identity, crypto, calendar, PtP).
+    pub ptp: PtpConfig,
+    /// DHT namespace for peer discovery.
+    pub dht_namespace: String,
+    /// Known server addresses for self-registration.
+    pub known_servers: Vec<String>,
+    /// Maximum peers to auto-discover.
+    pub max_discovered_peers: usize,
+}
+
+/// Dispatch surface — select which level to instantiate.
+pub enum ForetiasConfig {
+    Standalone(StandaloneConfig),
+    Ptp(PtpConfig),
+    P2p(P2pConfig),
+}
+```
+
+A `P2pConfig` **is** a `PtpConfig` **is** a `StandaloneConfig` plus more. A `Foretias` instance built from `P2pConfig` inherently has all Level 1 + 2 capabilities without flattening.
+
+### 7.4 Config-Driven Instantiation
+
+Single entry point, configuration determines capabilities:
+
+```rust
+impl Foretias {
+    /// Create from configuration — level determined by config variant.
+    pub async fn with_config(config: ForetiasConfig) -> Result<Self, ForetiasError>;
+}
+```
+
+Convenience constructors remain as thin wrappers:
+```rust
+impl Foretias {
+    /// Level 1 — pure in-memory.
+    pub fn new(tbn: String, persist_path: Option<PathBuf>) -> Result<Self, ForetiasError>;
+
+    /// Level 2 — PtP client (outbound only).
+    pub fn connect(tbn: String, peer_addr: String) -> Result<Self, ForetiasError>;
+}
+```
+
+### 7.5 Communerd Tiered Capabilities
+
+Communerd is split into three capability tiers, each containing the previous:
+
+| Tier | Type | Capability | Can Accept Incoming? |
+|------|------|-----------|---------------------|
+| Reader | `CommunerdReader` | PtP client — outbound connections, DHT discovery | No |
+| Server | `CommunerdServer` | Reader + TCP listener — accepts PtP requests | Yes (PtP) |
+| P2P | `CommunerdP2P` | Server + libp2P swarm — full mesh, gossipsub, peer pool | Yes (PtP + P2P) |
+
+**`CommunerdReader`** (`foretias-client`):
+- Outbound PtP connections via Noise_XX
+- DHT peer discovery (query only, no registration)
+- Probity gossip (consume only, no propagation)
+- No listening port, no incoming connections
+
+**`CommunerdServer`** (`foretias-server`):
+- Contains `CommunerdReader` capabilities
+- TCP listener for incoming PtP requests
+- JSON-RPC handler dispatch (stamp, verify, calendar_slice)
+- No P2P swarm
+
+**`CommunerdP2P`** (`foretias-server`, optional):
+- Contains `CommunerdServer` capabilities
+- libp2P swarm (yamux, identify, ping)
+- Kademlia DHT (registration + discovery)
+- Gossipsub (probity gossip, heartbeat)
+- Peer pool with mutual attestation
+- **Gated by `ForetiasServerConfig.p2p_enabled`**
+
+### 7.6 ForetiasServer Configuration
+
+```rust
+pub struct ForetiasServerConfig {
+    /// Level 3 client capabilities (identity, crypto, calendar, PtP, DHT).
+    pub p2p: P2pConfig,
+    /// Listen address for TCP PtP server.
+    pub listen_addr: String,
+    /// Enable P2P swarm (libp2P). When false, server operates as PtP-only.
+    pub p2p_enabled: bool,
+    /// libp2P listen multiaddr (ignored if p2p_enabled is false).
+    pub p2p_listen: Option<String>,
+    /// Port range for auto-selection (ignored if p2p_enabled is false).
+    pub p2p_port_range: [u16; 2],
+}
+
+impl ForetiasServer {
+    /// Create with config — P2P stack only activates if p2p_enabled is true.
+    pub async fn with_config(config: ForetiasServerConfig) -> Result<Self, ServerError>;
+}
+```
+
+When `p2p_enabled: false`, `ForetiasServer` operates as a **Level 2 server** — TCP PtP only, no swarm, no DHT, no gossipsub. This is the minimal server configuration.
+
+### 7.7 crate Layout After Split
+
+```
+p2p/
+├── Cargo.toml                         # workspace: foretias-core, foretias-client, foretias-server
+│
+├── core-engine/                       # → foretias-core
+│   └── Cargo.toml                     # name = "foretias-core"
+│
+├── foretias-client/                   # NEW crate
+│   ├── Cargo.toml                     # name = "foretias-client", deps = [foretias-core]
+│   └── src/
+│       ├── lib.rs                     # ForetiasConfig, Foretias, CommunerdReader
+│       ├── config.rs                  # StandaloneConfig, PtpConfig, P2pConfig, ForetiasConfig
+│       ├── noise_ptp.rs               # C11 Noise_XX PtP client transport
+│       └── communerd_reader.rs        # CommunerdReader (DHT discovery, outbound P2P)
+│
+├── foretias-node/                     # → foretias-server
+│   ├── Cargo.toml                     # name = "foretias-server", deps = [foretias-core, foretias-client]
+│   └── src/
+│       ├── lib.rs                     # ForetiasServer, CommunerdServer, CommunerdP2P
+│       ├── main.rs                    # CLI binary
+│       ├── server/                    # TimeFamilyServer → ForetiasServer
+│       ├── communerd.rs              # CommunerdServer + CommunerdP2P
+│       ├── calendar.rs               # Calendar wrapper
+│       ├── calendar_store.rs         # Persistence
+│       ├── probity.rs                # Gossip handler
+│       └── metrics.rs                # Node metrics
+```
+
+---
+
+## 8. RELATIONSHIP TO SCOPE REDUCTION
 
 This spec is a **companion** to `SCOPE_REDUCTION_SPEC.md`. The scope reduction removes Python/Java bindings. This spec defines the Rust library refactoring that makes the library usable in three modes — for Rust programs AND future language bindings.
 
@@ -356,7 +546,7 @@ The scope reduction spec preserves the language-agnostic thin client model (inva
 
 When language bindings are reintroduced, they will:
 1. Confirm this Rust spec is implemented (or implement it if not)
-2. Write thin FFI wrappers around the `ThinClient` type
+2. Write thin FFI wrappers around the `Foretias` type in `foretias-client`
 3. Pass the three-tier test matrix
 
 ---
