@@ -45,17 +45,18 @@ Spec and plan files should always be paired by prefix:
 
 ### Checkbox Format in PLAN.md
 
-Checkboxes in PLAN.md files track progress. When an item is checked off, **always place a timestamp (to the minute) next to the checkbox**:
+Checkboxes in PLAN.md files track progress. When an item is checked off, **always place a timestamp (to the minute) on the next line with indent into the bulleted list**:
 
 ```markdown
 - [ ] Task not yet done
 - [x] Task completed                    ← bad (no timestamp)
-- [x](2026-05-06 13:11) Task completed  ← good (timestamped)
+- [x] Task completed                    ← good it is
+      (2026-05-06 13:11)                ← timestamped properly
 ```
 
 This gives both agents and humans a clear idea of how work is progressing over time.
 
-### Specify, Plan and Backburnered PLAN.md
+### Specify, Plan, Backburnered and Deprecated PLAN.md
 
 Before a specification is complete, and some times before a plan is complete, we may have intermediate steps. In these situations a plan file may be created with corresponding open items:
 ```markdown
@@ -65,11 +66,21 @@ Before a specification is complete, and some times before a plan is complete, we
 Most of time this is not needed, but when specification or planning takes on multi-turn iteration, it is useful to track these separately and check them off.
 
 When a specification is considered VERY important but interfering with current highest priorities, it is marked with `[x] backburnered`. To be revived by removing the `[x] backburnered` marker. These plans are to be excluded when agent or human asks for plans that are: ready, pending, iterating, in progress, developing, active, etc. backburnered plans can only be found and addressed directly by using the words "backburnered plan(s)".
+
 ```markdown
-- [x] backburnered
+- [x] Backburnered
+      (2026-05-06 14:00)
 - [ ] Do this or system will break
 - [ ] And fix that bug
 - [ ] ...
+```
+Canceled features shall be marked as "not to be done" using the marker "[-] don't do this". An entirely deprecated plans hall have a "[x] canceled" box at the top. The AGENT should first add the canceled check item, then mark all todo's with per-item cancelation "[-] each one". Here is the example of properly canceled spec
+```markdown
+- [x] Canceled. Optionally explain there's a new spec see ABCD_PLAN.md
+      (2026-05-06 14:00)
+- [-] Do this or system will break
+- [-] And fix that bug
+- [-] ...
 ```
 
 ### Worktree Branch Tracking in PLAN.md
@@ -95,10 +106,12 @@ If scoping was incorrect for any task, and and it became many tasks, It is possi
 ```markdown
 ...
 - [ ] Merge ${BRANCH_NAME} to alpha
-  - [x](2026-05-06 14:00)  Detected complex merge situation # Note, here we used a completed task to justify these subtasks
+  - [x] Detected complex merge situation # Note, here we used a completed task to justify these subtasks
+        (2026-05-06 14:00)
   - [ ] Update ${BRANCH_NAME} to follow new coding style
   - [ ] Update ${BRANCH_NAME} to use new API call convention
-  - [x](2026-05-06 14:31) Merged breaking alpha # Again, this is needed to document a clear need for more work as subtasks
+  - [x] Merged breaking alpha # Again, this is needed to document a clear need for more work as subtasks
+        (2026-05-06 14:31)
   - [ ] Repair ALL tests in alpha
   - [ ] Finalize:
     - [ ] cleanup ${FULL_WORKTREE_PATH}
