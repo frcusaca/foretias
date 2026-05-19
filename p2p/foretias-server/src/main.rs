@@ -13,7 +13,7 @@ use foretias_core::config::TimeFamilyConfig;
 use foretias_core::crypto_server;
 use foretias_server::communerd::p2p::swarm::CommunerdRpcHandler;
 use foretias_core::foretias::tick::{ChrononRecord, CalendarLookup};
-use foretias_client::{Foretias, noise_json_rpc};
+use foretias_client::Foretias;
 
 use foretias_server::server::TimeFamilyServer;
 
@@ -104,15 +104,12 @@ enum Commands {
         /// Write verify output to file (default: stdout)
         #[arg(short = 'o', long = "verify-output")]
         verify_output: Option<String>,
-        /// Disable DHT cross-node lookup; only check the local calendar on the target server
-        #[arg(long = "local-only")]
-        local_only: bool,
         /// Server address
         #[arg(short, long, default_value = "127.0.0.1:4001")]
         server: String,
     },
-    /// Fetch calendar slice from remote TimeBeing and verify locally
-    ProveVerification {
+    /// Download chronon from remote TimeBeing and verify locally (client-side proof)
+    VerifyWithProof {
         /// Message to verify
         #[arg(short, long)]
         message: Option<String>,
@@ -485,7 +482,6 @@ async fn cmd_verify(
     foretis: Option<String>,
     foretis_file: Option<String>,
     verify_output: Option<String>,
-    local_only: bool,
     server_addr: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let content = read_message(message, message_file)?;
@@ -505,7 +501,7 @@ async fn cmd_verify(
 
     let result = serde_json::json!({
         "valid": valid,
-        "method": if local_only { "local" } else { "remote" },
+        "method": "remote",
     });
 
     let output = serde_json::to_string_pretty(&result)?;
@@ -516,8 +512,7 @@ async fn cmd_verify(
     Ok(())
 }
 
-/// Local proof-of-verification: fetch calendar slice, verify locally (no /verify call).
-async fn cmd_prove_verification(
+async fn cmd_verify_with_proof(
     message: Option<String>,
     message_file: Option<String>,
     foretis: Option<String>,
@@ -525,80 +520,28 @@ async fn cmd_prove_verification(
     proof_output: Option<String>,
     server_addr: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let _content = read_message(message, message_file)?;
+    let content = read_message(message, message_file)?;
     let foretis_str = read_foretis(foretis, foretis_file)?;
-    let foretis_value: serde_json::Value = serde_json::from_str(&foretis_str)?;
+    let foretis: foretias_core::foretias::tick::Foretis = serde_json::from_str(&foretis_str)?;
 
-    // Extract chronon_number from the foretis to fetch the right calendar slice
-    let chronon_number = foretis_value.get("chronon_number")
-        .and_then(|v| v.as_u64())
-        .ok_or("foretis missing 'chronon_number'")?;
+    let client = Foretias::connect_one(
+        "cli-verify-with-proof".into(),
+        server_addr.clone(),
+        None,
+    )?;
 
-    // Fetch the calendar slice needed for local verification
-    let records = fetch_calendar_slice(&server_addr, chronon_number, 1).await?;
-    if records.is_empty() {
-        return Err(format!("no calendar records found for tick {}", chronon_number).into());
-    }
+    let report = client
+        .verify_with_proof(&content, &foretis)
+        .await
+        .map_err(|e| format!("verify with proof failed: {}", e))?;
 
-    // Build a minimal proof artifact
-    let proof = serde_json::json!({
-        "verified_locally": true,
-        "chronon_number": chronon_number,
-        "calendar_records": records,
-        "foretis": foretis_value,
-        "method": "prove_verification",
-    });
-
-    let output = serde_json::to_string_pretty(&proof)?;
+    let result = serde_json::to_value(&report)?;
+    let output = serde_json::to_string_pretty(&result)?;
     match proof_output {
         Some(path) => std::fs::write(&path, &output).map_err(|e| format!("Failed to write {}: {}", path, e))?,
         None => println!("{}", output),
     }
     Ok(())
-}
-
-async fn json_rpc_call(
-    server: &str,
-    method: &str,
-    params: serde_json::Value,
-) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-    noise_json_rpc(server, method, params, std::time::Duration::from_secs(30))
-        .await
-        .map_err(|e| Box::from(e) as Box<dyn std::error::Error>)
-}
-
-/// Fetch a calendar slice from a remote TimeBeing via get_calendar_slice.
-async fn fetch_calendar_slice(
-    server: &str,
-    chronon_number: u64,
-    count: u64,
-) -> Result<Vec<ChrononRecord>, Box<dyn std::error::Error>> {
-    let result = json_rpc_call(
-        server,
-        "get_calendar_slice",
-        serde_json::json!({"cal_chronon_start": chronon_number, "count": count}),
-    ).await?;
-
-    // Validate structure before deserializing from untrusted network data
-    let result_array = result.as_array().ok_or(
-        "calendar slice result: expected JSON array of ChrononRecords",
-    )?;
-    for (i, item) in result_array.iter().enumerate() {
-        let obj = item.as_object().ok_or(format!(
-            "calendar slice[{}]: expected ChrononRecord object", i
-        ))?;
-        if !obj.contains_key("chronon_number")
-            || !obj.contains_key("public_key")
-            || !obj.contains_key("forward_foretis")
-            || !obj.contains_key("backward_foretis")
-        {
-            return Err(format!("calendar slice[{}]: missing required ChrononRecord fields", i).into());
-        }
-    }
-
-    let records: Vec<ChrononRecord> = serde_json::from_value(result)
-        .map_err(|e| format!("failed to parse calendar slice: {}", e))?;
-    Ok(records)
 }
 
 /// Inspect external attestations in a persisted calendar file.
@@ -738,7 +681,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match &cli.command {
         Commands::Serve { .. } => init_tracing_with_file()?,
-        Commands::Stamp { .. } | Commands::Verify { .. } | Commands::ProveVerification { .. } => {
+        Commands::Stamp { .. } | Commands::Verify { .. } | Commands::VerifyWithProof { .. } => {
             // No tracing for client commands — stdout must be clean JSON for pipe consumption
         }
         _ => {
@@ -756,11 +699,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Stamp { message, message_file, stamp_output, server } => {
             cmd_stamp(message, message_file, stamp_output, server).await
         }
-        Commands::Verify { message, message_file, foretis, foretis_file, verify_output, local_only, server } => {
-            cmd_verify(message, message_file, foretis, foretis_file, verify_output, local_only, server).await
+        Commands::Verify { message, message_file, foretis, foretis_file, verify_output, server } => {
+            cmd_verify(message, message_file, foretis, foretis_file, verify_output, server).await
         }
-        Commands::ProveVerification { message, message_file, foretis, foretis_file, proof_output, server } => {
-            cmd_prove_verification(message, message_file, foretis, foretis_file, proof_output, server).await
+        Commands::VerifyWithProof { message, message_file, foretis, foretis_file, proof_output, server } => {
+            cmd_verify_with_proof(message, message_file, foretis, foretis_file, proof_output, server).await
         }
         Commands::InspectAttestations { calendar } => {
             cmd_inspect_attestations(calendar)?;

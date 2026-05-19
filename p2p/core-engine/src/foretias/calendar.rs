@@ -196,10 +196,10 @@ mod tests {
             forward_foretis: vec![].into(),
             backward_foretis: vec![].into(),
             aa_nonce: [0u8; 16].into(),
-            stamps_per_tick: 0,
+            chronon_stamp_count: 0,
             external_attestations: Vec::new(),
-            genesis_signature: vec![].into(),
             tb_version: 0,
+            tbid: Tbid::default(),
         }
     }
 
@@ -329,10 +329,10 @@ mod tests {
                 forward_foretis: forward_foretis.into(),
                 backward_foretis: backward_foretis.into(),
                 aa_nonce: nonce.into(),
-                stamps_per_tick: 0,
+                chronon_stamp_count: 0,
                 external_attestations: Vec::new(),
-            genesis_signature: vec![].into(),
-            tb_version: 0,
+                tb_version: 0,
+                tbid: Tbid::default(),
             }).unwrap();
         }
 
@@ -379,10 +379,10 @@ mod tests {
                 forward_foretis: forward_foretis.into(),
                 backward_foretis: backward_foretis.into(),
                 aa_nonce: nonce.into(),
-                stamps_per_tick: 0,
+                chronon_stamp_count: 0,
                 external_attestations: Vec::new(),
-            genesis_signature: vec![].into(),
-            tb_version: 0,
+                tb_version: 0,
+                tbid: Tbid::default(),
             }).unwrap();
         }
 

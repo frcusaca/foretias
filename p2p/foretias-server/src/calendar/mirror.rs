@@ -101,6 +101,7 @@ pub fn compute_hash_sanity(records: &[ChrononRecord]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use foretias_core::foretias::Tbid;
 
     fn make_tick(chronon_number: u64) -> ChrononRecord {
         ChrononRecord {
@@ -110,10 +111,11 @@ mod tests {
             forward_foretis: vec![].into(),
             backward_foretis: vec![].into(),
             aa_nonce: [0u8; 16].into(),
-            stamps_per_tick: 0,
+            chronon_stamp_count: 0,
             external_attestations: Vec::new(),
-            genesis_signature: Vec::new().into(),
+
             tb_version: 0,
+            tbid: Tbid::default(),
         }
     }
 

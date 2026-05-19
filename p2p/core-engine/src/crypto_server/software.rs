@@ -12,7 +12,7 @@ use crate::crypto_server::signing_sphincs;
 use crate::crypto_server::signing_dilithium;
 use crate::error::CryptoError;
 use crate::foretias::types::{SignatureAlgorithm, SignatureBytes};
-use super::{CryptoServerCapabilities, ForetiasCurve, PublicKeyBytes, SharedSecret, SealedBlob, SignOps, VerifyOps, KexOps, HashOps, SealOps, RngOps, IdentityOps, FrostOps, ProofOps};
+use super::{CryptoServerCapabilities, ForetiasCurve, PublicKeyBytes, SealedBlob, SignOps, VerifyOps, KexOps, HashOps, SealOps, RngOps, IdentityOps, FrostOps, ProofOps};
 
 /// Derive seal key via HKDF-SHA256 over the Ed25519 seed.
 /// The seed never leaves C memory; the derivation happens inside C11.

@@ -8,7 +8,7 @@ pub mod callbacks;
 pub mod encoding;
 
 pub use types::{Tbid, TbidSecret, PublicKeyBytes, SignatureBytes, AlgorithmId, Digest, Message, AaNonce, TickNumber, SignatureAlgorithm, KemAlgorithm};
-pub use tick::{ChrononRecord, Foretis, CalendarLookup, stamp, verify, auto_attestation_blob, auto_attestation_blob_with_count, verify_pair, verify_genesis_signature};
+pub use tick::{ChrononRecord, Foretis, CalendarLookup, stamp, verify, auto_attestation_blob, auto_attestation_blob_with_count, auto_attestation_blob_with_genesis, verify_pair};
 pub use calendar::Calendar;
 pub use external_attestation::ExternalAttestation;
 pub use callbacks::{TickObserver, Attester, PeerMessenger, PeerAddr, CommunityQuery, CommunityResponse, TransportError, MutualAttestObserver};

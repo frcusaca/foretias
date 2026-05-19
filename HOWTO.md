@@ -13,21 +13,38 @@ This document shows you **four escalating demos** that prove foretias is:
 
 ## Prerequisites
 
-See [README.md](README.md) for full installation and build instructions. In short, you need the `foretias` binary:
+### System Dependencies
 
 ```bash
-cd p2p && cargo build
+sudo apt install build-essential cmake clang libsodium-dev libssl-dev
+rustup install stable
 ```
 
-The binary lives at `p2p/target/debug/foretias` (or `p2p/target/release/foretias` for a release build).
+### Full Clean Build
+
+```bash
+export CMAKE_BUILD_PARALLEL_LEVEL=10
+
+# Cargo builds the C11 core (via build.rs) and the full Rust workspace:
+cd p2p && cargo build --workspace --release
+```
+
+The release binary lives at `p2p/target/release/foretias`.
+
+> **Note:** The C11 core has its own CMake build (`p2p/core`) for standalone use, but it requires `liboqs` installed system-wide. The cargo build handles this automatically by cloning and building liboqs from source.
 
 For convenience, the rest of this document uses a shell alias:
 
 ```bash
-alias foretias="p2p/target/debug/foretias"
+alias foretias="p2p/target/release/foretias"
 ```
 
-If you built in release mode, adjust accordingly.
+### Running Tests
+
+```bash
+# Rust workspace tests (unit + integration) — covers C11 core via FFI
+cd p2p && cargo test --workspace
+```
 
 ---
 
@@ -89,7 +106,7 @@ Expected output:
 
 ```json
 {
-  "method": "local",
+  "method": "remote",
   "valid": true
 }
 ```
@@ -108,22 +125,53 @@ Expected output:
 
 ```json
 {
-  "method": "local",
+  "method": "remote",
   "valid": false
 }
 ```
 
 The content hash doesn't match. The stamp is immutable. Foretias caught the tampering.
 
-### Step 5: Prove Verification — Client-side proof
+### Step 5: Verify with proof — Client-side cryptographic proof
 
-So far, verification has been **server-side** — the server checks its own calendar and returns the answer. Now prove the stamp **client-side** by fetching a calendar slice and verifying locally:
+Download the chronon from the server and verify locally without trusting the server's answer:
 
 ```bash
-foretias prove-verification -m "hello world" -F /tmp/hello_world_stamp.json -s 127.0.0.1:4001
+foretias verify-with-proof -m "hello world" -F /tmp/hello_world_stamp.json -s 127.0.0.1:4001
 ```
 
-This downloads the relevant calendar ticks from the server, verifies the signature chain locally, and proves the stamp is valid **without trusting the server's answer**. This is the strongest form of verification — the client does all the cryptographic work.
+This fetches the relevant chronon record from the server, runs full cryptographic verification locally (SHA-256 hash check + Ed25519 signature verification), and prints the chronon record used for verification:
+
+Expected output:
+
+```json
+{
+  "chronon_number": 1,
+  "chronon_record": {
+    "aa_nonce": "...",
+    "backward_foretis": "...",
+    "chronon_number": 1,
+    "external_attestations": [],
+    "forward_foretis": "...",
+    "public_key": "...",
+    "signature_algorithm": "Ed25519",
+    "tb_version": 0
+  },
+  "method": "local",
+  "valid": true
+}
+```
+
+The chronon_record contains the public_key that was used to verify the stamp stored in `/tmp/hello_world_stamp.json`, this server had the only functioning secret key that can produce a stamp verifiable by this public_key.
+
+### Step 6: Prove Verification — Client-side proof
+
+`verify-with-proof` downloads the chronon from the server and verifies locally with cryptographic proof — returning both the verification result and the chronon record:
+
+foretias verify-with-proof -m "hello world" -F /tmp/hello_world_stamp.json -s 127.0.0.1:4001
+```
+
+This downloads the relevant calendar ticks from the server and proves the stamp is valid **without trusting the server's answer**. This is the strongest form of verification — the client does all the cryptographic work.
 
 > **Quick start complete.** You've stamped, verified, and proven a stamp in under 2 minutes. Now let's scale.
 
@@ -280,31 +328,41 @@ Expected output:
 
 ```json
 {
-  "method": "local",
+  "method": "remote",
   "valid": true
 }
 ```
 
 The stamp was created on peer #0 but verified on peer #5. The attestation was replicated through the P2P mesh.
 
-### Step 3: Prove Verification against the swarm
+### Step 3: Verify with proof against the swarm
+
+Client-side verification — download the chronon from peer #7 and verify locally:
+
+```bash
+foretias verify-with-proof -m "external CLI test" -F /tmp/swarm_stamp.json -s 127.0.0.1:5007
+```
+
+This fetches the chronon record from peer #7, performs full cryptographic verification locally, and returns the chronon record alongside the result.
+
+### Step 4: Prove Verification against the swarm
 
 Client-side proof — fetch the calendar slice from peer #7 and verify locally:
 
 ```bash
-foretias prove-verification -m "external CLI test" -F /tmp/swarm_stamp.json -s 127.0.0.1:5007
+foretias verify-with-proof -m "external CLI test" -F /tmp/swarm_stamp.json -s 127.0.0.1:5007
 ```
 
 The CLI downloads the relevant calendar ticks from peer #7, verifies the signature chain locally, and confirms the stamp's integrity — without trusting any single peer's answer.
 
-### Step 4: Stamp from a file
+### Step 5: Stamp from a file
 
 ```bash
 echo "Important document content" > /tmp/document.txt
 foretias stamp -M /tmp/document.txt -s 127.0.0.1:5003 -o /tmp/doc_stamp.json
 ```
 
-### Step 5: Print CLI examples from the REPL
+### Step 6: Print CLI examples from the REPL
 
 Back in the peer manager REPL, get ready-to-copy CLI commands:
 
@@ -381,7 +439,7 @@ Expected output from a surviving peer:
 
 ```json
 {
-  "method": "local",
+  "method": "remote",
   "valid": true
 }
 ```
@@ -478,11 +536,11 @@ When the peer manager is running, any `foretias` CLI can connect to any peer usi
 # Stamp (connect to peer #N on port 5000+N):
 foretias stamp -m "message" -s 127.0.0.1:5000 -o /tmp/stamp.json
 
-# Verify (can be a different peer):
+# Verify (server-side — can be any peer):
 foretias verify -m "message" -F /tmp/stamp.json -s 127.0.0.1:5005
 
-# Prove verification (client-side proof, any peer):
-foretias prove-verification -m "message" -F /tmp/stamp.json -s 127.0.0.1:5010
+# Verify with proof (client-side — downloads chronon, verifies cryptographically):
+foretias verify-with-proof -m "message" -F /tmp/stamp.json -s 127.0.0.1:5005
 
 # Stamp from file:
 foretias stamp -M /tmp/document.txt -s 127.0.0.1:5000 -o /tmp/stamp.json

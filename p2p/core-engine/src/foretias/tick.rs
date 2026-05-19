@@ -30,17 +30,17 @@ pub struct ChrononRecord {
     /// Number of user-initiated stamps during this chronon (excluding auto-attestation itself,
     /// but including mutual attestations). Persisted for blob reconstruction during verify_pair.
     #[serde(default)]
-    pub stamps_per_tick: u64,
+    pub chronon_stamp_count: u64,
     /// External attestations from other Time Families.
     #[serde(default)]
     pub external_attestations: Vec<super::external_attestation::ExternalAttestation>,
-    /// Dual-key (Ed25519 + SLH-DSA-SHA2-256f) signature over the genesis blob.
-    /// Present only on tick 1 when the node supports TBID V1 dual-key identity.
-    #[serde(default)]
-    pub genesis_signature: FTByteVector,
+
     /// TBID protocol version: 0 = legacy (16-byte UUID), 1 = dual-key (96-byte).
     #[serde(default = "default_tb_version")]
     pub tb_version: u32,
+    /// Time Being ID — identifies which calendar this record belongs to.
+    #[serde(default)]
+    pub tbid: Tbid,
 }
 
 impl ChrononRecord {
@@ -55,7 +55,7 @@ impl ChrononRecord {
         forward_foretis: FTByteVector,
         backward_foretis: FTByteVector,
         aa_nonce: FTByteArray<16>,
-        stamps_per_tick: u64,
+        chronon_stamp_count: u64,
     ) -> Result<Self, NodeError> {
         if chronon_number == 0 {
             return Err(NodeError::InvalidInput("chronon_number must be > 0".into()));
@@ -70,11 +70,16 @@ impl ChrononRecord {
             forward_foretis,
             backward_foretis,
             aa_nonce,
-            stamps_per_tick,
+            chronon_stamp_count,
             external_attestations: Vec::new(),
-            genesis_signature: FTByteVector::new(),
             tb_version: 0,
+            tbid: Tbid::default(),
         })
+    }
+
+    /// Returns true if this record is the genesis chronon (tick 1).
+    pub fn is_genesis(&self) -> bool {
+        self.chronon_number == 1
     }
 }
 
@@ -199,14 +204,6 @@ pub fn verify(
     let records = calendar.get(foretis.chronon_number, 1)?;
     let rec = records.first().ok_or(NodeError::NotFound("tick"))?;
 
-    // On tick 1, verify the genesis signature first
-    if foretis.chronon_number == 1 && !rec.genesis_signature.is_empty() {
-        let genesis_valid = verify_genesis_signature(&foretis.tbid, rec)?;
-        if !genesis_valid {
-            return Ok(false);
-        }
-    }
-
     // Use the algorithm declared in the Foretis itself for verification
     let mut sig_input = Vec::new();
     sig_input.extend_from_slice(&foretis.tbid.raw_bytes());
@@ -221,11 +218,11 @@ pub fn verify(
     )?)
 }
 
-/// Build auto-attestation blob: tbid || A.tick || A.pk || B.tick || B.pk || stamps_per_tick || nonce
+/// Build auto-attestation blob: tbid || A.tick || A.pk || B.tick || B.pk || chronon_stamp_count || nonce
 ///
 /// Returns the signed blob and the 16-byte nonce for storage in ChrononRecord.
 /// The nonce ensures each blob is unique, preventing replay attacks.
-/// `stamps_per_tick` counts user-initiated stamps during tick B (excluding auto-attestation itself,
+/// `chronon_stamp_count` counts user-initiated stamps during tick B (excluding auto-attestation itself,
 /// but including mutual attestations). This is knowable only to the Chronomatter that produced the tick.
 pub fn auto_attestation_blob_with_count(
     tbid: &str,
@@ -233,7 +230,7 @@ pub fn auto_attestation_blob_with_count(
     a_pk: &[u8; 32],
     b_tick: u64,
     b_pk: &[u8; 32],
-    stamps_per_tick: u64,
+    chronon_stamp_count: u64,
 ) -> Result<(Vec<u8>, [u8; 16]), NodeError> {
     let mut nonce = [0u8; 16];
     random_bytes(&mut nonce)?;
@@ -243,7 +240,7 @@ pub fn auto_attestation_blob_with_count(
     blob.extend_from_slice(a_pk);
     blob.extend_from_slice(&b_tick.to_be_bytes());
     blob.extend_from_slice(b_pk);
-    blob.extend_from_slice(&stamps_per_tick.to_be_bytes());
+    blob.extend_from_slice(&chronon_stamp_count.to_be_bytes());
     blob.extend_from_slice(&nonce);
     Ok((blob, nonce))
 }
@@ -262,10 +259,37 @@ pub fn auto_attestation_blob(
     auto_attestation_blob_with_count(tbid, a_tick, a_pk, b_tick, b_pk, 0)
 }
 
+/// Build auto-attestation blob for genesis tick with embedded genesis signature:
+/// tbid || A.tick || A.pk || B.tick || B.pk || genesis_sig || chronon_stamp_count || nonce
+///
+/// Returns the signed blob and the 16-byte nonce for storage in ChrononRecord.
+/// The genesis_sig is included in the blob so both forward and backward foretis cover it.
+pub fn auto_attestation_blob_with_genesis(
+    tbid: &str,
+    tick: u64,
+    pk: &[u8; 32],
+    genesis_sig: &[u8],
+    chronon_stamp_count: u64,
+) -> Result<(Vec<u8>, [u8; 16]), NodeError> {
+    let mut nonce = [0u8; 16];
+    random_bytes(&mut nonce)?;
+    let mut blob = Vec::with_capacity(tbid.len() + 8 + 32 + 8 + 32 + genesis_sig.len() + 8 + 16);
+    blob.extend_from_slice(tbid.as_bytes());
+    blob.extend_from_slice(&tick.to_be_bytes());
+    blob.extend_from_slice(pk);
+    blob.extend_from_slice(&tick.to_be_bytes());
+    blob.extend_from_slice(pk);
+    blob.extend_from_slice(genesis_sig);
+    blob.extend_from_slice(&chronon_stamp_count.to_be_bytes());
+    blob.extend_from_slice(&nonce);
+    Ok((blob, nonce))
+}
+
 /// Verify the auto-attestation between two consecutive tick records.
 ///
 /// Rebuilds the blob from the two ticks using the nonce stored in `curr.aa_nonce`,
 /// then verifies that both signatures cover the same blob.
+/// At tick 1, extracts the genesis signature from forward/backward foretis and verifies it.
 pub fn verify_pair(
     crypto: &dyn CryptoServer,
     tbid_str: &str,
@@ -273,72 +297,113 @@ pub fn verify_pair(
     curr: &ChrononRecord,
 ) -> Result<bool, NodeError> {
     let nonce = curr.aa_nonce;
-    let stamps = curr.stamps_per_tick;
-    let mut attest_blob = Vec::with_capacity(tbid_str.len() + 8 + prev.public_key.len() + 8 + curr.public_key.len() + 8 + 16);
-    attest_blob.extend_from_slice(tbid_str.as_bytes());
-    attest_blob.extend_from_slice(&prev.chronon_number.to_be_bytes());
-    attest_blob.extend_from_slice(&prev.public_key);
-    attest_blob.extend_from_slice(&curr.chronon_number.to_be_bytes());
-    attest_blob.extend_from_slice(&curr.public_key);
-    // Backward compat: pre-v0.9 ChrononRecords have stamps_per_tick=0 (serde default)
-    attest_blob.extend_from_slice(&stamps.to_be_bytes());
-    attest_blob.extend_from_slice(&nonce[..]);
+    let stamps = curr.chronon_stamp_count;
+
+    let (forward_sig, backward_sig, attest_blob, genesis_valid) = if curr.chronon_number == 1 && curr.tb_version == 1 {
+        let forward = &curr.forward_foretis;
+        let backward = &curr.backward_foretis;
+
+        let ed25519_sig_len = 64usize;
+
+        let forward_ed_sig = if forward.len() > ed25519_sig_len {
+            &forward[..ed25519_sig_len]
+        } else {
+            forward
+        };
+        let forward_genesis = if forward.len() > ed25519_sig_len {
+            &forward[ed25519_sig_len..]
+        } else {
+            &[]
+        };
+
+        let backward_ed_sig = if backward.len() > ed25519_sig_len {
+            &backward[..ed25519_sig_len]
+        } else {
+            backward
+        };
+        let backward_genesis = if backward.len() > ed25519_sig_len {
+            &backward[ed25519_sig_len..]
+        } else {
+            &[]
+        };
+
+        let genesis_match = forward_genesis == backward_genesis;
+
+        let mut genesis_blob = Vec::with_capacity(96 + 8 + curr.public_key.len());
+        genesis_blob.extend_from_slice(&prev.tbid.raw_bytes());
+        genesis_blob.extend_from_slice(&curr.chronon_number.to_be_bytes());
+        genesis_blob.extend_from_slice(&curr.public_key);
+
+        let genesis_valid = if !forward_genesis.is_empty() && genesis_match {
+            let pub_bytes = crate::foretias::types::SignatureBytes::from(prev.tbid.raw_bytes().clone());
+            let sig = crate::foretias::types::SignatureBytes::from(forward_genesis.to_vec());
+            crate::crypto_server::signing_tbid::tbid_verify(
+                &pub_bytes,
+                &genesis_blob,
+                &sig,
+            )
+            .map_err(|e| NodeError::Crypto(e))?
+        } else if forward_genesis.is_empty() && curr.tb_version == 0 {
+            true
+        } else {
+            false
+        };
+
+        let attest_blob = if !forward_genesis.is_empty() {
+            let mut attest_blob = Vec::with_capacity(tbid_str.len() + 8 + 32 + 8 + 32 + forward_genesis.len() + 8 + 16);
+            attest_blob.extend_from_slice(tbid_str.as_bytes());
+            attest_blob.extend_from_slice(&curr.chronon_number.to_be_bytes());
+            attest_blob.extend_from_slice(&curr.public_key);
+            attest_blob.extend_from_slice(&curr.chronon_number.to_be_bytes());
+            attest_blob.extend_from_slice(&curr.public_key);
+            attest_blob.extend_from_slice(forward_genesis);
+            attest_blob.extend_from_slice(&stamps.to_be_bytes());
+            attest_blob.extend_from_slice(&nonce[..]);
+            attest_blob
+        } else {
+            let mut attest_blob = Vec::with_capacity(tbid_str.len() + 8 + 32 + 8 + 32 + 8 + 16);
+            attest_blob.extend_from_slice(tbid_str.as_bytes());
+            attest_blob.extend_from_slice(&curr.chronon_number.to_be_bytes());
+            attest_blob.extend_from_slice(&curr.public_key);
+            attest_blob.extend_from_slice(&curr.chronon_number.to_be_bytes());
+            attest_blob.extend_from_slice(&curr.public_key);
+            attest_blob.extend_from_slice(&stamps.to_be_bytes());
+            attest_blob.extend_from_slice(&nonce[..]);
+            attest_blob
+        };
+
+        (forward_ed_sig.to_vec().into(), backward_ed_sig.to_vec().into(), attest_blob, genesis_valid)
+    } else {
+        let mut attest_blob = Vec::with_capacity(tbid_str.len() + 8 + prev.public_key.len() + 8 + curr.public_key.len() + 8 + 16);
+        attest_blob.extend_from_slice(tbid_str.as_bytes());
+        attest_blob.extend_from_slice(&prev.chronon_number.to_be_bytes());
+        attest_blob.extend_from_slice(&prev.public_key);
+        attest_blob.extend_from_slice(&curr.chronon_number.to_be_bytes());
+        attest_blob.extend_from_slice(&curr.public_key);
+        attest_blob.extend_from_slice(&stamps.to_be_bytes());
+        attest_blob.extend_from_slice(&nonce[..]);
+
+        (curr.forward_foretis.clone(), curr.backward_foretis.clone(), attest_blob, true)
+    };
 
     let forward_valid = crypto.verify_with(
         &prev.public_key,
         &curr.signature_algorithm,
         &attest_blob,
-        &curr.forward_foretis,
+        &forward_sig,
     )?;
 
     let backward_valid = crypto.verify_with(
         &curr.public_key,
         &curr.signature_algorithm,
         &attest_blob,
-        &curr.backward_foretis,
+        &backward_sig,
     )?;
 
-    Ok(forward_valid && backward_valid)
+    Ok(forward_valid && backward_valid && genesis_valid)
 }
 
-/// Verify the genesis signature on tick 1.
-///
-/// Rebuilds the genesis blob from the tick record (tbid_raw || chronon_number || public_key),
-/// then verifies both Ed25519 and SLH-DSA signatures against the TBID public key.
-///
-/// Returns `Ok(true)` if the genesis signature is valid.
-/// Returns `Ok(false)` if the signature is empty (legacy tick) or invalid.
-/// Returns `Err` only on internal/crypto errors.
-pub fn verify_genesis_signature(
-    tbid: &Tbid,
-    record: &ChrononRecord,
-) -> Result<bool, NodeError> {
-    if record.chronon_number != 1 {
-        return Ok(false);
-    }
-    if record.genesis_signature.is_empty() {
-        return Ok(false);
-    }
-    if record.tb_version != 1 {
-        return Ok(false);
-    }
 
-    let mut genesis_blob = Vec::with_capacity(96 + 8 + record.public_key.len());
-    genesis_blob.extend_from_slice(&tbid.raw_bytes());
-    genesis_blob.extend_from_slice(&record.chronon_number.to_be_bytes());
-    genesis_blob.extend_from_slice(&record.public_key);
-
-    let pub_bytes = crate::foretias::types::SignatureBytes::from(tbid.raw_bytes());
-    let sig = crate::foretias::types::SignatureBytes::from(record.genesis_signature.clone());
-    let sig_valid = crate::crypto_server::signing_tbid::tbid_verify(
-        &pub_bytes,
-        &genesis_blob,
-        &sig,
-    )
-    .map_err(|e| NodeError::Crypto(e))?;
-
-    Ok(sig_valid)
-}
 
 fn default_sig_algorithm() -> String {
     "Ed25519".to_string()
@@ -378,10 +443,11 @@ mod tests {
             forward_foretis: serde_json::to_vec(&foretis).unwrap().into(),
             backward_foretis: vec![].into(),
             aa_nonce: [0u8; 16].into(),
-            stamps_per_tick: 0,
+            chronon_stamp_count: 0,
             external_attestations: Vec::new(),
-            genesis_signature: vec![].into(),
+
             tb_version: 0,
+            tbid: Tbid::default(),
         }).unwrap();
         cal
     }
@@ -456,10 +522,11 @@ mod tests {
             forward_foretis: vec![].into(),
             backward_foretis: vec![].into(),
             aa_nonce: [0u8; 16].into(),
-            stamps_per_tick: 0,
+            chronon_stamp_count: 0,
             external_attestations: Vec::new(),
-            genesis_signature: vec![].into(),
+
             tb_version: 0,
+            tbid: Tbid::default(),
         }).unwrap();
         let content = b"test";
         let foretis = stamp(server.as_ref(), &SystemClock, &tbid, 1, content, "e", "bad-cal")
@@ -493,10 +560,11 @@ mod tests {
             forward_foretis: vec![].into(),
             backward_foretis: vec![].into(),
             aa_nonce: [0u8; 16].into(),
-            stamps_per_tick: 0,
+            chronon_stamp_count: 0,
             external_attestations: Vec::new(),
-            genesis_signature: vec![].into(),
+
             tb_version: 0,
+            tbid: Tbid::default(),
         };
         let curr = ChrononRecord {
             chronon_number: 2,
@@ -505,10 +573,11 @@ mod tests {
             forward_foretis: FTByteVector::from(sig_bytes.clone()),
             backward_foretis: FTByteVector::from(sig_bytes),
             aa_nonce: FTByteArray::from(nonce),
-            stamps_per_tick: 0,
+            chronon_stamp_count: 0,
             external_attestations: Vec::new(),
-            genesis_signature: vec![].into(),
+
             tb_version: 0,
+            tbid: Tbid::default(),
         };
 
         let valid = verify_pair(server.as_ref(), &tbid_str, &prev, &curr).unwrap();
@@ -537,10 +606,11 @@ mod tests {
             forward_foretis: vec![].into(),
             backward_foretis: vec![].into(),
             aa_nonce: [0u8; 16].into(),
-            stamps_per_tick: 0,
+            chronon_stamp_count: 0,
             external_attestations: Vec::new(),
-            genesis_signature: vec![].into(),
+
             tb_version: 0,
+            tbid: Tbid::default(),
         };
         let curr = ChrononRecord {
             chronon_number: 2,
@@ -549,10 +619,11 @@ mod tests {
             forward_foretis: FTByteVector::from(sig_bytes.clone()),
             backward_foretis: FTByteVector::from(sig_bytes.clone()),
             aa_nonce: FTByteArray::from(nonce),
-            stamps_per_tick: 0,
+            chronon_stamp_count: 0,
             external_attestations: Vec::new(),
-            genesis_signature: vec![].into(),
+
             tb_version: 0,
+            tbid: Tbid::default(),
         };
 
         assert!(verify_pair(server.as_ref(), &tbid_str, &prev, &curr).unwrap());
@@ -565,10 +636,11 @@ mod tests {
             forward_foretis: FTByteVector::from(sig_bytes),
             backward_foretis: vec![0u8; 64].into(),
             aa_nonce: FTByteArray::from(nonce),
-            stamps_per_tick: 0,
+            chronon_stamp_count: 0,
             external_attestations: Vec::new(),
-            genesis_signature: vec![].into(),
+
             tb_version: 0,
+            tbid: Tbid::default(),
         };
 
 let valid = verify_pair(server.as_ref(), &tbid_str, &prev, &curr_tampered).unwrap();

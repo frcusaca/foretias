@@ -344,23 +344,36 @@ impl Foretias {
         }
     }
 
-    pub async fn prove_verification(
+    pub async fn verify_with_proof(
         &self,
         content: &[u8],
         foretis: &Foretis,
     ) -> Result<VerificationReport, ForetiasError> {
-        let calendar = self.inner.calendar();
         let chronon_number = foretis.chronon_number;
-        let records = calendar
-            .get(chronon_number, 2)
+        let records = self.calendar_slice(chronon_number, 2).await?;
+        if records.is_empty() {
+            return Err(ForetiasError::Network(format!(
+                "no calendar records found for chronon {}", chronon_number
+            )));
+        }
+
+        let crypto = crypto_server::new_software(ForetiasCurve::Ed25519)
             .map_err(ForetiasError::from)?;
-        let verified = self.verify(content, foretis).await?;
+        let fetched_cal = FetchedCalendar {
+            record: records[0].clone(),
+            tbid: foretis.tbid,
+            tbn: foretis.tbn.clone(),
+        };
+        let verified = foretias_core::foretias::tick::verify(
+            &*crypto, foretis, content, &fetched_cal,
+        ).map_err(ForetiasError::from)?;
+
         Ok(VerificationReport {
             verified,
             chronon_number,
             calendar_records: records,
             foretis: foretis.clone(),
-            method: "prove_verification".into(),
+            method: "verify_with_proof".into(),
         })
     }
 
@@ -521,6 +534,34 @@ impl Foretias {
     }
 }
 
+struct FetchedCalendar {
+    record: ChrononRecord,
+    tbid: Tbid,
+    tbn: String,
+}
+
+impl CalendarLookup for FetchedCalendar {
+    fn get(&self, start: u64, count: usize) -> Result<Vec<ChrononRecord>, NodeError> {
+        if start == self.record.chronon_number && count >= 1 {
+            Ok(vec![self.record.clone()])
+        } else {
+            Ok(vec![])
+        }
+    }
+
+    fn latest(&self) -> Option<u64> {
+        Some(self.record.chronon_number)
+    }
+
+    fn tbid(&self) -> Tbid {
+        self.tbid
+    }
+
+    fn tbn(&self) -> &str {
+        &self.tbn
+    }
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct VerificationReport {
     pub verified: bool,
@@ -661,6 +702,80 @@ mod tests {
             assert_eq!(foretis.signature, deserialized.signature);
             assert_eq!(foretis.tbid, deserialized.tbid);
             assert_eq!(foretis.echo, deserialized.echo);
+        });
+    }
+
+    #[test]
+    fn verify_with_proof_succeeds_standalone() {
+        let client = Foretias::new("vwp-success".into(), None).unwrap();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let content = b"verify with proof test";
+            let foretis = client.stamp(content, "echo".into()).await.unwrap();
+            let report = client.verify_with_proof(content, &foretis).await.unwrap();
+            assert!(report.verified, "valid stamp should verify with proof");
+            assert_eq!(report.chronon_number, foretis.chronon_number);
+            assert!(!report.calendar_records.is_empty(), "report must include calendar records");
+            assert_eq!(report.calendar_records.len(), 1);
+            assert_eq!(report.calendar_records[0].chronon_number, foretis.chronon_number);
+            assert_eq!(report.foretis.chronon_number, foretis.chronon_number);
+            assert_eq!(report.method, "verify_with_proof");
+        });
+    }
+
+    #[test]
+    fn verify_with_proof_fails_wrong_content_standalone() {
+        let client = Foretias::new("vwp-wrong-content".into(), None).unwrap();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let foretis = client.stamp(b"original content", "echo".into()).await.unwrap();
+            let report = client.verify_with_proof(b"tampered content", &foretis).await.unwrap();
+            assert!(!report.verified, "wrong content should fail verification");
+        });
+    }
+
+    #[test]
+    fn verify_with_proof_returns_report_structure() {
+        let client = Foretias::new("vwp-structure".into(), None).unwrap();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let content = b"structure test";
+            let foretis = client.stamp(content, "echo".into()).await.unwrap();
+            let report = client.verify_with_proof(content, &foretis).await.unwrap();
+            assert!(report.verified);
+            assert!(report.chronon_number > 0, "chronon_number must be positive");
+            assert_eq!(report.calendar_records.len(), 1);
+            assert!(!report.calendar_records[0].public_key.is_empty());
+            assert!(!report.calendar_records[0].forward_foretis.is_empty());
+            assert!(!report.calendar_records[0].signature_algorithm.is_empty());
+        });
+    }
+
+    #[test]
+    fn verify_with_proof_nonexistent_chronon() {
+        let client = Foretias::new("vwp-nonexistent".into(), None).unwrap();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let foretis = client.stamp(b"content", "echo".into()).await.unwrap();
+            let report = client.verify_with_proof(b"content", &foretis).await.unwrap();
+            assert!(report.verified);
+        });
+    }
+
+    #[test]
+    fn verify_with_proof_multi_stamp() {
+        let client = Foretias::new("vwp-multi".into(), None).unwrap();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let f1 = client.stamp(b"first stamp", "echo1".into()).await.unwrap();
+            let f2 = client.stamp(b"second stamp", "echo2".into()).await.unwrap();
+            assert_ne!(f1.chronon_number, f2.chronon_number);
+            let r1 = client.verify_with_proof(b"first stamp", &f1).await.unwrap();
+            let r2 = client.verify_with_proof(b"second stamp", &f2).await.unwrap();
+            assert!(r1.verified);
+            assert!(r2.verified);
+            assert_eq!(r1.calendar_records[0].chronon_number, f1.chronon_number);
+            assert_eq!(r2.calendar_records[0].chronon_number, f2.chronon_number);
         });
     }
 }

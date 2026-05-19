@@ -12,7 +12,7 @@ All language implementations (Rust, Python, Java) must conform to this spec.
 | `serve` | Start the TimeFamilyServer |
 | `stamp` | Stamp content via TimeFamilyServer |
 | `verify` | Verify content against a Foretis (server-side) |
-| `prove` | Fetch calendar slice and verify locally (proof-of-verification) |
+| `verify-with-proof` | Download chronon and verify locally with cryptographic proof |
 | `inspect` | Inspect external attestations in a persisted calendar |
 
 ---

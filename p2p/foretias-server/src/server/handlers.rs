@@ -782,7 +782,7 @@ mod tests {
         assert!(resp.error.is_none());
         let result = resp.result.unwrap();
         assert_eq!(result.get("all_valid").and_then(|v| v.as_bool()), Some(true));
-        assert_eq!(result.get("pairs_checked").and_then(|v| v.as_u64()), Some(3));
+        assert_eq!(result.get("pairs_checked").and_then(|v| v.as_u64()), Some(2));
     }
 
     #[test]
@@ -795,7 +795,7 @@ mod tests {
             handle_stamp(&server, params);
         }
 
-        let params = serde_json::json!({"start": 1, "end": 3});
+        let params = serde_json::json!({"start": 1, "end": 4});
         let resp = handle_integrity_check(&server, params);
         assert!(resp.error.is_none());
         let result = resp.result.unwrap();

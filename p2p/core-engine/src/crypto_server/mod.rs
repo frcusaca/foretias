@@ -111,11 +111,11 @@ pub trait VerifyOps: Send + Sync {
 /// Key-exchange (ECDH) operations.
 pub trait KexOps: Send + Sync {
     /// Performs Ed25519-based ECDH to derive a shared secret with a peer.
-    fn ecdh_ed25519(&self, peer_pub: &ForetiasPubKey32) -> Result<SharedSecret, CryptoError> {
+    fn ecdh_ed25519(&self, _peer_pub: &ForetiasPubKey32) -> Result<SharedSecret, CryptoError> {
         Err(CryptoError::Unsupported(NOT_SUPPORTED))
     }
     /// Performs P-256 ECDH to derive a shared secret with a peer.
-    fn ecdh_p256(&self, peer_pub: &ForetiasPubKey33) -> Result<SharedSecret, CryptoError> {
+    fn ecdh_p256(&self, _peer_pub: &ForetiasPubKey33) -> Result<SharedSecret, CryptoError> {
         Err(CryptoError::Unsupported(NOT_SUPPORTED))
     }
 }

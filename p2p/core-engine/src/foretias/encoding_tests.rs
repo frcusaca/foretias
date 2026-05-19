@@ -282,7 +282,7 @@ fn tick_record_roundtrip() {
     assert_eq!(decoded.forward_foretis, tr.forward_foretis);
     assert_eq!(decoded.backward_foretis, tr.backward_foretis);
     assert_eq!(decoded.aa_nonce, tr.aa_nonce);
-    assert_eq!(decoded.stamps_per_tick, tr.stamps_per_tick);
+    assert_eq!(decoded.chronon_stamp_count, tr.chronon_stamp_count);
 }
 
 // Tbid

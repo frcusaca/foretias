@@ -110,12 +110,12 @@ foretias verify --message "hello world" --foretis '{"tick_number":...}' --server
 | `--verify-output`, `-o` | stdout | Write verify output to file |
 | `--server`, `-s` | `127.0.0.1:4001` | Server address |
 
-### prove-verification
+### verify-with-proof
 
-Fetch a calendar slice from a remote TimeBeing and verify locally (client-side proof).
+Download the chronon from a remote TimeBeing and verify locally with cryptographic proof. Returns the verification result along with the chronon record used.
 
 ```bash
-foretias prove-verification --message "hello world" --foretis '{"tick_number":...}' --server 127.0.0.1:4001
+foretias verify-with-proof --message "hello world" --foretis '{"chronon_number":...}' --server 127.0.0.1:4001
 ```
 
 | Flag | Default | Description |

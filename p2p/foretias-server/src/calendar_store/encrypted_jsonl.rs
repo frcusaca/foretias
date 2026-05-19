@@ -205,7 +205,7 @@ pub fn migrate_plaintext(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use foretias_core::crypto_server;
+    use foretias_core::{crypto_server, foretias::Tbid};
 
     fn make_server() -> Arc<dyn CryptoServer> {
         let server: Box<dyn CryptoServer> = crypto_server::new_software(crypto_server::ForetiasCurve::Ed25519)
@@ -221,10 +221,11 @@ mod tests {
             forward_foretis: vec![].into(),
             backward_foretis: vec![].into(),
             aa_nonce: [0u8; 16].into(),
-            stamps_per_tick: 0,
+            chronon_stamp_count: 0,
             external_attestations: Vec::new(),
-            genesis_signature: Vec::new().into(),
+
             tb_version: 0,
+            tbid: Tbid::default(),
         }
     }
 
