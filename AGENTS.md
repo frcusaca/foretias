@@ -74,7 +74,7 @@ When a specification is considered VERY important but interfering with current h
 - [ ] And fix that bug
 - [ ] ...
 ```
-Canceled features shall be marked as "not to be done" using the marker "[-] don't do this". An entirely deprecated plans hall have a "[x] canceled" box at the top. The AGENT should first add the canceled check item, then mark all todo's with per-item cancelation "[-] each one". Here is the example of properly canceled spec
+Canceled features shall be marked as "not to be done" using the marker "[-] don't do this". An entirely deprecated plans hall have a "[x] canceled" box at the top. The AGENT should first add the canceled check item, then mark all todo's with per-item cancelation "[-] each one". The deprecation can have elaboration regarding the reasons and context on the same line after the initial "[x] Canceled." text. Here is the example of properly canceled spec
 ```markdown
 - [x] Canceled. Optionally explain there's a new spec see ABCD_PLAN.md
       (2026-05-06 14:00)
