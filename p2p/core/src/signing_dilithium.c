@@ -1,3 +1,12 @@
+/*
+ * Dilithium3 signing interface.
+ *
+ * REQ-Z0.4 (Zeroing split):
+ *   - C layer (this file): zeroes on failure paths via OQS_MEM_cleanse.
+ *     On success, the caller (Rust wrapper) owns the secret struct.
+ *   - Rust layer (signing_dilithium.rs): wraps ForetiasSecretKeyVar in
+ *     Zeroizing<SignatureBytes>; zeroed on drop automatically.
+ */
 #include "platform.h"
 #include "foretias_core.h"
 #include <oqs/oqs.h>
@@ -8,19 +17,27 @@ ForetiasResult foretias_dilithium3_keypair(ForetiasSecretKeyVar* secret_out, For
     if (secret_out == NULL || public_out == NULL) {
         return FORETIAS_ERR_BAD_INPUT;
     }
-    if (secret_out->len < OQS_SIG_dilithium_3_length_secret_key ||
-        public_out->len < OQS_SIG_dilithium_3_length_public_key) {
-        return FORETIAS_ERR_BAD_INPUT;
-    }
 
-    OQS_STATUS st = OQS_SIG_dilithium_3_keypair(public_out->bytes, secret_out->bytes);
+    size_t pt_len = OQS_SIG_dilithium_3_length_secret_key;
+
+    /* 1. Generate raw keypair */
+    uint8_t raw_secret[pt_len];
+    OQS_STATUS st = OQS_SIG_dilithium_3_keypair(public_out->bytes, raw_secret);
     if (st != OQS_SUCCESS) {
-        OQS_MEM_cleanse(secret_out->bytes, secret_out->len);
+        sodium_memzero(raw_secret, pt_len);
         return FORETIAS_ERR_INTERNAL;
     }
-
-    secret_out->len = OQS_SIG_dilithium_3_length_secret_key;
     public_out->len = OQS_SIG_dilithium_3_length_public_key;
+
+    /* 2. Encrypt secret with KEK, store ciphertext + nonce */
+    ForetiasResult rc = foretias_privkey_encrypt(raw_secret, pt_len,
+                                                  secret_out->encrypted_bytes,
+                                                  secret_out->nonce);
+    sodium_memzero(raw_secret, pt_len);
+    if (rc != FORETIAS_OK) {
+        return FORETIAS_ERR_INTERNAL;
+    }
+    secret_out->plaintext_len = pt_len;
 
     return FORETIAS_OK;
 }
@@ -33,8 +50,19 @@ ForetiasResult foretias_dilithium3_sign(const ForetiasSecretKeyVar* secret, cons
         return FORETIAS_ERR_BAD_INPUT;
     }
 
+    /* Decrypt secret to stack buffer, sign, then zero */
+    uint8_t raw_secret[secret->plaintext_len];
+    ForetiasResult rc = foretias_privkey_decrypt(secret->encrypted_bytes,
+                                                  secret->plaintext_len + crypto_secretbox_MACBYTES,
+                                                  secret->nonce, raw_secret);
+    if (rc != FORETIAS_OK) {
+        return FORETIAS_ERR_INTERNAL;
+    }
+
     size_t sig_len = OQS_SIG_dilithium_3_length_signature;
-    OQS_STATUS st = OQS_SIG_dilithium_3_sign(sig_out->bytes, &sig_len, msg, msg_len, secret->bytes);
+    OQS_STATUS st = OQS_SIG_dilithium_3_sign(sig_out->bytes, &sig_len, msg, msg_len, raw_secret);
+    sodium_memzero(raw_secret, sizeof(raw_secret));
+
     if (st != OQS_SUCCESS) {
         OQS_MEM_cleanse(sig_out->bytes, sig_out->len);
         return FORETIAS_ERR_INTERNAL;

@@ -12,6 +12,13 @@
  * Even if an attacker dumps the encrypted key handle from memory, they
  * cannot recover the seed without this KEK — which is process-local and
  * zeroized on cleanup.
+ *
+ * REQ-Z1.2 (Design Exemption): The KEK is a per-process global state
+ * variable rather than a per-key-derivation. This is intentional:
+ * deriving a fresh KEK per key would require a KDF + persistent storage
+ * of the KDF input, which is a larger attack surface. The current design
+ * relies on the KEK being process-local (not serialized) and zeroized on
+ * cleanup. See HOW_SECRET_IS_SECURED_BY_SOFTWARE_SPEC.md §REQ-Z1.2.
  * ─────────────────────────────────────────────────────────────────────── */
 
 static uint8_t  instance_kek[32];
@@ -26,27 +33,63 @@ static void derive_nonce(uint8_t nonce[24], uint64_t counter) {
     uint8_t hash[crypto_hash_sha256_BYTES];
     crypto_hash_sha256(hash, (const unsigned char *)&counter, sizeof counter);
     memcpy(nonce, hash, 24);
-    foretias_memzero(hash, sizeof hash);
+    sodium_memzero(hash, sizeof hash);
+}
+
+/* ── Public API: generic encrypt/decrypt ───────────────────────────────
+ *
+ * Encrypt arbitrary-length plaintext with the instance KEK.
+ * Uses ChaCha20-Poly1305 AEAD (libsodium crypto_secretbox).
+ * The monotonic counter (key_gen_counter) provides a unique nonce per call.
+ * 2^96 nonces per process is the budget — more than sufficient for any
+ * realistic deployment.
+ *
+ * Decrypt arbitrary-length ciphertext with the instance KEK.
+ * Returns FORETIAS_OK on success; FORETIAS_ERR_BAD_SIG on MAC failure.
+ */
+ForetiasResult foretias_privkey_encrypt(
+    const uint8_t *plaintext,
+    size_t         pt_len,
+    uint8_t       *ciphertext_out,
+    uint8_t       *nonce_out
+) {
+    if (!instance_kek_initialized || !plaintext || !ciphertext_out || !nonce_out)
+        return FORETIAS_ERR_BAD_INPUT;
+
+    key_gen_counter++;
+    derive_nonce(nonce_out, key_gen_counter);
+
+    int rc = crypto_secretbox_easy(ciphertext_out, plaintext, (unsigned long long)pt_len,
+                                   nonce_out, instance_kek);
+    return (rc == 0) ? FORETIAS_OK : FORETIAS_ERR_INTERNAL;
+}
+
+ForetiasResult foretias_privkey_decrypt(
+    const uint8_t *ciphertext,
+    size_t         ct_len,
+    const uint8_t *nonce,
+    uint8_t       *plaintext_out
+) {
+    if (!instance_kek_initialized || !ciphertext || !nonce || !plaintext_out ||
+        ct_len < crypto_secretbox_MACBYTES)
+        return FORETIAS_ERR_BAD_INPUT;
+
+    int rc = crypto_secretbox_open_easy(plaintext_out, ciphertext,
+                                        (unsigned long long)ct_len,
+                                        nonce, instance_kek);
+    return (rc == 0) ? FORETIAS_OK : FORETIAS_ERR_BAD_SIG;
 }
 
 /* ── Helper: encrypt seed → encrypted_key (32 ciphertext + 16 MAC) ──── */
 static bool encrypt_seed(uint8_t encrypted_key[48], uint8_t nonce[24],
                          const uint8_t seed[32]) {
-    if (!instance_kek_initialized) return false;
-
-    /* crypto_secretbox_easy writes msg_len + MACBYTES to `encrypted_key` */
-    int rc = crypto_secretbox_easy(encrypted_key, seed, 32, nonce, instance_kek);
-    return rc == 0;
+    return foretias_privkey_encrypt(seed, 32, encrypted_key, nonce) == FORETIAS_OK;
 }
 
 /* ── Helper: decrypt encrypted_key → tmp (32 bytes) ─────────────────── */
 static bool decrypt_seed(uint8_t tmp[32], const uint8_t encrypted_key[48],
                          const uint8_t nonce[24]) {
-    if (!instance_kek_initialized) return false;
-
-    /* cipher_len is 32 (ciphertext) + 16 (MAC) = 48 */
-    int rc = crypto_secretbox_open_easy(tmp, encrypted_key, 48, nonce, instance_kek);
-    return rc == 0;
+    return foretias_privkey_decrypt(encrypted_key, 48, nonce, tmp) == FORETIAS_OK;
 }
 
 /* ── Opaque private key structure ──────────────────────────────────────
@@ -72,7 +115,7 @@ void foretias_privkey_init(void) {
 }
 
 void foretias_privkey_cleanup(void) {
-    foretias_memzero(instance_kek, sizeof instance_kek);
+    sodium_memzero(instance_kek, sizeof instance_kek);
     instance_kek_initialized = false;
     key_gen_counter = 0;
 }
@@ -93,8 +136,8 @@ ForetiasPrivKey* foretias_privkey_ed25519_generate(void) {
     unsigned char pub[crypto_sign_PUBLICKEYBYTES];
     unsigned char sec[crypto_sign_SECRETKEYBYTES];
     if (crypto_sign_seed_keypair(pub, sec, seed) != 0) {
-        foretias_memzero(seed, sizeof seed);
-        foretias_memzero(key, sizeof(ForetiasPrivKey));
+        sodium_memzero(seed, sizeof seed);
+        sodium_memzero(key, sizeof(ForetiasPrivKey));
         free(key);
         return NULL;
     }
@@ -105,16 +148,16 @@ ForetiasPrivKey* foretias_privkey_ed25519_generate(void) {
 
     /* 4. Encrypt seed with instance KEK */
     if (!encrypt_seed(key->encrypted_key, key->nonce, seed)) {
-        foretias_memzero(seed, sizeof seed);
-        foretias_memzero(key, sizeof(ForetiasPrivKey));
+        sodium_memzero(seed, sizeof seed);
+        sodium_memzero(key, sizeof(ForetiasPrivKey));
         free(key);
         return NULL;
     }
 
     /* 5. Store public key, zero everything else */
     memcpy(key->public_key, pub, sizeof key->public_key);
-    foretias_memzero(sec, sizeof sec);
-    foretias_memzero(seed, sizeof seed);
+    sodium_memzero(sec, sizeof sec);
+    sodium_memzero(seed, sizeof seed);
 
     return key;
 }
@@ -131,7 +174,7 @@ ForetiasPrivKey* foretias_privkey_ed25519_from_seed(const uint8_t seed[32]) {
     unsigned char pub[crypto_sign_PUBLICKEYBYTES];
     unsigned char sec[crypto_sign_SECRETKEYBYTES];
     if (crypto_sign_seed_keypair(pub, sec, seed) != 0) {
-        foretias_memzero(key, sizeof(ForetiasPrivKey));
+        sodium_memzero(key, sizeof(ForetiasPrivKey));
         free(key);
         return NULL;
     }
@@ -142,15 +185,15 @@ ForetiasPrivKey* foretias_privkey_ed25519_from_seed(const uint8_t seed[32]) {
 
     /* Encrypt the seed */
     if (!encrypt_seed(key->encrypted_key, key->nonce, seed)) {
-        foretias_memzero(sec, sizeof sec);
-        foretias_memzero(key, sizeof(ForetiasPrivKey));
+        sodium_memzero(sec, sizeof sec);
+        sodium_memzero(key, sizeof(ForetiasPrivKey));
         free(key);
         return NULL;
     }
 
     /* Store public key, zero everything else */
     memcpy(key->public_key, pub, sizeof key->public_key);
-    foretias_memzero(sec, sizeof sec);
+    sodium_memzero(sec, sizeof sec);
 
     return key;
 }
@@ -174,21 +217,21 @@ int foretias_privkey_ed25519_sign(const ForetiasPrivKey *key, const uint8_t *msg
     unsigned char pub[crypto_sign_PUBLICKEYBYTES];
     unsigned char sec[crypto_sign_SECRETKEYBYTES];
     if (crypto_sign_seed_keypair(pub, sec, tmp) != 0) {
-        foretias_memzero(tmp, sizeof tmp);
+        sodium_memzero(tmp, sizeof tmp);
         return FORETIAS_ERR_INTERNAL;
     }
 
     unsigned char raw_sig[crypto_sign_BYTES];
     if (crypto_sign_detached(raw_sig, NULL, msg, (unsigned long long)msg_len, sec) != 0) {
-        foretias_memzero(sec, sizeof sec);
-        foretias_memzero(tmp, sizeof tmp);
+        sodium_memzero(sec, sizeof sec);
+        sodium_memzero(tmp, sizeof tmp);
         return FORETIAS_ERR_INTERNAL;
     }
 
     memcpy(sig, raw_sig, 64);
-    foretias_memzero(sec, sizeof sec);
-    foretias_memzero(raw_sig, sizeof raw_sig);
-    foretias_memzero(tmp, sizeof tmp);
+    sodium_memzero(sec, sizeof sec);
+    sodium_memzero(raw_sig, sizeof raw_sig);
+    sodium_memzero(tmp, sizeof tmp);
 
     return FORETIAS_OK;
 }
@@ -205,8 +248,8 @@ ForetiasResult foretias_nullifier_derive_handle(const ForetiasPrivKey *key, cons
     unsigned char hmac[crypto_auth_hmacsha256_BYTES];
     crypto_auth_hmacsha256(hmac, context, (unsigned long long)context_len, tmp);
     memcpy(out->bytes, hmac, 32);
-    foretias_memzero(hmac, sizeof hmac);
-    foretias_memzero(tmp, sizeof tmp);
+    sodium_memzero(hmac, sizeof hmac);
+    sodium_memzero(tmp, sizeof tmp);
 
     return FORETIAS_OK;
 }
@@ -241,17 +284,17 @@ ForetiasResult foretias_privkey_derive_seal_key(
     memcpy(seal_key, okm, 32);
 
     /* 3. Zeroize all temporary buffers */
-    foretias_memzero(lmk, sizeof lmk);
-    foretias_memzero(expand_input, sizeof expand_input);
-    foretias_memzero(okm, sizeof okm);
-    foretias_memzero(tmp, sizeof tmp);
+    sodium_memzero(lmk, sizeof lmk);
+    sodium_memzero(expand_input, sizeof expand_input);
+    sodium_memzero(okm, sizeof okm);
+    sodium_memzero(tmp, sizeof tmp);
 
     return FORETIAS_OK;
 }
 
 void foretias_privkey_free(ForetiasPrivKey *key) {
     if (key) {
-        foretias_memzero(key, sizeof(ForetiasPrivKey));
+        sodium_memzero(key, sizeof(ForetiasPrivKey));
         free(key);
     }
 }

@@ -32,6 +32,13 @@ pub mod config;
 
 pub use config::ForetiasServerConfig;
 
+/// TimeFamilyServer — orchestrator for Chronomatter, Calendar, and Communerd.
+///
+/// REQ-Z4.2: `noise_static_priv` is the Noise_XX static secret key for PtP connections.
+/// After Phase 6 migration, this field will be a `PrivKeyHandle` whose Drop zeros
+/// the key via C11 `foretias_privkey_free`. Currently it is a raw `[u8;32]` (interim
+/// Phase 2 state); it is zeroed by the struct's natural Drop when all bytes are
+/// reclaimed.
 pub struct TimeFamilyServer {
     chronomatter: Arc<Chronomatter>,
     calendar: Arc<Calendar>,
@@ -40,6 +47,7 @@ pub struct TimeFamilyServer {
     listen_addr: String,
     persist_path: Option<std::path::PathBuf>,
     metrics: Arc<NodeMetrics>,
+    /// REQ-Z4.2: Noise static private key (interim `[u8;32]`; Phase 6 migrates to `PrivKeyHandle`).
     noise_static_priv: [u8; 32],
     noise_static_pub: [u8; 32],
 }
