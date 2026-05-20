@@ -1,77 +1,410 @@
 # HOW_SECRET_IS_SECURED_BY_SOFTWARE_SPEC.md
 
 **Date:** 2026-05-20
-**Application:** Foretias v0.3
+**Application:** Foretias v0.3+
 **Scope:** Secret key lifecycle across all software layers — dependency libraries, C11 core, foretias-core, foretias-client, foretias-server, and future language bindings.
-**Purpose:** Specify the secrecy guarantees for every secret key type in the system, zone by zone. Each zone documents what objects *can* and *cannot* be represented or accessed within that domain, with explicit language-level and practical secrecy statements.
+**Authority:** This document is the **de facto, normative source of truth** for how secret material is handled in software across the Foretias project. All implementations — current and future — must conform to the requirements in **Part 1**. Subsequent SPECs, PLANs, and code reviews defer to this document on questions of secret storage, encryption, zeroization, type-system protection, constant-time comparison, and observability of secret material.
+**Companion plan:** `HOW_SECRET_IS_SECURED_BY_SOFTWARE_PLAN.md` — the phased, checkbox-tracked implementation plan that brings the codebase into compliance.
+**Sources synthesized:**
+- AGENTS.md "How To Write Rust Code" (especially the cryptographic and observability sections)
+- specs/COMBINED_PRE_P2P_PRODUCT_AND_CODE_REVIEW.md (esp. §1.3.5, §1.3.11, §1.5.A, §2.3.1, §2.5)
+- specs/pre-public-mvp-code-review.md (Dilithium Drop bug, since fixed)
+- docs/threat_model_v0_5.md
 
 ---
 
-## HARD REQUIREMENTS (Non-Negotiable)
+## How To Use This Document
 
-These two requirements apply to **every secret key** in the system, without exception. Where a requirement cannot be met, the violation **must** be thoroughly documented with: (a) the exact reason it is infeasible, (b) the threat model impact, (c) compensating controls, and (d) the owning component (e.g., an external library outside our control).
+- **Implementers** read **Part 1** before writing or reviewing any code that touches secret material. Part 1 is sufficient as an enforceable contract.
+- **Auditors** read Part 1 to identify what must be true, then use **Part 2** for per-zone evidence and the **Master REQ-Z\* Index** (§1.7) to confirm each requirement's status.
+- **Spec/PLAN authors** for any subsequent Foretias feature that handles secrets must (a) cite the relevant REQ-Z\* IDs they must satisfy, and (b) flag any new secret material so it can be added to Part 2.
+- **Pull-request reviewers** run the **Verification Checklist** (§1.8) before approving any merge that adds, removes, or modifies a type that holds or transports secret material.
 
-### HR-1: ALL Original Secrets Must Be Encrypted In Memory
+---
 
-Every secret key that originates from key generation or external input **must be encrypted while stored in memory**. "In memory" means any persistent or semi-persistent storage: heap allocations, stack variables that survive beyond the immediate operation, struct fields, Vec buffers, global state.
+# Part 1 — REQUIREMENTS (Normative — Read This First)
 
-**What counts as "encrypted":**
-- AEAD encryption (ChaCha20-Poly1305 via libsodium `crypto_secretbox_*`) using the instance KEK
-- The encrypted form must include a unique nonce per key (derived from a monotonic counter, as in `privkey.c`)
-- The ciphertext + MAC must be stored, not the plaintext
+The contents of Part 1 are **mandatory**. Every secret in the Foretias system must satisfy the Five Hard Requirements (§1.1) and the Mandatory Patterns (§1.6). Every code change touching a secret must pass the Verification Checklist (§1.8) before merge. Every violation must be documented using the Violation Template (§1.5). The Master Requirements Index (§1.7) is the single sortable list of all derived requirements (REQ-Z\*) that implement the Hard Requirements.
 
-**What does NOT count as "encrypted":**
-- Raw bytes in a struct field (`uint8_t bytes[32]`)
-- `Zeroizing<[u8; 32]>` (zeroing on drop is NOT encryption)
-- `ManuallyDrop` wrappers (opaque access is NOT encryption)
-- Library-internal encryption that we cannot verify or control
+The detailed per-zone analysis that produced and supports these requirements is preserved in Part 2.
 
-**Scope:** This applies to:
-- Ed25519 seeds (tick keys, Noise static keys, TBID Ed25519 component)
-- PQC secret keys (SPHINCS+, Dilithium3, ML-KEM)
-- TBID combined secrets
-- FROST shares
-- Noise session keys (chaining key, send/recv keys)
-- Seal keys
-- Any future secret key types
+## §1.1 The Five Hard Requirements
 
-**Current compliance:** Only `ForetiasPrivKey` (the opaque handle path in `privkey.c`) satisfies this requirement. All other secret types are **VIOLATIONS** that must be remediated or documented.
+These are non-negotiable. Where a Hard Requirement cannot be met by code under our control, the inability must be thoroughly documented using the Violation Template (§1.5).
+
+### HR-1: ALL Long-Lived Secrets Must Be Encrypted In Memory
+
+Every secret key that exists in memory beyond a single immediate operation **must be stored in encrypted form**. "In memory" means heap allocations, stack variables that outlive their producing function, struct fields, `Vec` buffers, `HashMap` values, global state, and any FFI-shared struct.
+
+**What counts as encryption (acceptable):**
+- AEAD encryption (ChaCha20-Poly1305 via libsodium `crypto_secretbox_*` or `crypto_aead_chacha20poly1305_ietf_*`) using the instance KEK.
+- A unique nonce per encrypted secret (e.g., derived from the monotonic counter in `privkey.c`).
+- Both the ciphertext and the authentication tag (MAC) stored; both required for decryption.
+
+**What does NOT count as encryption (NOT acceptable as standalone HR-1 compliance):**
+- Raw bytes in a struct field (`uint8_t bytes[32]`, `[u8; 32]`, `Vec<u8>`).
+- `Zeroizing<T>` — provides zeroing on drop only; **NOT encryption**.
+- `ManuallyDrop<T>` — opaque-access wrapper only; **NOT encryption**.
+- Library-internal encryption that we cannot verify or control (counts toward HR-1 only when explicitly documented as an accepted external-library compliance gap; see Zone 7).
+
+**Scope (non-exhaustive):**
+- Ed25519 seeds (tick keys, Noise static keys, TBID Ed25519 component).
+- PQC secret keys (SPHINCS+ variants, Dilithium3, ML-KEM-768, SLH-DSA-256f).
+- TBID V1 combined secrets (dual-key).
+- FROST shares and round-1 nonces.
+- Noise session keys (chaining key, send_key, recv_key).
+- Seal keys derived from a tick private key.
+- Any future secret key type added to the system.
 
 ### HR-2: ALL Ephemeral Secrets Must Be Zeroed Immediately After Use
 
-Every secret that exists only transiently — on the stack, as an intermediate value, or for a single operation — **must be zeroed before the function returns or the scope exits**. "Immediately" means before any other allocation, I/O, or control flow that could extend the exposure window.
+Every secret that exists only transiently — on the stack, as an intermediate value, or for a single operation — **must be zeroed before the producing function returns or the enclosing scope exits**. "Immediately" means before any subsequent allocation, I/O, error-return, or control-flow path that could extend the exposure window.
 
 **What counts as "ephemeral":**
-- Stack-allocated buffers (`uint8_t tmp[32]`)
-- Decrypted seeds used for a single signing operation
-- DH intermediate values
-- Ephemeral Diffie-Hellman private keys
-- Temporary copies of secret material during extraction or conversion
-- Noise ephemeral keys (generated per-handshake)
+- Stack-allocated buffers (`uint8_t tmp[32]`).
+- Decrypted seed copies used for a single signing operation.
+- DH intermediate values.
+- Per-connection ephemeral Diffie-Hellman private keys.
+- Temporary heap allocations holding secret material during extraction or conversion.
+- Noise ephemeral keys (generated per-handshake).
+- ML-KEM shared secrets between encapsulation and key derivation.
 
-**What does NOT count as "ephemeral":**
-- Long-lived keys stored in structs (covered by HR-1 instead)
-- Keys persisted across ticks or connections
+**What does NOT count as "ephemeral" (covered instead by HR-1):**
+- Long-lived keys stored in structs that persist across ticks, connections, or process operations.
 
 **Zeroing mechanism:**
-- C11: `sodium_memzero()` (per REQ-Z0.6)
-- Rust: `zeroize::Zeroizing` or explicit `fill(0)` before scope exit
+- **C11:** `sodium_memzero()` (per REQ-Z0.1). The custom `foretias_memzero` is being phased out.
+- **Rust:** `zeroize::Zeroizing` for any owned secret; explicit `fill(0)` or `Zeroize::zeroize()` for any caller-owned buffer that has been copied from.
 
-**Current compliance:** Partially satisfied. Signing operations in `privkey.c` zero temporary buffers correctly. Noise DH intermediates are zeroed with `sodium_memzero`. However, several gaps exist (documented per-zone below).
+### HR-3: Secret-Holding Types Must NOT Leak Through the Type System
 
-### Violation Documentation Template
+Any Rust type whose fields hold or transitively reference secret bytes **must NOT** derive `Debug`, `Clone`, `Copy`, or `Serialize` unless explicitly justified in a doc comment with the compensating discipline documented.
 
-When a secret cannot satisfy HR-1 or HR-2, use this format:
+**Rationale:**
+- A stray `format!("{:?}", obj)` or `tracing::debug!(?obj, ...)` on a `Debug`-deriving secret-holding type emits the full secret to logs, traces, or stdout.
+- A stray `.clone()` or implicit `Copy` silently duplicates a secret to a new memory location that may outlive the original and may not be subject to the same zeroization or encryption discipline.
+- A `Serialize` derive can serialize a secret to disk, the wire, or a debug log via the default formatter.
+
+**Required pattern for FFI types (bindgen-generated):**
+- Bindgen builder must specify `.no_debug("TypeName")` for every FFI struct that holds secret bytes.
+- The list of FFI structs that must be in this configuration is enumerated in §1.7 (Master REQ-Z\* Index, REQ-Z1.3 through REQ-Z1.11).
+
+**Required pattern for hand-written Rust types:**
+- Never derive `Debug` on a struct whose fields hold secret bytes. Provide a manual `Debug` impl that emits `<redacted N bytes>` only if logging is genuinely needed (rare).
+- Never derive `Clone`/`Copy` on a secret-holding type unless the protocol requires it. If required, the cloned/copied value must be subject to the same `Zeroizing` or opaque-handle discipline.
+- Never derive `Serialize`/`Deserialize` on a secret-holding type. Wire and disk serialization of secrets, where unavoidable, must go through an explicit encrypted-bytes-with-nonce wrapper.
+
+**Exception justification format (when a derive is genuinely required):**
+```rust
+// HR-3 exception: This type derives `Clone` because the protocol's
+// share-distribution phase requires N copies of the value, each held by
+// a different FROST committee member. Each clone is wrapped in
+// `Zeroizing<...>` at the field type level, so every copy is zeroed on
+// drop. See HOW_SECRET_IS_SECURED_BY_SOFTWARE_SPEC.md §HR-3 exception 1.
+#[derive(Clone)]
+pub struct FrostShare(Zeroizing<Vec<u8>>);
+```
+
+**Verification:**
+- `grep -rnE '#\[derive\([^)]*Debug[^)]*\)\]'` against types matching `*Secret*`, `*Priv*`, `*Key*`, `*Seed*`, `*Share*`, `*Nonce*` returns zero hits in production code.
+- `grep -rnE '#\[derive\([^)]*Clone[^)]*\)\]'` against the same patterns produces results only with an HR-3 exception comment within 5 lines above.
+- Bindgen output (`bindings.rs`) contains zero `#[derive(...Debug...)]` lines for FFI types enumerated in §1.7.
+
+### HR-4: Constant-Time Comparison of Secret-Derived Values
+
+Any comparison of secrets, signatures, authentication tags, MACs, key shares, or any byte sequence whose comparison-timing could leak information about a secret **MUST** use a constant-time comparison primitive.
+
+**Required primitives:**
+- **C11:** `sodium_memcmp(const void *a, const void *b, size_t len)` from libsodium.
+- **Rust:** `subtle::ConstantTimeEq` (`a.ct_eq(b).into()`) or, where applicable, `ring::constant_time::verify_slices_are_equal`.
+
+**Forbidden:**
+- `memcmp` (C) on secret-derived values.
+- `==`, `slice::eq`, `Vec::eq`, `bytes_a == bytes_b` (Rust) on secret-derived values.
+
+**Verification:**
+- `grep -nE 'memcmp\(' p2p/core/src/` produces zero hits.
+- Code review of any new `if some_sig == expected_sig` pattern flags as HR-4 violation.
+
+### HR-5: No Logging, Tracing, or Display of Secret Material
+
+Secrets must never be emitted to any log, trace, stdout/stderr, error message, panic message, or display formatter. This applies regardless of log level (including `trace!` and `debug!`) and regardless of conditional compilation (including `#[cfg(test)]` if test output is captured by CI).
+
+**Required practices:**
+- HR-3 closes the most common accidental path (no `Debug` derive on secret-holding types).
+- `Display` implementations on secret-holding types must emit `<redacted>` (no length, no prefix, no fingerprint).
+- Error messages must not embed any subset of secret bytes (e.g., "key starts with 0xAB..."). Use opaque identifiers (TBID hex prefix, handle pointer cast to opaque ID) where caller-side correlation is needed.
+- Panic messages must not embed secret material. `expect("invariant: signing key derive failed for tbid {}", tbid_short_hex)` is acceptable; `expect("seed was {}", hex::encode(seed))` is forbidden.
+- The `tracing` subscriber configuration in `main.rs` must enable structured field filtering that drops fields named `priv*`, `secret*`, `seed*`, `share*`, `_kek` from emitted spans. (Defensive belt-and-suspenders for HR-3.)
+
+**Verification:**
+- `grep -rnE 'tracing::(trace|debug|info|warn|error)!.*\?' src/` (the `?` field debug formatter) reviewed for secret-holding type arguments.
+- Snapshot tests of CLI output assert no secret hex appears in any control flow.
+
+## §1.2 Cross-Reference to AGENTS.md
+
+This spec is the canonical elaboration of AGENTS.md's secret-handling guidance. Specifically:
+
+| AGENTS.md guidance | This spec's elaboration |
+|---|---|
+| "Do not log secrets, private keys, raw credentials, sensitive peer material." | HR-3 (no Debug derive) + HR-5 (no logging). |
+| "Use constant-time comparison for signatures, MACs, authentication tags." | HR-4. |
+| "Wrap unsafe code in small safe abstractions." | Mandatory Pattern §1.6.1 (Opaque Handle). |
+| AGENTS.md §1.5.A (proposed addition in COMBINED review) "Secret Material Handling" | This spec is the implementation of that proposed addition. AGENTS.md should link here rather than duplicate. |
+
+The proposed AGENTS.md update is: **"All secret-handling rules in AGENTS.md are normatively expanded in `specs/HOW_SECRET_IS_SECURED_BY_SOFTWARE_SPEC.md`. Any conflict is resolved in favor of the more restrictive rule."**
+
+## §1.3 What This Spec Covers and Does NOT Cover
+
+**Covers:**
+- How secrets are stored (HR-1, encryption at rest in memory).
+- How secrets are zeroed (HR-2, ephemeral zeroization).
+- How secrets are exposed through types (HR-3, type-system protection).
+- How secrets are compared (HR-4, constant-time).
+- How secrets are observed (HR-5, no logging).
+- Cross-FFI secret handling (Mandatory Patterns §1.6.1, §1.6.6).
+- Audit and verification mechanics (§1.8).
+
+**Does NOT cover:**
+- Key generation entropy sources — assumed to be CSPRNG (`randombytes_buf`, `getrandom`). See `FORETIAS_1_MVP_SPEC §4.x` for entropy requirements.
+- Protocol-level use of secrets (what may legitimately be signed; what data may reach a signing call) — see Zone 6 (Formal Analysis), which establishes a formal-analysis framework; the actual analysis is a separate deliverable.
+- Wire-format secret distribution (e.g., FROST share dealing) — TBD when FROST is implemented; will defer to this spec's HR-1 for the in-transit ciphertext requirements.
+- Key compromise recovery and key rotation policy — covered by `FORETIAS_2_P2P_SPEC` and `questions.md`.
+- libp2p's internal secret handling — see Zone 7 (External Dependencies).
+
+## §1.4 Terminology: Two Kinds of Secrecy
+
+For every secret in the system, two dimensions of secrecy are evaluated:
+
+| Dimension | Question | Example |
+|-----------|----------|---------|
+| **Language Secrecy** | Does the language/type system prevent direct access? | "Rust has no syntax to access this field." |
+| **Practical Secrecy** | Even with full source access, can an attacker reconstruct the secret from accessible state? | "Rust code cannot reach the bytes; the KEK lives only in C file-scope and is obfuscated; no path exists." |
+
+A secret can be:
+- **Language-secret + Practical-secret** — Ideal. Type system blocks access AND no reconstruction path exists.
+- **Language-secret + Practical-accessible** — Type system blocks direct access, but the pieces exist elsewhere (e.g., KEK in mutable global state).
+- **Language-accessible + Practical-secret** — Raw bytes are reachable, but encrypted (useless without KEK).
+- **Language-accessible + Practical-accessible** — **VULNERABILITY**. Raw secret bytes are directly reachable.
+
+Every secret enumerated in Part 2 carries these two ratings.
+
+## §1.5 Violation Documentation Template
+
+When a secret cannot satisfy any Hard Requirement, the inability must be documented in the per-zone analysis (Part 2) using this template:
 
 ```
-**VIOLATION: HR-{1|2} — {Secret Name}**
-- **Component:** {file:line or library name}
-- **Reason:** {Why encryption/zeroing is infeasible}
-- **Threat:** {What an attacker can do with the unencrypted/zeroed secret}
-- **Compensating Controls:** {What mitigates the risk}
-- **Owner:** {Foretias code / external library (name) / OS / hardware}
+**VIOLATION: HR-{1|2|3|4|5} — {Secret Name}**
+- **Component:** {file:line OR external library name OR struct name}
+- **Reason:** {Why compliance is infeasible — be specific}
+- **Threat:** {What an attacker can do with the non-compliant secret}
+- **Compensating Controls:** {What mitigates the risk in the interim}
+- **Owner:** {Foretias code (within our control) | external library (name) | OS | hardware}
 - **Remediation Path:** {How to eventually satisfy the requirement, or "N/A — external dependency"}
+- **Tracking REQ:** {REQ-Zx.y that addresses this, or "none yet — must be added"}
 ```
+
+A violation that has not been documented using this template is treated, for compliance purposes, as if no analysis exists for the secret — i.e., assumed non-compliant.
+
+## §1.6 Mandatory Patterns
+
+These are the implementation patterns that must be used wherever applicable. Each pattern is named so spec authors, PLAN authors, and code reviewers can refer to them by short identifier.
+
+### §1.6.1 Pattern: Opaque Handle (Cross-FFI Secret Carrier)
+
+**When to use:** Any time a secret must be carried across the C11 ↔ Rust FFI boundary or any future language-binding boundary.
+
+**How:**
+- The secret is generated and stored inside the C11 core, encrypted under the instance KEK.
+- The cross-boundary type is an opaque pointer (`NonNull<ForetiasPrivKey>` in Rust, `void*` from C's perspective).
+- All cryptographic operations on the secret happen inside C; the higher language never sees raw bytes.
+- The Rust wrapper (`PrivKeyHandle`) is `ManuallyDrop<NonNull<ForetiasPrivKey>>` with no `Deref`, `Debug`, `Clone`, `Copy`.
+- The wrapper's `Drop` impl calls `foretias_privkey_free()` which `sodium_memzero`s the encrypted struct.
+
+**Reference implementation:** `ForetiasPrivKey` + `PrivKeyHandle` (Zone 1.1, Zone 2.1).
+
+### §1.6.2 Pattern: KEK Encryption (In-Process Storage)
+
+**When to use:** Any long-lived secret stored in C11 structs that cannot use the Opaque Handle pattern (e.g., PQC secrets whose operations must be exposed by their algorithm-specific API).
+
+**How:**
+- A process-singleton Key Encryption Key (KEK) is generated at startup via `randombytes_buf`.
+- The KEK lives in file-scope static memory inside `privkey.c`, obfuscated via the `rts` placeholder algorithm (HR-1 acknowledged compensating control until REQ-Z1.2A is delivered).
+- Every persistent secret is encrypted with the KEK using ChaCha20-Poly1305 AEAD with a unique nonce derived from a monotonic counter (`key_gen_counter`).
+- The encrypted form (`ciphertext + 16-byte MAC + 24-byte nonce`) is what is stored in the struct; the plaintext is held in memory only during a single decrypt-use-zero operation (Pattern §1.6.4).
+
+**Reference implementation:** `privkey.c:107` (`encrypt_seed`), `privkey.c:169` (`decrypt_seed`).
+
+### §1.6.3 Pattern: Zeroizing Wrapper (Rust Scope-Exit Zeroization)
+
+**When to use:** Any in-process Rust value holding secret bytes (typed as `[u8; N]`, `Vec<u8>`, or domain newtype thereof).
+
+**How:**
+- Wrap the field type in `zeroize::Zeroizing<T>`. Example: `Zeroizing<[u8; 32]>`, `Zeroizing<Vec<u8>>`.
+- For domain newtypes that hold secret bytes (`SignatureBytes`, `TbidSecret`), the inner field must itself be `Zeroizing<Vec<u8>>` so all wrappers participate.
+- Never `let _ = secret.clone()` without ensuring the clone is also `Zeroizing`.
+
+**Reference implementation:** `software.rs:34, :38-46` (seal_key, PQC secrets, FROST shares).
+
+### §1.6.4 Pattern: C-Side Decrypt-Use-Zero (Hot-Path Signing)
+
+**When to use:** Inside any C11 function that needs to use a KEK-encrypted secret to perform a cryptographic operation.
+
+**How:**
+1. Allocate a stack buffer the exact size of the plaintext secret (`uint8_t tmp[N]`).
+2. Call the decrypt helper to populate `tmp` from the encrypted struct field.
+3. Perform the cryptographic operation using `tmp`.
+4. Call `sodium_memzero(tmp, sizeof tmp)` before any return path.
+5. If any derived intermediate value (e.g., the 64-byte expanded Ed25519 secret) is computed, zero it as well before return.
+
+**Reference implementation:** `privkey.c:164-193` (`foretias_privkey_ed25519_sign`).
+
+### §1.6.5 Pattern: No-Debug FFI Binding
+
+**When to use:** Every bindgen-generated FFI struct that holds secret bytes.
+
+**How:** In `p2p/core-engine/build.rs`, add `.no_debug("TypeName")` to the bindgen builder for each such type. The full list lives in REQ-Z2.3.
+
+**Reference implementation:** REQ-Z2.3 (Phase 1 in PLAN.md).
+
+### §1.6.6 Pattern: Caller-Side Zeroize Before Return (Producer Discipline)
+
+**When to use:** Any C11 or Rust function that produces a secret which the caller will consume immediately and then discard.
+
+**How:**
+- After the caller has copied the secret into its destination (encrypted struct, Zeroizing wrapper, opaque handle, etc.), the producer-side temporary must be zeroed before the producing function returns.
+- Examples:
+  - `signing_tbid.c:7-41` zeros both the temporary Ed25519 and SLH-DSA buffers after composing the dual-key struct.
+  - `PrivKeyHandle::from_seed(seed)` MUST zero the caller's `seed` buffer (REQ-Z2.1 — currently open).
+  - `kem_mlkem.rs:14-15` MUST zero the C `secret` struct after extracting bytes (REQ-Z2.7 — currently open).
+
+### §1.6.7 Pattern: Bounded Retention (Old Keys Must Evict)
+
+**When to use:** Any collection that accumulates secret-holding values over time (tick keypairs, mirror records, FROST share log, etc.).
+
+**How:**
+- The collection must have a hard upper bound on retention (counted entries or wall-clock age, never unbounded).
+- Eviction must trigger `Drop` of the evicted secret, which must in turn invoke the appropriate zeroization (C-side `foretias_privkey_free`, Rust-side `Zeroizing::drop`, etc.).
+- Example: `Chronomatter::keypairs` MUST retain only the current and immediately previous tick keypairs; older entries must be evicted and zeroized (REQ-Z4.3).
+
+## §1.7 Master Requirements Index (REQ-Z*)
+
+The single sortable list of every requirement derived from the Hard Requirements. Each row links the requirement to its source HR, its priority, its zone of effect, and its current open/closed status. Sort by `Priority` then `HR` then `Zone` to derive a top-down implementation order.
+
+| REQ ID | What it requires | Source HR | Priority | Zone | Status |
+|---|---|---|---|---|---|
+| REQ-Z0.1 | Replace `foretias_memzero` with `sodium_memzero` throughout C11 core | HR-2 infrastructure | P1 | 0.4 | ❌ Open |
+| REQ-Z0.2 | Use `sodium_memcmp` for any constant-time comparison of secret material in C11 | HR-4 | P0 standing | 0.1 | ✅ No current violation (no comparisons exist) |
+| REQ-Z0.3 | Consider `sodium_mprotect` for KEK and per-tick private key memory regions | HR-1 hardening | P2 | 0.1 | ⏸ Deferred (nice-to-have) |
+| REQ-Z0.4 | Document split responsibility: C zeros on failure; Rust `Zeroizing` zeros on scope exit | HR-2 documentation | P1 | 0.2 | ❌ Open (doc-only) |
+| REQ-Z0.5 | All in-process Rust secrets MUST be wrapped in `Zeroizing<T>` at the type level | HR-2 / HR-3 corollary | P0 standing | 0.3 | ⚠ Partial (TBID Vec gap; noise_static_priv gap) |
+| REQ-Z0.6 | Replace all call sites of `foretias_memzero` with `sodium_memzero` (impl of Z0.1) | HR-2 infrastructure | P1 | 0.4 | ❌ Open |
+| REQ-Z0.7 | Remove `foretias_memzero` declaration from `foretias_core.h` after Z0.6 | HR-2 infrastructure | P1 | 0.4 | ❌ Open (blocked on Z0.6) |
+| REQ-Z1.1 | (Acknowledgment) `PrivKeyHandle` path is HR-1/HR-2 compliant; no change | HR-1, HR-2 | n/a | 1.1 | ✅ Verified |
+| REQ-Z1.2 | Document KEK global-static state as accepted design exemption | HR-1 documentation | P2 | 1.2 | ❌ Open (doc-only) |
+| REQ-Z1.2A | Replace `rts` placeholder with proper KEK derivation (HKDF from hardware-bound secret, Argon2, etc.) | HR-1 hardening | P1 | 1.2 | ❌ Open |
+| REQ-Z1.3 | Add `.no_debug("ForetiasPrivKey32")` to bindgen builder | HR-3 | P0 | 1.3 | ❌ Open |
+| REQ-Z1.3A | Migrate all `ForetiasPrivKey32` consumers to opaque-handle or C-internal derivation | HR-1 | P0 | 1.3 | ❌ Open |
+| REQ-Z1.4 | Zero `ForetiasPrivKey32.bytes` immediately after every Rust-side use (audit all callers) | HR-2 | P0 | 1.3 | ⚠ Partial (noise.rs:95 done; audit others) |
+| REQ-Z1.5 | Add `.no_debug("ForetiasSecretKeyVar")` to bindgen builder | HR-3 | P0 | 1.4 | ❌ Open |
+| REQ-Z1.5A | Encrypt PQC secret keys (SPHINCS+, Dilithium3) with KEK in `ForetiasSecretKeyVar` | HR-1 | P0 | 1.4 | ❌ Open |
+| REQ-Z1.6 | Zero `ForetiasSecretKeyVar` C struct after Rust-side extraction (signing_sphincs.rs, signing_dilithium.rs) | HR-2 | P1 | 1.4 | ❌ Open |
+| REQ-Z1.7 | Add `.no_debug("ForetiasKemSecretKey")` to bindgen builder | HR-3 | P0 | 1.6 | ❌ Open |
+| REQ-Z1.7A | Encrypt ML-KEM secret keys with KEK in `ForetiasKemSecretKey` | HR-1 | P0 | 1.6 | ❌ Open |
+| REQ-Z1.8 | Zero `ForetiasKemSecretKey` C struct after Rust-side `keypair`/`encapsulate` extraction | HR-2 | P1 | 1.6 | ⚠ Partial (decapsulate done; others open) |
+| REQ-Z1.8A | Zero ML-KEM shared secret immediately after caller extracts it | HR-2 | P0 | 1.6 | ❌ Open |
+| REQ-Z1.9 | Add `.no_debug("ForetiasTbidV1SecretKey")` to bindgen builder | HR-3 | P0 | 1.7 | ❌ Open |
+| REQ-Z1.9A | Encrypt TBID V1 components (Ed25519 seed + SLH-DSA secret) with KEK | HR-1 | P0 | 1.7 | ❌ Open |
+| REQ-Z1.10 | (Cross-listed as REQ-Z2.5) Wrap `secret_bytes: Vec<u8>` in `Zeroizing` in `signing_tbid.rs` | HR-2 | P0 | 1.7 / 2.4 | ❌ Open |
+| REQ-Z1.11 | Add `.no_debug("ForetiasNoiseState")` to bindgen builder | HR-3 | P0 | 1.8 | ❌ Open |
+| REQ-Z1.11A | Encrypt `ForetiasNoiseState` session keys with KEK (local_static_priv, send_key, recv_key, chaining_key) | HR-1 | P0 | 1.8 | ❌ Open |
+| REQ-Z1.11B | Document and/or zero caller's `static_priv` buffer after `NoiseSession::new()` | HR-2 | P1 | 1.8 | ❌ Open |
+| REQ-Z1.12 | (Acknowledgment) `foretias_frost_destroy_round1` already zeros C struct on destruction | HR-2 | n/a | 1.9 | ✅ Verified (when FROST becomes active) |
+| REQ-Z1.12A | Encrypt FROST round-1 nonces with KEK when FROST is implemented | HR-1 | P0 (deferred until FROST active) | 1.9 | ⏸ Blocked on FROST implementation |
+| REQ-Z2.1 | Zero caller's `seed` buffer after `PrivKeyHandle::from_seed(seed)` | HR-2 | P1 | 2.1 | ❌ Open |
+| REQ-Z2.2 | (Acknowledgment) Document `SoftwareCryptoServer::Drop` field-drop order in comment | HR-2 documentation | P1 | 2.2 | ❌ Open (doc-only) |
+| REQ-Z2.2A | Derive seal key on-demand from `PrivKeyHandle::derive_seal_key`; do not store persistently | HR-1 | P0 | 2.2 | ❌ Open |
+| REQ-Z2.2B | Receive PQC secrets from C11 in encrypted form; decrypt on-demand in Rust per signing operation | HR-1 | P0 | 2.2 | ❌ Open (depends on Z1.5A, Z1.7A) |
+| REQ-Z2.2C | Encrypt FROST shares with KEK before storing in `SoftwareCryptoServer::frost_shares` | HR-1 | P0 | 2.2 | ❌ Open |
+| REQ-Z2.3 | Consolidated bindgen config update (implements all `.no_debug(...)` from Z1.3/5/7/9/11) | HR-3 | P0 | 2.3 | ❌ Open (umbrella for Z1.3, Z1.5, Z1.7, Z1.9, Z1.11) |
+| REQ-Z2.4 | Evaluate and document whether `Copy` should be restricted on secret FFI bindings | HR-3 | P2 | 2.3 | ❌ Open (decision deferred) |
+| REQ-Z2.5 | (= REQ-Z1.10) Wrap TBID secret `Vec<u8>` in `Zeroizing` | HR-2 | P0 | 2.4 | ❌ Open |
+| REQ-Z2.6 | Audit `SignatureBytes` and `TbidSecret` newtypes; ensure inner `Vec<u8>` is `Zeroizing` | HR-2 / HR-3 | P1 | 2.4 | ❌ Open (audit + fix) |
+| REQ-Z2.7 | Zero `ForetiasKemSecretKey` C struct in `kem_mlkem.rs:keypair()` and `encapsulate()` | HR-2 | P1 | 2.5 | ❌ Open |
+| REQ-Z2.8 | Document `ed25519_sign(priv_key: &ForetiasPrivKey32, ...)` as the unsafe/raw key path | HR-1 documentation | P2 | 2.6 | ❌ Open (doc-only) |
+| REQ-Z3.1 | (Acknowledgment) noise_ptp ephemeral key zeroed at `noise.rs:95` after handshake | HR-2 | n/a | 3.1 | ✅ Verified |
+| REQ-Z3.1A | Generate ephemeral Noise keypair entirely inside C; no raw seed crosses FFI | HR-1 | P0 | 3.1 | ❌ Open |
+| REQ-Z4.1 | Wrap `TimeFamilyServer::noise_static_priv` in `Zeroizing<[u8; 32]>` (interim) | HR-2 | P0 | 4.1 | ❌ Open (interim before Z4.1A) |
+| REQ-Z4.1A | Replace `TimeFamilyServer::noise_static_priv: [u8; 32]` with `PrivKeyHandle` | HR-1 | P0 | 4.1 | ❌ Open |
+| REQ-Z4.1B | Zero `priv_key.bytes` immediately after copying to `noise_static_priv` (interim) | HR-2 | P0 | 4.1 | ❌ Open |
+| REQ-Z4.2 | (Acknowledgment) Document `TimeFamilyServer::Drop` zeroization via `Zeroizing` after Z4.1 | HR-2 documentation | P1 | 4.1 | ❌ Open (doc-only, after Z4.1) |
+| REQ-Z4.3 | Bound `Chronomatter::keypairs` to current + previous tick only; old entries evicted and zeroized | HR-2 / Pattern §1.6.7 | P1 | 4.2 | ❌ Open |
+| REQ-Z4.4 | Audit `TbidSecret` field in `Chronomatter`; ensure encrypted-at-rest path post Z1.9A | HR-1 | P1 | 4.3 | ❌ Open (depends on Z1.9A, Z2.6) |
+| REQ-Z5.1 | When Python PyO3 bindings are reintroduced: opaque-handle only; no raw secret bytes cross | HR-1 / HR-3 | P0 (when bindings activate) | 5.1 | ⏸ Blocked on Python re-introduction |
+| REQ-Z5.2 | Python `__repr__`/`__str__` on secret-holding objects must emit `<redacted>` | HR-3 / HR-5 | P0 (when bindings activate) | 5.1 | ⏸ Blocked |
+| REQ-Z5.3 | All future bindings MUST follow the Opaque Handle pattern (§1.6.1) | HR-1 / HR-3 | P0 standing | 5.3 | ✅ Pattern documented |
+| REQ-Z5.4 | `ForetiasPrivKey`+`PrivKeyHandle` is the reference implementation for any future binding | HR-1 / HR-3 | n/a | 5.3 | ✅ Verified |
+| REQ-Z6.1 | Conduct taint analysis of all data flows reaching signing functions enumerated in §6.2 | HR-1 / HR-3 protocol-layer | P1 | 6 | ❌ Open (separate deliverable) |
+| REQ-Z6.2 | Conduct information flow analysis (Trusted/Untrusted/Derived) | HR-1 protocol-layer | P1 | 6 | ❌ Open |
+| REQ-Z6.3 | Document all sanitization points that reclassify Untrusted → Trusted | HR-1 protocol-layer | P1 | 6 | ❌ Open |
+| REQ-Z6.4 | Document expected input contract for each signing function | HR-1 protocol-layer | P1 | 6 | ❌ Open |
+| REQ-Z6.5 | Repeat the formal analysis after any significant change to signing paths | HR-1 protocol-layer | P1 standing | 6 | ❌ Open process gate |
+| REQ-Z6.6 | Formal analysis deliverables reviewed and approved before public release | HR-1 protocol-layer | P0 release gate | 6 | ❌ Open |
+| REQ-Z7.1 | (libp2p HR-1 exemption) Document libp2p's plaintext static/ephemeral keys as accepted external-library compliance gap | HR-1 documentation | P1 | 7 | ✅ Done (Appendix D → Zone 7) |
+| REQ-Z7.2 | Pin libp2p version that uses `zeroize`-aware Noise transport; track upgrades | HR-2 supply chain | P1 | 7 | ❌ Open |
+| REQ-Z8.1 | CI grep gate: zero `#[derive(...Debug...)]` on types matching `*Secret*`/`*Priv*`/`*Key*`/`*Seed*`/`*Share*`/`*Nonce*` in production code | HR-3 enforcement | P1 | 8 | ❌ Open |
+| REQ-Z8.2 | CI grep gate: zero `memcmp(` in `p2p/core/src/` | HR-4 enforcement | P1 | 8 | ❌ Open |
+| REQ-Z8.3 | Heap-scan test post-tick: scan process memory for previous tick key bytes; assert absent | HR-2 verification | P1 | 8 | ❌ Open |
+| REQ-Z8.4 | Negative test: assert that `format!("{:?}", priv_key_obj)` does NOT compile for any HR-3-covered type | HR-3 enforcement | P1 | 8 | ❌ Open |
+| REQ-Z8.5 | Snapshot test: CLI output for `--verbose` and panic paths contains no hex sequence ≥ 32 bytes | HR-5 enforcement | P1 | 8 | ❌ Open |
+
+## §1.8 Verification Checklist (Pre-Merge)
+
+A pull request that adds, removes, or modifies any type or function that holds, transports, copies, or compares secret material MUST satisfy every applicable check below before merge. The checklist is intentionally brief; details are in §1.1, §1.6, and §1.7.
+
+**HR-1 (Encryption in Memory):**
+- [ ] Any new long-lived secret storage uses Pattern §1.6.1 (Opaque Handle) or §1.6.2 (KEK Encryption). Not a plain `[u8; N]` or `Vec<u8>`.
+- [ ] If a new C11 struct holds secret bytes, the bytes are stored encrypted (ciphertext + MAC + nonce), not raw.
+
+**HR-2 (Ephemeral Zeroing):**
+- [ ] Any new Rust value holding secret bytes is wrapped in `Zeroizing<T>` or held behind an opaque handle.
+- [ ] Any new C11 function that decrypts a secret zeros the plaintext (and all derived intermediates) before every return path (Pattern §1.6.4).
+- [ ] Any new producer of a secret (function that returns one) zeros its caller-side temporaries before return (Pattern §1.6.6).
+
+**HR-3 (Type System Protection):**
+- [ ] No `#[derive(Debug)]` on a new type holding secret bytes. If `Debug` is needed, manual impl emits `<redacted N bytes>`.
+- [ ] No `#[derive(Clone)]`/`Copy`/`Serialize`/`Deserialize` on a new secret-holding type without an HR-3 exception comment justifying it.
+- [ ] If the change introduces a new bindgen-generated FFI struct holding secret bytes, `.no_debug("NewTypeName")` is added to the bindgen builder.
+
+**HR-4 (Constant-Time Comparison):**
+- [ ] Any new comparison of secret-derived bytes uses `sodium_memcmp` (C) or `subtle::ConstantTimeEq` (Rust). No bare `==`, `memcmp`, or `slice::eq`.
+
+**HR-5 (No Logging):**
+- [ ] No `format!`, `println!`, `eprintln!`, `tracing::*!` with `?` or `%` formatter on a secret-holding type.
+- [ ] No error or panic message embeds any subset of secret bytes.
+
+**Documentation:**
+- [ ] If the change is a violation of any HR (intentional or temporary), the Violation Template (§1.5) is filled out in the appropriate zone of Part 2.
+- [ ] If the change introduces a new secret material type, a new entry is added to the relevant zone in Part 2.
+
+**Tests:**
+- [ ] Tests covering the new code do not log secrets and use deterministic RNG seeds.
+
+---
+
+## §1.9 Implementation Path
+
+The phased, checkbox-tracked implementation work to bring the codebase into compliance with all REQ-Z\* requirements is specified in the companion plan:
+
+→ **`specs/HOW_SECRET_IS_SECURED_BY_SOFTWARE_PLAN.md`**
+
+The plan organizes work into phases ordered by dependency: encryption infrastructure (foundation) → Debug-derive removal (HR-3) → Zeroizing wrappers (HR-2) → KEK encryption of PQC/TBID/Noise (HR-1) → consumer migrations → enforcement gates in CI. Each phase carries a checkbox and an effort estimate; checkboxes are timestamped on completion per AGENTS.md convention.
+
+---
+
+# Part 2 — ANALYTICAL DETAILS
+
+The remainder of this document is the per-zone analysis that produced and supports the requirements in Part 1. Each zone documents the secrets present in that zone, evaluates them against the Two Kinds of Secrecy (§1.4), and identifies which REQ-Z\* requirements remediate any gap.
 
 ---
 
@@ -1172,11 +1505,42 @@ The formal analysis must produce:
 
 ---
 
-## Zone 7: Compliance Requirements
+## Zone 7: External Dependencies (libp2p)
 
-This zone consolidates all specified requirements from the COMBINED review and the HR-1/HR-2 mandate, organized by priority.
+This zone documents the secret-handling status of external dependencies that hold secret material we cannot directly control.
 
-### 6.0 HR Violation Summary
+### 7.1 libp2p Noise Protocol Keys
+
+**VIOLATION: HR-1 — libp2p Noise Protocol Keys**
+- **Component:** `libp2p-noise` crate (external dependency)
+- **Reason:** The libp2p Noise transport layer generates and stores X25519 static/ephemeral keys internally. These keys are managed by the libp2p crate, not by Foretias code. We cannot modify libp2p's internal key storage to use our KEK-based encryption.
+- **Threat:** libp2p static and ephemeral keys exist in plaintext within the libp2p crate's memory. A process dump reveals these keys.
+- **Compensating Controls:**
+  - libp2p uses its own Noise protocol with forward secrecy — ephemeral keys are rotated per connection.
+  - libp2p static keys are used only for authentication, not for bulk encryption.
+  - The libp2p crate is a well-audited, widely-used dependency.
+- **Owner:** External library (`libp2p-noise`) — NOT within our control.
+- **Remediation Path:** N/A — external dependency. If this becomes unacceptable, we would need to fork libp2p or implement a custom transport layer, which is not currently planned.
+- **Tracking REQ:** REQ-Z7.1 (documentation acknowledgment), REQ-Z7.2 (track libp2p version pinning so future versions that use `zeroize` are adopted).
+
+### 7.2 libp2p Peer Identity Keys
+
+**VIOLATION: HR-1 — libp2p Peer Identity Keys**
+- **Component:** `libp2p-identify` crate (external dependency)
+- **Reason:** libp2p peer identity keys (used for peer authentication in the swarm) are stored by the libp2p crate. Foretias passes the key pair to libp2p during initialization, after which libp2p manages the keys internally.
+- **Threat:** Peer identity keys exist in plaintext within libp2p memory.
+- **Compensating Controls:** Peer identity keys are used only for authentication, not for signing time attestations. The Foretias identity (tick keys) remains protected via `PrivKeyHandle`.
+- **Owner:** External library (`libp2p-identify`) — NOT within our control.
+- **Remediation Path:** N/A — external dependency.
+- **Tracking REQ:** REQ-Z7.1, REQ-Z7.2.
+
+---
+
+## Zone 8: HR Violation Summary
+
+This zone summarizes per-secret HR compliance. The full forward-looking REQ-Z\* table lives in Part 1 §1.7; this table is the current as-implemented status.
+
+### 8.0 HR Violation Summary
 
 | Secret | HR-1 (Encrypted) | HR-2 (Zeroed) | Status |
 |--------|------------------|----------------|--------|
@@ -1260,11 +1624,21 @@ This zone consolidates all specified requirements from the COMBINED review and t
 
 ---
 
-## Zone 8: Implementation Plan
+## Zone 9: Implementation Plan — Moved to PLAN.md
 
-This zone provides a concrete plan for bringing the codebase into compliance with the HR-1/HR-2 mandate and all requirements above.
+The phased, checkbox-tracked implementation plan formerly residing in this section has been moved to its proper companion document:
 
-### 7.0 Phase 0: Encryption Infrastructure (P0 — Foundation)
+→ **`specs/HOW_SECRET_IS_SECURED_BY_SOFTWARE_PLAN.md`**
+
+That plan organizes work in dependency order: encryption infrastructure → bindgen Debug removal → Zeroizing wrappers → KEK encryption of PQC/TBID/Noise → consumer migrations → enforcement gates in CI. Each phase carries a checkbox per AGENTS.md plan convention, with timestamps applied on completion.
+
+The remainder of this document (Appendix A flow diagrams, Appendix B accessibility matrix, Appendix C verification checklist) supports auditing the implementation work but does not itself prescribe the work order.
+
+---
+
+<!-- The detailed Phase 0–9 enumeration formerly here has been superseded by PLAN.md. Historical contents preserved below for traceability until PLAN.md is reviewed. -->
+
+### 9.0 (legacy) Phase 0: Encryption Infrastructure (P0 — Foundation)
 
 **Effort:** ~4 hours
 **Risk:** Medium (new C11 API, changes struct layouts)
@@ -1572,30 +1946,13 @@ Can code in Zone X access secrets from Zone Y? (Current state — before HR comp
 
 ---
 
-## Appendix D: libp2p External Dependency Violation
+## Appendix D: (moved) libp2p External Dependency Violation
 
-**VIOLATION: HR-1 — libp2p Noise Protocol Keys**
-- **Component:** `libp2p-noise` crate (external dependency)
-- **Reason:** The libp2p Noise transport layer generates and stores X25519 static/ephemeral keys internally. These keys are managed by the libp2p crate, not by Foretias code. We cannot modify libp2p's internal key storage to use our KEK-based encryption.
-- **Threat:** libp2p static and ephemeral keys exist in plaintext within the libp2p crate's memory. A process dump reveals these keys.
-- **Compensating Controls:**
-  - libp2p uses its own `Noise` protocol with forward secrecy — ephemeral keys are rotated per connection.
-  - libp2p static keys are only used for authentication, not bulk encryption.
-  - The libp2p crate is a well-audited, widely-used dependency.
-- **Owner:** External library (`libp2p-noise`) — NOT within our control.
-- **Remediation Path:** N/A — external dependency. If this becomes unacceptable, we would need to fork libp2p or implement a custom transport layer, which is not currently planned.
-
-**VIOLATION: HR-1 — libp2p Peer Identity Keys**
-- **Component:** `libp2p-identify` crate (external dependency)
-- **Reason:** libp2p peer identity keys (used for peer authentication in the swarm) are stored by the libp2p crate. Foretias passes the key pair to libp2p during initialization, after which libp2p manages the keys internally.
-- **Threat:** Peer identity keys exist in plaintext within libp2p memory.
-- **Compensating Controls:** Peer identity keys are used only for authentication, not for signing time attestations. The Foretias identity (tick keys) remains protected via `PrivKeyHandle`.
-- **Owner:** External library (`libp2p-identify`) — NOT within our control.
-- **Remediation Path:** N/A — external dependency.
+→ Promoted to **Zone 7: External Dependencies (libp2p)** above. This appendix is intentionally left as a redirect to preserve cross-references.
 
 ---
 
-## Appendix C: Verification Checklist
+## Appendix C: Audit Verification Checklist (post-implementation)
 
 After implementing all requirements, verify:
 

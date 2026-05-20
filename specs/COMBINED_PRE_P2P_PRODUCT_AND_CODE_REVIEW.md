@@ -109,6 +109,7 @@ Each gap below is a direct violation of guidance already in AGENTS.md. Fixing th
 | `tick.rs:308-317` (genesis path) | If `forward_foretis.len() < 64`, malformed signature treated as Ed25519 component; `forward_genesis` becomes empty; for `tb_version == 0`, empty genesis is accepted as valid | OPENCODE §3.6 |
 | `communerd/mod.rs:586-605` (DHT lookup) | `PeerRegistrationRecord` from DHT is consumed without signature verification — TBID not cryptographically bound to peer_id | CLAUDE §4.3, OPENCODE §3.2 |
 | `handlers.rs:354-376` (`handle_verify_epoch_snapshot`) | Always returns `valid: true` regardless of signature | CLAUDE §15.1, OPENCODE §3.5 |
+| `handlers.rs:125-135` (`handle_verify` local path) | Local verification passes `foretis.signature_algorithm` to `server.verify_with()` without checking `rec.signature_algorithm == foretis.signature_algorithm`. The cross-node path (`cross_node_verify`) does perform this check — an **asymmetric validation gap** between two code paths in the same function. A locally forged Foretis with mismatched algorithm string could be verified against the wrong key type. | **[NEW — Qwen3.6-27B-AWQ-BF16-INT4, 2026-05-20]** — Prior review covered `cross_node_verify` but not the local path within `handle_verify`. |
 
 **Fix pattern:** Adopt the `UnverifiedX` / `VerifiedX` newtype distinction described in `AGENTS.md "Cryptographic and Security-Sensitive Code"`. Only trusted constructors create verified types. Each handler taking inbound bytes from network or DHT must build `UnverifiedFoo`, call `verify(...)`, then unwrap into `VerifiedFoo` before any downstream code consumes it.
 
@@ -155,6 +156,12 @@ let idx = {
 | `ForetiasKemSecretKey` | 260 | up to 2400 (ML-KEM secret) | **MED** |
 
 `[Sources: OPENCODE §3.1, §3.9]` — Not surfaced in CLAUDE review; this is the highest-impact OpenCode-specific find.
+
+**Additionally (NEW — NoiseSession `unsafe impl Send`):** `p2p/core-engine/src/noise.rs:31` — `NoiseSession` carries `unsafe impl Send` with the justification "no interior mutability in C." The C11 `ForetiasNoiseState` contains mutable counters (`send_nonce: u64`, `recv_nonce: u64`) and keys modified by `foretias_noise_send`/`foretias_noise_recv`. Moving the session across a thread boundary without synchronization means concurrent encryption/decryption can corrupt the noise state, potentially causing nonce reuse in ChaCha20-Poly1305 (catastrophic for encryption). This is a **different and arguably more dangerous unsafety** than the `PrivKeyHandle` Sync issue already cataloged.
+
+`[Sources: Qwen3.6-27B-AWQ-BF16-INT4 consolidated review, 2026-05-20 — NEW]` — Prior review covered `PrivKeyHandle` `Sync` but not `NoiseSession` `Send`.
+
+**Mitigation:** Remove `unsafe impl Send` unless the session is always protected by `Arc<Mutex<NoiseSession>>` before crossing thread boundaries.
 
 `AGENTS.md` says "Do not log secrets" but does not specifically say "FFI binding types holding secret material must not derive `Debug`." The rule should be added (proposed in §1.5).
 
@@ -615,6 +622,12 @@ See §2.2.3. The most dangerous aspect: `handle_verify_epoch_snapshot` returning
 
 `[Sources: CLAUDE §15.1, OPENCODE §3.5]`
 
+**Additionally (NEW — sibling stub `handle_get_latest_epoch`):** `handlers.rs:225-242` — `handle_get_latest_epoch` is a second stubbed epoch handler that returns `epoch_number: 0`, empty `peer_scores`, empty `committee`, `threshold: 0`, empty `frost_signature`, and empty `committee_pubkey`. This **sibling handler** misrepresents the current epoch state as "epoch zero with no peers" rather than "not implemented." A client consuming this response cannot distinguish between "network has zero peers" and "handler is not yet implemented."
+
+`[Sources: Qwen3.6-27B-AWQ-BF16-INT4 consolidated review, 2026-05-20 — NEW]` — Prior review flagged `handle_verify_epoch_snapshot` but not its sibling `handle_get_latest_epoch`.
+
+**Mitigation:** Return a JSON-RPC error with `"FROST epoch data not yet implemented"` rather than all-zero stub data. This forces callers to handle the unimplemented state explicitly.
+
 **Immediate mitigation (cheap):** Change `handle_verify_epoch_snapshot` to return `valid: false` with reason `"FROST epoch verification not yet implemented"`. This is honesty about the current state and prevents any code from acting on a false positive.
 
 **Long mitigation:** Implement FROST `sign`/`verify` in `software.rs` (or feature-gate); implement `run_frost_round` in `frost_bridge.rs` (real protocol); wire `verify_epoch_snapshot` to call real FROST verify.
@@ -690,6 +703,30 @@ See §2.2.3. The most dangerous aspect: `handle_verify_epoch_snapshot` returning
 `[Sources: CLAUDE §3.2]`
 
 **Mitigation:** `foretias-client/src/noise_ptp.rs` already implements Noise PtP for client connections. Make Noise the default for client→server, not an alternative. Plain JSON-RPC tolerated only for localhost or with explicit `--insecure-plaintext` flag.
+
+### §2.3.15 libp2p RPC Codec — Unbounded Allocation on Malicious Length — CRIT
+
+`communerd/p2p/rpc_protocol.rs:70-80` — The `ForetiasRpcCodec` implements `libp2p::request_response::Codec`. The `read_length_prefixed` function reads a 4-byte big-endian length prefix and allocates `vec![0u8; len]` with no upper bound. A malicious peer on the P2P network sends `0xFFFFFFFF`, triggering a ~4 GB allocation.
+
+**Critical distinction from existing review:** The prior review flagged `server/mod.rs:383` (server-side TCP JSON-RPC `read_length_prefixed`) which carries a 4 KB bound. The `rpc_protocol.rs` codec is a **separate code path** — it is the framing layer for libp2p request_response over yamux/mplex multiplexed streams. The server-side bound does not protect this path.
+
+**Impact:** Denial of service via memory exhaustion. Any peer on the P2P network can crash a target node with a single malformed RPC request.
+
+`[Sources: Qwen3.6-27B-AWQ-BF16-INT4 consolidated review, 2026-05-20 — NEW]` — Not surfaced in CLAUDE, OPENCODE, or pre-public-mvp reviews because the prior reviews focused on `foretias-server` TCP paths, not the `communerd` P2P codec.
+
+**Mitigation:** Add `if len > 4 * 1024 * 1024 { return Err(io::Error::new(io::ErrorKind::InvalidInput, "RPC message too large")); }` before `vec![0u8; len]`. Apply the same bound to both `read_request` and `read_response`.
+
+### §2.3.16 Noise PtP Client — Unbounded Response Allocation — CRIT
+
+`foretias-client/src/noise_ptp.rs:72-76` — `noise_json_rpc` reads `resp_len` from the wire (`u32::from_le_bytes(len_buf) as usize`), then allocates `vec![0u8; resp_len]` without any size limit. The server-side `read_len` in `core-engine/src/noise.rs` carries the `NOISE_MAX_MSG` (65535) bound check, but the **client-side path does not**.
+
+**Attack:** Attacker-controlled server sends a length prefix of `0xFFFFFFFF`. The client allocates ~4 GB of memory per request, causing OOM.
+
+**Critical distinction from existing review:** §5.3 notes that "Noise_XX PtP — Functional, with Trade-offs" and flags the "fresh handshake per request" cost. But the **asymmetric length-bound coverage** — server side protected, client side not — was not detected. The prior review examined the server path's bound but did not cross-reference the client path.
+
+`[Sources: Qwen3.6-27B-AWQ-BF16-INT4 consolidated review, 2026-05-20 — NEW]`
+
+**Mitigation:** Add `if resp_len > foretias_core::noise::NOISE_MAX_MSG as usize { return Err(PtPError::Decode("response exceeds maximum size".into())); }` before the `resp_buf` allocation.
 
 ## §2.4 Cryptographic Protocol Correctness Concerns
 
@@ -1099,6 +1136,16 @@ Already covered substantively in Part I. To summarize for architectural readers:
 
 **Fix:** Refactor handlers to `async fn`; use `.await` directly.
 
+### §4.8 std::sync::Mutex in Async Context — Potential Blocking (NEW)
+
+`communerd/mod.rs:131-136` — `namespace`, `_local_multiaddr_arc`, and `pending_lookups` all use `std::sync::Mutex` behind `Arc`, locked from within `tokio::spawn` tasks and async event loops (e.g., `namespace.lock().unwrap().clone()` at lines 259, 263, 380, 522, 653, 655). A `std::sync::Mutex` held across an `.await` boundary or by a long-running async task can block the entire async runtime thread, defeating the purpose of Tokio's cooperative scheduler.
+
+This is a **different pattern** from §4.7's `block_on` issue. The `block_on` issue blocks an OS thread waiting for async work. The `std::sync::Mutex` issue blocks the async runtime thread while holding a synchronous lock. Under high load, if the mutex is held by a task that yields, the runtime may stall, limiting horizontal scalability and causing jitter in the event loop.
+
+`[Sources: Qwen3.6-27B-AWQ-BF16-INT4 consolidated review, 2026-05-20 — NEW]`
+
+**Fix:** Replace with `tokio::sync::Mutex` (for async contexts) or `parking_lot::Mutex` (if hold time is proven to be sub-microsecond). For `namespace` and `_local_multiaddr_arc`, consider `Arc<OnceCell<String>>` / `Arc<OnceCell<libp2p::Multiaddr>>` if they are write-once-after-init. For `pending_lookups`, `tokio::sync::Mutex` or `tokio::sync::RwLock` is appropriate.
+
 ## §5 P2P Layer Analysis
 
 `[Sources: CLAUDE §4, OPENCODE §4]`
@@ -1259,6 +1306,22 @@ JSON-RPC methods have no version prefix (`stamp` not `foretias/v1/stamp`). No ve
 ### §8.1 Full Calendar Rewrite Per Stamp
 
 `server/handlers.rs:63` — Every stamp triggers full JSON serialization and write of the entire calendar. O(N) bytes per stamp. `EncryptedJsonlCalendarStore` (append-only) is the right solution but not default.
+
+### §8.1a Calendar::get — O(n) Linear Scan (NEW)
+
+`core-engine/src/foretias/calendar.rs:135-141` — `CalendarLookup::get` uses `.filter(|t| t.chronon_number >= chronon_number).take(count).cloned().collect()` — a linear scan over all ticks followed by cloning each match. For large calendars (thousands of ticks), every `verify`, `get_calendar_slice`, and `integrity_check` call triggers a full linear scan + clone of matching records.
+
+This is a **different concern** from §8.1's serialization cost. §8.1 is about the write path (serialize entire calendar on each stamp). §8.1a is about the read path (scan entire calendar on each lookup).
+
+`[Sources: Qwen3.6-27B-AWQ-BF16-INT4 consolidated review, 2026-05-20 — NEW]`
+
+**Fix:** Use `Vec::partition_point` or binary search on `chronon_number` (ticks are monotonically increasing) to find start index in O(log n), then slice for O(1) range access. Cloning is then limited to the actual requested range:
+```rust
+fn get(&self, chronon_number: u64, count: usize) -> Result<Vec<ChrononRecord>, NodeError> {
+    let start = self.ticks.partition_point(|t| t.chronon_number < chronon_number);
+    Ok(self.ticks[start..].iter().take(count).cloned().collect())
+}
+```
 
 ### §8.2 Eager PQC Keygen at Every SoftwareCryptoServer Init
 
@@ -1526,6 +1589,8 @@ Combined and de-duplicated from CLAUDE §12 and OPENCODE §11. Each item annotat
 | 15 | Lower `MAX_CONTENT_BYTES` (1 GiB → 16 MiB) and limit hex-string allocation pre-decode | HIGH | §8.11 |
 | 16 | Replace `block_on` in handlers with `async fn` | HIGH | §4.7 |
 | 17 | **NEW:** Apply AGENTS.md updates §1.5.A-I so future violations are caught at review time | HIGH | §1.5 |
+| 18 | **NEW:** Add length bound to libp2p RPC codec `read_length_prefixed` (prevent 4 GB OOM) | CRIT | §2.3.15 |
+| 19 | **NEW:** Add length bound to Noise PtP client `noise_json_rpc` response read (prevent 4 GB OOM) | CRIT | §2.3.16 |
 
 ### §14.1 P1 — Before First Public Tag
 
@@ -1558,6 +1623,11 @@ Combined and de-duplicated from CLAUDE §12 and OPENCODE §11. Each item annotat
 | 42 | Write missing test categories #1, #3, #4, #8, #11, #12, #13, #14 from §2.7.3 | HIGH | §2.7.3 |
 | 43 | Implement `info` CLI command | MED | §6.4 |
 | 44 | Rename `verify-with-proof` to `prove-verification` per spec | LOW | §6.4 |
+| 45 | **NEW:** Remove `unsafe impl Send` from `NoiseSession` (or wrap in `Arc<Mutex<>>`) | HIGH | §1.3.5 additional |
+| 46 | **NEW:** Add algorithm mismatch check to local verify path in `handle_verify` | HIGH | §1.3.2 additional |
+| 47 | **NEW:** Replace `std::sync::Mutex` with `tokio::sync::Mutex` in `communerd` async context | MED | §4.8 |
+| 48 | **NEW:** Make `handle_get_latest_epoch` return error instead of all-zero stub | MED | §2.3.5 additional |
+| 49 | **NEW:** Optimize `Calendar::get` from O(n) linear scan to O(log n) binary search | MED | §8.1a |
 
 ### §14.2 P2 — Soon After Public Tag
 
