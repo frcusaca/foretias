@@ -373,6 +373,36 @@ impl Chronomatter {
         )
     }
 
+    /// Verify an unprocessed Foretis against the local calendar.
+    ///
+    /// Accepts `UnprocessedForetis` (parsed, not trusted) and returns
+    /// `CleanAuthenticatedForetis` (authenticated + cleansed) on success.
+    /// The calendar record for the matching chronon must exist and be trusted
+    /// by construction (locally produced or previously verified).
+    pub fn verify_unprocessed(
+        &self,
+        unprocessed: crate::foretias::clean_auth::UnprocessedForetis,
+        content: &[u8],
+        calendar: &dyn CalendarLookup,
+    ) -> Result<crate::foretias::clean_auth::CleanAuthenticatedForetis, NodeError> {
+        // Look up the calendar record for this chronon
+        let records = calendar.get(unprocessed.inner().chronon_number, 1)
+            .map_err(|e| NodeError::Internal(format!("calendar lookup failed: {e}")))?;
+        let rec = records.first().ok_or_else(|| {
+            NodeError::Internal(format!(
+                "chronon {} not found in calendar for verification",
+                unprocessed.inner().chronon_number
+            ))
+        })?;
+
+        // Wrap the calendar record as CleanAuthenticated (trusted by construction)
+        let clean_rec = crate::foretias::clean_auth::CleanAuthenticatedChrononRecord::from_trusted(rec.clone());
+
+        // Verify and authenticate
+        unprocessed.into_clean_authenticated(self.crypto.as_ref(), content, &clean_rec)
+            .map_err(|e| NodeError::Internal(format!("verification failed: {e}")))
+    }
+
     // ── Daemon Tick Loop ────────────────────────────────────────────────────
 
     pub fn start_daemon(self: &Arc<Self>) {
