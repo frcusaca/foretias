@@ -29,6 +29,9 @@ ForetiasResult foretias_dilithium3_sign(const ForetiasSecretKeyVar* secret, cons
     if (secret == NULL || msg == NULL || sig_out == NULL) {
         return FORETIAS_ERR_BAD_INPUT;
     }
+    if (sig_out->len > FORETIAS_SIG_MAX_SIG_BYTES) {
+        return FORETIAS_ERR_BAD_INPUT;
+    }
     if (sig_out->len < OQS_SIG_dilithium_3_length_signature) {
         return FORETIAS_ERR_BAD_INPUT;
     }

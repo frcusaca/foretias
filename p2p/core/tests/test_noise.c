@@ -1,4 +1,5 @@
 #include "test_runner.h"
+#include <stdint.h>
 
 static void test_noise_init_ed25519_ok(void) {
     ForetiasNoiseState state;
@@ -54,6 +55,40 @@ static void test_noise_destroy_no_crash(void) {
     ASSERT_EQ(1, 1, "destroy on zeroed state does not crash");
 }
 
+static void test_noise_send_nonce_exhausted(void) {
+    ForetiasNoiseState state;
+    ForetiasPrivKey32 priv;
+    memset(&state, 0, sizeof(state));
+    memset(&priv, 0, sizeof(priv));
+    ForetiasResult r = foretias_noise_init_ed25519(&state, &priv, NULL, true);
+    ASSERT_EQ(r, FORETIAS_OK, "init succeeds");
+    state.handshake_complete = 1;
+    state.send_nonce = UINT64_MAX;
+    uint8_t ct[64];
+    size_t ct_len = sizeof(ct);
+    const uint8_t pt[] = "overflow";
+    r = foretias_noise_send(&state, pt, sizeof(pt) - 1, ct, &ct_len);
+    ASSERT_EQ(r, FORETIAS_ERR_INTERNAL, "send with exhausted nonce returns error");
+    foretias_noise_destroy(&state);
+}
+
+static void test_noise_recv_nonce_exhausted(void) {
+    ForetiasNoiseState state;
+    ForetiasPrivKey32 priv;
+    memset(&state, 0, sizeof(state));
+    memset(&priv, 0, sizeof(priv));
+    ForetiasResult r = foretias_noise_init_ed25519(&state, &priv, NULL, true);
+    ASSERT_EQ(r, FORETIAS_OK, "init succeeds");
+    state.handshake_complete = 1;
+    state.recv_nonce = UINT64_MAX;
+    uint8_t pt[64];
+    size_t pt_len = sizeof(pt);
+    uint8_t ct_recv[32] = {0};
+    r = foretias_noise_recv(&state, ct_recv, sizeof(ct_recv), pt, &pt_len);
+    ASSERT_EQ(r, FORETIAS_ERR_BAD_SIG, "recv with exhausted nonce returns BAD_SIG");
+    foretias_noise_destroy(&state);
+}
+
 int test_noise_main(void) {
     printf("=== noise ===\n");
     test_noise_init_ed25519_ok();
@@ -62,6 +97,8 @@ int test_noise_main(void) {
     test_noise_send_bad_input();
     test_noise_recv_bad_input();
     test_noise_destroy_no_crash();
+    test_noise_send_nonce_exhausted();
+    test_noise_recv_nonce_exhausted();
     TEST_REPORT("noise");
     return test_suite_finish();
 }

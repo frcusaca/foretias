@@ -13,6 +13,7 @@ int test_noise_main(void);
 int test_frost_stub_main(void);
 int test_legacy_hash_main(void);
 int test_privkey_main(void);
+int test_pqc_bounds_main(void);
 
 int main(void) {
     printf("Foretias Core Test Suite\n");
@@ -33,6 +34,7 @@ int main(void) {
     failures += test_frost_stub_main();
     failures += test_legacy_hash_main();
     failures += test_privkey_main();
+    failures += test_pqc_bounds_main();
 
     printf("\n=======================\n");
     if (failures == 0) {

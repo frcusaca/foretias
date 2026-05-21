@@ -1,4 +1,5 @@
 #include "test_runner.h"
+#include <stdint.h>
 
 static void test_init_cleanup_cycle(void) {
     /* Init should be idempotent */
@@ -152,6 +153,18 @@ static void test_from_seed_null_seed(void) {
     ASSERT_PTR_NULL(key, "from_seed with NULL returns NULL");
 }
 
+static void test_derive_seal_key_info_len_overflow(void) {
+    ForetiasPrivKey *key = foretias_privkey_ed25519_generate();
+    ASSERT_PTR_NOT_NULL(key, "generate returns non-NULL");
+    const uint8_t info[] = "test-info";
+    uint8_t seal_key[32];
+    ForetiasResult r = foretias_privkey_derive_seal_key(key, info, 64, seal_key);
+    ASSERT_EQ(r, FORETIAS_ERR_BAD_INPUT, "info_len=64 returns BAD_INPUT");
+    r = foretias_privkey_derive_seal_key(key, info, 63, seal_key);
+    ASSERT_EQ(r, FORETIAS_OK, "info_len=63 succeeds");
+    foretias_privkey_free(key);
+}
+
 int test_privkey_main(void) {
     printf("=== privkey (opaque handle, encrypted) ===\n");
 
@@ -168,6 +181,7 @@ int test_privkey_main(void) {
     test_nullifier_derive_handle();
     test_encrypted_key_useless_without_kek();
     test_from_seed_null_seed();
+    test_derive_seal_key_info_len_overflow();
 
     TEST_REPORT("privkey");
     return test_suite_finish();

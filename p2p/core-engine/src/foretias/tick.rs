@@ -29,7 +29,6 @@ pub struct ChrononRecord {
     pub aa_nonce: FTByteArray<16>,
     /// Number of user-initiated stamps during this chronon (excluding auto-attestation itself,
     /// but including mutual attestations). Persisted for blob reconstruction during verify_pair.
-    #[serde(default)]
     pub chronon_stamp_count: u64,
     /// External attestations from other Time Families.
     #[serde(default)]
@@ -170,7 +169,7 @@ pub fn stamp(
     sig_input.extend_from_slice(content);
 
     let signature = server.sign(&sig_input)?;
-    let sig_alg = crate::foretias::types::SignatureAlgorithm::Ed25519.to_id_string().to_string();
+    let sig_alg = server.signature_algorithm().to_id_string().to_string();
     let content_hash = server.sha256(content)?;
 
     let now_ns = clock.now_ns()
@@ -302,6 +301,20 @@ pub fn verify_pair(
     let (forward_sig, backward_sig, attest_blob, genesis_valid) = if curr.chronon_number == 1 && curr.tb_version == 1 {
         let forward = &curr.forward_foretis;
         let backward = &curr.backward_foretis;
+
+        // Validate minimum length for genesis foretis
+        // forward_foretis and backward_foretis must contain at least an Ed25519 signature (64 bytes)
+        const ED25519_SIG_LEN: usize = 64;
+        if forward.len() < ED25519_SIG_LEN {
+            return Err(NodeError::InvalidInput(
+                "forward_foretis too short for genesis split".into()
+            ));
+        }
+        if backward.len() < ED25519_SIG_LEN {
+            return Err(NodeError::InvalidInput(
+                "backward_foretis too short for genesis split".into()
+            ));
+        }
 
         let ed25519_sig_len = 64usize;
 
@@ -648,6 +661,44 @@ let valid = verify_pair(server.as_ref(), &tbid_str, &prev, &curr_tampered).unwra
     }
 
     #[test]
+    fn verify_pair_rejects_short_genesis_foretis() {
+        let server = make_server();
+        let tbid = Tbid::from_raw([0xEE; 96]);
+        let tbid_str = tbid.to_hex();
+
+        let prev = ChrononRecord {
+            chronon_number: 0,
+            public_key: vec![0u8; 32].into(),
+            signature_algorithm: "Ed25519".to_string(),
+            forward_foretis: vec![].into(),
+            backward_foretis: vec![].into(),
+            aa_nonce: [0u8; 16].into(),
+            chronon_stamp_count: 0,
+            external_attestations: Vec::new(),
+            tb_version: 0,
+            tbid: Tbid::default(),
+        };
+        let curr = ChrononRecord {
+            chronon_number: 1,
+            public_key: vec![0u8; 32].into(),
+            signature_algorithm: "Ed25519".to_string(),
+            forward_foretis: vec![0u8; 50].into(),
+            backward_foretis: vec![0u8; 70].into(),
+            aa_nonce: [0u8; 16].into(),
+            chronon_stamp_count: 0,
+            external_attestations: Vec::new(),
+            tb_version: 1,
+            tbid: Tbid::default(),
+        };
+
+        let result = verify_pair(server.as_ref(), &tbid_str, &prev, &curr);
+        assert!(
+            result.is_err(),
+            "verify_pair should reject forward_foretis shorter than 64 bytes at genesis"
+        );
+    }
+
+    #[test]
     fn auto_attestation_blob_nonce_is_unique() {
         let tbid = Tbid::from_raw([0x12; 96]);
         let tbid_str = tbid.to_hex();
@@ -670,5 +721,65 @@ let valid = verify_pair(server.as_ref(), &tbid_str, &prev, &curr_tampered).unwra
         let (blob, nonce) = auto_attestation_blob_with_count(&tbid_str, 5, &pk, 6, &pk, 0).unwrap();
         let nonce_pos = blob.len() - 16;
         assert_eq!(&blob[nonce_pos..], &nonce, "nonce must be appended to blob");
+    }
+
+    #[test]
+    fn chronon_record_deserialize_requires_chronon_stamp_count() {
+        let record = ChrononRecord {
+            chronon_number: 1,
+            public_key: vec![0x01u8; 32].into(),
+            signature_algorithm: "Ed25519".to_string(),
+            forward_foretis: vec![0x02u8; 64].into(),
+            backward_foretis: vec![0x03u8; 64].into(),
+            aa_nonce: [0x04u8; 16].into(),
+            chronon_stamp_count: 5,
+            external_attestations: Vec::new(),
+            tb_version: 1,
+            tbid: Tbid::default(),
+        };
+        let json = serde_json::to_string(&record).unwrap();
+        let json_missing = json.replace(
+            r#""chronon_stamp_count":5"#,
+            "",
+        );
+        let json_missing = if json_missing.contains(r#"":}"#) {
+            json_missing.replace(r#"":}"#, r#"}}"#)
+        } else {
+            json_missing.replace(r#"": ,"#, r#"},"#)
+        };
+
+        let result = serde_json::from_str::<ChrononRecord>(&json_missing);
+        assert!(
+            result.is_err(),
+            "deserialization must fail when chronon_stamp_count is omitted; got: {json_missing}"
+        );
+    }
+
+    #[test]
+    fn chronon_record_deserialize_succeeds_with_chronon_stamp_count_zero() {
+        let record = ChrononRecord {
+            chronon_number: 1,
+            public_key: vec![0x01u8; 32].into(),
+            signature_algorithm: "Ed25519".to_string(),
+            forward_foretis: vec![0x02u8; 64].into(),
+            backward_foretis: vec![0x03u8; 64].into(),
+            aa_nonce: [0x04u8; 16].into(),
+            chronon_stamp_count: 7,
+            external_attestations: Vec::new(),
+            tb_version: 1,
+            tbid: Tbid::default(),
+        };
+        let json = serde_json::to_string(&record).unwrap();
+        let json_with_zero = json.replace(
+            r#""chronon_stamp_count":7"#,
+            r#""chronon_stamp_count":0"#,
+        );
+
+        let result = serde_json::from_str::<ChrononRecord>(&json_with_zero);
+        assert!(
+            result.is_ok(),
+            "deserialization must succeed when chronon_stamp_count is explicitly zero"
+        );
+        assert_eq!(result.unwrap().chronon_stamp_count, 0);
     }
 }

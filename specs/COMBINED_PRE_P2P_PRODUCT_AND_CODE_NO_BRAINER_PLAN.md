@@ -125,7 +125,8 @@ if record.forward_foretis.len() < EXPECTED_GENESIS_FORETIS_MIN_LEN {
 **Effort:** 30 min.
 **Acceptance:** new test passes; existing genesis-verify tests unchanged.
 
-- [ ] **C.1** Complete
+- [x] **C.1** Complete
+      (2026-05-21 11:27)
 
 ### Task C.2 — Bound `sig->len` in PQC sign paths
 

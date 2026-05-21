@@ -62,6 +62,7 @@ static int _nh_ae_enc(uint8_t k[32], uint64_t *n,
     memset(nc, 0, 4);
     _nh_nonce(*n, nc + 4);
     unsigned long long cll = *cl;
+    if (*n == UINT64_MAX) return FORETIAS_ERR_OVERFLOW;
     int r = crypto_aead_chacha20poly1305_ietf_encrypt(
         ct, &cll, pt, (unsigned long long)pl,
         ad, (unsigned long long)al, NULL, nc, k);
@@ -78,6 +79,7 @@ static int _nh_ae_dec(uint8_t k[32], uint64_t *n,
     uint8_t nc[crypto_aead_chacha20poly1305_ietf_NPUBBYTES];
     memset(nc, 0, 4);
     _nh_nonce(*n, nc + 4);
+    if (*n == UINT64_MAX) return FORETIAS_ERR_OVERFLOW;
     unsigned long long pll = *pl;
     int r = crypto_aead_chacha20poly1305_ietf_decrypt(
         pt, &pll, NULL, ct, (unsigned long long)cl,

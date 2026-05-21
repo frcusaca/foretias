@@ -281,6 +281,7 @@ mod tests {
                     "forward_foretis": "",
                     "backward_foretis": "",
                     "aa_nonce": nonce_b64,
+                    "chronon_stamp_count": 0,
                     "external_attestations": []
                 },
                 {
@@ -289,6 +290,7 @@ mod tests {
                     "forward_foretis": "",
                     "backward_foretis": "",
                     "aa_nonce": nonce_b64,
+                    "chronon_stamp_count": 0,
                     "external_attestations": []
                 }
             ]

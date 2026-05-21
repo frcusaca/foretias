@@ -194,6 +194,7 @@ impl Chronomatter {
     }
 
     fn build_tick_record(&self, tick: u64, new_pub: [u8; 32]) -> Result<ChrononRecord, NodeError> {
+        let alg = self.crypto.signature_algorithm().to_id_string().to_string();
         if tick == 1 {
             if let Some(ref obs) = self.mutual_attest_observer {
                 obs.on_mutual_attest_sent();
@@ -256,7 +257,7 @@ impl Chronomatter {
             Ok(ChrononRecord {
                 chronon_number: tick,
                 public_key: new_pub.to_vec().into(),
-                signature_algorithm: crate::foretias::types::SignatureAlgorithm::Ed25519.to_id_string().to_string(),
+                signature_algorithm: alg.clone(),
                 forward_foretis: forward_foretis.into(),
                 backward_foretis: backward_foretis.into(),
                 aa_nonce: aa_nonce.into(),
@@ -281,7 +282,7 @@ impl Chronomatter {
             Ok(ChrononRecord {
                 chronon_number: tick,
                 public_key: new_pub.to_vec().into(),
-                signature_algorithm: crate::foretias::types::SignatureAlgorithm::Ed25519.to_id_string().to_string(),
+                signature_algorithm: alg,
                 forward_foretis: forward_foretis.into(),
                 backward_foretis: backward_foretis.into(),
                 aa_nonce: aa_nonce.into(),
@@ -306,13 +307,7 @@ impl Chronomatter {
             ));
         }
 
-        let tick = {
-            let old = self.current_tick.load(SeqCst);
-            self.current_tick.compare_exchange(
-                old, old + 1, SeqCst, SeqCst,
-            ).map_err(|e| NodeError::Internal(format!("tick counter conflict: {}", e)))?;
-            old + 1
-        };
+        let tick = self.current_tick.fetch_add(1, SeqCst) + 1;
 
         // Increment stamp counter — this count is included in the auto-attestation blob
         self.chronon_stamp_count.fetch_add(1, SeqCst);
@@ -323,6 +318,7 @@ impl Chronomatter {
     fn create_foretis(&self, tick: u64, content: Vec<u8>, echo: String) -> Result<Foretis, NodeError> {
         let tbid = self.tbid;
         let tbn = self.tbn.clone();
+        let alg = self.crypto.signature_algorithm().to_id_string().to_string();
 
         let kp_idx = self.generate_and_store_keypair()?;
         let new_pub = self.keypair_pub(kp_idx)
@@ -352,7 +348,7 @@ impl Chronomatter {
             chronon_number: tick,
             content_hash: content_hash.bytes.into(),
             signature: FTByteVector::from(sig.bytes.to_vec()),
-            signature_algorithm: crate::foretias::types::SignatureAlgorithm::Ed25519.to_id_string().to_string(),
+            signature_algorithm: alg,
             tbid,
             echo,
             tbn,
@@ -423,13 +419,7 @@ impl Chronomatter {
             return Ok(());
         }
 
-        let tick = {
-            let old = self.current_tick.load(SeqCst);
-            self.current_tick.compare_exchange(
-                old, old + 1, SeqCst, SeqCst,
-            ).map_err(|e| NodeError::Internal(format!("tick counter conflict: {}", e)))?;
-            old + 1
-        };
+        let tick = self.current_tick.fetch_add(1, SeqCst) + 1;
 
         let kp_idx = self.generate_and_store_keypair()?;
         let new_pub = self.keypair_pub(kp_idx)
@@ -549,6 +539,14 @@ mod tests {
         let foretis = cm.stamp(b"original".to_vec(), "v".to_string()).unwrap();
         let valid = cm.verify(&foretis, &b"tampered".to_vec(), &*calendar.read()).unwrap();
         assert!(!valid);
+    }
+
+    #[test]
+    fn stamp_uses_crypto_server_algorithm() {
+        let (cm, _last, _calendar) = make_chronomatter();
+        let foretis = cm.stamp(b"algo-test".to_vec(), "e".to_string()).unwrap();
+        let expected_alg = cm.crypto_server().signature_algorithm().to_id_string();
+        assert_eq!(foretis.signature_algorithm, expected_alg.to_string());
     }
 
     #[test]

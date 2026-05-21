@@ -16,6 +16,7 @@ set(TEST_SOURCES
     test_frost_stub.c
     test_legacy_hash.c
     test_privkey.c
+    test_pqc_bounds.c
 )
 
 # Build test executable

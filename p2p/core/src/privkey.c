@@ -218,6 +218,7 @@ ForetiasResult foretias_privkey_derive_seal_key(
     uint8_t seal_key[32]
 ) {
     if (!key || !info || !seal_key) return FORETIAS_ERR_BAD_INPUT;
+    if (info_len > 63) return FORETIAS_ERR_BAD_INPUT;
 
     /* 1. Decrypt seed */
     uint8_t tmp[32];

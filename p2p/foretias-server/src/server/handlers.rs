@@ -337,42 +337,17 @@ pub fn handle_get_peer_score(server: &TimeFamilyServer, params: Value) -> JsonRp
 
 pub fn handle_get_latest_epoch(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
     let id = params.get("id").cloned();
-    // Stub: return empty epoch data since we don't persist snapshots yet
-    // In the real implementation, this reads from TimeFamilyServer.latest_epoch_snapshot
-    resp_success(server, id, serde_json::json!({
-        "epoch_number": 0u64,
-        "epoch_start_ns": 0u64,
-        "epoch_end_ns": 0u64,
-        "peer_scores": serde_json::Value::Array(vec![]),
-        "committee": serde_json::Value::Array(vec![]),
-        "threshold": 0u32,
-        "frost_signature": String::new(),
-        "committee_pubkey": String::new(),
-    }))
+    // FROST epoch data not yet implemented — return an error so callers handle the unimplemented state
+    resp_error(server, id, jsonrpc::INTERNAL_ERROR, "FROST epoch data not yet implemented".into())
 }
 
 pub fn handle_verify_epoch_snapshot(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
     let id = params.get("id").cloned();
-    // Stub: always valid (no FROST verification yet)
-    if let Some(snapshot_val) = params.get("snapshot") {
-        if let Ok(snapshot) = serde_json::from_value::<EpochSnapshot>(snapshot_val.clone()) {
-            resp_success(server, id, serde_json::json!({
-                "valid": true,
-                "epoch_number": snapshot.epoch_number,
-                "committee_size": snapshot.committee.len(),
-            }))
-        } else {
-            resp_success(server, id, serde_json::json!({
-                "valid": false,
-                "error": "invalid snapshot JSON",
-            }))
-        }
-    } else {
-        resp_success(server, id, serde_json::json!({
-            "valid": false,
-            "error": "missing snapshot parameter",
-        }))
-    }
+    // FROST epoch verification not yet implemented — always return invalid so callers handle the unimplemented state
+    resp_success(server, id, serde_json::json!({
+        "valid": false,
+        "reason": "FROST epoch verification not yet implemented",
+    }))
 }
 
 pub fn handle_mirror_request(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
@@ -813,5 +788,30 @@ mod tests {
         assert_eq!(result["dormant"], false);
         assert_eq!(result["heartbeats_sent"], 0);
         assert_eq!(result["collisions_detected"], 0);
+    }
+
+    #[test]
+    fn handle_verify_epoch_snapshot_returns_valid_false() {
+        let server = make_server();
+        let params = serde_json::json!({"snapshot": {"epoch": 1}});
+        let resp = handle_verify_epoch_snapshot(&server, params);
+        assert!(resp.error.is_none());
+        assert!(resp.result.is_some());
+        let result = resp.result.unwrap();
+        assert_eq!(result.get("valid").and_then(|v| v.as_bool()), Some(false));
+        let reason = result.get("reason").and_then(|v| v.as_str()).unwrap();
+        assert!(reason.contains("FROST epoch verification not yet implemented"));
+    }
+
+    #[test]
+    fn handle_get_latest_epoch_returns_error() {
+        let server = make_server();
+        let params = serde_json::json!({});
+        let resp = handle_get_latest_epoch(&server, params);
+        assert!(resp.error.is_some());
+        assert!(resp.result.is_none());
+        let error = resp.error.unwrap();
+        assert_eq!(error.code, jsonrpc::INTERNAL_ERROR);
+        assert!(error.message.contains("FROST epoch data not yet implemented"));
     }
 }

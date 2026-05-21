@@ -29,6 +29,9 @@ ForetiasResult foretias_sphincs_sha2_128s_sign(const ForetiasSecretKeyVar* secre
     if (secret == NULL || msg == NULL || sig_out == NULL) {
         return FORETIAS_ERR_BAD_INPUT;
     }
+    if (sig_out->len > FORETIAS_SIG_MAX_SIG_BYTES) {
+        return FORETIAS_ERR_BAD_INPUT;
+    }
     if (sig_out->len < OQS_SIG_sphincs_sha2_128s_simple_length_signature) {
         return FORETIAS_ERR_BAD_INPUT;
     }
@@ -85,6 +88,9 @@ ForetiasResult foretias_sphincs_sha2_256f_keypair(ForetiasSecretKeyVar* secret_o
 
 ForetiasResult foretias_sphincs_sha2_256f_sign(const ForetiasSecretKeyVar* secret, const uint8_t* msg, size_t msg_len, ForetiasSigVar* sig_out) {
     if (secret == NULL || msg == NULL || sig_out == NULL) {
+        return FORETIAS_ERR_BAD_INPUT;
+    }
+    if (sig_out->len > FORETIAS_SIG_MAX_SIG_BYTES) {
         return FORETIAS_ERR_BAD_INPUT;
     }
     if (sig_out->len < OQS_SIG_sphincs_sha2_256f_simple_length_signature) {
