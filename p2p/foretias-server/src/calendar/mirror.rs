@@ -62,6 +62,10 @@ impl MirrorStore {
             .collect())
     }
 
+    pub fn latest_record(&self, tbid_hex: &str) -> Option<ChrononRecord> {
+        self.mirrors.read().get(tbid_hex).and_then(|v| v.last().cloned())
+    }
+
     pub fn mirror_info(&self, tbid_hex: &str) -> Option<(u64, u64, String)> {
         let mirrors = self.mirrors.read();
         let records = mirrors.get(tbid_hex)?;

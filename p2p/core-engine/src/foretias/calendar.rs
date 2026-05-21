@@ -141,6 +141,40 @@ impl Calendar {
         }
     }
 
+    /// Loads a calendar from disk and verifies chain integrity.
+    ///
+    /// After loading (including any `.tmp` crash recovery), runs `integrity_check`
+    /// on the full calendar. If any pair fails verification, the load is rejected.
+    ///
+    /// This is the verification gate: data retrieved from disk is treated as
+    /// `Unprocessed` until the integrity check passes, at which point the calendar
+    /// becomes `CleanAuthenticated`.
+    ///
+    /// If `start` is `None`, verification begins from the first tick.
+    /// If `end` is `None`, verification proceeds to the last tick.
+    pub fn load_and_verify(
+        path: &str,
+        crypto: &dyn CryptoServer,
+        tbid_str: &str,
+        start: Option<u64>,
+        end: Option<u64>,
+    ) -> Result<Self, NodeError> {
+        let cal = Self::load(path)?;
+
+        // Run integrity check on loaded calendar — reject if any pair fails
+        let results = cal.integrity_check(crypto, tbid_str, start, end)?;
+        if results.iter().any(|&v| !v) {
+            return Err(NodeError::Internal(format!(
+                "calendar integrity check failed for {}: {} pair(s) invalid out of {}",
+                path,
+                results.iter().filter(|&&v| !v).count(),
+                results.len()
+            )));
+        }
+
+        Ok(cal)
+    }
+
     /// Add an external attestation to a specific tick.
     pub fn add_external_attestation(
         &mut self,
@@ -487,5 +521,86 @@ mod tests {
 
         std::fs::remove_file(path).ok();
         std::fs::remove_file(&tmp_path).ok();
+    }
+
+    #[test]
+    fn load_and_verify_accepts_valid_calendar() {
+        let path = "/tmp/foretias-test-load-verify-valid.json";
+        let mut cal = Calendar::new(Tbid::from_raw([0xAA; 96]), "load-verify");
+        cal.append(make_tick(1)).unwrap();
+        cal.save(path).unwrap();
+
+        let server = crypto_server::new_software(crate::crypto_server::ForetiasCurve::Ed25519).unwrap();
+        let loaded = Calendar::load_and_verify(path, server.as_ref(), "test", None, None);
+        // Single tick calendar has no pairs to verify, so it passes
+        assert!(loaded.is_ok());
+        assert_eq!(loaded.unwrap().latest(), Some(1));
+
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn load_and_verify_rejects_corrupted_calendar() {
+        use crate::core::identity::generate_ed25519_keypair;
+        use crate::core::signing::ed25519_sign;
+        use crate::core::bindings::ForetiasPrivKey32;
+        use crate::foretias::tick::auto_attestation_blob_with_count;
+        use zeroize::Zeroizing;
+
+        let path = "/tmp/foretias-test-load-verify-corrupt.json";
+        let tbid = Tbid::from_raw([0xBB; 96]);
+        let tbid_str = tbid.to_hex();
+        let mut cal = Calendar::new(tbid, "corrupt-verify");
+
+        // Generate two keypairs
+        let (pk1, sk1) = generate_ed25519_keypair().unwrap();
+        let (pk2, _sk2) = generate_ed25519_keypair().unwrap();
+        let sk1 = Zeroizing::new(sk1.bytes);
+
+        // Tick 1 with valid auto-attestation
+        let (blob1, nonce1) = auto_attestation_blob_with_count(&tbid_str, 1, &pk1.bytes, 1, &pk1.bytes, 0).unwrap();
+        let sig1 = ed25519_sign(&ForetiasPrivKey32 { bytes: *sk1 }, &blob1).unwrap();
+
+        cal.append(ChrononRecord {
+            chronon_number: 1,
+            public_key: pk1.bytes.to_vec().into(),
+            signature_algorithm: "Ed25519".to_string(),
+            forward_foretis: sig1.bytes.to_vec().into(),
+            backward_foretis: sig1.bytes.to_vec().into(),
+            aa_nonce: nonce1.into(),
+            chronon_stamp_count: 0,
+            external_attestations: Vec::new(),
+            tb_version: 0,
+            tbid: Tbid::default(),
+        }).unwrap();
+
+        // Tick 2 with TAMPERED forward foretis (signed with wrong key)
+        let (blob2, nonce2) = auto_attestation_blob_with_count(&tbid_str, 1, &pk1.bytes, 2, &pk2.bytes, 0).unwrap();
+        // Sign with tick 1's key for forward, but use garbage for backward
+        let fwd_sig = ed25519_sign(&ForetiasPrivKey32 { bytes: *sk1 }, &blob2).unwrap();
+        let mut backward_sig = fwd_sig.bytes.to_vec();
+        backward_sig[0] ^= 0xFF; // tamper
+
+        cal.append(ChrononRecord {
+            chronon_number: 2,
+            public_key: pk2.bytes.to_vec().into(),
+            signature_algorithm: "Ed25519".to_string(),
+            forward_foretis: fwd_sig.bytes.to_vec().into(),
+            backward_foretis: backward_sig.into(),
+            aa_nonce: nonce2.into(),
+            chronon_stamp_count: 0,
+            external_attestations: Vec::new(),
+            tb_version: 0,
+            tbid: Tbid::default(),
+        }).unwrap();
+
+        cal.save(path).unwrap();
+
+        let server = crypto_server::new_software(crate::crypto_server::ForetiasCurve::Ed25519).unwrap();
+        let loaded = Calendar::load_and_verify(path, server.as_ref(), &tbid_str, None, None);
+        // Tampered backward signature should cause integrity check failure
+        assert!(loaded.is_err());
+
+        std::fs::remove_file(path).ok();
     }
 }

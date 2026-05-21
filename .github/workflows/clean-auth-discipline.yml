@@ -1,0 +1,68 @@
+# Clean Authentication Discipline Enforcement
+#
+# CI gates for the Unprocessed/CleanAuthenticated/Externalized type discipline.
+# Prevents future regression where handlers deserialize directly into trusted types.
+#
+# See specs/TYPE_ENFORCED_CLEANSING_AND_AUTHENTICATION_SPEC.md for full requirements.
+
+name: Clean Auth Discipline
+
+on:
+  push:
+    branches:
+      - alpha
+      - mvp
+  pull_request:
+    branches:
+      - alpha
+      - mvp
+
+permissions:
+  contents: read
+
+jobs:
+  ############################
+  # E.2: Grep-based discipline gate
+  ############################
+  discipline-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: E.2 — No direct deserialization into trusted types in handlers
+        run: |
+          # Check that handlers.rs does not deserialize directly into ChrononRecord/Foretis
+          # (must go through Unprocessed types first)
+          if grep -n 'serde_json::from_value.*ChrononRecord' \
+                p2p/foretias-server/src/server/handlers.rs \
+              | grep -v 'UnprocessedChrononRecord' ; then
+            echo "::error::Discipline violation: direct deserialization into trusted ChrononRecord"
+            exit 1
+          fi
+          if grep -n 'serde_json::from_value.*Foretis' \
+                p2p/foretias-server/src/server/handlers.rs \
+              | grep -v 'UnprocessedForetis' ; then
+            echo "::error::Discipline violation: direct deserialization into trusted Foretis"
+            exit 1
+          fi
+          echo "Discipline scan passed: no direct deserialization into trusted types"
+
+      - name: E.2 — CleanAuthenticated constructors are private
+        run: |
+          # Verify CleanAuthenticatedChrononRecord and CleanAuthenticatedForetis
+          # have private fields (no public struct literals outside clean_auth.rs)
+          if grep -rn 'CleanAuthenticatedChrononRecord {' \
+                --include='*.rs' \
+                p2p/foretias-server/src p2p/foretias-client/src \
+              | grep -v 'clean_auth.rs' | grep -v 'from_trusted\|inner\|externalize' ; then
+            echo "::error::Discipline violation: CleanAuthenticatedChrononRecord constructed outside clean_auth.rs"
+            exit 1
+          fi
+          if grep -rn 'CleanAuthenticatedForetis {' \
+                --include='*.rs' \
+                p2p/foretias-server/src p2p/foretias-client/src \
+              | grep -v 'clean_auth.rs' | grep -v 'from_trusted\|inner\|externalize' ; then
+            echo "::error::Discipline violation: CleanAuthenticatedForetis constructed outside clean_auth.rs"
+            exit 1
+          fi
+          echo "Constructor scan passed: CleanAuthenticated types only constructed via gates"
