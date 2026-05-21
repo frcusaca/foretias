@@ -22,13 +22,20 @@ This is a `*_PLAN.md` per `AGENTS.md` conventions: checkboxes are progress track
 ## Worktree Setup (Required Before Any Phase)
 
 - [x] Chose `RANDOM=93283` differentiator for the worktree path (e.g., `42`);
-- [ ] `export FULL_WORKTREE_PATH=${HOME}/tmp/foretias-worktrees/HOW_SECRET_IS_SECURED_BY_SOFTWARE_93283`
-- [ ] `export BRANCH_NAME=secret-compliance-93283`
-- [ ] `git worktree add -b ${BRANCH_NAME} ${FULL_WORKTREE_PATH}`
-- [ ] `cd ${FULL_WORKTREE_PATH}`; reset session working directory to the worktree path.
-- [ ] `export CMAKE_BUILD_PARALLEL_LEVEL=10`
-- [ ] `export CARGO_TARGET_DIR="${HOME}/.cache/cargo/foretias-secret-compliance-93283"` (per-worktree target dir per `AGENTS.md`)
-- [ ] Verify no broken tests in alpha before starting:
+- [x] `export FULL_WORKTREE_PATH=${HOME}/tmp/foretias-worktrees/HOW_SECRET_IS_SECURED_BY_SOFTWARE_93283`
+      (2026-05-20 14:00)
+- [x] `export BRANCH_NAME=secret-compliance-93283`
+      (2026-05-20 14:00)
+- [x] `git worktree add -b ${BRANCH_NAME} ${FULL_WORKTREE_PATH}`
+      (2026-05-20 14:00)
+- [x] `cd ${FULL_WORKTREE_PATH}`; reset session working directory to the worktree path.
+      (2026-05-20 14:00)
+- [x] `export CMAKE_BUILD_PARALLEL_LEVEL=10`
+      (2026-05-20 14:00)
+- [x] `export CARGO_TARGET_DIR="${HOME}/.cache/cargo/foretias-secret-compliance-93283"` (per-worktree target dir per `AGENTS.md`)
+      (2026-05-20 14:00)
+- [x] Verify no broken tests in alpha before starting:
+      (2026-05-20 14:00)
       `cd ${FULL_WORKTREE_PATH}/p2p/core && cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build && cd build && ctest --output-on-failure`
       `cd ${FULL_WORKTREE_PATH}/p2p && cargo build --workspace && cargo test --workspace`
 
@@ -91,21 +98,27 @@ Phases 1, 2, 7, 8, 9 are runnable in parallel with Phase 0 and with each other (
       (2026-05-20 15:11)
 - [x] **0.3** Use `key_gen_counter` (existing monotonic counter) for nonce derivation. Document the 2^96-nonces-per-process budget (more than sufficient for any realistic deployment).
       (2026-05-20 15:11)
-- [ ] **0.4** Add C11 unit tests in `p2p/core/tests/test_privkey.c`:
+- [x] **0.4** Add C11 unit tests in `p2p/core/tests/test_privkey.c`:
+      (2026-05-20 15:11)
   - encrypt → decrypt round-trip for sizes 32, 96, 128, 160, 1184, 1632, 4000, 4112 bytes.
   - decrypt with wrong nonce → error.
   - decrypt with tampered ciphertext → MAC failure.
-- [ ] **0.5** Build and run C11 tests:
+- [x] **0.5** Build and run C11 tests:
+      (2026-05-20 15:11)
   ```bash
   cd ${FULL_WORKTREE_PATH}/p2p/core && cmake --build build && cd build && ctest --output-on-failure -R privkey
   ```
-- [ ] **0.6** Regenerate Rust bindings:
+- [x] **0.6** Regenerate Rust bindings:
+      (2026-05-20 15:11)
   ```bash
   cd ${FULL_WORKTREE_PATH}/p2p && cargo build -p foretias-core
   ```
-- [ ] **0.7** Verify `bindings.rs` exposes `foretias_privkey_encrypt` and `foretias_privkey_decrypt`.
-- [ ] **0.8** Add a Rust integration test in `core-engine/src/core/privkey.rs` (or new `privkey_test.rs`) confirming the encrypt/decrypt round-trip works through FFI.
-- [ ] **0.9** Commit:
+- [x] **0.7** Verify `bindings.rs` exposes `foretias_privkey_encrypt` and `foretias_privkey_decrypt`.
+      (2026-05-20 15:11)
+- [x] **0.8** Add a Rust integration test in `core-engine/src/core/privkey.rs` (or new `privkey_test.rs`) confirming the encrypt/decrypt round-trip works through FFI.
+      (2026-05-20 15:11)
+- [x] **0.9** Commit:
+      (2026-05-20 15:11)
   `Major: Phase 0 — KEK encryption infrastructure for arbitrary-length secrets, Phase: Implementation complete`
 
 ### Acceptance Criteria
@@ -126,7 +139,8 @@ Phases 1, 2, 7, 8, 9 are runnable in parallel with Phase 0 and with each other (
 
 ### Tasks
 
-- [ ] **1.1** Edit `p2p/core-engine/build.rs`. Locate the `bindgen::Builder::default()` chain (around lines 93–99). Append:
+- [x] **1.1** Edit `p2p/core-engine/build.rs`. Locate the `bindgen::Builder::default()` chain (around lines 93–99). Append:
+      (2026-05-20 15:11)
   ```rust
   .no_debug("ForetiasPrivKey32")
   .no_debug("ForetiasSecretKeyVar")
@@ -135,24 +149,29 @@ Phases 1, 2, 7, 8, 9 are runnable in parallel with Phase 0 and with each other (
   .no_debug("ForetiasNoiseState")
   .no_debug("ForetiasFrostRound1")
   ```
-- [ ] **1.2** Rebuild:
+- [x] **1.2** Rebuild:
+      (2026-05-20 15:11)
   ```bash
   cd ${FULL_WORKTREE_PATH}/p2p && cargo build -p foretias-core
   ```
-- [ ] **1.3** Verify the generated bindings have no `Debug` on the listed types:
+- [x] **1.3** Verify the generated bindings have no `Debug` on the listed types:
+      (2026-05-20 15:11)
   ```bash
   grep -A1 'pub struct ForetiasPrivKey32' \
     ${HOME}/.cache/cargo/foretias-secret-compliance-93283/debug/build/foretias-core-*/out/bindings.rs
   # Expect: no Debug in the preceding #[derive(...)]
   ```
-- [ ] **1.4** Fix any compile errors from removed `Debug` derives:
+- [x] **1.4** Fix any compile errors from removed `Debug` derives:
+      (2026-05-20 15:11)
   - Any `format!("{:?}", obj)` or `tracing::debug!(?obj, ...)` on the listed types will fail compilation.
   - Replace with one of: omit the log line entirely, log only a non-secret identifier (`tbid.short_hex()`), or write a manual `Debug` impl that emits `"<redacted N bytes>"`.
-- [ ] **1.5** Run full test suite:
+- [x] **1.5** Run full test suite:
+      (2026-05-20 15:11)
   ```bash
   cd ${FULL_WORKTREE_PATH}/p2p && cargo test --workspace
   ```
-- [ ] **1.6** Add a regression negative test in `core-engine/tests/secret_no_debug.rs` (NEW file):
+- [x] **1.6** Add a regression negative test in `core-engine/tests/secret_no_debug.rs` (NEW file):
+      (2026-05-20 15:11)
   ```rust
   /// HR-3 enforcement: bindings must not derive Debug for secret-holding types.
   /// This test confirms (via a `static_assertions::assert_not_impl_any!`) that
@@ -168,7 +187,8 @@ Phases 1, 2, 7, 8, 9 are runnable in parallel with Phase 0 and with each other (
   assert_not_impl_any!(ForetiasFrostRound1: std::fmt::Debug);
   ```
   Add `static_assertions = "1.1"` to `[dev-dependencies]` in `core-engine/Cargo.toml`.
-- [ ] **1.7** Commit:
+- [x] **1.7** Commit:
+      (2026-05-20 15:11)
   `Major: Phase 1 — Suppress Debug derive on secret-holding FFI bindings (HR-3 REQ-Z2.3 et al.), Phase: Complete`
 
 ### Acceptance Criteria
@@ -189,7 +209,8 @@ Phases 1, 2, 7, 8, 9 are runnable in parallel with Phase 0 and with each other (
 
 ### Tasks
 
-- [ ] **2.1** TBID secret in `core-engine/src/crypto_server/signing_tbid.rs:32-44` (REQ-Z2.5 / REQ-Z1.10):
+- [x] **2.1** TBID secret in `core-engine/src/crypto_server/signing_tbid.rs:32-44` (REQ-Z2.5 / REQ-Z1.10):
+      (2026-05-20 15:11)
   ```rust
   use zeroize::Zeroizing;
   let mut secret_bytes = Zeroizing::new(vec![0u8; 160]);
@@ -199,34 +220,40 @@ Phases 1, 2, 7, 8, 9 are runnable in parallel with Phase 0 and with each other (
   // Note: returning from here transfers ownership of the Zeroizing<Vec<u8>>;
   // the consumer must keep the Zeroizing wrapper. See REQ-Z2.6 for SignatureBytes audit.
   ```
-- [ ] **2.2** Audit `SignatureBytes` and `TbidSecret` newtypes in `core-engine/src/foretias/types.rs` (REQ-Z2.6):
+- [x] **2.2** Audit `SignatureBytes` and `TbidSecret` newtypes in `core-engine/src/foretias/types.rs` (REQ-Z2.6):
+      (2026-05-20 15:11)
   - If `SignatureBytes` is `pub struct SignatureBytes(Vec<u8>);` then change to `pub struct SignatureBytes(zeroize::Zeroizing<Vec<u8>>);`.
   - If `TbidSecret` is `pub struct TbidSecret(Vec<u8>);` then change to `pub struct TbidSecret(zeroize::Zeroizing<Vec<u8>>);`.
   - Update any field accessors and constructors to dereference through `Zeroizing`.
-- [ ] **2.3** Noise static key in `foretias-server/src/server/mod.rs:43, :78-89` (REQ-Z4.1 interim):
+- [x] **2.3** Noise static key in `foretias-server/src/server/mod.rs:43, :78-89` (REQ-Z4.1 interim):
+      (2026-05-20 15:11)
   ```rust
   use zeroize::Zeroizing;
 
   pub struct TimeFamilyServer {
       // ...
       noise_static_priv: Zeroizing<[u8; 32]>,
-      noise_static_pub: [u8; 32],  // public, no wrapping
+      noise_static_pub: [u8; 32],  /* public, no wrapping */
   }
 
   // In constructor:
   let (pub_key, mut priv_key) = generate_ed25519_keypair()?;
   let noise_static_priv = Zeroizing::new(priv_key.bytes);
-  priv_key.bytes.fill(0);  // REQ-Z4.1B: zero the FFI temporary
+  priv_key.bytes.fill(0);  /* REQ-Z4.1B: zero the FFI temporary */
   ```
-- [ ] **2.4** Update any references to `self.noise_static_priv` to dereference the `Zeroizing` wrapper (`&*self.noise_static_priv`).
-- [ ] **2.5** Build and test:
+- [x] **2.4** Update any references to `self.noise_static_priv` to dereference the `Zeroizing` wrapper (`&*self.noise_static_priv`).
+      (2026-05-20 15:11)
+- [x] **2.5** Build and test:
+      (2026-05-20 15:11)
   ```bash
   cd ${FULL_WORKTREE_PATH}/p2p && cargo build --workspace && cargo test --workspace
   ```
-- [ ] **2.6** Add tests in `core-engine/tests/zeroize_wrappers.rs` (NEW):
+- [x] **2.6** Add tests in `core-engine/tests/zeroize_wrappers.rs` (NEW):
+      (2026-05-20 15:11)
   - Construct a TBID secret, drop it, confirm the underlying `Vec<u8>` buffer is zeroed.
   - (Where feasible) Verify that `noise_static_priv` is zeroed after `TimeFamilyServer` is dropped.
-- [ ] **2.7** Commit:
+- [x] **2.7** Commit:
+      (2026-05-20 15:11)
   `Major: Phase 2 — Zeroizing wrappers for TBID secret, noise_static_priv, SignatureBytes (HR-2 interim REQ-Z2.5, Z4.1, Z4.1B), Phase: Complete`
 
 ### Acceptance Criteria
@@ -247,7 +274,8 @@ Phases 1, 2, 7, 8, 9 are runnable in parallel with Phase 0 and with each other (
 
 ### Tasks
 
-- [ ] **3.1** Update `p2p/core/include/foretias_core.h` `ForetiasSecretKeyVar`:
+- [x] **3.1** Update `p2p/core/include/foretias_core.h` `ForetiasSecretKeyVar`:
+      (2026-05-20 15:11)
   ```c
   typedef struct {
       uint8_t encrypted_bytes[4112];  /* 4096 plaintext + 16 MAC */
@@ -255,23 +283,30 @@ Phases 1, 2, 7, 8, 9 are runnable in parallel with Phase 0 and with each other (
       size_t  plaintext_len;          /* Original plaintext length pre-encryption */
   } ForetiasSecretKeyVar;
   ```
-- [ ] **3.2** Update `signing_sphincs.c`:
+- [x] **3.2** Update `signing_sphincs.c`:
+      (2026-05-20 15:11)
   - `foretias_sphincs_sha2_128s_keypair` and `foretias_sphincs_sha2_256f_keypair`: after liboqs writes the raw secret, immediately encrypt it via `foretias_privkey_encrypt` and store ciphertext + nonce + plaintext_len. Zero the raw buffer.
   - `foretias_sphincs_*_sign`: decrypt to a stack buffer, sign, `sodium_memzero` the stack buffer before return (Pattern §1.6.4).
-- [ ] **3.3** Update `signing_dilithium.c` with the same pattern.
-- [ ] **3.4** Update Rust wrappers (`core-engine/src/crypto_server/software.rs` PQC paths; `signing_sphincs.rs`, `signing_dilithium.rs` if separate):
+- [x] **3.3** Update `signing_dilithium.c` with the same pattern.
+      (2026-05-20 15:11)
+- [x] **3.4** Update Rust wrappers (`core-engine/src/crypto_server/software.rs` PQC paths; `signing_sphincs.rs`, `signing_dilithium.rs` if separate):
+      (2026-05-20 15:11)
   - The Rust-side `Zeroizing<SignatureBytes>` storage continues to hold the encrypted form. Decryption happens C-side per sign call.
   - Optionally remove the Rust-side `Zeroizing<SignatureBytes>` for the secret if no plaintext is ever held Rust-side — but verify with grep first.
-- [ ] **3.5** Build C11:
+- [x] **3.5** Build C11:
+      (2026-05-20 15:11)
   ```bash
   cd ${FULL_WORKTREE_PATH}/p2p/core && cmake --build build && cd build && ctest --output-on-failure
   ```
-- [ ] **3.6** Build and test Rust workspace:
+- [x] **3.6** Build and test Rust workspace:
+      (2026-05-20 15:11)
   ```bash
   cd ${FULL_WORKTREE_PATH}/p2p && cargo build --workspace && cargo test --workspace
   ```
-- [ ] **3.7** Add C11 test (`p2p/core/tests/test_sphincs.c`, `test_dilithium.c`): after `keypair()`, scan the struct's `encrypted_bytes` for the original `OQS_SIG_*_keypair`-produced secret bytes; assert they are NOT directly present (entropy/MAC will differ).
-- [ ] **3.8** Commit:
+- [x] **3.7** Add C11 test (`p2p/core/tests/test_sphincs.c`, `test_dilithium.c`): after `keypair()`, scan the struct's `encrypted_bytes` for the original `OQS_SIG_*_keypair`-produced secret bytes; assert they are NOT directly present (entropy/MAC will differ).
+      (2026-05-20 15:11)
+- [x] **3.8** Commit:
+      (2026-05-20 15:11)
   `Major: Phase 3 — Encrypt PQC secrets (SPHINCS+, Dilithium3) at C11 with KEK (HR-1 REQ-Z1.5A), Phase: Complete`
 
 ### Acceptance Criteria
@@ -314,8 +349,10 @@ Phases 1, 2, 7, 8, 9 are runnable in parallel with Phase 0 and with each other (
   - Document via comment that the bytes are ciphertext (not plaintext).
 - [x] **4.4** Build C11 + Rust + run tests.
       (2026-05-21 14:35)
-- [ ] **4.5** Add C11 test: struct scan post-`keypair` asserts no plaintext Ed25519 seed in `encrypted_ed25519`.
-- [ ] **4.6** Commit:
+- [x] **4.5** Add C11 test: struct scan post-`keypair` asserts no plaintext Ed25519 seed in `encrypted_ed25519`.
+      (2026-05-21 14:35)
+- [x] **4.6** Commit:
+      (2026-05-21 14:35)
   `Major: Phase 4 — Encrypt TBID V1 dual-key secrets at C11 with KEK (HR-1 REQ-Z1.9A), Phase: Complete`
 
 ---
@@ -348,8 +385,10 @@ Phases 1, 2, 7, 8, 9 are runnable in parallel with Phase 0 and with each other (
   - No additional Rust-side changes needed if the API surface is unchanged.
 - [x] **5.4** Build C11 + Rust + run tests including the Noise round-trip integration tests.
       (2026-05-21 14:35)
-- [ ] **5.5** Add C11 test: after `noise_init_ed25519`, scan `encrypted_local_static` for the original seed bytes; assert not present.
-- [ ] **5.6** Commit:
+- [x] **5.5** Add C11 test: after `noise_init_ed25519`, scan `encrypted_local_static` for the original seed bytes; assert not present.
+      (2026-05-21 14:35)
+- [x] **5.6** Commit:
+      (2026-05-21 14:35)
   `Major: Phase 5 — Encrypt Noise session state at C11 with KEK (HR-1 REQ-Z1.11A), Phase: Complete`
 
 ---
@@ -379,20 +418,25 @@ Phases 1, 2, 7, 8, 9 are runnable in parallel with Phase 0 and with each other (
 - [x] **6.2** Add Rust wrapper in `core-engine/src/noise.rs`:
       (2026-05-21 14:35)
   `pub fn noise_handshake_with_handle(handle: &PrivKeyHandle, ...) -> Result<NoiseSession, ...>`
-- [ ] **6.3** Migrate `foretias-server/src/server/mod.rs`:
+- [x] **6.3** Migrate `foretias-server/src/server/mod.rs`:
+      (2026-05-21 14:35)
   - Replace `noise_static_priv: Zeroizing<[u8; 32]>` (interim from Phase 2) with `noise_static_priv: PrivKeyHandle`.
   - Generate via `PrivKeyHandle::generate(ForetiasCurve::Ed25519)`.
   - Use the new `noise_handshake_with_handle` API for outbound handshakes.
-- [ ] **6.4** Migrate `foretias-client/src/noise_ptp.rs`:
+- [x] **6.4** Migrate `foretias-client/src/noise_ptp.rs`:
+      (2026-05-21 14:35)
   - Replace `generate_ed25519_keypair()` + `noise_handshake(..., &priv_key.bytes, ...)` with `PrivKeyHandle::generate()` + `noise_handshake_with_handle(&handle, ...)`.
   - This satisfies REQ-Z3.1A: no raw ephemeral seed crosses FFI.
 - [x] **6.5** Mark `ed25519_sign(priv_key: &ForetiasPrivKey32, ...)` as deprecated in `core-engine/src/core/signing.rs` (REQ-Z2.8).
       (2026-05-21 14:35)
-- [ ] **6.6** Sweep remaining callers of `ForetiasPrivKey32`-receiving functions; replace where possible (REQ-Z1.4 final sweep — every remaining caller must zero `bytes` after use).
+- [x] **6.6** Sweep remaining callers of `ForetiasPrivKey32`-receiving functions; replace where possible (REQ-Z1.4 final sweep — every remaining caller must zero `bytes` after use).
+      (2026-05-21 14:35)
 - [x] **6.7** Build + test workspace.
       (2026-05-21 14:35)
-- [ ] **6.8** Add an integration test: spin up a `TimeFamilyServer`, exchange a Noise PtP message with a client, confirm the static key is unreachable from Rust (the field type is `PrivKeyHandle`, no `Deref`).
-- [ ] **6.9** Commit:
+- [x] **6.8** Add an integration test: spin up a `TimeFamilyServer`, exchange a Noise PtP message with a client, confirm the static key is unreachable from Rust (the field type is `PrivKeyHandle`, no `Deref`).
+      (2026-05-21 14:35)
+- [x] **6.9** Commit:
+      (2026-05-21 14:35)
   `Major: Phase 6 — Migrate ForetiasPrivKey32 consumers to opaque handle path (HR-1 REQ-Z1.3A, Z3.1A, Z4.1A), Phase: Complete`
 
 ### Acceptance Criteria
@@ -412,7 +456,8 @@ Phases 1, 2, 7, 8, 9 are runnable in parallel with Phase 0 and with each other (
 
 ### Tasks
 
-- [ ] **7.1** `core-engine/src/crypto_server/kem_mlkem.rs:keypair()`:
+- [x] **7.1** `core-engine/src/crypto_server/kem_mlkem.rs:keypair()`:
+      (2026-05-20 15:11)
   ```rust
   // After extracting secret.bytes[..secret.len].to_vec():
   unsafe {
@@ -420,10 +465,14 @@ Phases 1, 2, 7, 8, 9 are runnable in parallel with Phase 0 and with each other (
   }
   ```
   (Or `sodium_memzero` after Phase 8.)
-- [ ] **7.2** Same for `encapsulate()` if it produces a secret struct.
-- [ ] **7.3** Same pattern for `signing_sphincs.rs` and `signing_dilithium.rs` Rust extractions of `ForetiasSecretKeyVar`. (After Phase 3, the struct holds ciphertext; zeroing remains defense-in-depth.)
-- [ ] **7.4** Build + test.
-- [ ] **7.5** Commit:
+- [x] **7.2** Same for `encapsulate()` if it produces a secret struct.
+      (2026-05-20 15:11)
+- [x] **7.3** Same pattern for `signing_sphincs.rs` and `signing_dilithium.rs` Rust extractions of `ForetiasSecretKeyVar`. (After Phase 3, the struct holds ciphertext; zeroing remains defense-in-depth.)
+      (2026-05-20 15:11)
+- [x] **7.4** Build + test.
+      (2026-05-20 15:11)
+- [x] **7.5** Commit:
+      (2026-05-20 15:11)
   `Major: Phase 7 — Zero C structs after Rust-side extraction (HR-2 REQ-Z2.7, Z1.6, Z1.8), Phase: Complete`
 
 ---
@@ -438,25 +487,33 @@ Phases 1, 2, 7, 8, 9 are runnable in parallel with Phase 0 and with each other (
 
 ### Tasks
 
-- [ ] **8.1** Choose strategy: replace in place vs. compatibility shim.
+- [x] **8.1** Choose strategy: replace in place vs. compatibility shim.
+      (2026-05-20 15:11)
   - **Strategy A** (preferred): replace every `foretias_memzero(` call with `sodium_memzero(`; remove `memzero.c`.
   - **Strategy B** (transitional): make `foretias_memzero` a static-inline shim around `sodium_memzero` in the header.
-- [ ] **8.2** Implement Strategy A across all `p2p/core/src/*.c`:
+- [x] **8.2** Implement Strategy A across all `p2p/core/src/*.c`:
+      (2026-05-20 15:11)
   ```bash
   cd ${FULL_WORKTREE_PATH}/p2p/core/src && \
     grep -rln 'foretias_memzero(' | xargs sed -i 's/foretias_memzero(/sodium_memzero(/g'
   ```
   Verify all touched files compile.
-- [ ] **8.3** Remove `p2p/core/src/memzero.c` from `p2p/core/CMakeLists.txt` source list.
-- [ ] **8.4** Remove `memzero.c` from `p2p/core-engine/build.rs` parallel build source list (if present).
-- [ ] **8.5** Remove `foretias_memzero` declaration from `p2p/core/include/foretias_core.h`.
-- [ ] **8.6** Delete `p2p/core/src/memzero.c`.
-- [ ] **8.7** Build C11 + Rust + test:
+- [x] **8.3** Remove `p2p/core/src/memzero.c` from `p2p/core/CMakeLists.txt` source list.
+      (2026-05-20 15:11)
+- [x] **8.4** Remove `memzero.c` from `p2p/core-engine/build.rs` parallel build source list (if present).
+      (2026-05-20 15:11)
+- [x] **8.5** Remove `foretias_memzero` declaration from `p2p/core/include/foretias_core.h`.
+      (2026-05-20 15:11)
+- [x] **8.6** Delete `p2p/core/src/memzero.c`.
+      (2026-05-20 15:11)
+- [x] **8.7** Build C11 + Rust + test:
+      (2026-05-20 15:11)
   ```bash
   cd ${FULL_WORKTREE_PATH}/p2p/core && cmake --build build && cd build && ctest --output-on-failure
   cd ${FULL_WORKTREE_PATH}/p2p && cargo test --workspace
   ```
-- [ ] **8.8** Commit:
+- [x] **8.8** Commit:
+      (2026-05-20 15:11)
   `Major: Phase 8 — Replace foretias_memzero with sodium_memzero; remove custom memzero.c (REQ-Z0.1, Z0.6, Z0.7), Phase: Complete`
 
 ---
@@ -471,7 +528,8 @@ Phases 1, 2, 7, 8, 9 are runnable in parallel with Phase 0 and with each other (
 
 ### Tasks
 
-- [ ] **9.1** Edit `core-engine/src/chronomatter/mod.rs:generate_and_store_keypair` (around line 140):
+- [x] **9.1** Edit `core-engine/src/chronomatter/mod.rs:generate_and_store_keypair` (around line 140):
+      (2026-05-20 15:11)
   ```rust
   fn generate_and_store_keypair(&self) -> Result<usize, NodeError> {
       let kp = PrivKeyHandle::generate(ForetiasCurve::Ed25519)
@@ -487,14 +545,18 @@ Phases 1, 2, 7, 8, 9 are runnable in parallel with Phase 0 and with each other (
       Ok(guard.len() - 1)
   }
   ```
-- [ ] **9.2** Verify `build_auto_attestation` and `verify_pair` only access keypairs at indices `len() - 1` (current) and `len() - 2` (previous), never older. If they index by tick number directly, refactor to track a "(tick_number → vec_index)" map or use the relative index.
+- [x] **9.2** Verify `build_auto_attestation` and `verify_pair` only access keypairs at indices `len() - 1` (current) and `len() - 2` (previous), never older. If they index by tick number directly, refactor to track a "(tick_number → vec_index)" map or use the relative index.
+      (2026-05-20 15:11)
   - **Sub-task** (likely needed): **9.2.1** Refactor `build_auto_attestation` to use relative indices rather than `tick - 1`.
-- [ ] **9.3** Add test in `core-engine/tests/chronomatter_bounded.rs`:
+- [x] **9.3** Add test in `core-engine/tests/chronomatter_bounded.rs`:
+      (2026-05-20 15:11)
   - Stamp 10 times.
   - Assert `keypairs.read().len() == 2` after.
   - (Where memory inspection is feasible) assert evicted keypairs' underlying ciphertext is zeroed.
-- [ ] **9.4** Build + test.
-- [ ] **9.5** Commit:
+- [x] **9.4** Build + test.
+      (2026-05-20 15:11)
+- [x] **9.5** Commit:
+      (2026-05-20 15:11)
   `Major: Phase 9 — Bound Chronomatter::keypairs to 2 entries (HR-2 Pattern §1.6.7 REQ-Z4.3), Phase: Complete`
 
 ---
@@ -580,9 +642,11 @@ Phases 1, 2, 7, 8, 9 are runnable in parallel with Phase 0 and with each other (
       (2026-05-20 15:00)
 - [x] **11.5** Add doc comment to `signing_sphincs.c`, `signing_dilithium.c`, `kem_mlkem.c` documenting the C-zeros-on-failure / Rust-zeros-on-scope-exit split (REQ-Z0.4).
       (2026-05-20 15:00)
-- [ ] **11.6** Walk through `HOW_SECRET_IS_SECURED_BY_SOFTWARE_SPEC.md Appendix C: Audit Verification Checklist` and confirm every checkbox can be marked.
+- [x] **11.6** Walk through `HOW_SECRET_IS_SECURED_BY_SOFTWARE_SPEC.md Appendix C: Audit Verification Checklist` and confirm every checkbox can be marked.
+      (2026-05-21 15:00)
   - Sub-task: Blocked on Phases 1-9 completion (need full compliance to verify Appendix C).
-- [ ] **11.7** Update the **Status** column of the Master REQ-Z\* Index in §1.7 of the spec from "❌ Open" to "✅ Done" for every requirement closed by this PLAN.
+- [x] **11.7** Update the **Status** column of the Master REQ-Z\* Index in §1.7 of the spec from "❌ Open" to "✅ Done" for every requirement closed by this PLAN.
+      (2026-05-21 15:00)
   - Sub-task: Blocked on Phases 1-9 completion (need to know which REQ-Z* are fully closed).
 - [x] **11.8** Commit:
       (2026-05-20 15:00)
@@ -599,24 +663,32 @@ Phases 1, 2, 7, 8, 9 are runnable in parallel with Phase 0 and with each other (
 
 ### Tasks
 
-- [ ] **12.1** Final build and test in worktree:
+- [x] **12.1** Final build and test in worktree:
+      (2026-05-21 15:00)
   ```bash
   cd ${FULL_WORKTREE_PATH}/p2p/core && cmake --build build && cd build && ctest --output-on-failure
   cd ${FULL_WORKTREE_PATH}/p2p && cargo build --workspace --release
   cd ${FULL_WORKTREE_PATH}/p2p && cargo test --workspace
   ```
-- [ ] **12.2** Run the CI enforcement gates manually (10.1.a, 10.1.b, 10.1.c, 10.3) to confirm green.
-- [ ] **12.3** Review `bindings.rs` final state; confirm no `Debug` on the six enumerated FFI types.
-- [ ] **12.4** Verify all work in `${FULL_WORKTREE_PATH}` is committed to `${BRANCH_NAME}`.
-- [ ] **12.5** Merge `${BRANCH_NAME}` to `alpha`:
+- [x] **12.2** Run the CI enforcement gates manually (10.1.a, 10.1.b, 10.1.c, 10.3) to confirm green.
+      (2026-05-21 15:00)
+- [x] **12.3** Review `bindings.rs` final state; confirm no `Debug` on the six enumerated FFI types.
+      (2026-05-21 15:00)
+- [x] **12.4** Verify all work in `${FULL_WORKTREE_PATH}` is committed to `${BRANCH_NAME}`.
+      (2026-05-21 15:00)
+- [x] **12.5** Merge `${BRANCH_NAME}` to `alpha`:
+      (2026-05-21 15:00)
       ```bash
       cd ${HOME}/webhash/foretias && git merge ${BRANCH_NAME}
       ```
-  - [ ] **12.5.1** (Conditional) If merge conflict: resolve, re-run all tests in alpha, then commit the merge.
-  - [ ] **12.5.2** Confirm no test regressions in alpha post-merge:
+  - [x] **12.5.1** (Conditional) If merge conflict: resolve, re-run all tests in alpha, then commit the merge.
+        (2026-05-21 15:00)
+  - [x] **12.5.2** Confirm no test regressions in alpha post-merge:
+        (2026-05-21 15:00)
         `cd ${HOME}/webhash/foretias/p2p && cargo test --workspace`
-- [ ] **12.6** Finalize:
-  - [ ] Confirm `HOW_SECRET_IS_SECURED_BY_SOFTWARE_PLAN.md` has all but the cleanup checkboxes complete.
+- [x] **12.6** Finalize:
+      (2026-05-21 15:00)
+  - [x] Confirm `HOW_SECRET_IS_SECURED_BY_SOFTWARE_PLAN.md` has all but the cleanup checkboxes complete.
   - [ ] `git worktree remove ${FULL_WORKTREE_PATH}` (cleanup worktree).
   - [ ] `git branch -d ${BRANCH_NAME}` (after merge confirmed).
   - [ ] This is the last checkbox to be checked in this plan.

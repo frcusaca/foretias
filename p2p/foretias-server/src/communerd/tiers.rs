@@ -11,8 +11,8 @@ use std::sync::Arc;
 use super::Communerd;
 use super::transport::PeerAddr;
 use super::p2p::swarm::{CommunerdRpcHandler, SwarmCommand};
+use foretias_core::foretias::clean_auth::{CleanAuthenticatedForetis, CleanAuthenticatedChrononRecord};
 use foretias_core::config::CommunerdConfig;
-use foretias_core::foretias::tick::Foretis;
 use foretias_core::error::NodeError;
 use libp2p;
 
@@ -42,17 +42,17 @@ impl CommunerdServer {
     }
 
     /// Stamp on a remote peer.
-    pub async fn stamp_peer(&self, peer: &PeerAddr, content_hex: &str, echo: &str) -> Result<Foretis, super::transport::TransportError> {
+    pub async fn stamp_peer(&self, peer: &PeerAddr, content_hex: &str, echo: &str) -> Result<CleanAuthenticatedForetis, super::transport::TransportError> {
         self.inner.stamp_peer(peer, content_hex, echo).await
     }
 
     /// Route stamp via DHT lookup.
-    pub async fn route_stamp(&self, target_tbid: &str, content_hex: &str, echo: &str) -> Result<Foretis, super::transport::TransportError> {
+    pub async fn route_stamp(&self, target_tbid: &str, content_hex: &str, echo: &str) -> Result<CleanAuthenticatedForetis, super::transport::TransportError> {
         self.inner.route_stamp(target_tbid, content_hex, echo).await
     }
 
     /// Fetch calendar slice from a remote peer.
-    pub async fn get_calendar_slice(&self, peer: &PeerAddr, tick_start: u64, count: u64) -> Result<Vec<foretias_core::foretias::tick::ChrononRecord>, super::transport::TransportError> {
+    pub async fn get_calendar_slice(&self, peer: &PeerAddr, tick_start: u64, count: u64) -> Result<Vec<CleanAuthenticatedChrononRecord>, super::transport::TransportError> {
         self.inner.get_calendar_slice(peer, tick_start, count).await
     }
 
@@ -152,17 +152,17 @@ impl CommunerdP2P {
     }
 
     /// Stamp on a remote peer.
-    pub async fn stamp_peer(&self, peer: &PeerAddr, content_hex: &str, echo: &str) -> Result<Foretis, super::transport::TransportError> {
+    pub async fn stamp_peer(&self, peer: &PeerAddr, content_hex: &str, echo: &str) -> Result<CleanAuthenticatedForetis, super::transport::TransportError> {
         self.server.stamp_peer(peer, content_hex, echo).await
     }
 
     /// Route stamp via DHT lookup.
-    pub async fn route_stamp(&self, target_tbid: &str, content_hex: &str, echo: &str) -> Result<Foretis, super::transport::TransportError> {
+    pub async fn route_stamp(&self, target_tbid: &str, content_hex: &str, echo: &str) -> Result<CleanAuthenticatedForetis, super::transport::TransportError> {
         self.server.route_stamp(target_tbid, content_hex, echo).await
     }
 
     /// Fetch calendar slice from a remote peer.
-    pub async fn get_calendar_slice(&self, peer: &PeerAddr, tick_start: u64, count: u64) -> Result<Vec<foretias_core::foretias::tick::ChrononRecord>, super::transport::TransportError> {
+    pub async fn get_calendar_slice(&self, peer: &PeerAddr, tick_start: u64, count: u64) -> Result<Vec<CleanAuthenticatedChrononRecord>, super::transport::TransportError> {
         self.server.get_calendar_slice(peer, tick_start, count).await
     }
 

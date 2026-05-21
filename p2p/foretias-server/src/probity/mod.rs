@@ -4,8 +4,10 @@ pub mod report;
 pub mod aggregator;
 pub mod store;
 pub mod gossip_handler;
+pub mod clean_auth;
 
 pub use report::ProbityReport;
 pub use aggregator::{UShapeConfig, u_shape_weight, aggregate};
 pub use store::ProbityStore;
-pub use gossip_handler::handle_gossip_message;
+pub use gossip_handler::{handle_gossip_message, DefaultReporterKeyResolver, ReporterKeyResolver};
+pub use clean_auth::{CleanAuthError, UnprocessedProbityReport, CleanAuthenticatedProbityReport, ExternalizedProbityReport, pub_key_from_tbid_hex};

@@ -74,7 +74,9 @@ impl TimeFamilyServer {
         cal_inner.tbid = tbid;
         cal_inner.tbn = tbn.clone();
         let communerd = config.map(|c| {
-            Arc::new(Communerd::new(c))
+            let com = Arc::new(Communerd::new(c));
+            com.set_calendar(Arc::clone(&calendar));
+            com
         });
         let (pub_key, mut priv_key) = generate_ed25519_keypair()?;
         let noise_static_priv = Zeroizing::new(priv_key.bytes);
@@ -122,7 +124,9 @@ impl TimeFamilyServer {
     }
 
     pub fn with_communerd(mut self, config: CommunerdConfig) -> Self {
-        self.communerd = Some(Arc::new(Communerd::new(config)));
+        let com = Arc::new(Communerd::new(config));
+        com.set_calendar(Arc::clone(&self.calendar));
+        self.communerd = Some(com);
         self
     }
 
@@ -133,14 +137,16 @@ impl TimeFamilyServer {
             config.persist_path().cloned(),
             None,
         )?;
-        server.communerd = Some(Arc::new(Communerd::new(CommunerdConfig {
+        let com = Arc::new(Communerd::new(CommunerdConfig {
             mutual_attest: foretias_core::config::MutualAttestConfig {
                 peers: config.p2p.ptp.peers.clone(),
                 every_n_chronons: 1,
                 request_timeout_secs: config.p2p.ptp.timeout_secs,
             },
             ..Default::default()
-        })));
+        }));
+        com.set_calendar(Arc::clone(&server.calendar));
+        server.communerd = Some(com);
         Ok(server)
     }
 
