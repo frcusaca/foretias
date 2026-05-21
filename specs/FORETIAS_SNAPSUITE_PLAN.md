@@ -6,8 +6,10 @@ Paired with `FORETIAS_SNAPSUITE_SPEC.md`.
 
 ---
 
-- [ ] Create worktree `git worktree add -b spec/snapsuite ${HOME}/tmp/foretias-worktrees/FORETIAS_SNAPSUITE_19283`
-- [ ] `cd ${HOME}/tmp/foretias-worktrees/FORETIAS_SNAPSUITE_19283`; reset current session work directory to be the full worktree path.
+- [x] Create worktree `git worktree add -b spec/snapsuite ${HOME}/tmp/foretias-worktrees/FORETIAS_SNAPSUITE_4783`
+      (2026-05-21 14:31)
+- [x] `cd ${HOME}/tmp/foretias-worktrees/FORETIAS_SNAPSUITE_4783`; reset current session work directory to be the full worktree path.
+      (2026-05-21 14:31)
 
 ### Phase 1: Signature Module (core-engine)
 

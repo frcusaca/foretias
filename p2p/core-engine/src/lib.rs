@@ -14,5 +14,7 @@ pub mod collision;
 pub mod epoch;
 pub mod probity;
 pub mod noise;
+pub mod snapshot_signature;
+pub mod snapshot_suite;
 #[cfg(test)]
 mod integration_tests;

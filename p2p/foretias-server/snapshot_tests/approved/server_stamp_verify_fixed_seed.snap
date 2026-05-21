@@ -1,0 +1,64 @@
+INPUT:
+```json
+{
+  "messages": [
+    "hello world",
+    "second message"
+  ],
+  "server_config": {
+    "chronon_ns": 100000000,
+    "fixed_seed": true
+  },
+  "test_name": "server_stamp_verify_fixed_seed"
+}
+```
+[0] RESULT:
+```json
+{
+  "stamps": [
+    {
+      "chronon_number": 1,
+      "content_hash": "uU0nuZNNPgilLlLX2n2r-sSE7-N6U4DukIj3rOLvzek",
+      "echo": "hello world",
+      "signature": "HlPzH72O8PebDMnhgAXCZXZj3oaq65HsRlOJeVmAUsArlNEDBoUwhrtpLpV0IJtJnmpvlLrCH_uXGJ2ykK0UBg",
+      "signature_algorithm": "Ed25519",
+      "tbid": {
+        "inner": "q0I1CxvlShdvPYVOM7QkunE8jAvSQbHBBJ08x5BLASzDCdOYH9dUNF1wEhkqSr2cqqX4u9mnvTEqD_eZEIsCQyHxVifqs4XCrr5eOkT47XqGJeyHCBct4eI0Qy1TSNYn"
+      },
+      "tbn": "tf-ab42350b1be54a17",
+      "time_being_reference_time": "UE+1779399130696739678ns"
+    },
+    {
+      "chronon_number": 2,
+      "content_hash": "K7yLazOKfJ7Au2I-0jJfyIavIcRRmy6L9zehOfEb184",
+      "echo": "second message",
+      "signature": "hlDmh4gzuHKktpgFuhrbC9AM9jO0ouYVnCNPbtVQoWnUZRpxGkoFi7KMs83TLKRcWDARb27Q7lm52r0iG3b4Aw",
+      "signature_algorithm": "Ed25519",
+      "tbid": {
+        "inner": "q0I1CxvlShdvPYVOM7QkunE8jAvSQbHBBJ08x5BLASzDCdOYH9dUNF1wEhkqSr2cqqX4u9mnvTEqD_eZEIsCQyHxVifqs4XCrr5eOkT47XqGJeyHCBct4eI0Qy1TSNYn"
+      },
+      "tbn": "tf-ab42350b1be54a17",
+      "time_being_reference_time": "UE+1779399130738891872ns"
+    }
+  ],
+  "verifications": [
+    {
+      "message": "hello world",
+      "valid": true
+    },
+    {
+      "message": "second message",
+      "valid": true
+    }
+  ]
+}
+```
+COMMENTS:
+```markdown
+server_stamp_verify_fixed_seed
+```
+SIGNATURES:
+Public key: 4193efbf702cde19fbae087ea53189f67e7768ebe888e0816e24a27282a5b030
+Input signature: dxtMiqOgTarrnXLOfN2iWZcmFbMVQr7Ha8TpDx6fFTn5MSd1MxsI4uJExSxCHqR9WRFi/mJOzPp89qBl+h5rBw==
+Result signature: RiiRvYWBt/094G/krgMeuhN3k8BjHRzkM47OshNO2swzu+WE1rZ8lh3DEMDrXMuO3dvKCdPsuJzCfhRSa6a8DA==
+Comments signature: 0qzNuZr8VfDEGHVzAU/t1T3JJ0vQsIy0jOitMNCXSYCufOmSHarm8ybFRGt2R4KNUD3OSwU6beRsp7eIe8RnDQ==
