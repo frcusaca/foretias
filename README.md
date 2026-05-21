@@ -153,6 +153,26 @@ Intra-family communication uses direct method calls. Only Communerd communicates
 
 The `TimeFamilyServer` holds `Arc<Chronomatter>`, `Arc<Calendar>`, and `Option<Arc<Communerd>>`, exposing JSON-RPC and HTTP endpoints for stamp, verify, and calendar queries.
 
+### Type-Enforced Trust Boundaries
+
+Foretias enforces a compiler-guaranteed three-stage type progression for all inbound data:
+
+```
+Unprocessed<X>  →  CleanAuthenticated<X>  →  Externalized<X>
+(parsed,        →  (authenticated +       →  (wire/disk format,
+ untrusted)         cleansed, trusted)          minimal fields)
+```
+
+Each type has strict boundaries on where it may appear:
+
+| Type | Allowed Locations | Forbidden Locations |
+|------|------------------|---------------------|
+| **`Unprocessed<X>`** | Communerd inbound handlers, unit tests | Everywhere else — Chronomatter, Calendar, core-engine domain logic |
+| **`CleanAuthenticated<X>`** | Chronomatter, Calendar, core-engine domain logic, intra-family communication | Never at wire/disk boundaries |
+| **`Externalized<X>`** | Communerd outbound (wire), Calendar storage (disk) | Never in domain logic or intra-family communication |
+
+The compiler refuses any code path that consumes untrusted inbound data as if it were safe. `CleanAuthenticated<X>` has private constructors — the only two gates are `into_clean_authenticated()` (inbound, requires verification) and `from_trusted()` (local, for data created locally).
+
 ## Tech Stack
 
 - **C11 core** — Verified cryptographic primitives (Ed25519 via libsodium, SHA-256, BLAKE3, Noise protocol, Merkle trees, FROST)

@@ -27,6 +27,7 @@ use foretias_core::foretias::clean_auth::{UnprocessedForetis, CleanAuthenticated
 use foretias_core::foretias::tick::{Foretis, ChrononRecord};
 use foretias_core::foretias::types::Tbid;
 
+use crate::calendar::Calendar;
 use self::json_rpc_transport::JsonRpcTransport;
 use self::libp2p_transport::Libp2pTransport;
 use self::peer_pool::PeerPool;
@@ -93,6 +94,7 @@ pub struct Communerd {
     _local_multiaddr_arc: Arc<std::sync::Mutex<Option<libp2p::Multiaddr>>>,
     tbid_index: Arc<std::sync::RwLock<HashMap<String, PeerRegistrationRecord>>>,
     pending_lookups: Arc<std::sync::Mutex<HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<PeerRegistrationRecord>>>>>,
+    calendar: Arc<std::sync::RwLock<Option<Arc<Calendar>>>>,
 }
 
 impl Clone for Communerd {
@@ -116,6 +118,7 @@ impl Clone for Communerd {
             _local_multiaddr_arc: Arc::clone(&self._local_multiaddr_arc),
             tbid_index: Arc::clone(&self.tbid_index),
             pending_lookups: Arc::clone(&self.pending_lookups),
+            calendar: Arc::clone(&self.calendar),
         }
     }
 }
@@ -152,6 +155,7 @@ impl Communerd {
             _local_multiaddr_arc: Arc::new(std::sync::Mutex::new(None)),
             tbid_index: Arc::new(std::sync::RwLock::new(HashMap::new())),
             pending_lookups: Arc::new(std::sync::Mutex::new(HashMap::new())),
+            calendar: Arc::new(std::sync::RwLock::new(None)),
         }
     }
 
@@ -281,6 +285,10 @@ impl Communerd {
 
     pub fn crypto_server(&self) -> Arc<dyn CryptoServer> {
         Arc::clone(&self.crypto)
+    }
+
+    pub fn set_calendar(&self, calendar: Arc<Calendar>) {
+        *self.calendar.write().unwrap() = Some(calendar);
     }
 
     pub fn namespace(&self) -> String {

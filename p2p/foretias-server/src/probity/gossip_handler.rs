@@ -6,6 +6,29 @@ use foretias_core::crypto_server::CryptoServer;
 use super::report::ProbityReport;
 use super::store::ProbityStore;
 
+/// Trait for resolving a reporter's Ed25519 public key from their TBID hex.
+pub trait ReporterKeyResolver {
+    fn resolve_public_key(&self, reporter_tbid_hex: &str) -> Result<Vec<u8>, NodeError>;
+}
+
+/// Default implementation: extracts the first 32 bytes from the TBID hex.
+/// For Ed25519, the first 64 hex chars (32 bytes) of the TBID are the public key.
+pub struct DefaultReporterKeyResolver;
+
+impl ReporterKeyResolver for DefaultReporterKeyResolver {
+    fn resolve_public_key(&self, reporter_tbid_hex: &str) -> Result<Vec<u8>, NodeError> {
+        let tbid_bytes = hex::decode(reporter_tbid_hex)
+            .map_err(|e| NodeError::BadFormat(format!("invalid reporter TBID hex: {}", e)))?;
+        if tbid_bytes.len() < 32 {
+            return Err(NodeError::BadFormat(format!(
+                "reporter TBID too short for Ed25519: {} bytes (need 32)",
+                tbid_bytes.len()
+            )));
+        }
+        Ok(tbid_bytes[..32].to_vec())
+    }
+}
+
 pub fn handle_gossip_message(
     data:         &[u8],
     store:        &ProbityStore,

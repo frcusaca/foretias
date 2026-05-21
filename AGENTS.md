@@ -556,6 +556,48 @@ opencode 1.14.39, Qwen3.6-27B-AWQ-BF16-INT4
 **NEVER** start file changes for project Phase or larger WHEN any tests are broken.
 **NEVER** start large project segment work WHEN ANY tests are broken even if there're notes indicating those breakage are known. The test has to be manually disabled by human OR repaired and committed.
 
+## TYPE-ENFORCED TRUST BOUNDARIES (Mandatory)
+
+Foretias enforces a three-stage type progression for all inbound data:
+
+```
+Unprocessed<X>  →  CleanAuthenticated<X>  →  Externalized<X>
+(parsed,        →  (authenticated +       →  (wire/disk format,
+ untrusted)         cleansed, trusted)          minimal fields)
+```
+
+### Where Each Type May Appear
+
+| Type | Allowed Locations | Forbidden Locations |
+|------|------------------|---------------------|
+| **`Unprocessed<X>`** | Communerd inbound handlers ONLY (`communerd/mod.rs`, `handlers.rs`, `gossip_handler.rs`), unit tests | Everywhere else — Chronomatter, Calendar, core-engine domain logic |
+| **`CleanAuthenticated<X>`** | Chronomatter, Calendar, core-engine domain logic, intra-family communication | Never at wire/disk boundaries |
+| **`Externalized<X>`** | Communerd outbound (wire transmission), Calendar storage (disk persistence) | Never in domain logic or intra-family communication |
+
+### Transition Points
+
+1. **Inbound Gate (Communerd):** Raw bytes → `Unprocessed<X>` → `CleanAuthenticated<X>` (via `into_clean_authenticated()`)
+2. **Intra-Family:** Only `CleanAuthenticated<X>` flows between Chronomatter, Calendar, and server logic
+3. **Outbound Gate (Communerd/Calendar):** `CleanAuthenticated<X>` → `Externalized<X>` (via `externalize()`) for wire/disk
+
+### Code Review Checklist
+
+Before approving any Rust changes, verify:
+- **No `Unprocessed<X>`** escapes Communerd or test code
+- **No `Externalized<X>`** appears in domain logic (Chronomatter, core-engine)
+- **No direct `CleanAuthenticated<X>` construction** outside `clean_auth.rs` (private constructors)
+- **No raw domain types** (`ChrononRecord`, `Foretis`, etc.) at trust boundaries — always wrapped
+
+### Constructor Discipline
+
+`CleanAuthenticated<X>` has **private constructors**. The only two gates are:
+- `into_clean_authenticated()` — inbound gate (Unprocessed → CleanAuthenticated, requires verification)
+- `from_trusted()` — local gate (domain type → CleanAuthenticated, for data created locally)
+
+Never construct `CleanAuthenticated<X>` directly. The compiler enforces this.
+
+---
+
 ## How To Write Rust Code
 
 This chapter applies to Rust code in both projects:
