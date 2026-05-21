@@ -23,6 +23,7 @@ use foretias_core::core::bindings::ForetiasPubKey32;
 use foretias_core::crypto_server::{CryptoServer, new_software, ForetiasCurve};
 use foretias_core::error::NodeError;
 use foretias_core::foretias::callbacks::{CommunityQuery, CommunityResponse, PeerAddr as CorePeerAddr, PeerMessenger, TransportError as CoreTransportError};
+use foretias_core::foretias::clean_auth::{UnprocessedForetis, CleanAuthenticatedForetis};
 use foretias_core::foretias::tick::{Foretis, ChrononRecord};
 use foretias_core::foretias::types::Tbid;
 
@@ -52,6 +53,21 @@ pub struct PeerRegistrationRecord {
 
 fn default_capabilities() -> Vec<PeerCapability> {
     vec![PeerCapability::AttestWilling]
+}
+
+/// Structural validation for a DHT-retrieved PeerRegistrationRecord.
+/// Rejects records with empty or malformed fields before trusting any data.
+fn validate_peer_registration(record: &PeerRegistrationRecord) -> bool {
+    if record.peer_id.is_empty() {
+        return false;
+    }
+    if record.tbid.len() < 64 || record.tbid.chars().any(|c| !c.is_ascii_hexdigit()) {
+        return false;
+    }
+    if record.json_rpc.is_empty() {
+        return false;
+    }
+    true
 }
 
 /// Communerd — all P2P traffic flows through this component.
@@ -166,8 +182,13 @@ impl Communerd {
         } else {
             self.transport.stamp(peer, content_hex, echo).await?
         };
-        let foretis: Foretis = serde_json::from_value(result)
+        let unprocessed = UnprocessedForetis::from_json_value(result)
             .map_err(|e| TransportError::Decode(e.to_string()))?;
+        let f = unprocessed.inner();
+        if f.chronon_number == 0 || f.signature.is_empty() || f.signature_algorithm.is_empty() {
+            return Err(TransportError::Decode("structurally invalid Foretis: chronon_number == 0, empty signature, or empty signature_algorithm".into()));
+        }
+        let foretis = CleanAuthenticatedForetis::from_trusted(unprocessed.0).into_inner();
         Ok(foretis)
     }
 
@@ -198,8 +219,13 @@ impl Communerd {
         } else {
             self.transport.route_stamp(&peer, target_tbid, content_hex, echo).await?
         };
-        let foretis: Foretis = serde_json::from_value(result)
+        let unprocessed = UnprocessedForetis::from_json_value(result)
             .map_err(|e| TransportError::Decode(e.to_string()))?;
+        let f = unprocessed.inner();
+        if f.chronon_number == 0 || f.signature.is_empty() || f.signature_algorithm.is_empty() {
+            return Err(TransportError::Decode("structurally invalid Foretis: chronon_number == 0, empty signature, or empty signature_algorithm".into()));
+        }
+        let foretis = CleanAuthenticatedForetis::from_trusted(unprocessed.0).into_inner();
         Ok(foretis)
     }
 
@@ -209,6 +235,8 @@ impl Communerd {
         tick_start: u64,
         count: u64,
     ) -> Result<Vec<ChrononRecord>, TransportError> {
+        // TODO(Phase B.4): Add chain verification for returned ChrononRecords using
+        // UnprocessedChrononRecord -> CleanAuthenticatedChrononRecord flow.
         if peer.peer_id.is_some() && self.p2p_cmd_tx.get().is_some() {
             match self.libp2p_transport.get_calendar_slice(peer, tick_start, count).await {
                 Ok(r) => {
@@ -425,6 +453,10 @@ impl Communerd {
                     if (&*key.to_vec()).ends_with(b"/peers/v1") {
                         for record in &records {
                             if let Ok(peer_record) = serde_json::from_slice::<PeerRegistrationRecord>(&record.value) {
+                                if !validate_peer_registration(&peer_record) {
+                                    tracing::warn!(component = "communerd", peer_id = %peer_record.peer_id, "communerd: DHT peer record failed structural validation, skipping");
+                                    continue;
+                                }
                                 let peer_addr = PeerAddr {
                                     json_rpc: peer_record.json_rpc.clone(),
                                     peer_id: peer_record.peer_id.parse().ok(),
@@ -444,6 +476,10 @@ impl Communerd {
                         if key_str.contains("/tbid/") {
                             for record in &records {
                                 if let Ok(peer_record) = serde_json::from_slice::<PeerRegistrationRecord>(&record.value) {
+                                    if !validate_peer_registration(&peer_record) {
+                                        tracing::warn!(component = "communerd", tbid = %peer_record.tbid, "communerd: DHT TBID record failed structural validation, skipping");
+                                        continue;
+                                    }
                                     let tbid_hex = peer_record.tbid.clone();
                                     tbid_index.write().unwrap().insert(tbid_hex.clone(), peer_record.clone());
                                     tracing::debug!(tbid = %tbid_hex, "TBID index record cached");
@@ -451,7 +487,7 @@ impl Communerd {
                             }
                             if let Some(sender) = pending_lookups.lock().unwrap().remove(&key) {
                                 let result = records.iter().find_map(|r| {
-                                    serde_json::from_slice::<PeerRegistrationRecord>(&r.value).ok()
+                                    serde_json::from_slice::<PeerRegistrationRecord>(&r.value).ok().filter(|rec| validate_peer_registration(rec))
                                 });
                                 let _ = sender.send(result);
                             }

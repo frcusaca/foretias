@@ -1,9 +1,11 @@
 use serde_json::Value;
 
 use foretias_core::error::NodeError;
-use foretias_core::epoch::EpochSnapshot;
+use foretias_core::foretias::clean_auth::{
+    CleanAuthenticatedChrononRecord,
+    UnprocessedChrononRecord, UnprocessedForetis,
+};
 use foretias_core::foretias::tick::CalendarLookup;
-use foretias_core::foretias::Foretis;
 use super::jsonrpc::{self, JsonRpcResponse};
 use crate::metrics::MetricField;
 use super::TimeFamilyServer;
@@ -135,10 +137,15 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
             "missing 'content'".into()),
     };
 
-    let foretis: Foretis = match params.get("foretis").and_then(|v| serde_json::from_value(v.clone()).ok()) {
-        Some(f) => f,
+    let unproc_foretis = match params.get("foretis") {
+        Some(v) => UnprocessedForetis::from_json_value(v.clone()),
         None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
             "missing or invalid 'foretis'".into()),
+    };
+    let unproc_foretis = match unproc_foretis {
+        Ok(f) => f,
+        Err(e) => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            format!("failed to parse foretis: {}", e)),
     };
 
     let content = match hex::decode(&content_hex) {
@@ -156,31 +163,42 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
+    let foretis_ref = unproc_foretis.inner();
+
     // Try local calendar first
-    let cm = server.chronomatter();
+    let crypto = server.chronomatter().crypto_server();
     let calendar = server.calendar().inner();
     let cal_read = calendar.read();
-    let local_result = cm.verify(&foretis, &content, &*cal_read);
+    let local_records = cal_read.get(foretis_ref.chronon_number, 1);
+    let local_valid = match local_records {
+        Ok(recs) if !recs.is_empty() => {
+            let calendar_record = CleanAuthenticatedChrononRecord::from_trusted(recs[0].clone());
+            unproc_foretis
+                .clone()
+                .into_clean_authenticated(crypto.as_ref(), &content, &calendar_record)
+                .is_ok()
+        }
+        _ => false,
+    };
     drop(cal_read);
 
-    if let Ok(valid) = local_result {
-        return resp_success(server, id, serde_json::json!({"valid": valid, "method": "local"}));
+    if local_valid {
+        return resp_success(server, id, serde_json::json!({"valid": true, "method": "local"}));
     }
 
     // Local calendar miss — if cross_node is enabled, try DHT lookup
     if !cross_node {
-        // Fall back to returning false for unknown TBID (legacy behavior)
         return resp_success(server, id, serde_json::json!({"valid": false, "method": "local", "note": "foretis.tbid not found in local calendar"}));
     }
 
-    let foretis_tbid_hex = foretis.tbid.to_hex();
-    if foretis.tbid == server.get_tbid() {
+    let foretis_tbid_hex = foretis_ref.tbid.to_hex();
+    if foretis_ref.tbid == server.get_tbid() {
         return resp_success(server, id, serde_json::json!({"valid": false, "method": "local", "note": "own TBID but calendar miss"}));
     }
 
     // Cross-node verification: lookup TBID owner via DHT, fetch calendar slice, retry
     match tokio::runtime::Handle::current().block_on(async {
-        cross_node_verify(server, &foretis, &content, &foretis_tbid_hex).await
+        cross_node_verify(server, &unproc_foretis, &content, &foretis_tbid_hex).await
     }) {
         Ok(valid) => resp_success(server, id, serde_json::json!({"valid": valid, "method": "cross_node"})),
         Err(e) => resp_error(server, id, jsonrpc::INTERNAL_ERROR,
@@ -190,10 +208,11 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
 
 async fn cross_node_verify(
     server: &TimeFamilyServer,
-    foretis: &Foretis,
+    unproc_foretis: &UnprocessedForetis,
     content: &[u8],
     foretis_tbid_hex: &str,
 ) -> Result<bool, NodeError> {
+    let foretis_ref = unproc_foretis.inner();
     let Some(com) = server.communerd() else {
         return Err(NodeError::Internal("P2P not enabled".into()));
     };
@@ -207,33 +226,34 @@ async fn cross_node_verify(
         peer_id: owner.peer_id.parse().ok(),
         last_seen_ns: 0,
     };
-    let records = com.get_calendar_slice(&owner_peer, foretis.chronon_number, 1).await
+    let records = com.get_calendar_slice(&owner_peer, foretis_ref.chronon_number, 1).await
         .map_err(|e| NodeError::Internal(format!("calendar fetch failed: {}", e)))?;
 
-    let rec = records.first().ok_or_else(|| NodeError::Internal(format!("tick {} not found on owner", foretis.chronon_number)))?;
+    let rec = records.first().ok_or_else(|| NodeError::Internal(format!("tick {} not found on owner", foretis_ref.chronon_number)))?;
 
-    // Reconcile algorithms
-    if rec.signature_algorithm != foretis.signature_algorithm {
+    if rec.chronon_number != foretis_ref.chronon_number {
+        return Err(NodeError::AlgorithmMismatch(
+            format!("tick chronon_number {} doesn't match Foretis {}",
+                rec.chronon_number, foretis_ref.chronon_number)
+        ));
+    }
+    if rec.signature_algorithm != foretis_ref.signature_algorithm {
         return Err(NodeError::AlgorithmMismatch(
             format!("tick uses '{}' but Foretis claims '{}'",
-                rec.signature_algorithm, foretis.signature_algorithm)
+                rec.signature_algorithm, foretis_ref.signature_algorithm)
         ));
     }
 
-    // Rebuild signature input and verify
-    let cm = server.chronomatter();
-    let mut sig_input = Vec::new();
-    sig_input.extend_from_slice(&foretis.tbid.raw_bytes());
-    sig_input.extend_from_slice(&foretis.chronon_number.to_be_bytes());
-    sig_input.extend_from_slice(content);
+    let calendar_record = CleanAuthenticatedChrononRecord::from_trusted(rec.clone());
 
-    let crypto = cm.crypto_server();
-    crypto.verify_with(
-        &rec.public_key,
-        &rec.signature_algorithm,
-        &sig_input,
-        &foretis.signature,
-    ).map_err(|e| NodeError::Internal(e.to_string()))
+    let crypto = server.chronomatter().crypto_server();
+    let valid = unproc_foretis
+        .clone()
+        .into_clean_authenticated(crypto.as_ref(), content, &calendar_record)
+        .map_err(|e| NodeError::Internal(e.to_string()))
+        .map(|_| true)?;
+
+    Ok(valid)
 }
 
 pub fn handle_get_calendar_slice(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
@@ -437,13 +457,53 @@ pub fn handle_ship_ack(server: &TimeFamilyServer, params: Value) -> JsonRpcRespo
     let id = params.get("id").cloned();
 
     let tbid = params.get("tbid").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let records: Vec<foretias_core::foretias::tick::ChrononRecord> =
-        params.get("records").and_then(|v| serde_json::from_value(v.clone()).ok())
-            .unwrap_or_default();
+    let empty_vec: Vec<Value> = vec![];
+    let raw_records = params.get("records").and_then(|v| v.as_array()).unwrap_or(&empty_vec);
+    let unprocessed: Result<Vec<UnprocessedChrononRecord>, _> = raw_records
+        .iter()
+        .map(|v| UnprocessedChrononRecord::from_json_value(v.clone()))
+        .collect();
+    let unprocessed = match unprocessed {
+        Ok(r) => r,
+        Err(e) => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            format!("failed to parse records: {}", e)),
+    };
+
+    if unprocessed.is_empty() {
+        return resp_success(server, id, serde_json::json!({
+            "status": "acked",
+            "tbid": tbid,
+            "tick_count": server.mirror_store().mirror_tick_count(&tbid),
+        }));
+    }
+
+    let crypto = server.chronomatter().crypto_server();
+
+    let mut verified: Vec<CleanAuthenticatedChrononRecord> = Vec::new();
+    for (i, unproc) in unprocessed.into_iter().enumerate() {
+        let clean = if i == 0 {
+            if unproc.inner().chronon_number == 1 {
+                unproc.into_clean_authenticated_genesis(crypto.as_ref())
+            } else {
+                return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+                    "batch first record is not genesis (chronon_number != 1)".into());
+            }
+        } else {
+            let prev = verified.last().unwrap();
+            unproc.into_clean_authenticated(crypto.as_ref(), prev)
+        };
+        match clean {
+            Ok(v) => verified.push(v),
+            Err(e) => {
+                return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+                    format!("chain verification failed at record {}: {}", i, e));
+            }
+        }
+    }
 
     let mirror_store = server.mirror_store();
-    for record in records {
-        if let Err(e) = mirror_store.insert_mirrored(&tbid, record) {
+    for record in verified {
+        if let Err(e) = mirror_store.insert_mirrored(&tbid, record.into_inner()) {
             tracing::warn!("mirror insert failed for {}: {}", tbid, e);
         }
     }
@@ -462,15 +522,42 @@ pub fn handle_stream_tick(server: &TimeFamilyServer, params: Value) -> JsonRpcRe
 
     let tbid = params.get("tbid").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let chronon_number = params.get("chronon_number").and_then(|v| v.as_u64()).unwrap_or(0);
-    let record: foretias_core::foretias::tick::ChrononRecord =
-        match params.get("record").and_then(|v| serde_json::from_value(v.clone()).ok()) {
-            Some(r) => r,
-            None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-                "missing 'record'".into()),
-        };
+    let unproc = match params.get("record") {
+        Some(v) => UnprocessedChrononRecord::from_json_value(v.clone()),
+        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            "missing 'record'".into()),
+    };
+    let unproc = match unproc {
+        Ok(r) => r,
+        Err(e) => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            format!("failed to parse record: {}", e)),
+    };
 
+    let crypto = server.chronomatter().crypto_server();
     let mirror_store = server.mirror_store();
-    if let Err(e) = mirror_store.insert_mirrored(&tbid, record) {
+
+    let latest = mirror_store.latest_record(&tbid);
+    let verified = match latest {
+        Some(trusted_rec) => {
+            let prev = CleanAuthenticatedChrononRecord::from_trusted(trusted_rec);
+            unproc.into_clean_authenticated(crypto.as_ref(), &prev)
+        }
+        None => {
+            if unproc.inner().chronon_number == 1 {
+                unproc.into_clean_authenticated_genesis(crypto.as_ref())
+            } else {
+                return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+                    "non-genesis record without predecessor".into());
+            }
+        }
+    };
+    let verified = match verified {
+        Ok(v) => v,
+        Err(e) => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            format!("verification failed: {}", e)),
+    };
+
+    if let Err(e) = mirror_store.insert_mirrored(&tbid, verified.into_inner()) {
         return resp_error(server, id, jsonrpc::INTERNAL_ERROR,
             format!("mirror insert failed: {}", e));
     }
