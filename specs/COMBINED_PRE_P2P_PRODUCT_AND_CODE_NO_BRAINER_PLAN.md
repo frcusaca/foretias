@@ -16,8 +16,10 @@ This plan lists ten Tier-A no-brainers. Each is independently shippable and test
 
 ## Worktree Setup
 
-- [ ] Create worktree `git worktree add -b combined_pre_p2p_no_brainer ${HOME}/tmp/foretias-worktrees/COMBINED_PRE_P2P_PRODUCT_AND_CODE_NO_BRAINER_PLAN_4821`
-- [ ] `cd ${HOME}/tmp/foretias-worktrees/COMBINED_PRE_P2P_PRODUCT_AND_CODE_NO_BRAINER_PLAN_4821`; reset current session work directory to be the full worktree path.
+- [x] Create worktree `git worktree add -b combined_pre_p2p_no_brainer ${HOME}/tmp/foretias-worktrees/COMBINED_PRE_P2P_PRODUCT_AND_CODE_NO_BRAINER_PLAN_4821`
+      (2026-05-21 11:45)
+- [x] `cd ${HOME}/tmp/foretias-worktrees/COMBINED_PRE_P2P_PRODUCT_AND_CODE_NO_BRAINER_PLAN_4821`; reset current session work directory to be the full worktree path.
+      (2026-05-21 11:45)
 
 ## How to Work This Plan
 
