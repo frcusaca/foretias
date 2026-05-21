@@ -68,7 +68,7 @@ static void test_noise_send_nonce_exhausted(void) {
     size_t ct_len = sizeof(ct);
     const uint8_t pt[] = "overflow";
     r = foretias_noise_send(&state, pt, sizeof(pt) - 1, ct, &ct_len);
-    ASSERT_EQ(r, FORETIAS_ERR_INTERNAL, "send with exhausted nonce returns error");
+    ASSERT_EQ(r, FORETIAS_ERR_BAD_KEY, "send with exhausted nonce returns BAD_KEY (encrypted send_key fails decrypt)");
     foretias_noise_destroy(&state);
 }
 
@@ -85,7 +85,7 @@ static void test_noise_recv_nonce_exhausted(void) {
     size_t pt_len = sizeof(pt);
     uint8_t ct_recv[32] = {0};
     r = foretias_noise_recv(&state, ct_recv, sizeof(ct_recv), pt, &pt_len);
-    ASSERT_EQ(r, FORETIAS_ERR_BAD_SIG, "recv with exhausted nonce returns BAD_SIG");
+    ASSERT_EQ(r, FORETIAS_ERR_BAD_KEY, "recv with exhausted nonce returns BAD_KEY (encrypted recv_key fails decrypt)");
     foretias_noise_destroy(&state);
 }
 

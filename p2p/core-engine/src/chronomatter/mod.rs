@@ -348,7 +348,7 @@ impl Chronomatter {
         let foretis = Foretis {
             chronon_number: tick,
             content_hash: content_hash.bytes.into(),
-            signature: FTByteVector::from(sig.bytes.to_vec()),
+            signature: FTByteVector::from(sig),
             signature_algorithm: alg,
             tbid,
             echo,
