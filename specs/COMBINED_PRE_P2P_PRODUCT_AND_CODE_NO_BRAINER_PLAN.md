@@ -45,7 +45,8 @@ These two changes prevent callers from acting on a false-positive epoch verifica
 **Effort:** 15 min.
 **Acceptance:** unit test passes; no behavior depends on the old `valid: true`.
 
-- [ ] **A.1** Complete
+- [x] **A.1** Complete
+      (2026-05-21 11:45)
 
 ### Task A.2 — `handle_get_latest_epoch` returns JSON-RPC error instead of zero-stub
 
@@ -60,7 +61,8 @@ These two changes prevent callers from acting on a false-positive epoch verifica
 **Effort:** 15 min.
 **Acceptance:** clients consuming `get_latest_epoch` are forced to handle the unimplemented state explicitly.
 
-- [ ] **A.2** Complete
+- [x] **A.2** Complete
+      (2026-05-21 11:45)
 
 ---
 
@@ -85,7 +87,8 @@ if (*n == UINT64_MAX) return FORETIAS_ERR_NONCE_EXHAUSTED;
 **Effort:** 30 min.
 **Acceptance:** new test passes; existing Noise round-trip tests unchanged.
 
-- [ ] **B.1** Complete
+- [x] **B.1** Complete
+      (2026-05-21 11:45)
 
 ### Task B.2 — HKDF `info_len` overflow guard in `privkey.c`
 
@@ -99,7 +102,8 @@ if (info_len > 63) return FORETIAS_ERR_BAD_INPUT;
 **Effort:** 20 min.
 **Acceptance:** new tests pass; existing seal-key derivation tests unchanged.
 
-- [ ] **B.2** Complete
+- [x] **B.2** Complete
+      (2026-05-21 11:45)
 
 ---
 
@@ -143,7 +147,8 @@ if (sig->len > FORETIAS_SIG_MAX_SIG_BYTES) return FORETIAS_ERR_BAD_INPUT;
 **Effort:** 30 min (both files).
 **Acceptance:** new tests pass; existing PQC tests unchanged.
 
-- [ ] **C.2** Complete
+- [x] **C.2** Complete
+      (2026-05-21 11:45)
 
 ### Task C.3 — Bound length-prefixed allocation in libp2p RPC codec
 
@@ -160,7 +165,8 @@ if len > MAX_RPC_FRAME_BYTES {
 **Effort:** 30 min.
 **Acceptance:** new test passes; existing libp2p RPC tests unchanged.
 
-- [ ] **C.3** Complete
+- [x] **C.3** Complete
+      (2026-05-21 11:45)
 
 ---
 
@@ -179,7 +185,8 @@ Two small Rust correctness fixes that close silent-failure modes.
 **Effort:** 10 min.
 **Acceptance:** new tests pass; any test fixtures that previously relied on the default (likely none) are updated.
 
-- [ ] **D.1** Complete
+- [x] **D.1** Complete
+      (2026-05-21 11:45)
 
 ### Task D.2 — Query algorithm from `CryptoServer` rather than hardcoding `Ed25519`
 
@@ -190,7 +197,8 @@ Two small Rust correctness fixes that close silent-failure modes.
 **Effort:** 30 min.
 **Acceptance:** new test passes; existing stamp tests (which use the default Ed25519 backend) continue to pass.
 
-- [ ] **D.2** Complete
+- [x] **D.2** Complete
+      (2026-05-21 11:45)
 
 ---
 
@@ -211,7 +219,8 @@ Remove the `map_err(|e| NodeError::Internal(format!("tick counter conflict: {}",
 **Effort:** 40 min.
 **Acceptance:** new stress test passes; existing single-threaded stamp tests pass unchanged.
 
-- [ ] **E.1** Complete
+- [x] **E.1** Complete
+      (2026-05-21 11:45)
 
 ---
 
@@ -281,8 +290,10 @@ The following items from COMBINED were considered and explicitly excluded from t
 
 ## Worktree Teardown
 
-- [ ] Verify all work is complete in `${HOME}/tmp/foretias-worktrees/COMBINED_PRE_P2P_PRODUCT_AND_CODE_NO_BRAINER_PLAN_4821` and committed to `combined_pre_p2p_no_brainer`
-- [ ] Merge `combined_pre_p2p_no_brainer` to alpha
+- [x] Verify all work is complete in `${HOME}/tmp/foretias-worktrees/COMBINED_PRE_P2P_PRODUCT_AND_CODE_NO_BRAINER_PLAN_4821` and committed to `combined_pre_p2p_no_brainer`
+      (2026-05-21 11:45)
+- [x] Merge `combined_pre_p2p_no_brainer` to alpha
+      (2026-05-21 11:45)
 
 ## Completion Criteria
 
