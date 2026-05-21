@@ -134,12 +134,8 @@ impl SoftwareCryptoServer {
 
 impl Drop for SoftwareCryptoServer {
     fn drop(&mut self) {
-        // REQ-Z2.2: Field drop order (Rust source order):
-        // 1. priv_key (PrivKeyHandle)  -> C11 foretias_privkey_free -> sodium_memzero
-        // 2. seal_key (Zeroizing<[u8;32]>)  -> Zeroizing::drop -> ptr::write_volatile zero
-        // 3. PQC secrets (Zeroizing<SignatureBytes>)  -> Zeroizing::drop
-        // 4. frost_shares (Mutex<HashMap<_, Zeroizing<Vec<u8>>>>)  -> per-entry Zeroizing::drop
-        // No manual fill(0) needed for Zeroizing fields; only seal_key needs it here.
+        // Zeroize seal key manually; Zeroizing wrappers on PQC secret keys
+        // already handle zeroization on drop, so no need to repeat here.
         self.seal_key.fill(0);
     }
 }

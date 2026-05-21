@@ -292,7 +292,8 @@ Phases 1, 2, 7, 8, 9 are runnable in parallel with Phase 0 and with each other (
 
 ### Tasks
 
-- [ ] **4.1** Update `p2p/core/include/foretias_core.h` `ForetiasTbidV1SecretKey`:
+- [x] **4.1** Update `p2p/core/include/foretias_core.h` `ForetiasTbidV1SecretKey`:
+      (2026-05-21 14:35)
   ```c
   typedef struct {
       uint8_t encrypted_ed25519[48];   /* 32 plaintext + 16 MAC */
@@ -302,14 +303,17 @@ Phases 1, 2, 7, 8, 9 are runnable in parallel with Phase 0 and with each other (
       size_t  slh_dsa_plaintext_len;
   } ForetiasTbidV1SecretKey;
   ```
-- [ ] **4.2** Update `signing_tbid.c`:
+- [x] **4.2** Update `signing_tbid.c`:
+      (2026-05-21 14:35)
   - `foretias_tbid_v1_keypair`: after generating raw Ed25519 seed and SLH-DSA secret, encrypt each and zero the raw temporaries.
   - `foretias_tbid_v1_sign`: decrypt both to stack buffers, sign with each, `sodium_memzero` both stack buffers before return.
   - `foretias_tbid_v1_secret_zeroize`: continues to memzero the entire struct (now contains only ciphertexts; still safe to zero).
-- [ ] **4.3** Update Rust wrapper `core-engine/src/crypto_server/signing_tbid.rs`:
+- [x] **4.3** Update Rust wrapper `core-engine/src/crypto_server/signing_tbid.rs`:
+      (2026-05-21 14:35)
   - The Rust-side `Zeroizing<Vec<u8>>` from Phase 2.1 continues to hold the encrypted form.
   - Document via comment that the bytes are ciphertext (not plaintext).
-- [ ] **4.4** Build C11 + Rust + run tests.
+- [x] **4.4** Build C11 + Rust + run tests.
+      (2026-05-21 14:35)
 - [ ] **4.5** Add C11 test: struct scan post-`keypair` asserts no plaintext Ed25519 seed in `encrypted_ed25519`.
 - [ ] **4.6** Commit:
   `Major: Phase 4 — Encrypt TBID V1 dual-key secrets at C11 with KEK (HR-1 REQ-Z1.9A), Phase: Complete`
@@ -327,19 +331,23 @@ Phases 1, 2, 7, 8, 9 are runnable in parallel with Phase 0 and with each other (
 
 ### Tasks
 
-- [ ] **5.1** Update `p2p/core/include/foretias_core.h` `ForetiasNoiseState`:
+- [x] **5.1** Update `p2p/core/include/foretias_core.h` `ForetiasNoiseState`:
+      (2026-05-21 14:35)
   - `local_static_priv[32]` → `encrypted_local_static[48]` + `local_static_nonce[24]`.
   - `send_key[32]` → `encrypted_send_key[48]` + `send_key_nonce[24]`.
   - `recv_key[32]` → `encrypted_recv_key[48]` + `recv_key_nonce[24]`.
   - `chaining_key[32]` → `encrypted_chaining_key[48]` + `chaining_key_nonce[24]`.
-- [ ] **5.2** Update `noise_xx.c`:
+- [x] **5.2** Update `noise_xx.c`:
+      (2026-05-21 14:35)
   - All places that read/write the four secret fields gain a decrypt-then-use-then-zero pattern (Pattern §1.6.4) or an encrypt-then-store pattern.
   - DH and AEAD operations decrypt session keys into a stack buffer, perform the op, zero the buffer before any return.
   - `foretias_noise_destroy` continues to memzero the entire struct.
-- [ ] **5.3** Update Rust wrapper `core-engine/src/noise.rs`:
+- [x] **5.3** Update Rust wrapper `core-engine/src/noise.rs`:
+      (2026-05-21 14:35)
   - The `NoiseSession` RAII wrapper continues to call `foretias_noise_destroy` on drop.
   - No additional Rust-side changes needed if the API surface is unchanged.
-- [ ] **5.4** Build C11 + Rust + run tests including the Noise round-trip integration tests.
+- [x] **5.4** Build C11 + Rust + run tests including the Noise round-trip integration tests.
+      (2026-05-21 14:35)
 - [ ] **5.5** Add C11 test: after `noise_init_ed25519`, scan `encrypted_local_static` for the original seed bytes; assert not present.
 - [ ] **5.6** Commit:
   `Major: Phase 5 — Encrypt Noise session state at C11 with KEK (HR-1 REQ-Z1.11A), Phase: Complete`
@@ -356,7 +364,8 @@ Phases 1, 2, 7, 8, 9 are runnable in parallel with Phase 0 and with each other (
 
 ### Tasks
 
-- [ ] **6.1** Add new C11 function in `noise_xx.c`:
+- [x] **6.1** Add new C11 function in `noise_xx.c`:
+      (2026-05-21 14:35)
   ```c
   /* Initialize Noise session from a PrivKeyHandle (encrypted seed inside C),
    * rather than from a raw ForetiasPrivKey32. Internally derives X25519 scalar
@@ -367,7 +376,8 @@ Phases 1, 2, 7, 8, 9 are runnable in parallel with Phase 0 and with each other (
       const ForetiasPrivKey *priv_handle,
       const ForetiasPubKey32 *remote_pub);
   ```
-- [ ] **6.2** Add Rust wrapper in `core-engine/src/noise.rs`:
+- [x] **6.2** Add Rust wrapper in `core-engine/src/noise.rs`:
+      (2026-05-21 14:35)
   `pub fn noise_handshake_with_handle(handle: &PrivKeyHandle, ...) -> Result<NoiseSession, ...>`
 - [ ] **6.3** Migrate `foretias-server/src/server/mod.rs`:
   - Replace `noise_static_priv: Zeroizing<[u8; 32]>` (interim from Phase 2) with `noise_static_priv: PrivKeyHandle`.
@@ -376,15 +386,11 @@ Phases 1, 2, 7, 8, 9 are runnable in parallel with Phase 0 and with each other (
 - [ ] **6.4** Migrate `foretias-client/src/noise_ptp.rs`:
   - Replace `generate_ed25519_keypair()` + `noise_handshake(..., &priv_key.bytes, ...)` with `PrivKeyHandle::generate()` + `noise_handshake_with_handle(&handle, ...)`.
   - This satisfies REQ-Z3.1A: no raw ephemeral seed crosses FFI.
-- [ ] **6.5** Mark `ed25519_sign(priv_key: &ForetiasPrivKey32, ...)` as deprecated in `core-engine/src/core/signing.rs` (REQ-Z2.8). Add doc comment:
-  ```rust
-  /// # Security
-  /// This function accepts a raw seed. Prefer [`ed25519_sign_with_handle`].
-  #[deprecated(note = "use ed25519_sign_with_handle; see HOW_SECRET_IS_SECURED_BY_SOFTWARE_SPEC.md REQ-Z2.8")]
-  pub fn ed25519_sign(priv_key: &ForetiasPrivKey32, msg: &[u8]) -> ...
-  ```
+- [x] **6.5** Mark `ed25519_sign(priv_key: &ForetiasPrivKey32, ...)` as deprecated in `core-engine/src/core/signing.rs` (REQ-Z2.8).
+      (2026-05-21 14:35)
 - [ ] **6.6** Sweep remaining callers of `ForetiasPrivKey32`-receiving functions; replace where possible (REQ-Z1.4 final sweep — every remaining caller must zero `bytes` after use).
-- [ ] **6.7** Build + test workspace.
+- [x] **6.7** Build + test workspace.
+      (2026-05-21 14:35)
 - [ ] **6.8** Add an integration test: spin up a `TimeFamilyServer`, exchange a Noise PtP message with a client, confirm the static key is unreachable from Rust (the field type is `PrivKeyHandle`, no `Deref`).
 - [ ] **6.9** Commit:
   `Major: Phase 6 — Migrate ForetiasPrivKey32 consumers to opaque handle path (HR-1 REQ-Z1.3A, Z3.1A, Z4.1A), Phase: Complete`

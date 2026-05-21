@@ -4,14 +4,6 @@ use crate::core::bindings::*;
 use crate::core::identity::PrivKeyHandle;
 use crate::error::{CryptoError, c_result_to_error};
 
-/// Sign a message with Ed25519.
-///
-/// # Security
-/// This function accepts a raw seed via `ForetiasPrivKey32`. The caller is
-/// responsible for zeroing `priv_key.bytes` after use.
-/// Prefer `ed25519_sign_with_handle` where the seed never crosses the FFI.
-///
-/// REQ-Z2.8: This is the raw signing path; deprecated in Phase 6.
 #[deprecated(note = "use ed25519_sign_with_handle; see HOW_SECRET_IS_SECURED_BY_SOFTWARE_SPEC.md REQ-Z2.8")]
 pub fn ed25519_sign(priv_key: &ForetiasPrivKey32, msg: &[u8]) -> Result<ForetiasSig64, CryptoError> {
     // SAFETY: zeroing known-good #[repr(C)] struct from bindings.

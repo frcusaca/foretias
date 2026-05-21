@@ -1,12 +1,3 @@
-/*
- * ML-KEM-768 key encapsulation interface.
- *
- * REQ-Z0.4 (Zeroing split):
- *   - C layer (this file): zeroes on failure paths via OQS_MEM_cleanse.
- *     On success, the caller (Rust wrapper) owns the secret struct.
- *   - Rust layer (kem_mlkem.rs): wraps ForetiasKemSecretKey in
- *     Zeroizing<SignatureBytes>; zeroed on drop automatically.
- */
 #include "platform.h"
 #include "foretias_core.h"
 #include <oqs/oqs.h>

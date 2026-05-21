@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use std::sync::Arc;
+use zeroize::Zeroizing;
 
 use axum::extract::State;
 use axum::routing::post;
@@ -32,13 +33,6 @@ pub mod config;
 
 pub use config::ForetiasServerConfig;
 
-/// TimeFamilyServer — orchestrator for Chronomatter, Calendar, and Communerd.
-///
-/// REQ-Z4.2: `noise_static_priv` is the Noise_XX static secret key for PtP connections.
-/// After Phase 6 migration, this field will be a `PrivKeyHandle` whose Drop zeros
-/// the key via C11 `foretias_privkey_free`. Currently it is a raw `[u8;32]` (interim
-/// Phase 2 state); it is zeroed by the struct's natural Drop when all bytes are
-/// reclaimed.
 pub struct TimeFamilyServer {
     chronomatter: Arc<Chronomatter>,
     calendar: Arc<Calendar>,
@@ -47,8 +41,7 @@ pub struct TimeFamilyServer {
     listen_addr: String,
     persist_path: Option<std::path::PathBuf>,
     metrics: Arc<NodeMetrics>,
-    /// REQ-Z4.2: Noise static private key (interim `[u8;32]`; Phase 6 migrates to `PrivKeyHandle`).
-    noise_static_priv: [u8; 32],
+    noise_static_priv: Zeroizing<[u8; 32]>,
     noise_static_pub: [u8; 32],
 }
 
@@ -83,7 +76,9 @@ impl TimeFamilyServer {
         let communerd = config.map(|c| {
             Arc::new(Communerd::new(c))
         });
-        let (pub_key, priv_key) = generate_ed25519_keypair()?;
+        let (pub_key, mut priv_key) = generate_ed25519_keypair()?;
+        let noise_static_priv = Zeroizing::new(priv_key.bytes);
+        priv_key.bytes.fill(0);
         Ok(Self {
             chronomatter: Arc::new(cm),
             calendar,
@@ -92,7 +87,7 @@ impl TimeFamilyServer {
             listen_addr: listen_addr.to_string(),
             persist_path,
             metrics,
-            noise_static_priv: priv_key.bytes,
+            noise_static_priv,
             noise_static_pub: pub_key.bytes,
         })
     }
@@ -110,7 +105,9 @@ impl TimeFamilyServer {
         let metrics = Arc::new(NodeMetrics::new());
         cm.set_mutual_attest_observer(Arc::clone(&metrics) as Arc<dyn MutualAttestObserver>);
         let calendar = Arc::new(Calendar::from_persisted(path)?);
-        let (pub_key, priv_key) = generate_ed25519_keypair()?;
+        let (pub_key, mut priv_key) = generate_ed25519_keypair()?;
+        let noise_static_priv = Zeroizing::new(priv_key.bytes);
+        priv_key.bytes.fill(0);
         Ok(Self {
             chronomatter: Arc::new(cm),
             calendar,
@@ -119,7 +116,7 @@ impl TimeFamilyServer {
             listen_addr: listen_addr.to_string(),
             persist_path: None,
             metrics,
-            noise_static_priv: priv_key.bytes,
+            noise_static_priv,
             noise_static_pub: pub_key.bytes,
         })
     }
@@ -315,7 +312,7 @@ async fn handle_connection(
     server: Arc<TimeFamilyServer>,
     stream: tokio::net::TcpStream,
 ) -> Result<(), NodeError> {
-    let static_priv = server.noise_static_priv;
+    let static_priv = &*server.noise_static_priv;
 
     let (mut session, stream) = match noise::noise_handshake(stream, &static_priv, None, false).await {
         Ok(res) => res,

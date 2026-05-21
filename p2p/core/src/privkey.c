@@ -12,13 +12,6 @@
  * Even if an attacker dumps the encrypted key handle from memory, they
  * cannot recover the seed without this KEK — which is process-local and
  * zeroized on cleanup.
- *
- * REQ-Z1.2 (Design Exemption): The KEK is a per-process global state
- * variable rather than a per-key-derivation. This is intentional:
- * deriving a fresh KEK per key would require a KDF + persistent storage
- * of the KDF input, which is a larger attack surface. The current design
- * relies on the KEK being process-local (not serialized) and zeroized on
- * cleanup. See HOW_SECRET_IS_SECURED_BY_SOFTWARE_SPEC.md §REQ-Z1.2.
  * ─────────────────────────────────────────────────────────────────────── */
 
 static uint8_t  instance_kek[32];
@@ -36,60 +29,24 @@ static void derive_nonce(uint8_t nonce[24], uint64_t counter) {
     sodium_memzero(hash, sizeof hash);
 }
 
-/* ── Public API: generic encrypt/decrypt ───────────────────────────────
- *
- * Encrypt arbitrary-length plaintext with the instance KEK.
- * Uses ChaCha20-Poly1305 AEAD (libsodium crypto_secretbox).
- * The monotonic counter (key_gen_counter) provides a unique nonce per call.
- * 2^96 nonces per process is the budget — more than sufficient for any
- * realistic deployment.
- *
- * Decrypt arbitrary-length ciphertext with the instance KEK.
- * Returns FORETIAS_OK on success; FORETIAS_ERR_BAD_SIG on MAC failure.
- */
-ForetiasResult foretias_privkey_encrypt(
-    const uint8_t *plaintext,
-    size_t         pt_len,
-    uint8_t       *ciphertext_out,
-    uint8_t       *nonce_out
-) {
-    if (!instance_kek_initialized || !plaintext || !ciphertext_out || !nonce_out)
-        return FORETIAS_ERR_BAD_INPUT;
-
-    key_gen_counter++;
-    derive_nonce(nonce_out, key_gen_counter);
-
-    int rc = crypto_secretbox_easy(ciphertext_out, plaintext, (unsigned long long)pt_len,
-                                   nonce_out, instance_kek);
-    return (rc == 0) ? FORETIAS_OK : FORETIAS_ERR_INTERNAL;
-}
-
-ForetiasResult foretias_privkey_decrypt(
-    const uint8_t *ciphertext,
-    size_t         ct_len,
-    const uint8_t *nonce,
-    uint8_t       *plaintext_out
-) {
-    if (!instance_kek_initialized || !ciphertext || !nonce || !plaintext_out ||
-        ct_len < crypto_secretbox_MACBYTES)
-        return FORETIAS_ERR_BAD_INPUT;
-
-    int rc = crypto_secretbox_open_easy(plaintext_out, ciphertext,
-                                        (unsigned long long)ct_len,
-                                        nonce, instance_kek);
-    return (rc == 0) ? FORETIAS_OK : FORETIAS_ERR_BAD_SIG;
-}
-
 /* ── Helper: encrypt seed → encrypted_key (32 ciphertext + 16 MAC) ──── */
 static bool encrypt_seed(uint8_t encrypted_key[48], uint8_t nonce[24],
                          const uint8_t seed[32]) {
-    return foretias_privkey_encrypt(seed, 32, encrypted_key, nonce) == FORETIAS_OK;
+    if (!instance_kek_initialized) return false;
+
+    /* crypto_secretbox_easy writes msg_len + MACBYTES to `encrypted_key` */
+    int rc = crypto_secretbox_easy(encrypted_key, seed, 32, nonce, instance_kek);
+    return rc == 0;
 }
 
 /* ── Helper: decrypt encrypted_key → tmp (32 bytes) ─────────────────── */
 static bool decrypt_seed(uint8_t tmp[32], const uint8_t encrypted_key[48],
                          const uint8_t nonce[24]) {
-    return foretias_privkey_decrypt(encrypted_key, 48, nonce, tmp) == FORETIAS_OK;
+    if (!instance_kek_initialized) return false;
+
+    /* cipher_len is 32 (ciphertext) + 16 (MAC) = 48 */
+    int rc = crypto_secretbox_open_easy(tmp, encrypted_key, 48, nonce, instance_kek);
+    return rc == 0;
 }
 
 /* ── Opaque private key structure ──────────────────────────────────────
@@ -236,6 +193,20 @@ int foretias_privkey_ed25519_sign(const ForetiasPrivKey *key, const uint8_t *msg
     return FORETIAS_OK;
 }
 
+ForetiasResult foretias_privkey_ed25519_get_seed(const ForetiasPrivKey *key, uint8_t seed_out[32]) {
+    if (!key || !seed_out) return FORETIAS_ERR_BAD_INPUT;
+
+    uint8_t tmp[32];
+    if (!decrypt_seed(tmp, key->encrypted_key, key->nonce)) {
+        return FORETIAS_ERR_INTERNAL;
+    }
+
+    memcpy(seed_out, tmp, 32);
+    sodium_memzero(tmp, sizeof tmp);
+
+    return FORETIAS_OK;
+}
+
 ForetiasResult foretias_nullifier_derive_handle(const ForetiasPrivKey *key, const uint8_t *context, size_t context_len, ForetiasNullifier *out) {
     if (!key || !context || !out) return FORETIAS_ERR_BAD_INPUT;
 
@@ -297,4 +268,38 @@ void foretias_privkey_free(ForetiasPrivKey *key) {
         sodium_memzero(key, sizeof(ForetiasPrivKey));
         free(key);
     }
+}
+
+ForetiasResult foretias_privkey_encrypt(
+    const uint8_t *plaintext,
+    size_t         pt_len,
+    uint8_t       *ciphertext_out,
+    uint8_t       *nonce_out
+) {
+    if (!plaintext || !ciphertext_out || !nonce_out) return FORETIAS_ERR_BAD_INPUT;
+    if (!instance_kek_initialized) return FORETIAS_ERR_INTERNAL;
+
+    key_gen_counter++;
+    derive_nonce(nonce_out, key_gen_counter);
+
+    int rc = crypto_secretbox_easy(ciphertext_out, plaintext, pt_len, nonce_out, instance_kek);
+    if (rc != 0) return FORETIAS_ERR_INTERNAL;
+
+    return FORETIAS_OK;
+}
+
+ForetiasResult foretias_privkey_decrypt(
+    const uint8_t *ciphertext,
+    size_t         ct_len,
+    const uint8_t *nonce,
+    uint8_t       *plaintext_out
+) {
+    if (!ciphertext || !nonce || !plaintext_out) return FORETIAS_ERR_BAD_INPUT;
+    if (!instance_kek_initialized) return FORETIAS_ERR_INTERNAL;
+    if (ct_len < 16) return FORETIAS_ERR_BAD_INPUT;
+
+    int rc = crypto_secretbox_open_easy(plaintext_out, ciphertext, ct_len, nonce, instance_kek);
+    if (rc != 0) return FORETIAS_ERR_BAD_SIG;
+
+    return FORETIAS_OK;
 }

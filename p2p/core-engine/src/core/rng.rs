@@ -11,10 +11,12 @@ pub fn random_bytes(buf: &mut [u8]) -> Result<(), CryptoError> {
     Ok(())
 }
 
-/// Securely zero memory (volatile write loop).
+/// Securely zero memory via C11 foretias_memzero (libsodium sodium_memzero).
 pub fn memzero(buf: &mut [u8]) {
     // SAFETY: buf is valid for its length; memzero handles zero-length safely.
-    unsafe { foretias_memzero(buf.as_mut_ptr() as *mut std::ffi::c_void, buf.len()) }
+    unsafe {
+        foretias_memzero(buf.as_mut_ptr() as *mut std::ffi::c_void, buf.len())
+    }
 }
 
 #[cfg(test)]

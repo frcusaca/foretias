@@ -18,6 +18,9 @@ int main(void) {
     printf("Foretias Core Test Suite\n");
     printf("=======================\n\n");
 
+    /* HR-1: KEK must be initialized before Noise tests (encrypt session secrets) */
+    foretias_privkey_init();
+
     int failures = 0;
 
     failures += test_memzero_main();

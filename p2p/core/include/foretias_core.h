@@ -83,7 +83,7 @@ typedef enum {
 #define FORETIAS_TBID_V1_PUB_BYTES          96     /* 32 + 64 */
 #define FORETIAS_TBID_V1_ED25519_SK_BYTES   32
 #define FORETIAS_TBID_V1_SLH_DSA_SK_BYTES   128
-#define FORETIAS_TBID_V1_SECRET_BYTES       160    /* 32 + 128 */
+#define FORETIAS_TBID_V1_SECRET_BYTES       240    /* 72 + 168 (encrypted) */
 #define FORETIAS_TBID_V1_ED25519_SIG_BYTES  64
 #define FORETIAS_TBID_V1_SLH_DSA_SIG_BYTES  49856
 #define FORETIAS_TBID_V1_SIG_BYTES          49920  /* 64 + 49856 */
@@ -113,8 +113,9 @@ typedef struct {
 } ForetiasPubKeyVar;
 
 typedef struct {
-    uint8_t bytes[FORETIAS_SIG_MAX_SECRET_BYTES];
-    size_t  len;
+    uint8_t encrypted_bytes[FORETIAS_SIG_MAX_SECRET_BYTES + 16]; /* ciphertext + MAC */
+    uint8_t nonce[24];
+    size_t  plaintext_len; /* original plaintext length pre-encryption */
 } ForetiasSecretKeyVar;
 
 typedef struct {
@@ -144,9 +145,11 @@ typedef struct {
 } ForetiasTbidV1PubKey;
 
 typedef struct {
-    ForetiasPrivKey32 ed25519_sk;    /* 32 bytes */
-    uint8_t           slh_dsa_sk[FORETIAS_TBID_V1_SLH_DSA_SK_BYTES];  /* 128 bytes */
-    size_t            slh_dsa_sk_len; /* actual length for zeroing */
+    uint8_t encrypted_ed25519[48];   /* 32 plaintext + 16 MAC */
+    uint8_t ed25519_nonce[24];
+    uint8_t encrypted_slh_dsa[144];  /* 128 plaintext + 16 MAC */
+    uint8_t slh_dsa_nonce[24];
+    size_t  slh_dsa_plaintext_len;
 } ForetiasTbidV1SecretKey;
 
 typedef struct {
@@ -253,15 +256,21 @@ ForetiasResult foretias_hash_legacy_insecure_sha1(
 #define FORETIAS_NOISE_MAX_MSG 65535
 
 typedef struct {
-    uint8_t  chaining_key[32];
+    /* Encrypted session secrets (HR-1 compliance) */
+    uint8_t  encrypted_chaining_key[48];  /* 32 + 16 MAC */
+    uint8_t  chaining_key_nonce[24];
+    uint8_t  encrypted_local_static[48];  /* 32 + 16 MAC */
+    uint8_t  local_static_nonce[24];
+    uint8_t  encrypted_send_key[48];      /* 32 + 16 MAC */
+    uint8_t  send_key_nonce[24];
+    uint8_t  encrypted_recv_key[48];      /* 32 + 16 MAC */
+    uint8_t  recv_key_nonce[24];
+    /* Non-secret state */
     uint8_t  handshake_hash[32];
-    uint8_t  local_static_priv[32];
     uint8_t  local_static_pub[32];
     uint8_t  local_ephemeral[32];
     uint8_t  remote_ephemeral[32];
     uint8_t  remote_static[32];
-    uint8_t  send_key[32];
-    uint8_t  recv_key[32];
     uint64_t send_nonce;
     uint64_t recv_nonce;
     int32_t  step;
@@ -271,9 +280,19 @@ typedef struct {
     uint8_t  _pad[4];
 } ForetiasNoiseState;
 
+// Forward declaration for ForetiasPrivKey (opaque handle)
+typedef struct ForetiasPrivKey ForetiasPrivKey;
+
 ForetiasResult foretias_noise_init_ed25519(
     ForetiasNoiseState*      state,
     const ForetiasPrivKey32* my_static_priv,
+    const ForetiasPubKey32*  their_static_pub,  /* NULL for responder */
+    bool                    is_initiator
+);
+
+ForetiasResult foretias_noise_init_with_handle(
+    ForetiasNoiseState*      state,
+    const ForetiasPrivKey*   priv_handle,
     const ForetiasPubKey32*  their_static_pub,  /* NULL for responder */
     bool                    is_initiator
 );
@@ -379,6 +398,9 @@ ForetiasResult foretias_nullifier_derive(
 ForetiasResult foretias_rng_bytes(uint8_t* buf, size_t len);
 
 /* ── Secure zero ────────────────────────────────── */
+/* Thin FFI wrapper around libsodium sodium_memzero.
+   Provides a stable FFI entry point for Rust callers. */
+#include <sodium.h>
 void foretias_memzero(void* ptr, size_t len);
 
 /* ── Opaque Private Key Handle ──────────────────── */
@@ -394,9 +416,7 @@ void foretias_memzero(void* ptr, size_t len);
 
    Call foretias_privkey_init() once at process startup
    before any key operations. Call foretias_privkey_cleanup()
-   at shutdown to zeroize the KEK. */
-
-typedef struct ForetiasPrivKey ForetiasPrivKey;
+    at shutdown to zeroize the KEK. */
 
 /* Initialize the instance KEK. Must be called once at startup
    before any key operations. Generates a random 32-byte KEK. */
@@ -434,9 +454,17 @@ ForetiasResult foretias_nullifier_derive_handle(
     ForetiasNullifier *out
 );
 
+/* Extract the Ed25519 seed from the handle into the caller's buffer.
+    The seed is decrypted from the handle's encrypted storage.
+    WARNING: This exposes the raw seed. Prefer foretias_privkey_ed25519_sign. */
+ForetiasResult foretias_privkey_ed25519_get_seed(
+    const ForetiasPrivKey *key,
+    uint8_t               seed_out[32]
+);
+
 /* Derive a 32-byte seal key via HKDF-SHA256 from the handle's seed.
-   The seed never leaves C memory. The info string identifies the
-   derived key's purpose (e.g. "foretias-calendar-seal-v1"). */
+    The seed never leaves C memory. The info string identifies the
+    derived key's purpose (e.g. "foretias-calendar-seal-v1"). */
 ForetiasResult foretias_privkey_derive_seal_key(
     const ForetiasPrivKey *key,
     const uint8_t *info,
@@ -446,6 +474,35 @@ ForetiasResult foretias_privkey_derive_seal_key(
 
 /* Destroy the handle, securely zeroing all key material. */
 void foretias_privkey_free(ForetiasPrivKey *key);
+
+/* ── Generic encrypt/decrypt with instance KEK ────────
+ *
+ * Encrypt arbitrary-length plaintext with the instance KEK using
+ * ChaCha20-Poly1305 AEAD. The caller supplies a nonce buffer (24 bytes)
+ * that will be filled with a unique nonce derived from the monotonic
+ * counter (key_gen_counter). 2^96 nonces per process provides more
+ * budget than any realistic deployment needs.
+ *
+ * Output buffer must be at least pt_len + 16 bytes (ciphertext + 16-byte MAC).
+ * Returns FORETIAS_OK on success.
+ *
+ * Decrypt arbitrary-length ciphertext with the instance KEK.
+ * Writes plaintext to `plaintext_out` (must be ct_len - 16 bytes).
+ * Returns (ct_len - 16) == plaintext length on success; negative on auth failure.
+ */
+ForetiasResult foretias_privkey_encrypt(
+    const uint8_t *plaintext,
+    size_t         pt_len,
+    uint8_t       *ciphertext_out,  /* caller: pt_len + 16 */
+    uint8_t       *nonce_out        /* caller: 24 bytes */
+);
+
+ForetiasResult foretias_privkey_decrypt(
+    const uint8_t *ciphertext,  /* ct_len bytes = pt_len + 16 */
+    size_t         ct_len,
+    const uint8_t *nonce,       /* 24 bytes */
+    uint8_t       *plaintext_out
+);
 
 /* ── SPHINCS+ (SHA2-128s-simple) ──────────────────── */
 ForetiasResult foretias_sphincs_sha2_128s_keypair(

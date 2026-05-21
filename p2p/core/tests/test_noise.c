@@ -24,7 +24,7 @@ static void test_noise_step_bad_input(void) {
     uint8_t out[64];
     size_t out_len = sizeof(out);
     ForetiasResult r = foretias_noise_step(&state, NULL, 0, out, &out_len);
-    ASSERT_EQ(r, FORETIAS_ERR_BAD_INPUT, "step on zeroed state returns BAD_INPUT");
+    ASSERT_EQ(r, FORETIAS_ERR_BAD_KEY, "step on zeroed state returns BAD_KEY (encrypted chaining key fails decrypt)");
 }
 
 static void test_noise_send_bad_input(void) {

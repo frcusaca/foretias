@@ -13,15 +13,15 @@ ForetiasResult foretias_ed25519_generate_keypair(ForetiasPubKey32* pub_out, Fore
     unsigned char pub[crypto_sign_PUBLICKEYBYTES];
     unsigned char sec[crypto_sign_SECRETKEYBYTES];
     if (crypto_sign_seed_keypair(pub, sec, seed) != 0) {
-        foretias_memzero(seed, sizeof seed);
+        sodium_memzero(seed, sizeof seed);
         return FORETIAS_ERR_INTERNAL;
     }
 
     memcpy(priv_out->bytes, seed, sizeof priv_out->bytes);
     memcpy(pub_out->bytes,  pub,  sizeof pub_out->bytes);
 
-    foretias_memzero(sec, sizeof sec);
-    foretias_memzero(seed, sizeof seed);
+    sodium_memzero(sec, sizeof sec);
+    sodium_memzero(seed, sizeof seed);
 
     return FORETIAS_OK;
 }

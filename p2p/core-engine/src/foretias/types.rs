@@ -70,12 +70,16 @@ impl Tbid {
 /// Secret key material for a TBID (tb_version 1.0).
 /// Both private keys are held together; zeroized on drop.
 ///
-/// Layout: Ed25519_SK(32) ‖ SLH-DSA-SHA2-256f_SK(128) = 160 bytes total.
+/// Layout: EncEd25519(48) ‖ NonceEd(24) ‖ EncSLH(144) ‖ NonceSLH(24) = 240 bytes total.
 pub struct TbidSecret {
-    /// Ed25519 secret key — fast signing (32 bytes).
-    ed25519_sk: Zeroizing<[u8; 32]>,
-    /// SLH-DSA-SHA2-256f secret key — quantum-resistant signing (128 bytes).
-    slh_dsa_sk: Zeroizing<Vec<u8>>,
+    /// Encrypted Ed25519 secret key (48 bytes: 32 ciphertext + 16 MAC).
+    encrypted_ed25519: Zeroizing<[u8; 48]>,
+    /// Ed25519 nonce for decryption (24 bytes).
+    ed25519_nonce: Zeroizing<[u8; 24]>,
+    /// Encrypted SLH-DSA secret key (144 bytes: 128 ciphertext + 16 MAC).
+    encrypted_slh_dsa: Zeroizing<[u8; 144]>,
+    /// SLH-DSA nonce for decryption (24 bytes).
+    slh_dsa_nonce: Zeroizing<[u8; 24]>,
 }
 
 impl TbidSecret {
@@ -94,36 +98,34 @@ impl TbidSecret {
     /// Returns Ed25519_SIG(64) ‖ SLH-DSA_SIG(49856) = 49,920 bytes.
     pub fn sign(&self, message: &[u8]) -> Result<SignatureBytes, crate::error::CryptoError> {
         use crate::crypto_server::signing_tbid;
-        let mut secret_bytes = Vec::with_capacity(160);
-        secret_bytes.extend_from_slice(&self.ed25519_sk[..]);
-        secret_bytes.extend_from_slice(&self.slh_dsa_sk);
-        // Safe: we always generate exactly 160 bytes
-        let secret_array: [u8; 160] = secret_bytes.try_into()
+        let mut secret_bytes = Vec::with_capacity(240);
+        secret_bytes.extend_from_slice(&self.encrypted_ed25519[..]);
+        secret_bytes.extend_from_slice(&self.ed25519_nonce[..]);
+        secret_bytes.extend_from_slice(&self.encrypted_slh_dsa[..]);
+        secret_bytes.extend_from_slice(&self.slh_dsa_nonce[..]);
+        let secret_array: [u8; 240] = secret_bytes.try_into()
             .map_err(|_| crate::error::CryptoError::BadInput("secret key length mismatch"))?;
         signing_tbid::tbid_sign(&SignatureBytes::from(secret_array), message)
     }
 
-    /// Ed25519 secret key for Ed25519-specific operations.
-    pub fn ed25519_secret_key(&self) -> &[u8; 32] {
-        &self.ed25519_sk
-    }
-
-    /// SLH-DSA-SHA2-256f secret key for SLH-DSA-specific operations.
-    pub fn slh_dsa_secret_key(&self) -> &[u8] {
-        &self.slh_dsa_sk
-    }
-
-    /// Construct from flat 160-byte secret key material.
+    /// Construct from flat 240-byte encrypted secret key material.
     fn from_bytes(bytes: &[u8]) -> Result<Self, crate::error::CryptoError> {
-        if bytes.len() != 160 {
-            return Err(crate::error::CryptoError::BadInput("TBID secret must be 160 bytes"));
+        if bytes.len() != 240 {
+            return Err(crate::error::CryptoError::BadInput("TBID secret must be 240 bytes"));
         }
-        let mut ed25519_sk = [0u8; 32];
-        ed25519_sk.copy_from_slice(&bytes[..32]);
-        let slh_dsa_sk = bytes[32..160].to_vec();
+        let mut encrypted_ed25519 = [0u8; 48];
+        encrypted_ed25519.copy_from_slice(&bytes[..48]);
+        let mut ed25519_nonce = [0u8; 24];
+        ed25519_nonce.copy_from_slice(&bytes[48..72]);
+        let mut encrypted_slh_dsa = [0u8; 144];
+        encrypted_slh_dsa.copy_from_slice(&bytes[72..216]);
+        let mut slh_dsa_nonce = [0u8; 24];
+        slh_dsa_nonce.copy_from_slice(&bytes[216..240]);
         Ok(Self {
-            ed25519_sk: Zeroizing::new(ed25519_sk),
-            slh_dsa_sk: Zeroizing::new(slh_dsa_sk),
+            encrypted_ed25519: Zeroizing::new(encrypted_ed25519),
+            ed25519_nonce: Zeroizing::new(ed25519_nonce),
+            encrypted_slh_dsa: Zeroizing::new(encrypted_slh_dsa),
+            slh_dsa_nonce: Zeroizing::new(slh_dsa_nonce),
         })
     }
 }

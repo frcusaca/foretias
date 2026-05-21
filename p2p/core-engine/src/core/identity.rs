@@ -63,6 +63,16 @@ impl PrivKeyHandle {
         Ok(Self(ManuallyDrop::new(unsafe { NonNull::new_unchecked(ptr) })))
     }
 
+    /// Expose the raw C pointer for FFI callers (e.g., Noise handshake).
+    ///
+    /// # Safety
+    /// The caller must ensure the pointer is only used through valid C11 APIs
+    /// and the handle remains alive for the duration of its use.
+    #[doc(hidden)]
+    pub unsafe fn as_ptr(&self) -> *const ForetiasPrivKey {
+        self.0.as_ptr()
+    }
+
     /// Derive the public key for this handle.
     pub fn public_key(&self) -> Result<[u8; 32], CryptoError> {
         let mut out = [0u8; 32];
