@@ -15,6 +15,7 @@ use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use foretias_core::crypto_server::{CryptoServer, SealedBlob};
 use foretias_core::foretias::ChrononRecord;
+use foretias_core::foretias::clean_auth::{ExternalizedChrononRecord, CleanAuthenticatedChrononRecord};
 use foretias_core::error::NodeError;
 use serde::{Deserialize, Serialize};
 
@@ -26,7 +27,7 @@ pub struct CalendarBlock {
     /// Wall-clock nanoseconds when the block was written.
     pub written_at_ns: u64,
     /// Tick records contained in this block.
-    pub ticks: Vec<ChrononRecord>,
+    pub ticks: Vec<ExternalizedChrononRecord>,
 }
 
 /// Encrypted append-only calendar store backed by a JSONL file.
@@ -58,7 +59,7 @@ impl EncryptedJsonlCalendarStore {
     /// The ticks are wrapped in a [`CalendarBlock`], serialized to JSON,
     /// sealed with the node's seal key, CBOR-encoded, base64-encoded,
     /// and appended as a newline-terminated line to the backing file.
-    pub fn append_block(&self, ticks: Vec<ChrononRecord>) -> Result<(), NodeError> {
+    pub fn append_block(&self, ticks: Vec<ExternalizedChrononRecord>) -> Result<(), NodeError> {
         let block_id = self.next_block_id.fetch_add(1, Ordering::SeqCst);
         let written_at_ns = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -196,13 +197,17 @@ pub fn migrate_plaintext(
     let count = cal.ticks.len();
 
     if !cal.ticks.is_empty() {
-        store.append_block(cal.ticks)?;
+        let externalized: Vec<ExternalizedChrononRecord> = cal.ticks
+            .into_iter()
+            .map(|r| CleanAuthenticatedChrononRecord::from_trusted(r).externalize())
+            .collect();
+        store.append_block(externalized)?;
     }
 
     Ok(count)
 }
 
-#[cfg(test)]
+    #[cfg(test)]
 mod tests {
     use super::*;
     use foretias_core::{crypto_server, foretias::Tbid};
@@ -213,8 +218,8 @@ mod tests {
         Arc::from(server)
     }
 
-    fn make_tick(chronon_number: u64) -> ChrononRecord {
-        ChrononRecord {
+    fn make_tick(chronon_number: u64) -> ExternalizedChrononRecord {
+        let record = ChrononRecord {
             chronon_number,
             public_key: vec![0u8; 32].into(),
             signature_algorithm: "Ed25519".to_string(),
@@ -226,7 +231,8 @@ mod tests {
 
             tb_version: 0,
             tbid: Tbid::default(),
-        }
+        };
+        CleanAuthenticatedChrononRecord::from_trusted(record).externalize()
     }
 
     #[test]
@@ -328,6 +334,38 @@ mod tests {
 
         let blocks = store.read_all().unwrap();
         assert!(blocks.is_empty());
+    }
+
+    #[test]
+    fn test_externalized_roundtrip() {
+        let tmp_dir = std::env::temp_dir().join(format!("foretias-ext-roundtrip-{}", std::process::id()));
+        let path = tmp_dir.join("calendar.jsonl");
+        let server = make_server();
+        let store = EncryptedJsonlCalendarStore::new(path.clone(), server.clone());
+
+        // Append ExternalizedChrononRecord ticks
+        let ticks = vec![make_tick(42), make_tick(43)];
+        store.append_block(ticks).unwrap();
+
+        // Read back
+        let blocks = store.read_all().unwrap();
+        assert_eq!(blocks.len(), 1);
+        let block = &blocks[0];
+
+        // Verify fields preserved through serialization roundtrip
+        assert_eq!(block.ticks.len(), 2);
+        assert_eq!(block.ticks[0].chronon_number, 42);
+        assert_eq!(block.ticks[1].chronon_number, 43);
+        assert_eq!(block.ticks[0].signature_algorithm, "Ed25519");
+        assert_eq!(block.ticks[0].public_key, [0u8; 32]);
+        assert_eq!(block.ticks[0].aa_nonce, [0u8; 16]);
+        assert!(block.ticks[0].forward_foretis.is_empty());
+        assert!(block.ticks[0].backward_foretis.is_empty());
+        assert!(block.ticks[0].external_attestations.is_empty());
+
+        // Cleanup
+        std::fs::remove_file(&path).ok();
+        std::fs::remove_dir(&tmp_dir).ok();
     }
 
     #[test]
