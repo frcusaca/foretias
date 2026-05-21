@@ -8,18 +8,28 @@ ForetiasResult foretias_dilithium3_keypair(ForetiasSecretKeyVar* secret_out, For
     if (secret_out == NULL || public_out == NULL) {
         return FORETIAS_ERR_BAD_INPUT;
     }
-    if (secret_out->len < OQS_SIG_dilithium_3_length_secret_key ||
+    if (secret_out->plaintext_len < OQS_SIG_dilithium_3_length_secret_key ||
         public_out->len < OQS_SIG_dilithium_3_length_public_key) {
         return FORETIAS_ERR_BAD_INPUT;
     }
 
-    OQS_STATUS st = OQS_SIG_dilithium_3_keypair(public_out->bytes, secret_out->bytes);
+    uint8_t plaintext_sk[OQS_SIG_dilithium_3_length_secret_key];
+    uint8_t plaintext_pk[OQS_SIG_dilithium_3_length_public_key];
+    OQS_STATUS st = OQS_SIG_dilithium_3_keypair(plaintext_pk, plaintext_sk);
     if (st != OQS_SUCCESS) {
-        OQS_MEM_cleanse(secret_out->bytes, secret_out->len);
+        sodium_memzero(plaintext_sk, sizeof(plaintext_sk));
         return FORETIAS_ERR_INTERNAL;
     }
 
-    secret_out->len = OQS_SIG_dilithium_3_length_secret_key;
+    ForetiasResult rc = foretias_privkey_encrypt(plaintext_sk, OQS_SIG_dilithium_3_length_secret_key,
+                                                 secret_out->encrypted_bytes, secret_out->nonce);
+    sodium_memzero(plaintext_sk, sizeof(plaintext_sk));
+    if (rc != FORETIAS_OK) {
+        return rc;
+    }
+    secret_out->plaintext_len = OQS_SIG_dilithium_3_length_secret_key;
+
+    memcpy(public_out->bytes, plaintext_pk, OQS_SIG_dilithium_3_length_public_key);
     public_out->len = OQS_SIG_dilithium_3_length_public_key;
 
     return FORETIAS_OK;
@@ -36,8 +46,16 @@ ForetiasResult foretias_dilithium3_sign(const ForetiasSecretKeyVar* secret, cons
         return FORETIAS_ERR_BAD_INPUT;
     }
 
+    uint8_t plaintext_sk[OQS_SIG_dilithium_3_length_secret_key];
+    ForetiasResult rc = foretias_privkey_decrypt(secret->encrypted_bytes, secret->plaintext_len + 16,
+                                                 secret->nonce, plaintext_sk);
+    if (rc < 0) {
+        return FORETIAS_ERR_INTERNAL;
+    }
+
     size_t sig_len = OQS_SIG_dilithium_3_length_signature;
-    OQS_STATUS st = OQS_SIG_dilithium_3_sign(sig_out->bytes, &sig_len, msg, msg_len, secret->bytes);
+    OQS_STATUS st = OQS_SIG_dilithium_3_sign(sig_out->bytes, &sig_len, msg, msg_len, plaintext_sk);
+    sodium_memzero(plaintext_sk, sizeof(plaintext_sk));
     if (st != OQS_SUCCESS) {
         OQS_MEM_cleanse(sig_out->bytes, sig_out->len);
         return FORETIAS_ERR_INTERNAL;

@@ -146,19 +146,26 @@ impl Chronomatter {
         self.mutual_attest_observer = Some(observer);
     }
 
-    fn generate_and_store_keypair(&self) -> Result<usize, NodeError> {
+    fn generate_and_store_keypair(&self) -> Result<(), NodeError> {
         let handle = PrivKeyHandle::generate()
             .map_err(|e| NodeError::Crypto(e))?;
         let pub_key = handle.public_key().map_err(|e| NodeError::Crypto(e))?;
         let kp = TickKeyPair { pub_key, priv_key: handle };
         let mut keypairs = self.keypairs.write();
-        let idx = keypairs.len();
         keypairs.push(kp);
-        Ok(idx)
+        // REQ-Z4.3: retain only current + previous; evict older.
+        while keypairs.len() > 2 {
+            let _ = keypairs.remove(0);
+        }
+        Ok(())
     }
 
-    fn sign_with_keypair(&self, idx: usize, msg: &[u8]) -> Result<Vec<u8>, NodeError> {
+    fn sign_with_keypair(&self, relative_idx: usize, msg: &[u8]) -> Result<Vec<u8>, NodeError> {
         let keypairs = self.keypairs.read();
+        let len = keypairs.len();
+        let idx = len.checked_sub(relative_idx + 1).ok_or_else(|| {
+            NodeError::Internal(format!("keypair relative index {} out of range (len={})", relative_idx, len))
+        })?;
         let kp = keypairs.get(idx).ok_or_else(|| {
             NodeError::Internal(format!("keypair index {} out of range", idx))
         })?;
@@ -167,28 +174,28 @@ impl Chronomatter {
         Ok(sig.bytes.to_vec())
     }
 
-    fn keypair_pub(&self, idx: usize) -> Option<[u8; 32]> {
-        self.keypairs.read().get(idx).map(|kp| kp.pub_key)
+    fn keypair_pub(&self, relative_idx: usize) -> Option<[u8; 32]> {
+        let keypairs = self.keypairs.read();
+        let len = keypairs.len();
+        let idx = len.checked_sub(relative_idx + 1)?;
+        keypairs.get(idx).map(|kp| kp.pub_key)
     }
 
     fn build_auto_attestation(&self, tick: u64, new_pub: [u8; 32]) -> Result<(Vec<u8>, Vec<u8>, [u8; 16], u64), NodeError> {
         let tbid_str = self.tbid.to_hex();
-        let kp_idx = (tick - 1) as usize;
         let stamps = self.chronon_stamp_count.swap(0, SeqCst);
 
         if tick == 1 {
             let (attest_blob, nonce) = auto_attestation_blob_with_count(&tbid_str, tick, &new_pub, tick, &new_pub, stamps)?;
-            let sig = self.sign_with_keypair(kp_idx, &attest_blob)?;
+            let sig = self.sign_with_keypair(0, &attest_blob)?;
             Ok((sig.clone(), sig, nonce, stamps))
         } else {
-            let prev_tick = tick - 1;
-            let prev_kp_idx = (prev_tick - 1) as usize;
-            let prev_pub = self.keypair_pub(prev_kp_idx)
+            let prev_pub = self.keypair_pub(1)
                 .ok_or_else(|| NodeError::Internal("missing previous keypair".into()))?;
 
-            let (attest_blob, nonce) = auto_attestation_blob_with_count(&tbid_str, prev_tick, &prev_pub, tick, &new_pub, stamps)?;
-            let forward_sig = self.sign_with_keypair(prev_kp_idx, &attest_blob)?;
-            let backward_sig = self.sign_with_keypair(kp_idx, &attest_blob)?;
+            let (attest_blob, nonce) = auto_attestation_blob_with_count(&tbid_str, tick - 1, &prev_pub, tick, &new_pub, stamps)?;
+            let forward_sig = self.sign_with_keypair(1, &attest_blob)?;
+            let backward_sig = self.sign_with_keypair(0, &attest_blob)?;
             Ok((forward_sig, backward_sig, nonce, stamps))
         }
     }
@@ -320,8 +327,8 @@ impl Chronomatter {
         let tbn = self.tbn.clone();
         let alg = self.crypto.signature_algorithm().to_id_string().to_string();
 
-        let kp_idx = self.generate_and_store_keypair()?;
-        let new_pub = self.keypair_pub(kp_idx)
+        self.generate_and_store_keypair()?;
+        let new_pub = self.keypair_pub(0)
             .ok_or_else(|| NodeError::Internal("keypair not found after generation".into()))?;
 
         let raw_tbid = tbid.raw_bytes();
@@ -330,13 +337,7 @@ impl Chronomatter {
         sig_input.extend_from_slice(&tick.to_be_bytes());
         sig_input.extend_from_slice(&content);
 
-        let sig = {
-            let guard = self.keypairs.read();
-            let kp = guard.get(kp_idx)
-                .ok_or_else(|| NodeError::Internal("keypair not found after generation".into()))?;
-            kp.priv_key.sign(&sig_input)
-                .map_err(|e| NodeError::Crypto(e))?
-        };
+        let sig = self.sign_with_keypair(0, &sig_input)?;
 
         let content_hash = self.crypto.sha256(&content)?;
 
@@ -421,8 +422,8 @@ impl Chronomatter {
 
         let tick = self.current_tick.fetch_add(1, SeqCst) + 1;
 
-        let kp_idx = self.generate_and_store_keypair()?;
-        let new_pub = self.keypair_pub(kp_idx)
+        self.generate_and_store_keypair()?;
+        let new_pub = self.keypair_pub(0)
             .ok_or_else(|| NodeError::Internal("keypair not found after generation".into()))?;
 
         let record = self.build_tick_record(tick, new_pub)?;

@@ -15,13 +15,13 @@ ForetiasResult foretias_ed25519_sign(const ForetiasPrivKey32* priv, const uint8_
 
     unsigned char sig[crypto_sign_BYTES];
     if (crypto_sign_detached(sig, NULL, msg, (unsigned long long)msg_len, sec) != 0) {
-        foretias_memzero(sec, sizeof sec);
+        sodium_memzero(sec, sizeof sec);
         return FORETIAS_ERR_INTERNAL;
     }
 
     memcpy(sig_out->bytes, sig, sizeof sig_out->bytes);
-    foretias_memzero(sec, sizeof sec);
-    foretias_memzero(sig, sizeof sig);
+    sodium_memzero(sec, sizeof sec);
+    sodium_memzero(sig, sizeof sig);
 
     return FORETIAS_OK;
 }

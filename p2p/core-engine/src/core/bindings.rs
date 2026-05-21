@@ -24,7 +24,7 @@ pub const FORETIAS_TBID_V1_SLH_DSA_PUB_BYTES: u32 = 64;
 pub const FORETIAS_TBID_V1_PUB_BYTES: u32 = 96;
 pub const FORETIAS_TBID_V1_ED25519_SK_BYTES: u32 = 32;
 pub const FORETIAS_TBID_V1_SLH_DSA_SK_BYTES: u32 = 128;
-pub const FORETIAS_TBID_V1_SECRET_BYTES: u32 = 160;
+pub const FORETIAS_TBID_V1_SECRET_BYTES: u32 = 240;
 pub const FORETIAS_TBID_V1_ED25519_SIG_BYTES: u32 = 64;
 pub const FORETIAS_TBID_V1_SLH_DSA_SIG_BYTES: u32 = 49856;
 pub const FORETIAS_TBID_V1_SIG_BYTES: u32 = 49920;
@@ -100,7 +100,7 @@ const _: () = {
         [::std::mem::offset_of!(ForetiasPubKey33, bytes) - 0usize];
 };
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub struct ForetiasPrivKey32 {
     pub bytes: [u8; 32usize],
 }
@@ -211,19 +211,22 @@ const _: () = {
         [::std::mem::offset_of!(ForetiasPubKeyVar, len) - 2048usize];
 };
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub struct ForetiasSecretKeyVar {
-    pub bytes: [u8; 4096usize],
-    pub len: usize,
+    pub encrypted_bytes: [u8; 4112usize],
+    pub nonce: [u8; 24usize],
+    pub plaintext_len: usize,
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
-    ["Size of ForetiasSecretKeyVar"][::std::mem::size_of::<ForetiasSecretKeyVar>() - 4104usize];
+    ["Size of ForetiasSecretKeyVar"][::std::mem::size_of::<ForetiasSecretKeyVar>() - 4144usize];
     ["Alignment of ForetiasSecretKeyVar"][::std::mem::align_of::<ForetiasSecretKeyVar>() - 8usize];
-    ["Offset of field: ForetiasSecretKeyVar::bytes"]
-        [::std::mem::offset_of!(ForetiasSecretKeyVar, bytes) - 0usize];
-    ["Offset of field: ForetiasSecretKeyVar::len"]
-        [::std::mem::offset_of!(ForetiasSecretKeyVar, len) - 4096usize];
+    ["Offset of field: ForetiasSecretKeyVar::encrypted_bytes"]
+        [::std::mem::offset_of!(ForetiasSecretKeyVar, encrypted_bytes) - 0usize];
+    ["Offset of field: ForetiasSecretKeyVar::nonce"]
+        [::std::mem::offset_of!(ForetiasSecretKeyVar, nonce) - 4112usize];
+    ["Offset of field: ForetiasSecretKeyVar::plaintext_len"]
+        [::std::mem::offset_of!(ForetiasSecretKeyVar, plaintext_len) - 4136usize];
 };
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -256,7 +259,7 @@ const _: () = {
         [::std::mem::offset_of!(ForetiasKemPubKey, len) - 1184usize];
 };
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub struct ForetiasKemSecretKey {
     pub bytes: [u8; 2400usize],
     pub len: usize,
@@ -302,24 +305,30 @@ const _: () = {
         [::std::mem::offset_of!(ForetiasTbidV1PubKey, slh_dsa_pub) - 32usize];
 };
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub struct ForetiasTbidV1SecretKey {
-    pub ed25519_sk: ForetiasPrivKey32,
-    pub slh_dsa_sk: [u8; 128usize],
-    pub slh_dsa_sk_len: usize,
+    pub encrypted_ed25519: [u8; 48usize],
+    pub ed25519_nonce: [u8; 24usize],
+    pub encrypted_slh_dsa: [u8; 144usize],
+    pub slh_dsa_nonce: [u8; 24usize],
+    pub slh_dsa_plaintext_len: usize,
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
     ["Size of ForetiasTbidV1SecretKey"]
-        [::std::mem::size_of::<ForetiasTbidV1SecretKey>() - 168usize];
+        [::std::mem::size_of::<ForetiasTbidV1SecretKey>() - 248usize];
     ["Alignment of ForetiasTbidV1SecretKey"]
         [::std::mem::align_of::<ForetiasTbidV1SecretKey>() - 8usize];
-    ["Offset of field: ForetiasTbidV1SecretKey::ed25519_sk"]
-        [::std::mem::offset_of!(ForetiasTbidV1SecretKey, ed25519_sk) - 0usize];
-    ["Offset of field: ForetiasTbidV1SecretKey::slh_dsa_sk"]
-        [::std::mem::offset_of!(ForetiasTbidV1SecretKey, slh_dsa_sk) - 32usize];
-    ["Offset of field: ForetiasTbidV1SecretKey::slh_dsa_sk_len"]
-        [::std::mem::offset_of!(ForetiasTbidV1SecretKey, slh_dsa_sk_len) - 160usize];
+    ["Offset of field: ForetiasTbidV1SecretKey::encrypted_ed25519"]
+        [::std::mem::offset_of!(ForetiasTbidV1SecretKey, encrypted_ed25519) - 0usize];
+    ["Offset of field: ForetiasTbidV1SecretKey::ed25519_nonce"]
+        [::std::mem::offset_of!(ForetiasTbidV1SecretKey, ed25519_nonce) - 48usize];
+    ["Offset of field: ForetiasTbidV1SecretKey::encrypted_slh_dsa"]
+        [::std::mem::offset_of!(ForetiasTbidV1SecretKey, encrypted_slh_dsa) - 72usize];
+    ["Offset of field: ForetiasTbidV1SecretKey::slh_dsa_nonce"]
+        [::std::mem::offset_of!(ForetiasTbidV1SecretKey, slh_dsa_nonce) - 216usize];
+    ["Offset of field: ForetiasTbidV1SecretKey::slh_dsa_plaintext_len"]
+        [::std::mem::offset_of!(ForetiasTbidV1SecretKey, slh_dsa_plaintext_len) - 240usize];
 };
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -409,17 +418,21 @@ extern "C" {
     pub fn foretias_hash_legacy_insecure_sha1(        data: *const u8,        len: usize,        out: *mut ForetiasHash20,    ) -> ForetiasResult;
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub struct ForetiasNoiseState {
-    pub chaining_key: [u8; 32usize],
+    pub encrypted_chaining_key: [u8; 48usize],
+    pub chaining_key_nonce: [u8; 24usize],
+    pub encrypted_local_static: [u8; 48usize],
+    pub local_static_nonce: [u8; 24usize],
+    pub encrypted_send_key: [u8; 48usize],
+    pub send_key_nonce: [u8; 24usize],
+    pub encrypted_recv_key: [u8; 48usize],
+    pub recv_key_nonce: [u8; 24usize],
     pub handshake_hash: [u8; 32usize],
-    pub local_static_priv: [u8; 32usize],
     pub local_static_pub: [u8; 32usize],
     pub local_ephemeral: [u8; 32usize],
     pub remote_ephemeral: [u8; 32usize],
     pub remote_static: [u8; 32usize],
-    pub send_key: [u8; 32usize],
-    pub recv_key: [u8; 32usize],
     pub send_nonce: u64,
     pub recv_nonce: u64,
     pub step: i32,
@@ -430,44 +443,61 @@ pub struct ForetiasNoiseState {
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
-    ["Size of ForetiasNoiseState"][::std::mem::size_of::<ForetiasNoiseState>() - 328usize];
+    ["Size of ForetiasNoiseState"][::std::mem::size_of::<ForetiasNoiseState>() - 488usize];
     ["Alignment of ForetiasNoiseState"][::std::mem::align_of::<ForetiasNoiseState>() - 8usize];
-    ["Offset of field: ForetiasNoiseState::chaining_key"]
-        [::std::mem::offset_of!(ForetiasNoiseState, chaining_key) - 0usize];
+    ["Offset of field: ForetiasNoiseState::encrypted_chaining_key"]
+        [::std::mem::offset_of!(ForetiasNoiseState, encrypted_chaining_key) - 0usize];
+    ["Offset of field: ForetiasNoiseState::chaining_key_nonce"]
+        [::std::mem::offset_of!(ForetiasNoiseState, chaining_key_nonce) - 48usize];
+    ["Offset of field: ForetiasNoiseState::encrypted_local_static"]
+        [::std::mem::offset_of!(ForetiasNoiseState, encrypted_local_static) - 72usize];
+    ["Offset of field: ForetiasNoiseState::local_static_nonce"]
+        [::std::mem::offset_of!(ForetiasNoiseState, local_static_nonce) - 120usize];
+    ["Offset of field: ForetiasNoiseState::encrypted_send_key"]
+        [::std::mem::offset_of!(ForetiasNoiseState, encrypted_send_key) - 144usize];
+    ["Offset of field: ForetiasNoiseState::send_key_nonce"]
+        [::std::mem::offset_of!(ForetiasNoiseState, send_key_nonce) - 192usize];
+    ["Offset of field: ForetiasNoiseState::encrypted_recv_key"]
+        [::std::mem::offset_of!(ForetiasNoiseState, encrypted_recv_key) - 216usize];
+    ["Offset of field: ForetiasNoiseState::recv_key_nonce"]
+        [::std::mem::offset_of!(ForetiasNoiseState, recv_key_nonce) - 264usize];
     ["Offset of field: ForetiasNoiseState::handshake_hash"]
-        [::std::mem::offset_of!(ForetiasNoiseState, handshake_hash) - 32usize];
-    ["Offset of field: ForetiasNoiseState::local_static_priv"]
-        [::std::mem::offset_of!(ForetiasNoiseState, local_static_priv) - 64usize];
+        [::std::mem::offset_of!(ForetiasNoiseState, handshake_hash) - 288usize];
     ["Offset of field: ForetiasNoiseState::local_static_pub"]
-        [::std::mem::offset_of!(ForetiasNoiseState, local_static_pub) - 96usize];
+        [::std::mem::offset_of!(ForetiasNoiseState, local_static_pub) - 320usize];
     ["Offset of field: ForetiasNoiseState::local_ephemeral"]
-        [::std::mem::offset_of!(ForetiasNoiseState, local_ephemeral) - 128usize];
+        [::std::mem::offset_of!(ForetiasNoiseState, local_ephemeral) - 352usize];
     ["Offset of field: ForetiasNoiseState::remote_ephemeral"]
-        [::std::mem::offset_of!(ForetiasNoiseState, remote_ephemeral) - 160usize];
+        [::std::mem::offset_of!(ForetiasNoiseState, remote_ephemeral) - 384usize];
     ["Offset of field: ForetiasNoiseState::remote_static"]
-        [::std::mem::offset_of!(ForetiasNoiseState, remote_static) - 192usize];
-    ["Offset of field: ForetiasNoiseState::send_key"]
-        [::std::mem::offset_of!(ForetiasNoiseState, send_key) - 224usize];
-    ["Offset of field: ForetiasNoiseState::recv_key"]
-        [::std::mem::offset_of!(ForetiasNoiseState, recv_key) - 256usize];
+        [::std::mem::offset_of!(ForetiasNoiseState, remote_static) - 416usize];
     ["Offset of field: ForetiasNoiseState::send_nonce"]
-        [::std::mem::offset_of!(ForetiasNoiseState, send_nonce) - 288usize];
+        [::std::mem::offset_of!(ForetiasNoiseState, send_nonce) - 448usize];
     ["Offset of field: ForetiasNoiseState::recv_nonce"]
-        [::std::mem::offset_of!(ForetiasNoiseState, recv_nonce) - 296usize];
+        [::std::mem::offset_of!(ForetiasNoiseState, recv_nonce) - 456usize];
     ["Offset of field: ForetiasNoiseState::step"]
-        [::std::mem::offset_of!(ForetiasNoiseState, step) - 304usize];
+        [::std::mem::offset_of!(ForetiasNoiseState, step) - 464usize];
     ["Offset of field: ForetiasNoiseState::is_initiator"]
-        [::std::mem::offset_of!(ForetiasNoiseState, is_initiator) - 308usize];
+        [::std::mem::offset_of!(ForetiasNoiseState, is_initiator) - 468usize];
     ["Offset of field: ForetiasNoiseState::handshake_complete"]
-        [::std::mem::offset_of!(ForetiasNoiseState, handshake_complete) - 312usize];
+        [::std::mem::offset_of!(ForetiasNoiseState, handshake_complete) - 472usize];
     ["Offset of field: ForetiasNoiseState::curve"]
-        [::std::mem::offset_of!(ForetiasNoiseState, curve) - 316usize];
+        [::std::mem::offset_of!(ForetiasNoiseState, curve) - 476usize];
     ["Offset of field: ForetiasNoiseState::_pad"]
-        [::std::mem::offset_of!(ForetiasNoiseState, _pad) - 320usize];
+        [::std::mem::offset_of!(ForetiasNoiseState, _pad) - 480usize];
 };
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ForetiasPrivKey {
+    _unused: [u8; 0],
+}
 extern "C" {
     #[link_name = "foretias_noise_init_ed25519"]
     pub fn foretias_noise_init_ed25519(        state: *mut ForetiasNoiseState,        my_static_priv: *const ForetiasPrivKey32,        their_static_pub: *const ForetiasPubKey32,        is_initiator: bool,    ) -> ForetiasResult;
+}
+extern "C" {
+    #[link_name = "foretias_noise_init_with_handle"]
+    pub fn foretias_noise_init_with_handle(        state: *mut ForetiasNoiseState,        priv_handle: *const ForetiasPrivKey,        their_static_pub: *const ForetiasPubKey32,        is_initiator: bool,    ) -> ForetiasResult;
 }
 extern "C" {
     #[link_name = "foretias_noise_init_p256"]
@@ -516,7 +546,7 @@ extern "C" {
     pub fn foretias_merkle_verify(        root: *const ForetiasHash32,        leaf: *const ForetiasHash32,        proof: *const ForetiasMerkleProof,    ) -> ForetiasResult;
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub struct ForetiasFrostRound1 {
     pub nonce_d: [u8; 32usize],
     pub nonce_e: [u8; 32usize],
@@ -564,11 +594,6 @@ extern "C" {
     #[link_name = "foretias_memzero"]
     pub fn foretias_memzero(ptr: *mut ::std::os::raw::c_void, len: usize);
 }
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct ForetiasPrivKey {
-    _unused: [u8; 0],
-}
 extern "C" {
     #[link_name = "foretias_privkey_init"]
     pub fn foretias_privkey_init();
@@ -598,12 +623,24 @@ extern "C" {
     pub fn foretias_nullifier_derive_handle(        key: *const ForetiasPrivKey,        context: *const u8,        context_len: usize,        out: *mut ForetiasNullifier,    ) -> ForetiasResult;
 }
 extern "C" {
+    #[link_name = "foretias_privkey_ed25519_get_seed"]
+    pub fn foretias_privkey_ed25519_get_seed(        key: *const ForetiasPrivKey,        seed_out: *mut u8,    ) -> ForetiasResult;
+}
+extern "C" {
     #[link_name = "foretias_privkey_derive_seal_key"]
     pub fn foretias_privkey_derive_seal_key(        key: *const ForetiasPrivKey,        info: *const u8,        info_len: usize,        seal_key: *mut u8,    ) -> ForetiasResult;
 }
 extern "C" {
     #[link_name = "foretias_privkey_free"]
     pub fn foretias_privkey_free(key: *mut ForetiasPrivKey);
+}
+extern "C" {
+    #[link_name = "foretias_privkey_encrypt"]
+    pub fn foretias_privkey_encrypt(        plaintext: *const u8,        pt_len: usize,        ciphertext_out: *mut u8,        nonce_out: *mut u8,    ) -> ForetiasResult;
+}
+extern "C" {
+    #[link_name = "foretias_privkey_decrypt"]
+    pub fn foretias_privkey_decrypt(        ciphertext: *const u8,        ct_len: usize,        nonce: *const u8,        plaintext_out: *mut u8,    ) -> ForetiasResult;
 }
 extern "C" {
     #[link_name = "foretias_sphincs_sha2_128s_keypair"]

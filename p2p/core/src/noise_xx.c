@@ -111,6 +111,59 @@ static int _nh_dec_hash(uint8_t h[_NH_H], uint8_t k[32],
     return 0;
 }
 
+/* ── HR-1: KEK encrypt/decrypt helpers for Noise session secrets ── */
+
+static int _nh_decrypt_key(const uint8_t encrypted[48],
+                           const uint8_t nonce[24],
+                           uint8_t out[32]) {
+    int rc = foretias_privkey_decrypt(encrypted, 48, nonce, out);
+    if (rc < 0) return -1;
+    return 0;
+}
+
+static int _nh_encrypt_key(const uint8_t plaintext[32],
+                           uint8_t encrypted_out[48],
+                           uint8_t nonce_out[24]) {
+    int rc = foretias_privkey_encrypt(plaintext, 32, encrypted_out, nonce_out);
+    if (rc != FORETIAS_OK) return -1;
+    return 0;
+}
+
+/* ── Inline helpers for encrypting state fields ── */
+
+static int _nh_encrypt_chaining_key(ForetiasNoiseState *st, const uint8_t ck[32]) {
+    return _nh_encrypt_key(ck, st->encrypted_chaining_key, st->chaining_key_nonce);
+}
+
+static int _nh_decrypt_chaining_key(const ForetiasNoiseState *st, uint8_t ck[32]) {
+    return _nh_decrypt_key(st->encrypted_chaining_key, st->chaining_key_nonce, ck);
+}
+
+static int _nh_encrypt_local_static(ForetiasNoiseState *st, const uint8_t lsp[32]) {
+    return _nh_encrypt_key(lsp, st->encrypted_local_static, st->local_static_nonce);
+}
+
+static int _nh_decrypt_local_static(const ForetiasNoiseState *st, uint8_t lsp[32]) {
+    return _nh_decrypt_key(st->encrypted_local_static, st->local_static_nonce, lsp);
+}
+
+static int _nh_encrypt_send_key(ForetiasNoiseState *st, const uint8_t sk[32]) {
+    return _nh_encrypt_key(sk, st->encrypted_send_key, st->send_key_nonce);
+}
+
+static int _nh_decrypt_send_key(const ForetiasNoiseState *st, uint8_t sk[32]) {
+    return _nh_decrypt_key(st->encrypted_send_key, st->send_key_nonce, sk);
+}
+
+static int _nh_encrypt_recv_key(ForetiasNoiseState *st, const uint8_t rk[32]) {
+    return _nh_encrypt_key(rk, st->encrypted_recv_key, st->recv_key_nonce);
+}
+
+static int _nh_decrypt_recv_key(const ForetiasNoiseState *st, uint8_t rk[32]) {
+    return _nh_decrypt_key(st->encrypted_recv_key, st->recv_key_nonce, rk);
+}
+
+
 ForetiasResult foretias_noise_init_ed25519(
     ForetiasNoiseState*      state,
     const ForetiasPrivKey32* my_static_priv,
@@ -125,7 +178,7 @@ ForetiasResult foretias_noise_init_ed25519(
     const char *salt = "Noise_XX_static_key_ed25519";
     uint8_t prk[32];
     (void)crypto_auth_hmacsha256(prk, my_static_priv->bytes, 32,
-                                 (const uint8_t *)salt);
+                                  (const uint8_t *)salt);
 
     uint8_t seed[32];
     { uint8_t i = 0x01;
@@ -138,9 +191,15 @@ ForetiasResult foretias_noise_init_ed25519(
         return FORETIAS_ERR_BAD_KEY;
     }
 
-    memcpy(state->local_static_priv, seed, 32);
-    memcpy(state->local_static_pub, epub, 32);
+    /* HR-1: Encrypt local_static_priv before storing */
+    if (_nh_encrypt_local_static(state, seed) != 0) {
+        sodium_memzero(seed, 32);
+        sodium_memzero(prk, 32);
+        return FORETIAS_ERR_INTERNAL;
+    }
     sodium_memzero(seed, 32);
+
+    memcpy(state->local_static_pub, epub, 32);
     sodium_memzero(prk, 32);
     sodium_memzero(epub, 32);
 
@@ -151,13 +210,97 @@ ForetiasResult foretias_noise_init_ed25519(
     size_t proto_len = strlen(proto);
     if (proto_len > _NH_H) {
         (void)crypto_hash_sha256(state->handshake_hash,
-                                 (const uint8_t *)proto,
-                                 (unsigned long long)proto_len);
+                                  (const uint8_t *)proto,
+                                  (unsigned long long)proto_len);
     } else {
         memcpy(state->handshake_hash, proto, proto_len);
         memset(state->handshake_hash + proto_len, 0, _NH_H - proto_len);
     }
-    memcpy(state->chaining_key, state->handshake_hash, _NH_H);
+    /* HR-1: Encrypt chaining_key before storing */
+    { uint8_t ck[32];
+      memcpy(ck, state->handshake_hash, _NH_H);
+      if (_nh_encrypt_chaining_key(state, ck) != 0) {
+          sodium_memzero(ck, 32);
+          return FORETIAS_ERR_INTERNAL;
+      }
+      sodium_memzero(ck, 32);
+    }
+
+    state->step               = 0;
+    state->is_initiator       = is_initiator ? 1 : 0;
+    state->handshake_complete = 0;
+    state->curve              = FORETIAS_CURVE_ED25519;
+
+    return FORETIAS_OK;
+}
+
+ForetiasResult foretias_noise_init_with_handle(
+    ForetiasNoiseState*      state,
+    const ForetiasPrivKey*   priv_handle,
+    const ForetiasPubKey32*  their_static_pub,
+    bool                    is_initiator
+) {
+    if (!state || !priv_handle) return FORETIAS_ERR_BAD_INPUT;
+    if (sodium_init() < 0) return FORETIAS_ERR_INTERNAL;
+
+    memset(state, 0, sizeof(*state));
+
+    uint8_t ed_seed[32];
+    ForetiasResult rc = foretias_privkey_ed25519_get_seed(priv_handle, ed_seed);
+    if (rc != FORETIAS_OK) return rc;
+
+    const char *salt = "Noise_XX_static_key_ed25519";
+    uint8_t prk[32];
+    (void)crypto_auth_hmacsha256(prk, ed_seed, 32, (const uint8_t *)salt);
+
+    uint8_t x25519_seed[32];
+    { uint8_t i = 0x01;
+      (void)crypto_auth_hmacsha256(x25519_seed, &i, 1, prk); }
+
+    uint8_t epub[32];
+    if (crypto_scalarmult_base(epub, x25519_seed) != 0) {
+        sodium_memzero(x25519_seed, 32);
+        sodium_memzero(prk, 32);
+        sodium_memzero(ed_seed, 32);
+        return FORETIAS_ERR_BAD_KEY;
+    }
+
+    /* HR-1: Encrypt local_static_priv before storing */
+    if (_nh_encrypt_local_static(state, x25519_seed) != 0) {
+        sodium_memzero(x25519_seed, 32);
+        sodium_memzero(prk, 32);
+        sodium_memzero(ed_seed, 32);
+        return FORETIAS_ERR_INTERNAL;
+    }
+    sodium_memzero(x25519_seed, 32);
+
+    memcpy(state->local_static_pub, epub, 32);
+    sodium_memzero(prk, 32);
+    sodium_memzero(ed_seed, 32);
+    sodium_memzero(epub, 32);
+
+    if (their_static_pub)
+        memcpy(state->remote_static, their_static_pub->bytes, 32);
+
+    const char *proto = "Noise_XX_25519_ChaChaPoly_SHA256";
+    size_t proto_len = strlen(proto);
+    if (proto_len > _NH_H) {
+        (void)crypto_hash_sha256(state->handshake_hash,
+                                  (const uint8_t *)proto,
+                                  (unsigned long long)proto_len);
+    } else {
+        memcpy(state->handshake_hash, proto, proto_len);
+        memset(state->handshake_hash + proto_len, 0, _NH_H - proto_len);
+    }
+    /* HR-1: Encrypt chaining_key before storing */
+    { uint8_t ck[32];
+      memcpy(ck, state->handshake_hash, _NH_H);
+      if (_nh_encrypt_chaining_key(state, ck) != 0) {
+          sodium_memzero(ck, 32);
+          return FORETIAS_ERR_INTERNAL;
+      }
+      sodium_memzero(ck, 32);
+    }
 
     state->step               = 0;
     state->is_initiator       = is_initiator ? 1 : 0;
@@ -191,7 +334,8 @@ ForetiasResult foretias_noise_step(
     if (state->handshake_complete) return FORETIAS_ERR_BAD_INPUT;
 
     uint8_t ck[_NH_H], h[_NH_H], k[_NH_H];
-    memcpy(ck, state->chaining_key, _NH_H);
+    if (_nh_decrypt_chaining_key(state, ck) != 0)
+        return FORETIAS_ERR_BAD_KEY;
     memcpy(h, state->handshake_hash, _NH_H);
     memset(k, 0, _NH_H);
 
@@ -208,7 +352,11 @@ ForetiasResult foretias_noise_step(
             }
 
             memcpy(state->local_ephemeral, epub, _NH_D);
-            memcpy(state->send_key, epriv, _NH_D);
+            /* HR-1: Encrypt send_key instead of storing plaintext */
+            if (_nh_encrypt_send_key(state, epriv) != 0) {
+                sodium_memzero(epriv, 32);
+                return FORETIAS_ERR_INTERNAL;
+            }
             sodium_memzero(epriv, 32);
 
             memcpy(output, epub, _NH_D);
@@ -229,9 +377,17 @@ ForetiasResult foretias_noise_step(
             memcpy(state->remote_ephemeral, input, _NH_D);
             _nh_mix_hash(h, state->remote_ephemeral, _NH_D);
 
-            uint8_t dh[_NH_D];
-            if (_nh_x25519(state->send_key, state->remote_ephemeral, dh) != 0)
+            /* HR-1: Decrypt send_key for DH */
+            uint8_t sk[32];
+            if (_nh_decrypt_send_key(state, sk) != 0)
                 return FORETIAS_ERR_BAD_KEY;
+
+            uint8_t dh[_NH_D];
+            if (_nh_x25519(sk, state->remote_ephemeral, dh) != 0) {
+                sodium_memzero(sk, 32);
+                return FORETIAS_ERR_BAD_KEY;
+            }
+            sodium_memzero(sk, 32);
             _nh_mix_key(ck, dh, ck, k);
             sodium_memzero(dh, _NH_D);
 
@@ -248,8 +404,15 @@ ForetiasResult foretias_noise_step(
                 sodium_memzero(s, _NH_D);
             }
 
-            if (_nh_x25519(state->send_key, state->remote_static, dh) != 0)
+            /* HR-1: Decrypt send_key for second DH */
+            if (_nh_decrypt_send_key(state, sk) != 0)
                 return FORETIAS_ERR_BAD_KEY;
+
+            if (_nh_x25519(sk, state->remote_static, dh) != 0) {
+                sodium_memzero(sk, 32);
+                return FORETIAS_ERR_BAD_KEY;
+            }
+            sodium_memzero(sk, 32);
             _nh_mix_key(ck, dh, ck, k);
             sodium_memzero(dh, _NH_D);
 
@@ -267,9 +430,15 @@ ForetiasResult foretias_noise_step(
                 }
             }
 
-            sodium_memzero(state->send_key, _NH_H);
-            memcpy(state->send_key, k, _NH_H);
-            memcpy(state->chaining_key, ck, _NH_H);
+            /* HR-1: Encrypt send_key (k) — previous value is overwritten */
+            if (_nh_encrypt_send_key(state, k) != 0)
+                return FORETIAS_ERR_INTERNAL;
+            /* HR-1: Encrypt chaining_key */
+            if (_nh_encrypt_chaining_key(state, ck) != 0) {
+                sodium_memzero(ck, 32); sodium_memzero(k, 32);
+                return FORETIAS_ERR_INTERNAL;
+            }
+            sodium_memzero(ck, 32); sodium_memzero(k, 32);
             memcpy(state->handshake_hash, h, _NH_H);
 
             state->step = 2;
@@ -280,7 +449,9 @@ ForetiasResult foretias_noise_step(
             if (!output || *output_len < _NH_D + _NH_T)
                 return FORETIAS_ERR_BAD_INPUT;
 
-            memcpy(k, state->send_key, _NH_H);
+            /* HR-1: Decrypt send_key for encrypt-and-hash */
+            if (_nh_decrypt_send_key(state, k) != 0)
+                return FORETIAS_ERR_BAD_KEY;
 
             size_t ct_l = *output_len;
             if (_nh_eh(h, k, &state->send_nonce,
@@ -288,21 +459,42 @@ ForetiasResult foretias_noise_step(
                        output, &ct_l) != 0)
                 return FORETIAS_ERR_INTERNAL;
 
-            uint8_t dh[_NH_D];
-            if (_nh_x25519(state->local_static_priv,
-                           state->remote_ephemeral, dh) != 0)
+            /* HR-1: Decrypt local_static_priv for DH */
+            uint8_t lsp[32];
+            if (_nh_decrypt_local_static(state, lsp) != 0)
                 return FORETIAS_ERR_BAD_KEY;
+
+            uint8_t dh[_NH_D];
+            if (_nh_x25519(lsp, state->remote_ephemeral, dh) != 0) {
+                sodium_memzero(lsp, 32);
+                return FORETIAS_ERR_BAD_KEY;
+            }
+            sodium_memzero(lsp, 32);
             _nh_mix_key(ck, dh, ck, k);
             sodium_memzero(dh, _NH_D);
 
             uint8_t sk[_NH_H], rk[_NH_H];
             _nh_split(ck, sk, rk);
-            memcpy(state->send_key, sk, _NH_H);
-            memcpy(state->recv_key, rk, _NH_H);
+
+            /* HR-1: Encrypt send_key and recv_key */
+            if (_nh_encrypt_send_key(state, sk) != 0) {
+                sodium_memzero(sk, 32); sodium_memzero(rk, 32);
+                return FORETIAS_ERR_INTERNAL;
+            }
+            if (_nh_encrypt_recv_key(state, rk) != 0) {
+                sodium_memzero(sk, 32); sodium_memzero(rk, 32);
+                return FORETIAS_ERR_INTERNAL;
+            }
             sodium_memzero(sk, _NH_H);
             sodium_memzero(rk, _NH_H);
 
-            memcpy(state->chaining_key, ck, _NH_H);
+            /* HR-1: Encrypt chaining_key */
+            if (_nh_encrypt_chaining_key(state, ck) != 0) {
+                sodium_memzero(ck, 32);
+                return FORETIAS_ERR_INTERNAL;
+            }
+            sodium_memzero(ck, 32);
+
             memcpy(state->handshake_hash, h, _NH_H);
 
             *output_len = ct_l;
@@ -339,18 +531,28 @@ ForetiasResult foretias_noise_step(
             }
 
             memcpy(state->local_ephemeral, epub, _NH_D);
-            memcpy(state->recv_key, epriv, _NH_D);
+            /* HR-1: Encrypt recv_key instead of storing plaintext */
+            if (_nh_encrypt_recv_key(state, epriv) != 0) {
+                sodium_memzero(epriv, 32);
+                return FORETIAS_ERR_INTERNAL;
+            }
             sodium_memzero(epriv, 32);
 
             memcpy(output, epub, _NH_D);
             sodium_memzero(epub, 32);
             _nh_mix_hash(h, state->local_ephemeral, _NH_D);
 
+            /* HR-1: Decrypt recv_key for DH */
+            uint8_t rk[32];
+            if (_nh_decrypt_recv_key(state, rk) != 0)
+                return FORETIAS_ERR_BAD_KEY;
+
             uint8_t dh[_NH_D];
-            if (_nh_x25519(state->recv_key, state->remote_ephemeral, dh) != 0) {
-                sodium_memzero(state->recv_key, _NH_D);
+            if (_nh_x25519(rk, state->remote_ephemeral, dh) != 0) {
+                sodium_memzero(rk, 32);
                 return FORETIAS_ERR_BAD_KEY;
             }
+            sodium_memzero(rk, 32);
             _nh_mix_key(ck, dh, ck, k);
             sodium_memzero(dh, _NH_D);
 
@@ -359,22 +561,42 @@ ForetiasResult foretias_noise_step(
                 if (_nh_eh(h, k, &state->send_nonce,
                            state->local_static_pub, _NH_D,
                            output + _NH_D, &ct_l) != 0) {
-                    sodium_memzero(state->recv_key, _NH_D);
+                    sodium_memzero(k, 32);
                     return FORETIAS_ERR_INTERNAL;
                 }
                 *output_len = _NH_D + ct_l;
             }
 
-            if (_nh_x25519(state->local_static_priv,
-                           state->remote_ephemeral, dh) != 0) {
-                sodium_memzero(state->recv_key, _NH_D);
+            /* HR-1: Decrypt local_static_priv for DH */
+            uint8_t lsp[32];
+            if (_nh_decrypt_local_static(state, lsp) != 0) {
+                sodium_memzero(k, 32);
                 return FORETIAS_ERR_BAD_KEY;
             }
+
+            if (_nh_x25519(lsp, state->remote_ephemeral, dh) != 0) {
+                sodium_memzero(lsp, 32);
+                sodium_memzero(k, 32);
+                return FORETIAS_ERR_BAD_KEY;
+            }
+            sodium_memzero(lsp, 32);
             _nh_mix_key(ck, dh, ck, k);
             sodium_memzero(dh, _NH_D);
 
-            memcpy(state->send_key, k, _NH_H);
-            memcpy(state->chaining_key, ck, _NH_H);
+            /* HR-1: Encrypt send_key (k) */
+            if (_nh_encrypt_send_key(state, k) != 0) {
+                sodium_memzero(k, 32);
+                return FORETIAS_ERR_INTERNAL;
+            }
+            sodium_memzero(k, 32);
+
+            /* HR-1: Encrypt chaining_key */
+            if (_nh_encrypt_chaining_key(state, ck) != 0) {
+                sodium_memzero(ck, 32);
+                return FORETIAS_ERR_INTERNAL;
+            }
+            sodium_memzero(ck, 32);
+
             memcpy(state->handshake_hash, h, _NH_H);
 
             state->step = 2;
@@ -385,7 +607,9 @@ ForetiasResult foretias_noise_step(
             if (!input || input_len < _NH_D + _NH_T)
                 return FORETIAS_ERR_BAD_INPUT;
 
-            memcpy(k, state->send_key, _NH_H);
+            /* HR-1: Decrypt send_key for dec_hash */
+            if (_nh_decrypt_send_key(state, k) != 0)
+                return FORETIAS_ERR_BAD_KEY;
 
             {
                 size_t ct_l = _NH_D + _NH_T;
@@ -399,15 +623,19 @@ ForetiasResult foretias_noise_step(
                 sodium_memzero(s, _NH_D);
             }
 
+            /* HR-1: Decrypt recv_key for DH */
+            uint8_t rk[32];
+            if (_nh_decrypt_recv_key(state, rk) != 0)
+                return FORETIAS_ERR_BAD_KEY;
+
             uint8_t dh[_NH_D];
-            if (_nh_x25519(state->recv_key, state->remote_static, dh) != 0) {
-                sodium_memzero(state->recv_key, _NH_D);
+            if (_nh_x25519(rk, state->remote_static, dh) != 0) {
+                sodium_memzero(rk, 32);
                 return FORETIAS_ERR_BAD_KEY;
             }
+            sodium_memzero(rk, 32);
             _nh_mix_key(ck, dh, ck, k);
             sodium_memzero(dh, _NH_D);
-
-            sodium_memzero(state->recv_key, _NH_D);
 
             {
                 size_t off = _NH_D + _NH_T;
@@ -423,14 +651,28 @@ ForetiasResult foretias_noise_step(
                 }
             }
 
-            uint8_t sk[_NH_H], rk[_NH_H];
-            _nh_split(ck, sk, rk);
-            memcpy(state->send_key, rk, _NH_H);
-            memcpy(state->recv_key, sk, _NH_H);
-            sodium_memzero(sk, _NH_H);
-            sodium_memzero(rk, _NH_H);
+            uint8_t sk[_NH_H], rk_out[_NH_H];
+            _nh_split(ck, sk, rk_out);
 
-            memcpy(state->chaining_key, ck, _NH_H);
+            /* HR-1: Encrypt send_key (rk_out) and recv_key (sk) */
+            if (_nh_encrypt_send_key(state, rk_out) != 0) {
+                sodium_memzero(sk, 32); sodium_memzero(rk_out, 32);
+                return FORETIAS_ERR_INTERNAL;
+            }
+            if (_nh_encrypt_recv_key(state, sk) != 0) {
+                sodium_memzero(sk, 32); sodium_memzero(rk_out, 32);
+                return FORETIAS_ERR_INTERNAL;
+            }
+            sodium_memzero(sk, _NH_H);
+            sodium_memzero(rk_out, _NH_H);
+
+            /* HR-1: Encrypt chaining_key */
+            if (_nh_encrypt_chaining_key(state, ck) != 0) {
+                sodium_memzero(ck, 32);
+                return FORETIAS_ERR_INTERNAL;
+            }
+            sodium_memzero(ck, 32);
+
             memcpy(state->handshake_hash, h, _NH_H);
 
             state->step               = 3;
@@ -457,9 +699,15 @@ ForetiasResult foretias_noise_send(
     size_t out = pt_len + _NH_T;
     if (*ct_len < out) return FORETIAS_ERR_BAD_INPUT;
 
-    int r = _nh_ae_enc(state->send_key, &state->send_nonce,
+    /* HR-1: Decrypt send_key for AEAD encryption */
+    uint8_t sk[32];
+    if (_nh_decrypt_send_key(state, sk) != 0)
+        return FORETIAS_ERR_BAD_KEY;
+
+    int r = _nh_ae_enc(sk, &state->send_nonce,
                         NULL, 0, plaintext, pt_len,
                         ciphertext, ct_len);
+    sodium_memzero(sk, 32);
     if (r != 0) return FORETIAS_ERR_INTERNAL;
 
     return FORETIAS_OK;
@@ -476,10 +724,16 @@ ForetiasResult foretias_noise_recv(
     if (!ciphertext || !plaintext || !pt_len) return FORETIAS_ERR_BAD_INPUT;
     if (ct_len < _NH_T) return FORETIAS_ERR_BAD_INPUT;
 
+    /* HR-1: Decrypt recv_key for AEAD decryption */
+    uint8_t rk[32];
+    if (_nh_decrypt_recv_key(state, rk) != 0)
+        return FORETIAS_ERR_BAD_KEY;
+
     size_t max_pt = ct_len;
-    int r = _nh_ae_dec(state->recv_key, &state->recv_nonce,
+    int r = _nh_ae_dec(rk, &state->recv_nonce,
                         NULL, 0, ciphertext, ct_len,
                         plaintext, &max_pt);
+    sodium_memzero(rk, 32);
     if (r != 0) return FORETIAS_ERR_BAD_SIG;
 
     *pt_len = max_pt;
@@ -487,5 +741,5 @@ ForetiasResult foretias_noise_recv(
 }
 
 void foretias_noise_destroy(ForetiasNoiseState *state) {
-    if (state) foretias_memzero(state, sizeof(ForetiasNoiseState));
+    if (state) sodium_memzero(state, sizeof(ForetiasNoiseState));
 }

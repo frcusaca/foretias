@@ -165,6 +165,113 @@ static void test_derive_seal_key_info_len_overflow(void) {
     foretias_privkey_free(key);
 }
 
+/* ── Generic encrypt/decrypt tests (HR-1 Phase 0.4) ─────────────────── */
+static void test_encrypt_decrypt_roundtrip(void) {
+    /* Test round-trip for sizes: 32, 96, 128, 160, 1184, 1632, 4000, 4112 */
+    size_t sizes[] = {32, 96, 128, 160, 1184, 1632, 4000, 4112};
+    int n_sizes = sizeof(sizes) / sizeof(sizes[0]);
+
+    for (int i = 0; i < n_sizes; i++) {
+        size_t pt_len = sizes[i];
+        uint8_t plaintext[4112];
+        uint8_t nonce[24];
+        uint8_t ciphertext[4128];  /* 4112 + 16 */
+        uint8_t decrypted[4112];
+
+        /* Fill plaintext with known pattern */
+        for (size_t j = 0; j < pt_len; j++)
+            plaintext[j] = (uint8_t)(j & 0xFF);
+
+        /* Encrypt */
+        ForetiasResult rc = foretias_privkey_encrypt(plaintext, pt_len, ciphertext, nonce);
+        char buf[64];
+        snprintf(buf, sizeof(buf), "encrypt succeeds for size %zu", pt_len);
+        ASSERT_EQ(rc, FORETIAS_OK, buf);
+
+        /* Decrypt */
+        rc = foretias_privkey_decrypt(ciphertext, pt_len + 16, nonce, decrypted);
+        snprintf(buf, sizeof(buf), "decrypt succeeds for size %zu", pt_len);
+        ASSERT_EQ(rc, FORETIAS_OK, buf);
+
+        /* Compare */
+        int same = (memcmp(plaintext, decrypted, pt_len) == 0) ? 1 : 0;
+        snprintf(buf, sizeof(buf), "roundtrip matches for size %zu", pt_len);
+        ASSERT_EQ(same, 1, buf);
+    }
+}
+
+static void test_decrypt_wrong_nonce_fails(void) {
+    uint8_t plaintext[32];
+    uint8_t nonce[24];
+    uint8_t wrong_nonce[24];
+    uint8_t ciphertext[48];
+    uint8_t decrypted[32];
+
+    for (size_t i = 0; i < 32; i++) plaintext[i] = (uint8_t)i;
+
+    ForetiasResult rc = foretias_privkey_encrypt(plaintext, 32, ciphertext, nonce);
+    ASSERT_EQ(rc, FORETIAS_OK, "encrypt succeeds");
+
+    /* Use a wrong nonce */
+    memcpy(wrong_nonce, nonce, 24);
+    wrong_nonce[0] ^= 0xFF;
+
+    rc = foretias_privkey_decrypt(ciphertext, 48, wrong_nonce, decrypted);
+    ASSERT_NEQ(rc, FORETIAS_OK, "decrypt with wrong nonce fails");
+}
+
+static void test_decrypt_tampered_ciphertext_fails(void) {
+    uint8_t plaintext[32];
+    uint8_t nonce[24];
+    uint8_t ciphertext[48];
+    uint8_t decrypted[32];
+
+    for (size_t i = 0; i < 32; i++) plaintext[i] = (uint8_t)i;
+
+    ForetiasResult rc = foretias_privkey_encrypt(plaintext, 32, ciphertext, nonce);
+    ASSERT_EQ(rc, FORETIAS_OK, "encrypt succeeds");
+
+    /* Tamper with ciphertext */
+    ciphertext[10] ^= 0xFF;
+
+    rc = foretias_privkey_decrypt(ciphertext, 48, nonce, decrypted);
+    ASSERT_NEQ(rc, FORETIAS_OK, "decrypt with tampered ciphertext fails");
+}
+
+static void test_encrypt_null_input(void) {
+    uint8_t buf[32];
+    uint8_t nonce[24];
+    uint8_t ct[48];
+
+    ForetiasResult rc = foretias_privkey_encrypt(NULL, 32, ct, nonce);
+    ASSERT_EQ(rc, FORETIAS_ERR_BAD_INPUT, "encrypt with NULL plaintext fails");
+
+    rc = foretias_privkey_encrypt(buf, 32, NULL, nonce);
+    ASSERT_EQ(rc, FORETIAS_ERR_BAD_INPUT, "encrypt with NULL ciphertext fails");
+
+    rc = foretias_privkey_encrypt(buf, 32, ct, NULL);
+    ASSERT_EQ(rc, FORETIAS_ERR_BAD_INPUT, "encrypt with NULL nonce fails");
+}
+
+static void test_decrypt_null_input(void) {
+    uint8_t buf[48];
+    uint8_t nonce[24];
+    uint8_t pt[32];
+
+    ForetiasResult rc = foretias_privkey_decrypt(NULL, 48, nonce, pt);
+    ASSERT_EQ(rc, FORETIAS_ERR_BAD_INPUT, "decrypt with NULL ciphertext fails");
+
+    rc = foretias_privkey_decrypt(buf, 48, NULL, pt);
+    ASSERT_EQ(rc, FORETIAS_ERR_BAD_INPUT, "decrypt with NULL nonce fails");
+
+    rc = foretias_privkey_decrypt(buf, 48, nonce, NULL);
+    ASSERT_EQ(rc, FORETIAS_ERR_BAD_INPUT, "decrypt with NULL plaintext fails");
+
+    /* ct_len < 16 should fail */
+    rc = foretias_privkey_decrypt(buf, 10, nonce, pt);
+    ASSERT_EQ(rc, FORETIAS_ERR_BAD_INPUT, "decrypt with ct_len < 16 fails");
+}
+
 int test_privkey_main(void) {
     printf("=== privkey (opaque handle, encrypted) ===\n");
 
@@ -182,6 +289,13 @@ int test_privkey_main(void) {
     test_encrypted_key_useless_without_kek();
     test_from_seed_null_seed();
     test_derive_seal_key_info_len_overflow();
+
+    /* Generic encrypt/decrypt tests */
+    test_encrypt_decrypt_roundtrip();
+    test_decrypt_wrong_nonce_fails();
+    test_decrypt_tampered_ciphertext_fails();
+    test_encrypt_null_input();
+    test_decrypt_null_input();
 
     TEST_REPORT("privkey");
     return test_suite_finish();

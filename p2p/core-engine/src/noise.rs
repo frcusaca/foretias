@@ -19,6 +19,7 @@ use std::ptr::NonNull;
 use std::mem::ManuallyDrop;
 
 use crate::core::bindings::*;
+use crate::core::identity::PrivKeyHandle;
 use crate::error::{CryptoError, c_result_to_error};
 
 /// Maximum payload size supported by the Noise_XX cipher.
@@ -58,6 +59,63 @@ impl NoiseSession {
         their_static_pub: Option<&[u8; 32]>,
     ) -> Result<Self, CryptoError> {
         Self::new(static_priv, their_static_pub, false)
+    }
+
+    /// Create a new initiator (client) session from an opaque key handle.
+    ///
+    /// # Arguments
+    /// * `handle` - PrivKeyHandle (private key bytes never leave C memory)
+    /// * `their_static_pub` - Optional remote static public key (None for Noise_XX)
+    pub fn new_initiator_with_handle(
+        handle: &PrivKeyHandle,
+        their_static_pub: Option<&[u8; 32]>,
+    ) -> Result<Self, CryptoError> {
+        Self::new_with_handle(handle, their_static_pub, true)
+    }
+
+    /// Create a new responder (server) session from an opaque key handle.
+    ///
+    /// # Arguments
+    /// * `handle` - PrivKeyHandle (private key bytes never leave C memory)
+    /// * `their_static_pub` - Optional remote static public key (None for Noise_XX)
+    pub fn new_responder_with_handle(
+        handle: &PrivKeyHandle,
+        their_static_pub: Option<&[u8; 32]>,
+    ) -> Result<Self, CryptoError> {
+        Self::new_with_handle(handle, their_static_pub, false)
+    }
+
+    fn new_with_handle(
+        handle: &PrivKeyHandle,
+        their_static_pub: Option<&[u8; 32]>,
+        is_initiator: bool,
+    ) -> Result<Self, CryptoError> {
+        let their_pub: *const ForetiasPubKey32 =
+            their_static_pub.map_or(std::ptr::null(), |p| p as *const _ as *const ForetiasPubKey32);
+
+        let layout = std::alloc::Layout::new::<ForetiasNoiseState>();
+        let state_ptr = unsafe {
+            let ptr = std::alloc::alloc_zeroed(layout);
+            if ptr.is_null() {
+                return Err(CryptoError::BadInput("noise state allocation failed"));
+            }
+            ptr as *mut ForetiasNoiseState
+        };
+
+        let rc = unsafe {
+            foretias_noise_init_with_handle(
+                state_ptr,
+                handle.as_ptr(),
+                their_pub,
+                is_initiator,
+            )
+        };
+
+        c_result_to_error(rc)?;
+
+        let ptr = NonNull::new(state_ptr)
+            .ok_or(CryptoError::BadInput("noise: C library returned null state pointer"))?;
+        Ok(Self(ManuallyDrop::new(ptr)))
     }
 
     fn new(
@@ -266,6 +324,44 @@ pub async fn noise_handshake(
     Ok((session, stream))
 }
 
+pub async fn noise_handshake_with_handle(
+    mut stream: tokio::net::TcpStream,
+    handle: &PrivKeyHandle,
+    their_static_pub: Option<&[u8; 32]>,
+    is_initiator: bool,
+) -> Result<(NoiseSession, tokio::net::TcpStream), CryptoError> {
+    let mut session = if is_initiator {
+        NoiseSession::new_initiator_with_handle(handle, their_static_pub)?
+    } else {
+        NoiseSession::new_responder_with_handle(handle, their_static_pub)?
+    };
+
+    if is_initiator {
+        let e_out = session.step(None)?;
+        write_len(&mut stream, &e_out).await?;
+
+        let e2 = read_len(&mut stream).await?;
+        session.step(Some(&e2))?;
+
+        let e3 = session.step(None)?;
+        write_len(&mut stream, &e3).await?;
+    } else {
+        let e1 = read_len(&mut stream).await?;
+        session.step(Some(&e1))?;
+
+        let e2 = session.step(None)?;
+        write_len(&mut stream, &e2).await?;
+
+        let e3 = read_len(&mut stream).await?;
+        session.step(Some(&e3))?;
+    }
+
+    if !session.is_complete() {
+        return Err(CryptoError::BadInput("noise handshake incomplete"));
+    }
+    Ok((session, stream))
+}
+
 async fn write_len(stream: &mut tokio::net::TcpStream, msg: &[u8]) -> Result<(), CryptoError> {
     let len = (msg.len() as u32).to_le_bytes();
     tokio::io::AsyncWriteExt::write_all(stream, &len).await.map_err(|e| CryptoError::IoWrite(e.to_string()))?;
@@ -325,6 +421,7 @@ mod tests {
 
     #[test]
     fn noise_session_init_and_complete() {
+        PrivKeyHandle::init();
         let (_alice_pub, alice_priv) = crate::core::identity::generate_ed25519_keypair().unwrap();
         let (_bob_pub, bob_priv) = crate::core::identity::generate_ed25519_keypair().unwrap();
 
@@ -362,6 +459,7 @@ mod tests {
 
     #[test]
     fn noise_session_encrypt_decrypt_roundtrip() {
+        PrivKeyHandle::init();
         let (_alice_pub, alice_priv) = crate::core::identity::generate_ed25519_keypair().unwrap();
         let (_bob_pub, bob_priv) = crate::core::identity::generate_ed25519_keypair().unwrap();
 
@@ -396,6 +494,7 @@ mod tests {
 
     #[test]
     fn noise_session_rejects_tampered_ciphertext() {
+        PrivKeyHandle::init();
         let (alice_priv, _) = crate::core::identity::generate_ed25519_keypair().unwrap();
         let (bob_priv, _) = crate::core::identity::generate_ed25519_keypair().unwrap();
 
@@ -422,6 +521,7 @@ mod tests {
 
     #[test]
     fn noise_session_large_message() {
+        PrivKeyHandle::init();
         let (alice_priv, _) = crate::core::identity::generate_ed25519_keypair().unwrap();
         let (bob_priv, _) = crate::core::identity::generate_ed25519_keypair().unwrap();
 
@@ -443,5 +543,31 @@ mod tests {
         let ct = alice.send(&big_msg).unwrap();
         let pt = bob.recv(&ct).unwrap();
         assert_eq!(pt, big_msg, "Large message roundtrip should succeed");
+    }
+
+    #[test]
+    fn noise_session_with_handle_init_and_complete() {
+        PrivKeyHandle::init();
+
+        let alice_handle = PrivKeyHandle::generate().unwrap();
+        let bob_handle = PrivKeyHandle::generate().unwrap();
+
+        let mut alice = NoiseSession::new_initiator_with_handle(&alice_handle, None).unwrap();
+        let mut bob = NoiseSession::new_responder_with_handle(&bob_handle, None).unwrap();
+
+        let e1 = alice.step(None).unwrap();
+        bob.step(Some(&e1)).unwrap();
+        let e2 = bob.step(None).unwrap();
+        alice.step(Some(&e2)).unwrap();
+        let e3 = alice.step(None).unwrap();
+        bob.step(Some(&e3)).unwrap();
+
+        assert!(alice.is_complete(), "Alice handshake should complete");
+        assert!(bob.is_complete(), "Bob handshake should complete");
+
+        let msg = b"handle-based noise test";
+        let ct = alice.send(msg).unwrap();
+        let pt = bob.recv(&ct).unwrap();
+        assert_eq!(pt, msg, "Bob should decrypt Alice's message via handle");
     }
 }

@@ -97,6 +97,12 @@ fn main() {
         .allowlist_function("foretias_.*")
         .allowlist_var("FORETIAS_.*")
         .derive_debug(true).derive_copy(true)
+        .no_debug("ForetiasPrivKey32")
+        .no_debug("ForetiasSecretKeyVar")
+        .no_debug("ForetiasKemSecretKey")
+        .no_debug("ForetiasTbidV1SecretKey")
+        .no_debug("ForetiasNoiseState")
+        .no_debug("ForetiasFrostRound1")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .generate()
         .expect("bindgen failed");

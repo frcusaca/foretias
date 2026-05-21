@@ -2,12 +2,12 @@
 //!
 //! TBID V1 combines an Ed25519 keypair (classic identity) with an
 //! SLH-DSA-SHA2-256f keypair (post-quantum identity) into a single
-//! 96-byte public key and 160-byte secret key.
+//! 96-byte public key and 240-byte encrypted secret key.
 //!
 //! Layout:
-//!   pub_key  = Ed25519_PK(32) || SLH_DSA_PK(64)   = 96 bytes
-//!   secret   = Ed25519_SK(32) || SLH_DSA_SK(128)   = 160 bytes
-//!   sig      = Ed25519_Sig(64) || SLH_DSA_Sig(49856) = 49920 bytes
+//!   pub_key  = Ed25519_PK(32) || SLH_DSA_PK(64)               = 96 bytes
+//!   secret   = EncEd25519(48) || NonceEd(24) || EncSLH(144) || NonceSLH(24) = 240 bytes
+//!   sig      = Ed25519_Sig(64) || SLH_DSA_Sig(49856)          = 49920 bytes
 
 use crate::core::bindings::*;
 use crate::error::{c_result_to_error, CryptoError};
@@ -19,7 +19,7 @@ use crate::foretias::types::{SignatureBytes, Tbid};
 ///
 /// Returns (public_key, secret_key) where:
 ///   - public_key  is 96 bytes: Ed25519_PK(32) || SLH_DSA_PK(64)
-///   - secret_key  is 160 bytes: Ed25519_SK(32) || SLH_DSA_SK(128)
+///   - secret_key  is 240 bytes: EncEd25519(48) || NonceEd(24) || EncSLH(144) || NonceSLH(24)
 pub fn tbid_keypair() -> Result<(SignatureBytes, SignatureBytes), CryptoError> {
     // SAFETY: zeroing known-good #[repr(C)] structs from bindings.
     let mut secret: ForetiasTbidV1SecretKey = unsafe { std::mem::zeroed() };
@@ -29,9 +29,12 @@ pub fn tbid_keypair() -> Result<(SignatureBytes, SignatureBytes), CryptoError> {
     let rc = unsafe { foretias_tbid_v1_keypair(&mut secret, &mut public) };
     c_result_to_error(rc)?;
 
-    let mut secret_bytes = vec![0u8; FORETIAS_TBID_V1_SECRET_BYTES as usize];
-    secret_bytes[..32].copy_from_slice(&secret.ed25519_sk.bytes);
-    secret_bytes[32..].copy_from_slice(&secret.slh_dsa_sk[..FORETIAS_TBID_V1_SLH_DSA_SK_BYTES as usize]);
+    // Secret is now encrypted: ed25519 (48 bytes ct + 24 nonce) + slh_dsa (144 bytes ct + 24 nonce)
+    let mut secret_bytes = Vec::with_capacity(240);
+    secret_bytes.extend_from_slice(&secret.encrypted_ed25519);
+    secret_bytes.extend_from_slice(&secret.ed25519_nonce);
+    secret_bytes.extend_from_slice(&secret.encrypted_slh_dsa);
+    secret_bytes.extend_from_slice(&secret.slh_dsa_nonce);
 
     let mut public_bytes = vec![0u8; FORETIAS_TBID_V1_PUB_BYTES as usize];
     public_bytes[..32].copy_from_slice(&public.ed25519_pub.bytes);
@@ -52,15 +55,18 @@ pub fn tbid_sign(
     secret_key: &SignatureBytes,
     msg: &[u8],
 ) -> Result<SignatureBytes, CryptoError> {
-    if secret_key.len() != FORETIAS_TBID_V1_SECRET_BYTES as usize {
+    // secret_key layout: encrypted_ed25519(48) || ed25519_nonce(24) || encrypted_slh_dsa(144) || slh_dsa_nonce(24)
+    if secret_key.len() != 240 {
         return Err(CryptoError::BadInput("secret key length mismatch"));
     }
 
-    // Reconstruct ForetiasTbidV1SecretKey from raw bytes.
+    // Reconstruct encrypted ForetiasTbidV1SecretKey from stored bytes.
     let mut secret: ForetiasTbidV1SecretKey = unsafe { std::mem::zeroed() };
-    secret.ed25519_sk.bytes.copy_from_slice(&secret_key[..32]);
-    secret.slh_dsa_sk[..FORETIAS_TBID_V1_SLH_DSA_SK_BYTES as usize].copy_from_slice(&secret_key[32..160]);
-    secret.slh_dsa_sk_len = FORETIAS_TBID_V1_SLH_DSA_SK_BYTES as usize;
+    secret.encrypted_ed25519.copy_from_slice(&secret_key[..48]);
+    secret.ed25519_nonce.copy_from_slice(&secret_key[48..72]);
+    secret.encrypted_slh_dsa.copy_from_slice(&secret_key[72..216]);
+    secret.slh_dsa_nonce.copy_from_slice(&secret_key[216..240]);
+    secret.slh_dsa_plaintext_len = FORETIAS_TBID_V1_SLH_DSA_SK_BYTES as usize;
 
     // SAFETY: zeroing known-good #[repr(C)] struct from bindings.
     let mut sig: ForetiasTbidV1Sig = unsafe { std::mem::zeroed() };

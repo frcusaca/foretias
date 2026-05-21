@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use std::sync::Arc;
+use zeroize::Zeroizing;
 
 use axum::extract::State;
 use axum::routing::post;
@@ -40,7 +41,7 @@ pub struct TimeFamilyServer {
     listen_addr: String,
     persist_path: Option<std::path::PathBuf>,
     metrics: Arc<NodeMetrics>,
-    noise_static_priv: [u8; 32],
+    noise_static_priv: Zeroizing<[u8; 32]>,
     noise_static_pub: [u8; 32],
 }
 
@@ -75,7 +76,9 @@ impl TimeFamilyServer {
         let communerd = config.map(|c| {
             Arc::new(Communerd::new(c))
         });
-        let (pub_key, priv_key) = generate_ed25519_keypair()?;
+        let (pub_key, mut priv_key) = generate_ed25519_keypair()?;
+        let noise_static_priv = Zeroizing::new(priv_key.bytes);
+        priv_key.bytes.fill(0);
         Ok(Self {
             chronomatter: Arc::new(cm),
             calendar,
@@ -84,7 +87,7 @@ impl TimeFamilyServer {
             listen_addr: listen_addr.to_string(),
             persist_path,
             metrics,
-            noise_static_priv: priv_key.bytes,
+            noise_static_priv,
             noise_static_pub: pub_key.bytes,
         })
     }
@@ -102,7 +105,9 @@ impl TimeFamilyServer {
         let metrics = Arc::new(NodeMetrics::new());
         cm.set_mutual_attest_observer(Arc::clone(&metrics) as Arc<dyn MutualAttestObserver>);
         let calendar = Arc::new(Calendar::from_persisted(path)?);
-        let (pub_key, priv_key) = generate_ed25519_keypair()?;
+        let (pub_key, mut priv_key) = generate_ed25519_keypair()?;
+        let noise_static_priv = Zeroizing::new(priv_key.bytes);
+        priv_key.bytes.fill(0);
         Ok(Self {
             chronomatter: Arc::new(cm),
             calendar,
@@ -111,7 +116,7 @@ impl TimeFamilyServer {
             listen_addr: listen_addr.to_string(),
             persist_path: None,
             metrics,
-            noise_static_priv: priv_key.bytes,
+            noise_static_priv,
             noise_static_pub: pub_key.bytes,
         })
     }
@@ -307,7 +312,7 @@ async fn handle_connection(
     server: Arc<TimeFamilyServer>,
     stream: tokio::net::TcpStream,
 ) -> Result<(), NodeError> {
-    let static_priv = server.noise_static_priv;
+    let static_priv = &*server.noise_static_priv;
 
     let (mut session, stream) = match noise::noise_handshake(stream, &static_priv, None, false).await {
         Ok(res) => res,

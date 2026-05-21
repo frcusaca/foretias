@@ -20,14 +20,18 @@ find_path(SODIUM_INCLUDE_DIR sodium.h REQUIRED)
 find_package(OpenSSL REQUIRED COMPONENTS Crypto)
 
 # ── Find liboqs (for PQC signing/KEM) ───────────────────────────────────
-find_library(OQS_LIBRARY NAMES oqs REQUIRED)
-find_path(OQS_INCLUDE_DIR oqs/oqs.h REQUIRED)
+if(NOT DEFINED OQS_LIBRARY)
+  set(OQS_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/../core-engine/deps/liboqs/build/lib/liboqs.a")
+endif()
+if(NOT DEFINED OQS_INCLUDE_DIR)
+  set(OQS_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../core-engine/deps/liboqs/build/include")
+endif()
 
 # ── Source files ────────────────────────────────────────────────────────
 set(FORETIAS_CORE_SOURCES
     src/version.c
-    src/memzero.c
     src/rng_mix.c
+    src/memzero.c
     src/identity_ed25519.c
     src/identity_p256.c
     src/signing_ed25519.c

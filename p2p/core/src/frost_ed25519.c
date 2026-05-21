@@ -1,5 +1,6 @@
 #include "platform.h"
 #include "foretias_core.h"
+#include <sodium.h>
 
 ForetiasResult foretias_frost_round1(ForetiasFrostRound1* out) {
     (void)out;
@@ -47,5 +48,5 @@ ForetiasResult foretias_frost_aggregate(
 }
 
 void foretias_frost_destroy_round1(ForetiasFrostRound1* state) {
-    if (state) foretias_memzero(state, sizeof(ForetiasFrostRound1));
+    if (state) sodium_memzero(state, sizeof(ForetiasFrostRound1));
 }

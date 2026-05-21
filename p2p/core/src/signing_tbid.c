@@ -19,23 +19,37 @@ ForetiasResult foretias_tbid_v1_keypair(
         return result;
     }
 
-    ForetiasSecretKeyVar slh_dsa_secret = { .bytes = {0}, .len = FORETIAS_SIG_MAX_SECRET_BYTES };
-    ForetiasPubKeyVar slh_dsa_public = { .bytes = {0}, .len = FORETIAS_SIG_MAX_PUBKEY_BYTES };
-    result = foretias_sphincs_sha2_256f_keypair(&slh_dsa_secret, &slh_dsa_public);
-    if (result != FORETIAS_OK) {
-        foretias_memzero(&ed25519_sk, sizeof(ed25519_sk));
-        return result;
+    uint8_t plaintext_slh[OQS_SIG_sphincs_sha2_256f_simple_length_secret_key];
+    uint8_t plaintext_pk[OQS_SIG_sphincs_sha2_256f_simple_length_public_key];
+    OQS_STATUS st = OQS_SIG_sphincs_sha2_256f_simple_keypair(plaintext_pk, plaintext_slh);
+    if (st != OQS_SUCCESS) {
+        sodium_memzero(&ed25519_sk, sizeof(ed25519_sk));
+        sodium_memzero(plaintext_slh, sizeof(plaintext_slh));
+        return FORETIAS_ERR_INTERNAL;
     }
 
     public_out->ed25519_pub = ed25519_pub;
-    memcpy(public_out->slh_dsa_pub, slh_dsa_public.bytes, FORETIAS_TBID_V1_SLH_DSA_PUB_BYTES);
+    memcpy(public_out->slh_dsa_pub, plaintext_pk, FORETIAS_TBID_V1_SLH_DSA_PUB_BYTES);
 
-    secret_out->ed25519_sk = ed25519_sk;
-    memcpy(secret_out->slh_dsa_sk, slh_dsa_secret.bytes, FORETIAS_TBID_V1_SLH_DSA_SK_BYTES);
-    secret_out->slh_dsa_sk_len = FORETIAS_TBID_V1_SLH_DSA_SK_BYTES;
+    // Encrypt Ed25519 secret (32 bytes)
+    ForetiasResult rc = foretias_privkey_encrypt(
+        ed25519_sk.bytes, FORETIAS_TBID_V1_ED25519_SK_BYTES,
+        secret_out->encrypted_ed25519, secret_out->ed25519_nonce);
+    sodium_memzero(&ed25519_sk, sizeof(ed25519_sk));
+    if (rc != FORETIAS_OK) {
+        sodium_memzero(plaintext_slh, sizeof(plaintext_slh));
+        return rc;
+    }
 
-    foretias_memzero(&ed25519_sk, sizeof(ed25519_sk));
-    foretias_memzero(slh_dsa_secret.bytes, slh_dsa_secret.len);
+    // Encrypt SLH-DSA secret (128 bytes)
+    rc = foretias_privkey_encrypt(
+        plaintext_slh, FORETIAS_TBID_V1_SLH_DSA_SK_BYTES,
+        secret_out->encrypted_slh_dsa, secret_out->slh_dsa_nonce);
+    sodium_memzero(plaintext_slh, sizeof(plaintext_slh));
+    if (rc != FORETIAS_OK) {
+        return rc;
+    }
+    secret_out->slh_dsa_plaintext_len = FORETIAS_TBID_V1_SLH_DSA_SK_BYTES;
 
     return FORETIAS_OK;
 }
@@ -53,28 +67,39 @@ ForetiasResult foretias_tbid_v1_sign(
         return FORETIAS_ERR_BAD_INPUT;
     }
 
+    // Decrypt Ed25519 secret
+    ForetiasPrivKey32 ed25519_sk;
+    ForetiasResult rc = foretias_privkey_decrypt(
+        secret->encrypted_ed25519, FORETIAS_TBID_V1_ED25519_SK_BYTES + 16,
+        secret->ed25519_nonce, ed25519_sk.bytes);
+    if (rc < 0) return FORETIAS_ERR_INTERNAL;
+
+    // Sign with Ed25519
     ForetiasSig64 ed25519_sig;
-    ForetiasResult result = foretias_ed25519_sign(&secret->ed25519_sk, msg, msg_len, &ed25519_sig);
+    ForetiasResult result = foretias_ed25519_sign(&ed25519_sk, msg, msg_len, &ed25519_sig);
+    sodium_memzero(&ed25519_sk, sizeof(ed25519_sk));
     if (result != FORETIAS_OK) {
         return result;
     }
 
-    ForetiasSecretKeyVar slh_dsa_secret = { .bytes = {0}, .len = FORETIAS_SIG_MAX_SECRET_BYTES };
-    memcpy(slh_dsa_secret.bytes, secret->slh_dsa_sk, secret->slh_dsa_sk_len);
-    slh_dsa_secret.len = secret->slh_dsa_sk_len;
+    // Decrypt SLH-DSA secret
+    uint8_t plaintext_slh[OQS_SIG_sphincs_sha2_256f_simple_length_secret_key];
+    rc = foretias_privkey_decrypt(
+        secret->encrypted_slh_dsa, secret->slh_dsa_plaintext_len + 16,
+        secret->slh_dsa_nonce, plaintext_slh);
+    if (rc < 0) return FORETIAS_ERR_INTERNAL;
 
-    ForetiasSigVar slh_dsa_sig = { .bytes = {0}, .len = FORETIAS_SIG_MAX_SIG_BYTES };
-    result = foretias_sphincs_sha2_256f_sign(&slh_dsa_secret, msg, msg_len, &slh_dsa_sig);
-    if (result != FORETIAS_OK) {
-        foretias_memzero(slh_dsa_secret.bytes, slh_dsa_secret.len);
-        return result;
+    size_t sig_len = OQS_SIG_sphincs_sha2_256f_simple_length_signature;
+    uint8_t slh_sig[OQS_SIG_sphincs_sha2_256f_simple_length_signature];
+    OQS_STATUS st = OQS_SIG_sphincs_sha2_256f_simple_sign(slh_sig, &sig_len, msg, msg_len, plaintext_slh);
+    sodium_memzero(plaintext_slh, sizeof(plaintext_slh));
+    if (st != OQS_SUCCESS) {
+        return FORETIAS_ERR_INTERNAL;
     }
-
-    foretias_memzero(slh_dsa_secret.bytes, slh_dsa_secret.len);
 
     memcpy(sig_out->bytes, ed25519_sig.bytes, FORETIAS_TBID_V1_ED25519_SIG_BYTES);
-    memcpy(sig_out->bytes + FORETIAS_TBID_V1_ED25519_SIG_BYTES, slh_dsa_sig.bytes, slh_dsa_sig.len);
-    sig_out->len = FORETIAS_TBID_V1_ED25519_SIG_BYTES + slh_dsa_sig.len;
+    memcpy(sig_out->bytes + FORETIAS_TBID_V1_ED25519_SIG_BYTES, slh_sig, sig_len);
+    sig_out->len = FORETIAS_TBID_V1_ED25519_SIG_BYTES + sig_len;
 
     return FORETIAS_OK;
 }
@@ -115,9 +140,7 @@ ForetiasResult foretias_tbid_v1_verify(
 
 void foretias_tbid_v1_secret_zeroize(ForetiasTbidV1SecretKey* secret) {
     if (secret == NULL) return;
-    foretias_memzero(&secret->ed25519_sk, sizeof(secret->ed25519_sk));
-    foretias_memzero(secret->slh_dsa_sk, secret->slh_dsa_sk_len);
-    secret->slh_dsa_sk_len = 0;
+    sodium_memzero(secret, sizeof(ForetiasTbidV1SecretKey));
 }
 
 #endif
