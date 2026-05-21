@@ -85,7 +85,7 @@ Canceled features shall be marked as "not to be done" using the marker "[-] don'
 
 ### Worktree Branch Tracking in PLAN.md
 
-If a worktree branch is used for implementation, the PLAN.md **must** document the lifecycle of that worktree as explicit, separate checkbox tasks placed at appropriate points in the plan. The workpath shall always be `FULL_WORKTREE_PATH=${HOME}/tmp/foretias-worktrees/{SPEC_NAME_WITHOUT_MARKDOWN_EXTENSION}_${RANDOM}`, that random differentiator is set once while creating the plan file and stays consistent throughout the plan file.
+If a worktree branch is used for implementation, the PLAN.md **must** document the lifecycle of that worktree as explicit, separate checkbox tasks placed at appropriate points in the plan. The workpath shall always be `FULL_WORKTREE_PATH=${HOME}/tmp/foretias-worktrees/{SPEC_NAME_WITHOUT_MARKDOWN_EXTENSION}_####`, with '####' replaced by random digts once, then the name stays consistent throughout the plan file.
 ```markdown
 - [ ] Create worktree `git worktree add -b ${BRANCH_NAME} ${FULL_WORKTREE_PATH}}`
 - [ ] `cd ${FULL_WORKTREE_PATH}}`; reset current session work directory to be the full worktree path.
