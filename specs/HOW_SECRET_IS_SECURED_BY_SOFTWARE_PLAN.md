@@ -687,11 +687,11 @@ Phases 1, 2, 7, 8, 9 are runnable in parallel with Phase 0 and with each other (
         (2026-05-21 15:00)
         `cd ${HOME}/webhash/foretias/p2p && cargo test --workspace`
 - [x] **12.6** Finalize:
-      (2026-05-21 15:00)
+      (2026-05-21 15:10)
   - [x] Confirm `HOW_SECRET_IS_SECURED_BY_SOFTWARE_PLAN.md` has all but the cleanup checkboxes complete.
-  - [ ] `git worktree remove ${FULL_WORKTREE_PATH}` (cleanup worktree).
-  - [ ] `git branch -d ${BRANCH_NAME}` (after merge confirmed).
-  - [ ] This is the last checkbox to be checked in this plan.
+  - [x] `git worktree remove ${FULL_WORKTREE_PATH}` (cleanup worktree).
+  - [x] `git branch -d ${BRANCH_NAME}` (after merge confirmed).
+  - [x] This is the last checkbox to be checked in this plan.
 
 ---
 
