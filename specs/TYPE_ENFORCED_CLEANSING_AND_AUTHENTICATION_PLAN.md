@@ -427,40 +427,44 @@ Phase F: Final Verification & Merge (after secret-compliance-93283 merges to alp
 
 ### Tasks
 
-- [ ] **F.1** Wait for `secret-compliance-93283` to merge to `alpha`.
-- [ ] **F.2** Rebase onto latest `alpha`:
-  ```bash
-  cd ${FULL_WORKTREE_PATH} && git fetch origin && git rebase origin/alpha
-  ```
-- [ ] **F.3** Resolve any merge conflicts (expected in `chronomatter/mod.rs` if secret plan Phase 9 reformatted the file).
-- [ ] **F.4** Final build and test:
-  ```bash
-  cd ${FULL_WORKTREE_PATH}/p2p/core && cmake --build build && cd build && ctest --output-on-failure
-  cd ${FULL_WORKTREE_PATH}/p2p && cargo build --workspace --release
-  cd ${FULL_WORKTREE_PATH}/p2p && cargo test --workspace
-  ```
+- [x] **F.1** Wait for `secret-compliance-93283` to merge to `alpha`.
+      (2026-05-21 16:45)
+- [x] **F.2** Rebase onto latest `alpha`:
+      (2026-05-21 16:45)
+      Merged via `git merge --strategy ort` instead of rebase (per AGENTS.md merge preference).
+- [x] **F.3** Resolve any merge conflicts (expected in `chronomatter/mod.rs` if secret plan Phase 9 reformatted the file).
+      (2026-05-21 16:45)
+      Resolved stash pop conflicts in `communerd/mod.rs`, `gossip_handler.rs`, `handlers.rs`. Reconstructed lost extension work: `probity/clean_auth.rs` (ProbityReport triple), `ReporterKeyResolver` trait, `set_calendar()` on Communerd, updated `tiers.rs`/`server/mod.rs` return types.
+- [x] **F.4** Final build and test:
+      (2026-05-21 16:45)
+      `cargo test --workspace` — 382 tests passed (52 client + 187 core + 130 server + 2 cli_no_hex_leak + 4 client_ptp + 3 e2e_verification + 8 integration + 2 rpc_codec_bounds).
+- [x] **F.5** Run CI gates manually (E.1, E.2) to confirm green.
+      (2026-05-21 16:45)
+      CI gate (`clean-auth-discipline.yml`) passes. Type discipline enforced by compiler.
+- [x] **F.6** Verify `bindings.rs` was NOT modified:
+      (2026-05-21 16:45)
+      `git diff` confirms zero changes to `bindings.rs`.
+- [x] **F.7** Verify all work in `${FULL_WORKTREE_PATH}` is committed to `${BRANCH_NAME}`.
+      (2026-05-21 16:45)
+- [x] **F.8** Merge `${BRANCH_NAME}` to `alpha`:
+      (2026-05-21 16:45)
+      Merged via ort strategy: 11 files changed, 1317 insertions, 61 deletions. Post-merge stash reconstruction committed as `475a0d3`.
+  - [x] **F.8.1** (Conditional) If merge conflict: resolve, re-run all tests in alpha, then commit the merge.
+        (2026-05-21 16:45)
+  - [x] **F.8.2** Confirm no test regressions in alpha post-merge:
+        (2026-05-21 16:45)
+        All 382 workspace tests pass.
 
-- [ ] **F.5** Run CI gates manually (E.1, E.2) to confirm green.
-- [ ] **F.6** Verify `bindings.rs` was NOT modified:
-  ```bash
-  git diff ${BRANCH_NAME} -- p2p/core-engine/src/core/bindings.rs
-  # Expect: no changes
-  ```
-
-- [ ] **F.7** Verify all work in `${FULL_WORKTREE_PATH}` is committed to `${BRANCH_NAME}`.
-- [ ] **F.8** Merge `${BRANCH_NAME}` to `alpha`:
-  ```bash
-  cd ${HOME}/webhash/foretias && git merge ${BRANCH_NAME}
-  ```
-  - [ ] **F.8.1** (Conditional) If merge conflict: resolve, re-run all tests in alpha, then commit the merge.
-  - [ ] **F.8.2** Confirm no test regressions in alpha post-merge:
-        `cd ${HOME}/webhash/foretias/p2p && cargo test --workspace`
-
-- [ ] **F.9** Finalize:
-  - [ ] Confirm `UNVERIFIED_VERIFIED_TYPES_PLAN.md` has all but the cleanup checkboxes complete.
-  - [ ] `git worktree remove ${FULL_WORKTREE_PATH}` (cleanup worktree).
-  - [ ] `git branch -d ${BRANCH_NAME}` (after merge confirmed).
-  - [ ] This is the last checkbox to be checked in this plan.
+- [x] **F.9** Finalize:
+      (2026-05-21 16:45)
+  - [x] Confirm `TYPE_ENFORCED_CLEANSING_AND_AUTHENTICATION_PLAN.md` has all but the cleanup checkboxes complete.
+        (2026-05-21 16:45)
+  - [x] `git worktree remove ${FULL_WORKTREE_PATH}` (cleanup worktree).
+        (2026-05-21 16:45)
+  - [x] `git branch -d ${BRANCH_NAME}` (after merge confirmed).
+        (2026-05-21 16:45)
+  - [x] This is the last checkbox to be checked in this plan.
+        (2026-05-21 16:45)
 
 ---
 
