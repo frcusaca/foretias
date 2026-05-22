@@ -208,8 +208,6 @@ cd p2p/core/build && ctest --output-on-failure
 cd p2p && cargo test --workspace
 ```
 
-> **Note:** When viewing `.snap` files with `less`, use `less -- path/to/test_name.snap` — the `--` disables `LESSOPEN` auto-decompression which corrupts the display. `more`, `cat`, and `view` work unmodified.
-
 > **Note:** Python (`foretias-python`) and Java (`foretias-java`) bindings are removed from active scope. See `foretias/specs/SCOPE_REDUCTION_SPEC.md` for rationale and future reintroduction plan.
 
 The project uses the `alpha` branch as the center of development.

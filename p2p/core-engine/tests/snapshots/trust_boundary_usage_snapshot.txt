@@ -1,19 +1,18 @@
 === Trust Boundary Usage Snapshot ===
 
-file | crate | wrapper | inner | context
+file | inner | context | Unprocessed | CleanAuthenticated | Externalized
 ========================================================================================================================
-core-engine/src/foretias/clean_auth.rs | core-engine | Unprocessed | T | impl::Unprocessed
-core-engine/src/foretias/clean_auth.rs | core-engine | Unprocessed | T | impl::Unprocessed
-core-engine/src/foretias/clean_auth.rs | core-engine | CleanAuthenticated | T | impl::CleanAuthenticated
-core-engine/src/foretias/clean_auth.rs | core-engine | Externalized | T | impl::Externalized
-core-engine/src/foretias/clean_auth.rs | core-engine | Unprocessed | ChrononRecord | struct::UnprocessedChrononRecord
-core-engine/src/foretias/clean_auth.rs | core-engine | CleanAuthenticated | ChrononRecord | struct::CleanAuthenticatedChrononRecord
-core-engine/src/foretias/clean_auth.rs | core-engine | Unprocessed | Foretis | struct::UnprocessedForetis
-core-engine/src/foretias/clean_auth.rs | core-engine | CleanAuthenticated | Foretis | struct::CleanAuthenticatedForetis
-core-engine/src/foretias/clean_auth.rs | core-engine | Unprocessed | EpochSnapshot | struct::UnprocessedEpochSnapshot
-core-engine/src/foretias/clean_auth.rs | core-engine | CleanAuthenticated | EpochSnapshot | struct::CleanAuthenticatedEpochSnapshot
-foretias-server/src/probity/clean_auth.rs | foretias-server | Unprocessed | ProbityReport | struct::UnprocessedProbityReport
-foretias-server/src/probity/clean_auth.rs | foretias-server | CleanAuthenticated | ProbityReport | struct::CleanAuthenticatedProbityReport
+core-engine/src/foretias/clean_auth.rs | ChrononRecord | struct::CleanAuthenticatedChrononRecord | - | Y | -
+core-engine/src/foretias/clean_auth.rs | ChrononRecord | struct::UnprocessedChrononRecord | Y | - | -
+core-engine/src/foretias/clean_auth.rs | EpochSnapshot | struct::CleanAuthenticatedEpochSnapshot | - | Y | -
+core-engine/src/foretias/clean_auth.rs | EpochSnapshot | struct::UnprocessedEpochSnapshot | Y | - | -
+core-engine/src/foretias/clean_auth.rs | Foretis | struct::CleanAuthenticatedForetis | - | Y | -
+core-engine/src/foretias/clean_auth.rs | Foretis | struct::UnprocessedForetis | Y | - | -
+core-engine/src/foretias/clean_auth.rs | T | impl::CleanAuthenticated | - | Y | -
+core-engine/src/foretias/clean_auth.rs | T | impl::Externalized | - | - | Y
+core-engine/src/foretias/clean_auth.rs | T | impl::Unprocessed | Y | - | -
+foretias-server/src/probity/clean_auth.rs | ProbityReport | struct::CleanAuthenticatedProbityReport | - | Y | -
+foretias-server/src/probity/clean_auth.rs | ProbityReport | struct::UnprocessedProbityReport | Y | - | -
 
 
 === Cross-Tabulation ===

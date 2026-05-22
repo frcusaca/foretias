@@ -9,15 +9,27 @@ use std::path::Path;
 use syn::visit::Visit;
 
 #[derive(Debug, Clone)]
-struct TypeUsage {
+struct LocationEntry {
+    file: String,
+    inner: String,
+    context: String,
+    is_unprocessed: bool,
+    is_clean_authenticated: bool,
+    is_externalized: bool,
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+struct RawOccurrence {
     file: String,
     wrapper: String, // "CleanAuthenticated", "Unprocessed", "Externalized"
-    inner: String,   // e.g. "ChrononRecord", "Foretis", "EpochSnapshot", "ProbityReport"
-    context: String, // brief context: "struct::X", "impl::X::fn::Y", "fn::Z"
+    inner: String,
+    context: String,
 }
 
 struct WrapperTypeVisitor {
-    usages: Vec<TypeUsage>,
+    locations: HashMap<(String, String, String), LocationEntry>,
+    raw_occurrences: Vec<RawOccurrence>,
     current_file: String,
     context_stack: Vec<String>,
 }
@@ -25,7 +37,8 @@ struct WrapperTypeVisitor {
 impl WrapperTypeVisitor {
     fn new(file: &str) -> Self {
         Self {
-            usages: Vec::new(),
+            locations: HashMap::new(),
+            raw_occurrences: Vec::new(),
             current_file: file.to_string(),
             context_stack: Vec::new(),
         }
@@ -37,6 +50,34 @@ impl WrapperTypeVisitor {
         } else {
             self.context_stack.join("::")
         }
+    }
+
+    fn record_wrapper(&mut self, wrapper: &str, inner: &str, context: &str) {
+        let key = (
+            self.current_file.clone(),
+            inner.to_string(),
+            context.to_string(),
+        );
+        let entry = self.locations.entry(key).or_insert_with(|| LocationEntry {
+            file: self.current_file.clone(),
+            inner: inner.to_string(),
+            context: context.to_string(),
+            is_unprocessed: false,
+            is_clean_authenticated: false,
+            is_externalized: false,
+        });
+        match wrapper {
+            "Unprocessed" => entry.is_unprocessed = true,
+            "CleanAuthenticated" => entry.is_clean_authenticated = true,
+            "Externalized" => entry.is_externalized = true,
+            _ => {}
+        }
+        self.raw_occurrences.push(RawOccurrence {
+            file: self.current_file.clone(),
+            wrapper: wrapper.to_string(),
+            inner: inner.to_string(),
+            context: context.to_string(),
+        });
     }
 }
 
@@ -68,22 +109,12 @@ impl<'ast> Visit<'ast> for WrapperTypeVisitor {
                                     syn::Type::Reference(_) => "ref".to_string(),
                                     _ => "other".to_string(),
                                 };
-                                self.usages.push(TypeUsage {
-                                    file: self.current_file.clone(),
-                                    wrapper: name.clone(),
-                                    inner: inner_name,
-                                    context: self.current_context(),
-                                });
+                                self.record_wrapper(&name, &inner_name, &self.current_context());
                             }
                         }
                     } else {
                         // Bare usage without generic argument
-                        self.usages.push(TypeUsage {
-                            file: self.current_file.clone(),
-                            wrapper: name,
-                            inner: "bare".to_string(),
-                            context: self.current_context(),
-                        });
+                        self.record_wrapper(&name, "bare", &self.current_context());
                     }
                 }
             }
@@ -126,9 +157,9 @@ impl<'ast> Visit<'ast> for WrapperTypeVisitor {
     }
 }
 
-/// Collect all wrapper type usages across the workspace source directories.
-fn collect_all_type_usages(workspace_root: &Path) -> Vec<TypeUsage> {
-    let mut all_usages = Vec::new();
+fn collect_all_type_usages(workspace_root: &Path) -> (Vec<LocationEntry>, Vec<RawOccurrence>) {
+    let mut all_locations = HashMap::new();
+    let mut all_raw = Vec::new();
     let src_dirs = vec![
         "core-engine/src".to_string(),
         "foretias-client/src".to_string(),
@@ -157,12 +188,15 @@ fn collect_all_type_usages(workspace_root: &Path) -> Vec<TypeUsage> {
                     };
                     let mut visitor = WrapperTypeVisitor::new(&file_str);
                     visitor.visit_file(&ast);
-                    all_usages.extend(visitor.usages);
+                    all_locations.extend(visitor.locations);
+                    all_raw.extend(visitor.raw_occurrences);
                 }
             }
         }
     }
-    all_usages
+    let mut result: Vec<LocationEntry> = all_locations.into_values().collect();
+    result.sort_by(|a, b| a.file.cmp(&b.file).then(a.inner.cmp(&b.inner)).then(a.context.cmp(&b.context)));
+    (result, all_raw)
 }
 
 #[test]
@@ -172,10 +206,10 @@ fn test_wrapper_type_visitor_detects_wrappers() {
         .parent()
         .unwrap();
 
-    let usages = collect_all_type_usages(workspace);
+    let (locations, raw) = collect_all_type_usages(workspace);
 
     let wrappers: HashMap<String, usize> =
-        usages
+        raw
             .iter()
             .fold(HashMap::new(), |mut acc, u| {
                 *acc.entry(u.wrapper.clone()).or_insert(0) += 1;
@@ -202,18 +236,26 @@ fn test_wrapper_type_visitor_detects_wrappers() {
     );
 
     println!("\n=== Detailed Usage ===");
-    for u in &usages {
+    for loc in &locations {
+        let wrappers = vec![
+            (loc.is_unprocessed, "Unprocessed"),
+            (loc.is_clean_authenticated, "CleanAuthenticated"),
+            (loc.is_externalized, "Externalized"),
+        ];
+        let active: Vec<_> = wrappers.into_iter().filter(|(b, _)| *b).map(|(_, n)| n).collect();
         println!(
             "  {} [{}] {} (context: {})",
-            u.file, u.wrapper, u.inner, u.context
+            loc.file,
+            active.join(", "),
+            loc.inner,
+            loc.context
         );
     }
 }
 
-/// Build cross-tabulation: (crate, wrapper, inner) -> count
-fn build_cross_tabulation(usages: &[TypeUsage]) -> Vec<(String, String, String, usize)> {
+fn build_cross_tabulation(raw: &[RawOccurrence]) -> Vec<(String, String, String, usize)> {
     let mut map: HashMap<(String, String, String), usize> = HashMap::new();
-    for u in usages {
+    for u in raw {
         let crate_name = u.file.split('/').next().unwrap_or("unknown").to_string();
         let key = (crate_name, u.wrapper.clone(), u.inner.clone());
         *map.entry(key).or_insert(0) += 1;
@@ -224,43 +266,43 @@ fn build_cross_tabulation(usages: &[TypeUsage]) -> Vec<(String, String, String, 
 }
 
 /// Verify trust boundary invariants from AGENTS.md type-enforced trust boundaries.
-fn verify_trust_boundary_invariants(usages: &[TypeUsage]) -> Vec<String> {
+fn verify_trust_boundary_invariants(locations: &[LocationEntry]) -> Vec<String> {
     let mut violations = Vec::new();
 
     // Rule 1: core-engine should NOT contain Unprocessed usage EXCEPT in clean_auth.rs
-    for u in usages {
-        if u.file.starts_with("core-engine/src") && u.wrapper == "Unprocessed" {
-            if !u.file.ends_with("clean_auth.rs") {
+    for loc in locations {
+        if loc.file.starts_with("core-engine/src") && loc.is_unprocessed {
+            if !loc.file.ends_with("clean_auth.rs") {
                 violations.push(format!(
                     "VIOLATION: Unprocessed found in core-engine outside clean_auth.rs: {} [{}] {}",
-                    u.file, u.wrapper, u.inner
+                    loc.file, "Unprocessed", loc.inner
                 ));
             }
         }
     }
 
     // Rule 2: core-engine should NOT contain Externalized usage EXCEPT in clean_auth.rs
-    for u in usages {
-        if u.file.starts_with("core-engine/src") && u.wrapper == "Externalized" {
-            if !u.file.ends_with("clean_auth.rs") {
+    for loc in locations {
+        if loc.file.starts_with("core-engine/src") && loc.is_externalized {
+            if !loc.file.ends_with("clean_auth.rs") {
                 violations.push(format!(
                     "VIOLATION: Externalized found in core-engine outside clean_auth.rs: {} [{}] {}",
-                    u.file, u.wrapper, u.inner
+                    loc.file, "Externalized", loc.inner
                 ));
             }
         }
     }
 
     // Rule 3: Unprocessed should ONLY appear in communerd, clean_auth, or test files
-    for u in usages {
-        if u.wrapper == "Unprocessed" && u.inner != "bare" && u.inner != "T" {
-            let allowed = u.file.contains("communerd")
-                || u.file.contains("clean_auth")
-                || u.file.contains("test");
+    for loc in locations {
+        if loc.is_unprocessed && loc.inner != "bare" && loc.inner != "T" {
+            let allowed = loc.file.contains("communerd")
+                || loc.file.contains("clean_auth")
+                || loc.file.contains("test");
             if !allowed {
                 violations.push(format!(
                     "VIOLATION: Unprocessed outside allowed locations: {} [{}] {}",
-                    u.file, u.wrapper, u.inner
+                    loc.file, "Unprocessed", loc.inner
                 ));
             }
         }
@@ -269,19 +311,20 @@ fn verify_trust_boundary_invariants(usages: &[TypeUsage]) -> Vec<String> {
     violations
 }
 
-/// Build a formatted table string from usages.
-fn format_usage_table(usages: &[TypeUsage]) -> String {
+fn format_usage_table(locations: &[LocationEntry]) -> String {
     let mut table = String::new();
-    table.push_str("file | crate | wrapper | inner | context\n");
+    table.push_str("file | inner | context | Unprocessed | CleanAuthenticated | Externalized\n");
     table.push_str(&"=".repeat(120));
     table.push('\n');
-    for u in usages {
-        let crate_name = u.file.split('/').next().unwrap_or("?");
+    for loc in locations {
+        let up = if loc.is_unprocessed { "Y" } else { "-" };
+        let ca = if loc.is_clean_authenticated { "Y" } else { "-" };
+        let ex = if loc.is_externalized { "Y" } else { "-" };
         use std::fmt::Write;
         writeln!(
             table,
-            "{} | {} | {} | {} | {}",
-            u.file, crate_name, u.wrapper, u.inner, u.context
+            "{} | {} | {} | {} | {} | {}",
+            loc.file, loc.inner, loc.context, up, ca, ex
         )
         .unwrap();
     }
@@ -307,11 +350,11 @@ fn test_trust_boundary_snapshot() {
         .parent()
         .unwrap();
 
-    let usages = collect_all_type_usages(workspace);
-    let cross_tab = build_cross_tabulation(&usages);
-    let violations = verify_trust_boundary_invariants(&usages);
+    let (locations, raw) = collect_all_type_usages(workspace);
+    let cross_tab = build_cross_tabulation(&raw);
+    let violations = verify_trust_boundary_invariants(&locations);
 
-    let usage_table = format_usage_table(&usages);
+    let usage_table = format_usage_table(&locations);
     let cross_tab_str = format_cross_tab(&cross_tab);
 
     let mut snapshot = String::new();
