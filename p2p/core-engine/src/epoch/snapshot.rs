@@ -30,6 +30,15 @@ pub struct EpochSnapshot {
 }
 
 impl EpochSnapshot {
+    pub fn epoch_number(&self) -> &u64 { &self.epoch_number }
+    pub fn epoch_start_ns(&self) -> &u64 { &self.epoch_start_ns }
+    pub fn epoch_end_ns(&self) -> &u64 { &self.epoch_end_ns }
+    pub fn peer_scores(&self) -> &Vec<PeerScore> { &self.peer_scores }
+    pub fn committee(&self) -> &Vec<String> { &self.committee }
+    pub fn threshold(&self) -> &u32 { &self.threshold }
+    pub fn frost_signature(&self) -> &FTByteVector { &self.frost_signature }
+    pub fn committee_pubkey(&self) -> &FTByteVector { &self.committee_pubkey }
+
     /// Canonical bytes for FROST signing — everything except frost_signature.
     pub fn canonical_bytes(&self) -> Vec<u8> {
         let mut val = serde_json::to_value(self).unwrap();

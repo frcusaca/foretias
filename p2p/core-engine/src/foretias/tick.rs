@@ -80,6 +80,17 @@ impl ChrononRecord {
     pub fn is_genesis(&self) -> bool {
         self.chronon_number == 1
     }
+
+    pub fn chronon_number(&self) -> &u64 { &self.chronon_number }
+    pub fn public_key(&self) -> &FTByteVector { &self.public_key }
+    pub fn signature_algorithm(&self) -> &str { &self.signature_algorithm }
+    pub fn forward_foretis(&self) -> &FTByteVector { &self.forward_foretis }
+    pub fn backward_foretis(&self) -> &FTByteVector { &self.backward_foretis }
+    pub fn aa_nonce(&self) -> &FTByteArray<16> { &self.aa_nonce }
+    pub fn chronon_stamp_count(&self) -> &u64 { &self.chronon_stamp_count }
+    pub fn external_attestations(&self) -> &Vec<super::external_attestation::ExternalAttestation> { &self.external_attestations }
+    pub fn tb_version(&self) -> &u32 { &self.tb_version }
+    pub fn tbid(&self) -> &Tbid { &self.tbid }
 }
 
 /// A cryptographically signed attestation of content at a specific chronon.
@@ -135,6 +146,15 @@ impl Foretis {
             time_being_reference_time,
         })
     }
+
+    pub fn chronon_number(&self) -> &u64 { &self.chronon_number }
+    pub fn content_hash(&self) -> &FTByteArray<32> { &self.content_hash }
+    pub fn signature(&self) -> &FTByteVector { &self.signature }
+    pub fn signature_algorithm(&self) -> &str { &self.signature_algorithm }
+    pub fn tbid(&self) -> &Tbid { &self.tbid }
+    pub fn echo(&self) -> &str { &self.echo }
+    pub fn tbn(&self) -> &str { &self.tbn }
+    pub fn time_being_reference_time(&self) -> &str { &self.time_being_reference_time }
 }
 
 /// Trait for looking up ChrononRecords from a calendar or calendar-like store.

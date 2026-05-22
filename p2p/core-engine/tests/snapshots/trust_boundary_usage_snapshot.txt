@@ -1,0 +1,33 @@
+=== Trust Boundary Usage Snapshot ===
+
+file | crate | wrapper | inner | context
+========================================================================================================================
+core-engine/src/foretias/clean_auth.rs | core-engine | Unprocessed | T | impl::Unprocessed
+core-engine/src/foretias/clean_auth.rs | core-engine | Unprocessed | T | impl::Unprocessed
+core-engine/src/foretias/clean_auth.rs | core-engine | CleanAuthenticated | T | impl::CleanAuthenticated
+core-engine/src/foretias/clean_auth.rs | core-engine | Externalized | T | impl::Externalized
+core-engine/src/foretias/clean_auth.rs | core-engine | Unprocessed | ChrononRecord | struct::UnprocessedChrononRecord
+core-engine/src/foretias/clean_auth.rs | core-engine | CleanAuthenticated | ChrononRecord | struct::CleanAuthenticatedChrononRecord
+core-engine/src/foretias/clean_auth.rs | core-engine | Unprocessed | Foretis | struct::UnprocessedForetis
+core-engine/src/foretias/clean_auth.rs | core-engine | CleanAuthenticated | Foretis | struct::CleanAuthenticatedForetis
+core-engine/src/foretias/clean_auth.rs | core-engine | Unprocessed | EpochSnapshot | struct::UnprocessedEpochSnapshot
+core-engine/src/foretias/clean_auth.rs | core-engine | CleanAuthenticated | EpochSnapshot | struct::CleanAuthenticatedEpochSnapshot
+foretias-server/src/probity/clean_auth.rs | foretias-server | Unprocessed | ProbityReport | struct::UnprocessedProbityReport
+foretias-server/src/probity/clean_auth.rs | foretias-server | CleanAuthenticated | ProbityReport | struct::CleanAuthenticatedProbityReport
+
+
+=== Cross-Tabulation ===
+
+crate | wrapper | inner | count
+================================================================================
+core-engine | CleanAuthenticated | ChrononRecord | 1
+core-engine | CleanAuthenticated | EpochSnapshot | 1
+core-engine | CleanAuthenticated | Foretis | 1
+core-engine | CleanAuthenticated | T | 1
+core-engine | Externalized | T | 1
+core-engine | Unprocessed | ChrononRecord | 1
+core-engine | Unprocessed | EpochSnapshot | 1
+core-engine | Unprocessed | Foretis | 1
+core-engine | Unprocessed | T | 2
+foretias-server | CleanAuthenticated | ProbityReport | 1
+foretias-server | Unprocessed | ProbityReport | 1

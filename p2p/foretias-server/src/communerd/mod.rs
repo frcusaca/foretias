@@ -192,7 +192,7 @@ impl Communerd {
         if f.chronon_number == 0 || f.signature.is_empty() || f.signature_algorithm.is_empty() {
             return Err(TransportError::Decode("structurally invalid Foretis: chronon_number == 0, empty signature, or empty signature_algorithm".into()));
         }
-        let foretis = CleanAuthenticatedForetis::from_trusted(unprocessed.0).into_inner();
+        let foretis = CleanAuthenticatedForetis::from_trusted(unprocessed.into_inner()).into_inner();
         Ok(foretis)
     }
 
@@ -229,7 +229,7 @@ impl Communerd {
         if f.chronon_number == 0 || f.signature.is_empty() || f.signature_algorithm.is_empty() {
             return Err(TransportError::Decode("structurally invalid Foretis: chronon_number == 0, empty signature, or empty signature_algorithm".into()));
         }
-        let foretis = CleanAuthenticatedForetis::from_trusted(unprocessed.0).into_inner();
+        let foretis = CleanAuthenticatedForetis::from_trusted(unprocessed.into_inner()).into_inner();
         Ok(foretis)
     }
 

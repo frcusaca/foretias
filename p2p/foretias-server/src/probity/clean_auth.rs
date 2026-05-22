@@ -8,6 +8,8 @@
 use serde::{Deserialize, Serialize};
 use foretias_core::crypto_server::CryptoServer;
 pub use foretias_core::foretias::clean_auth::{CleanAuthError, ParseError};
+pub use foretias_core::foretias::clean_auth::{CleanAuthenticated, Unprocessed, TrustedInner};
+use delegate::delegate;
 
 use super::report::ProbityReport;
 
@@ -32,38 +34,50 @@ pub fn pub_key_from_tbid_hex(pub_key_hex: &str) -> Result<Vec<u8>, CleanAuthErro
 }
 
 // ---------------------------------------------------------------------------
-// UnprocessedProbityReport
+// UnprocessedProbityReport — generic wrapper
 // ---------------------------------------------------------------------------
 
 /// A ProbityReport that has been parsed but not yet verified.
 ///
 /// This type carries raw report data from the wire. Do NOT trust it.
 #[derive(Debug, Clone)]
-pub struct UnprocessedProbityReport(pub ProbityReport);
+pub struct UnprocessedProbityReport(pub Unprocessed<ProbityReport>);
 
 impl UnprocessedProbityReport {
     /// Parse from raw bytes (JSON). No verification performed.
     pub fn from_bytes(b: &[u8]) -> Result<Self, ParseError> {
         let report: ProbityReport = serde_json::from_slice(b)
             .map_err(ParseError::InvalidJson)?;
-        Ok(UnprocessedProbityReport(report))
+        Ok(UnprocessedProbityReport(Unprocessed::from_parsed(report)))
     }
 
     /// Parse from a JSON Value. No verification performed.
     pub fn from_json_value(v: serde_json::Value) -> Result<Self, ParseError> {
         let report: ProbityReport = serde_json::from_value(v)
             .map_err(ParseError::InvalidJson)?;
-        Ok(UnprocessedProbityReport(report))
+        Ok(UnprocessedProbityReport(Unprocessed::from_parsed(report)))
     }
 
     /// Extract the inner report (for inspection only; still untrusted).
     pub fn inner(&self) -> &ProbityReport {
-        &self.0
+        TrustedInner::<ProbityReport>::inner(&self.0)
+    }
+
+    delegate! {
+        to TrustedInner::<ProbityReport>::inner(&self.0) {
+            pub fn subject(&self) -> &str;
+            pub fn reporter(&self) -> &str;
+            pub fn attribute(&self) -> &str;
+            pub fn value(&self) -> &f32;
+            pub fn timestamp_ns(&self) -> &u64;
+            pub fn signature(&self) -> &Vec<u8>;
+            pub fn curve(&self) -> &u8;
+        }
     }
 }
 
 // ---------------------------------------------------------------------------
-// CleanAuthenticatedProbityReport
+// CleanAuthenticatedProbityReport — generic wrapper
 // ---------------------------------------------------------------------------
 
 /// A ProbityReport that has been authenticated to the claimed reporter TBID.
@@ -72,29 +86,39 @@ impl UnprocessedProbityReport {
 /// against the public key extracted from the reporter's TBID hex.
 ///
 /// **Private fields** -- zero external construction.
-pub struct CleanAuthenticatedProbityReport {
-    inner: ProbityReport,
-}
+pub struct CleanAuthenticatedProbityReport(CleanAuthenticated<ProbityReport>);
 
 impl CleanAuthenticatedProbityReport {
     /// Trusted construction -- only for locally-produced reports.
     pub fn from_trusted(report: ProbityReport) -> Self {
-        Self { inner: report }
+        Self(CleanAuthenticated::from_trusted(report))
     }
 
     /// Read-only accessor.
     pub fn inner(&self) -> &ProbityReport {
-        &self.inner
+        TrustedInner::<ProbityReport>::inner(&self.0)
     }
 
     /// Consume and return the inner report.
     pub fn into_inner(self) -> ProbityReport {
-        self.inner
+        TrustedInner::<ProbityReport>::into_inner(self.0)
+    }
+
+    delegate! {
+        to TrustedInner::<ProbityReport>::inner(&self.0) {
+            pub fn subject(&self) -> &str;
+            pub fn reporter(&self) -> &str;
+            pub fn attribute(&self) -> &str;
+            pub fn value(&self) -> &f32;
+            pub fn timestamp_ns(&self) -> &u64;
+            pub fn signature(&self) -> &Vec<u8>;
+            pub fn curve(&self) -> &u8;
+        }
     }
 
     /// Strip to minimal wire form. No runtime context leaks.
     pub fn externalize(self) -> ExternalizedProbityReport {
-        let r = self.inner;
+        let r = TrustedInner::<ProbityReport>::into_inner(self.0);
         ExternalizedProbityReport {
             subject: r.subject,
             reporter: r.reporter,
@@ -108,7 +132,7 @@ impl CleanAuthenticatedProbityReport {
 }
 
 // ---------------------------------------------------------------------------
-// ExternalizedProbityReport
+// ExternalizedProbityReport — concrete wire format
 // ---------------------------------------------------------------------------
 
 /// Minimal persistent form for ProbityReport (wire/disk).
@@ -138,9 +162,13 @@ impl ExternalizedProbityReport {
             signature: self.signature,
             curve: self.curve,
         };
-        Ok(UnprocessedProbityReport(report))
+        Ok(UnprocessedProbityReport(Unprocessed::from_parsed(report)))
     }
 }
+
+// ---------------------------------------------------------------------------
+// Verification gate: Unprocessed → CleanAuthenticated
+// ---------------------------------------------------------------------------
 
 impl UnprocessedProbityReport {
     /// Verify Ed25519 signature against the reporter's public key.
@@ -151,7 +179,7 @@ impl UnprocessedProbityReport {
         self,
         crypto: &dyn CryptoServer,
     ) -> Result<CleanAuthenticatedProbityReport, CleanAuthError> {
-        let report = &self.0;
+        let report = self.inner();
 
         // Only Ed25519 is supported for probity reports
         if report.curve != 1 {
@@ -181,7 +209,9 @@ impl UnprocessedProbityReport {
             return Err(CleanAuthError::InvalidSignature);
         }
 
-        Ok(CleanAuthenticatedProbityReport::from_trusted(self.0))
+        Ok(CleanAuthenticatedProbityReport::from_trusted(
+            TrustedInner::<ProbityReport>::into_inner(self.0)
+        ))
     }
 }
 
@@ -253,7 +283,7 @@ mod tests {
     fn test_verify_valid_signature() {
         let crypto = make_crypto();
         let report = make_signed_report(crypto.as_ref());
-        let up = UnprocessedProbityReport(report);
+        let up = UnprocessedProbityReport(Unprocessed::from_parsed(report));
         let ca = up.into_clean_authenticated(crypto.as_ref()).unwrap();
         assert_eq!(ca.inner().subject, "peer-A");
     }
@@ -263,7 +293,7 @@ mod tests {
         let crypto = make_crypto();
         let mut report = make_signed_report(crypto.as_ref());
         report.signature = vec![0xFF; 64]; // wrong signature
-        let up = UnprocessedProbityReport(report);
+        let up = UnprocessedProbityReport(Unprocessed::from_parsed(report));
         let result = up.into_clean_authenticated(crypto.as_ref());
         assert!(result.is_err());
         assert!(matches!(result, Err(CleanAuthError::InvalidSignature)));
@@ -274,7 +304,7 @@ mod tests {
         let crypto = make_crypto();
         let mut report = make_signed_report(crypto.as_ref());
         report.signature = vec![0xFF; 10]; // too short
-        let up = UnprocessedProbityReport(report);
+        let up = UnprocessedProbityReport(Unprocessed::from_parsed(report));
         let result = up.into_clean_authenticated(crypto.as_ref());
         assert!(result.is_err());
         assert!(matches!(result, Err(CleanAuthError::InvalidLength(_))));
@@ -317,7 +347,7 @@ mod tests {
     #[test]
     fn test_unprocessed_cannot_be_used_as_clean_authenticated() {
         // Type system enforces the distinction.
-        let _up: UnprocessedProbityReport = UnprocessedProbityReport(ProbityReport {
+        let _up: UnprocessedProbityReport = UnprocessedProbityReport(Unprocessed::from_parsed(ProbityReport {
             subject: "A".into(),
             reporter: "B".into(),
             attribute: "correctness".into(),
@@ -325,8 +355,48 @@ mod tests {
             timestamp_ns: 0,
             signature: vec![],
             curve: 1,
-        });
+        }));
         // The following would NOT compile:
         // let _: CleanAuthenticatedProbityReport = _up;
+    }
+
+    // ---------------------------------------------------------------------------
+    // Serialization snapshots — regression guards for wire format
+    // ---------------------------------------------------------------------------
+
+    /// Byte-exact snapshot: compare serialized JSON bytes directly.
+    /// The expected string must match the declaration-order serialization of the Externalized struct.
+    fn assert_snapshot_structural(json_bytes: &[u8], expected_json: &str, name: &str) {
+        let actual_str = std::str::from_utf8(json_bytes)
+            .unwrap_or_else(|_| panic!("failed to decode utf8 for {name} snapshot"));
+        if actual_str != expected_json {
+            panic!("Snapshot mismatch for {name}: wire-format serialization changed.\nactual:   {actual_str}\nexpected: {expected_json}");
+        }
+    }
+
+    #[test]
+    fn snapshot_probity_report_externalized() {
+        let report = ProbityReport {
+            subject: "peer-A".to_string(),
+            reporter: "peer-123".to_string(),
+            attribute: "correctness".to_string(),
+            value: -10.0,
+            timestamp_ns: 1_000_000_000_000,
+            signature: vec![0xABu8; 64],
+            curve: 1,
+        };
+        let ca = CleanAuthenticatedProbityReport::from_trusted(report);
+        let ext = ca.externalize();
+        let json_bytes = serde_json::to_vec(&ext).unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&json_bytes).unwrap();
+        assert_eq!(v["subject"], "peer-A");
+        assert_eq!(v["reporter"], "peer-123");
+        assert_eq!(v["attribute"], "correctness");
+        assert_eq!(v["timestamp_ns"].as_u64().unwrap(), 1_000_000_000_000);
+        assert_eq!(v["signature"].as_array().unwrap().len(), 64);
+        assert_eq!(v["curve"], 1);
+        assert_snapshot_structural(&json_bytes,
+            r#"{"subject":"peer-A","reporter":"peer-123","attribute":"correctness","value":-10.0,"timestamp_ns":1000000000000,"signature":[171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171,171],"curve":1}"#,
+            "snapshot_probity_report_externalized");
     }
 }

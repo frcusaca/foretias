@@ -21,6 +21,14 @@ pub struct ProbityReport {
 }
 
 impl ProbityReport {
+    pub fn subject(&self) -> &str { &self.subject }
+    pub fn reporter(&self) -> &str { &self.reporter }
+    pub fn attribute(&self) -> &str { &self.attribute }
+    pub fn value(&self) -> &f32 { &self.value }
+    pub fn timestamp_ns(&self) -> &u64 { &self.timestamp_ns }
+    pub fn signature(&self) -> &Vec<u8> { &self.signature }
+    pub fn curve(&self) -> &u8 { &self.curve }
+
     /// Canonical byte representation for signing — fixed field order,
     /// no signature field. Any change to this function is a wire-breaking change.
     pub fn canonical(&self) -> Vec<u8> {

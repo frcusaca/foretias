@@ -5,6 +5,7 @@
 //! before reaching trusted state.
 
 use foretias_core::foretias::calendar::Calendar;
+use foretias_core::foretias::clean_auth::{Unprocessed, UnprocessedChrononRecord, CleanAuthenticatedChrononRecord};
 use foretias_core::foretias::types::Tbid;
 use foretias_core::crypto_server;
 
@@ -80,7 +81,7 @@ async fn test_e2e_type_discipline_enforced() {
         tb_version: 0,
         tbid: Tbid::default(),
     };
-    let _up: UnprocessedChrononRecord = UnprocessedChrononRecord(record);
+    let _up: UnprocessedChrononRecord = UnprocessedChrononRecord(Unprocessed::from_parsed(record));
     // The following would NOT compile:
     // let _: CleanAuthenticatedChrononRecord = _up;
     // This is the desired behavior — the compiler enforces the gate.

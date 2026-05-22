@@ -16,6 +16,97 @@ use crate::error::NodeError;
 use super::tick::{ChrononRecord, Foretis, verify_pair};
 use super::types::Tbid;
 use super::external_attestation::ExternalAttestation;
+use super::encoding::{FTByteVector, FTByteArray};
+use delegate::delegate;
+
+// ---------------------------------------------------------------------------
+// TrustedInner trait
+// ---------------------------------------------------------------------------
+
+/// Trait for accessing the inner value of a trust boundary wrapper.
+///
+/// Generic impl covers all three wrapper types (CleanAuthenticated, Unprocessed, Externalized)
+/// with zero boilerplate.
+pub trait TrustedInner<T>: Sized {
+    /// Trusted construction -- only for locally-produced data.
+    fn from_trusted(inner: T) -> Self;
+    /// Read-only accessor.
+    fn inner(&self) -> &T;
+    /// Consume and return the inner value.
+    fn into_inner(self) -> T;
+}
+
+// ---------------------------------------------------------------------------
+// Generic trust boundary wrappers
+// ---------------------------------------------------------------------------
+
+/// A domain type that has been parsed but not yet verified.
+///
+/// Raw domain data from the wire/disk. Do NOT trust it.
+#[derive(Debug, Clone)]
+pub struct Unprocessed<T> {
+    inner: T,
+}
+
+impl<T> Unprocessed<T> {
+    /// Construct from raw parsed data.
+    pub fn from_parsed(inner: T) -> Self {
+        Self { inner }
+    }
+}
+
+impl<T> TrustedInner<T> for Unprocessed<T> {
+    fn from_trusted(inner: T) -> Self {
+        Self { inner }
+    }
+    fn inner(&self) -> &T {
+        &self.inner
+    }
+    fn into_inner(self) -> T {
+        self.inner
+    }
+}
+
+/// A domain type that has been authenticated and cleansed.
+///
+/// Due diligence complete. Safe for in-process use.
+/// **Private fields** -- zero external construction.
+#[derive(Debug, Clone)]
+pub struct CleanAuthenticated<T> {
+    inner: T,
+}
+
+impl<T> TrustedInner<T> for CleanAuthenticated<T> {
+    fn from_trusted(inner: T) -> Self {
+        Self { inner }
+    }
+    fn inner(&self) -> &T {
+        &self.inner
+    }
+    fn into_inner(self) -> T {
+        self.inner
+    }
+}
+
+/// A domain type in its wire/disk form.
+///
+/// Minimal fields only. No runtime context.
+#[derive(Debug, Clone)]
+pub struct Externalized<T> {
+    inner: T,
+}
+
+impl<T> TrustedInner<T> for Externalized<T> {
+    fn from_trusted(inner: T) -> Self {
+        Self { inner }
+    }
+    fn inner(&self) -> &T {
+        &self.inner
+    }
+    fn into_inner(self) -> T {
+        self.inner
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Error types
@@ -105,26 +196,46 @@ impl std::error::Error for ParseError {}
 ///
 /// This type carries raw domain data from the wire/disk. Do NOT trust it.
 #[derive(Debug, Clone)]
-pub struct UnprocessedChrononRecord(pub ChrononRecord);
+pub struct UnprocessedChrononRecord(pub Unprocessed<ChrononRecord>);
 
 impl UnprocessedChrononRecord {
     /// Parse from raw bytes (JSON). No verification performed.
     pub fn from_bytes(b: &[u8]) -> Result<Self, ParseError> {
         let record: ChrononRecord = serde_json::from_slice(b)
             .map_err(ParseError::InvalidJson)?;
-        Ok(UnprocessedChrononRecord(record))
+        Ok(UnprocessedChrononRecord(Unprocessed::from_parsed(record)))
     }
 
     /// Parse from a JSON-RPC Value. No verification performed.
     pub fn from_json_value(v: serde_json::Value) -> Result<Self, ParseError> {
         let record: ChrononRecord = serde_json::from_value(v)
             .map_err(ParseError::InvalidJson)?;
-        Ok(UnprocessedChrononRecord(record))
+        Ok(UnprocessedChrononRecord(Unprocessed::from_parsed(record)))
     }
 
     /// Extract the inner record (for inspection only; still untrusted).
     pub fn inner(&self) -> &ChrononRecord {
-        &self.0
+        TrustedInner::<ChrononRecord>::inner(&self.0)
+    }
+
+    /// Consume and return the inner record.
+    pub fn into_inner(self) -> ChrononRecord {
+        TrustedInner::<ChrononRecord>::into_inner(self.0)
+    }
+
+    delegate! {
+        to TrustedInner::<ChrononRecord>::inner(&self.0) {
+            pub fn chronon_number(&self) -> &u64;
+            pub fn public_key(&self) -> &FTByteVector;
+            pub fn signature_algorithm(&self) -> &str;
+            pub fn forward_foretis(&self) -> &FTByteVector;
+            pub fn backward_foretis(&self) -> &FTByteVector;
+            pub fn aa_nonce(&self) -> &FTByteArray<16>;
+            pub fn chronon_stamp_count(&self) -> &u64;
+            pub fn external_attestations(&self) -> &Vec<ExternalAttestation>;
+            pub fn tb_version(&self) -> &u32;
+            pub fn tbid(&self) -> &Tbid;
+        }
     }
 }
 
@@ -134,9 +245,7 @@ impl UnprocessedChrononRecord {
 /// sanitized, validated, normalized. Safe for in-process use.
 ///
 /// **Private fields** -- zero external construction.
-pub struct CleanAuthenticatedChrononRecord {
-    inner: ChrononRecord,
-}
+pub struct CleanAuthenticatedChrononRecord(CleanAuthenticated<ChrononRecord>);
 
 impl CleanAuthenticatedChrononRecord {
     /// Trusted construction -- only for locally-produced records.
@@ -144,22 +253,37 @@ impl CleanAuthenticatedChrononRecord {
     /// Chronomatter-produced records use this path. The caller asserts
     /// the record was signed with our own key.
     pub fn from_trusted(record: ChrononRecord) -> Self {
-        Self { inner: record }
+        Self(CleanAuthenticated::from_trusted(record))
     }
 
     /// Read-only accessor.
     pub fn inner(&self) -> &ChrononRecord {
-        &self.inner
+        TrustedInner::<ChrononRecord>::inner(&self.0)
     }
 
     /// Consume and return the inner record.
     pub fn into_inner(self) -> ChrononRecord {
-        self.inner
+        TrustedInner::<ChrononRecord>::into_inner(self.0)
+    }
+
+    delegate! {
+        to TrustedInner::<ChrononRecord>::inner(&self.0) {
+            pub fn chronon_number(&self) -> &u64;
+            pub fn public_key(&self) -> &FTByteVector;
+            pub fn signature_algorithm(&self) -> &str;
+            pub fn forward_foretis(&self) -> &FTByteVector;
+            pub fn backward_foretis(&self) -> &FTByteVector;
+            pub fn aa_nonce(&self) -> &FTByteArray<16>;
+            pub fn chronon_stamp_count(&self) -> &u64;
+            pub fn external_attestations(&self) -> &Vec<ExternalAttestation>;
+            pub fn tb_version(&self) -> &u32;
+            pub fn tbid(&self) -> &Tbid;
+        }
     }
 
     /// Strip to minimal persistent form. No runtime context leaks.
     pub fn externalize(self) -> ExternalizedChrononRecord {
-        let r = self.inner;
+        let r = TrustedInner::<ChrononRecord>::into_inner(self.0);
         ExternalizedChrononRecord {
             chronon_number: r.chronon_number,
             public_key: r.public_key.as_slice().try_into()
@@ -260,7 +384,7 @@ impl ExternalizedChrononRecord {
             tb_version: self.tb_version as u32,
             tbid: Tbid::from_raw(self.tbid.try_into().unwrap_or([0u8; 96])),
         };
-        Ok(UnprocessedChrononRecord(record))
+        Ok(UnprocessedChrononRecord(Unprocessed::from_parsed(record)))
     }
 }
 
@@ -274,12 +398,14 @@ impl UnprocessedChrononRecord {
         crypto: &dyn CryptoServer,
         prev: &CleanAuthenticatedChrononRecord,
     ) -> Result<CleanAuthenticatedChrononRecord, CleanAuthError> {
-        let valid = verify_pair(crypto, &prev.inner().tbid.to_hex(), prev.inner(), &self.0)
+        let valid = verify_pair(crypto, &prev.inner().tbid.to_hex(), prev.inner(), &TrustedInner::<ChrononRecord>::inner(&self.0))
             .map_err(CleanAuthError::Crypto)?;
         if !valid {
             return Err(CleanAuthError::ChainBreak);
         }
-        Ok(CleanAuthenticatedChrononRecord::from_trusted(self.0))
+        Ok(CleanAuthenticatedChrononRecord::from_trusted(
+            TrustedInner::<ChrononRecord>::into_inner(self.0)
+        ))
     }
 
     /// Verify a genesis record (tick 1). No predecessor required.
@@ -292,22 +418,25 @@ impl UnprocessedChrononRecord {
         // Genesis verification: the record must be tick 1 and have valid structure.
         // A full genesis verification requires the genesis public key and signature.
         // For now, we perform basic structural checks.
-        if self.0.chronon_number != 1 {
+        let record = &TrustedInner::<ChrononRecord>::inner(&self.0);
+        if record.chronon_number != 1 {
             return Err(CleanAuthError::ChainBreak);
         }
-        if self.0.public_key.is_empty() {
+        if record.public_key.is_empty() {
             return Err(CleanAuthError::InvalidLength("public_key empty".into()));
         }
         // For tb_version >= 1, verify genesis signature (requires tbid_verify).
         // For tb_version == 0, basic structural check suffices.
-        if self.0.tb_version >= 1 {
+        if record.tb_version >= 1 {
             // Genesis verification with SLH-DSA component -- delegated to verify_pair
             // with a synthetic predecessor. For now, return NotYetImplemented for
             // full genesis verification with PQC.
             // TODO: Implement full genesis verification when tbid_verify is wired.
             return Err(CleanAuthError::NotYetImplemented);
         }
-        Ok(CleanAuthenticatedChrononRecord::from_trusted(self.0))
+        Ok(CleanAuthenticatedChrononRecord::from_trusted(
+            TrustedInner::<ChrononRecord>::into_inner(self.0)
+        ))
     }
 }
 
@@ -319,26 +448,44 @@ impl UnprocessedChrononRecord {
 ///
 /// This type carries raw stamp data from the wire/disk. Do NOT trust it.
 #[derive(Debug, Clone)]
-pub struct UnprocessedForetis(pub Foretis);
+pub struct UnprocessedForetis(pub Unprocessed<Foretis>);
 
 impl UnprocessedForetis {
     /// Parse from raw bytes (JSON). No verification performed.
     pub fn from_bytes(b: &[u8]) -> Result<Self, ParseError> {
         let foretis: Foretis = serde_json::from_slice(b)
             .map_err(ParseError::InvalidJson)?;
-        Ok(UnprocessedForetis(foretis))
+        Ok(UnprocessedForetis(Unprocessed::from_parsed(foretis)))
     }
 
     /// Parse from a JSON-RPC Value. No verification performed.
     pub fn from_json_value(v: serde_json::Value) -> Result<Self, ParseError> {
         let foretis: Foretis = serde_json::from_value(v)
             .map_err(ParseError::InvalidJson)?;
-        Ok(UnprocessedForetis(foretis))
+        Ok(UnprocessedForetis(Unprocessed::from_parsed(foretis)))
     }
 
     /// Extract the inner Foretis (for inspection only; still untrusted).
     pub fn inner(&self) -> &Foretis {
-        &self.0
+        TrustedInner::<Foretis>::inner(&self.0)
+    }
+
+    /// Consume and return the inner Foretis.
+    pub fn into_inner(self) -> Foretis {
+        TrustedInner::<Foretis>::into_inner(self.0)
+    }
+
+    delegate! {
+        to TrustedInner::<Foretis>::inner(&self.0) {
+            pub fn chronon_number(&self) -> &u64;
+            pub fn content_hash(&self) -> &FTByteArray<32>;
+            pub fn signature(&self) -> &FTByteVector;
+            pub fn signature_algorithm(&self) -> &str;
+            pub fn tbid(&self) -> &Tbid;
+            pub fn echo(&self) -> &str;
+            pub fn tbn(&self) -> &str;
+            pub fn time_being_reference_time(&self) -> &str;
+        }
     }
 }
 
@@ -348,29 +495,40 @@ impl UnprocessedForetis {
 /// sanitized, validated, normalized. Safe for in-process use.
 ///
 /// **Private fields** -- zero external construction.
-pub struct CleanAuthenticatedForetis {
-    inner: Foretis,
-}
+pub struct CleanAuthenticatedForetis(CleanAuthenticated<Foretis>);
 
 impl CleanAuthenticatedForetis {
     /// Trusted construction -- only for locally-produced stamps.
     pub fn from_trusted(foretis: Foretis) -> Self {
-        Self { inner: foretis }
+        Self(CleanAuthenticated::from_trusted(foretis))
     }
 
     /// Read-only accessor.
     pub fn inner(&self) -> &Foretis {
-        &self.inner
+        TrustedInner::<Foretis>::inner(&self.0)
     }
 
     /// Consume and return the inner Foretis.
     pub fn into_inner(self) -> Foretis {
-        self.inner
+        TrustedInner::<Foretis>::into_inner(self.0)
+    }
+
+    delegate! {
+        to TrustedInner::<Foretis>::inner(&self.0) {
+            pub fn chronon_number(&self) -> &u64;
+            pub fn content_hash(&self) -> &FTByteArray<32>;
+            pub fn signature(&self) -> &FTByteVector;
+            pub fn signature_algorithm(&self) -> &str;
+            pub fn tbid(&self) -> &Tbid;
+            pub fn echo(&self) -> &str;
+            pub fn tbn(&self) -> &str;
+            pub fn time_being_reference_time(&self) -> &str;
+        }
     }
 
     /// Strip to minimal wire form. No runtime context leaks.
     pub fn externalize(self) -> ExternalizedForetis {
-        let f = self.inner;
+        let f = TrustedInner::<Foretis>::into_inner(self.0);
         ExternalizedForetis {
             chronon_number: f.chronon_number,
             content_hash: (*f.content_hash).into(),
@@ -408,7 +566,7 @@ impl ExternalizedForetis {
             tbn: String::new(),
             time_being_reference_time: String::new(),
         };
-        Ok(UnprocessedForetis(foretis))
+        Ok(UnprocessedForetis(Unprocessed::from_parsed(foretis)))
     }
 }
 
@@ -424,43 +582,46 @@ impl UnprocessedForetis {
         record: &CleanAuthenticatedChrononRecord,
     ) -> Result<CleanAuthenticatedForetis, CleanAuthError> {
         let rec = record.inner();
+        let foretis = TrustedInner::<Foretis>::inner(&self.0);
 
         // Algorithm mismatch detection
-        if self.0.signature_algorithm != rec.signature_algorithm {
+        if foretis.signature_algorithm != rec.signature_algorithm {
             return Err(CleanAuthError::AlgorithmMismatch);
         }
 
         // Chronon number must match
-        if self.0.chronon_number != rec.chronon_number {
+        if foretis.chronon_number != rec.chronon_number {
             return Err(CleanAuthError::ChainBreak);
         }
 
         // Recompute content hash and verify
         let recomputed = crypto.sha256(content)
             .map_err(|e| CleanAuthError::Crypto(NodeError::Crypto(e)))?;
-        if recomputed.bytes != *self.0.content_hash {
+        if recomputed.bytes != *foretis.content_hash {
             return Err(CleanAuthError::InvalidSignature);
         }
 
         // Rebuild signature input: tbid || chronon_number || content
         let mut sig_input = Vec::new();
-        sig_input.extend_from_slice(&self.0.tbid.raw_bytes());
-        sig_input.extend_from_slice(&self.0.chronon_number.to_be_bytes());
+        sig_input.extend_from_slice(&foretis.tbid.raw_bytes());
+        sig_input.extend_from_slice(&foretis.chronon_number.to_be_bytes());
         sig_input.extend_from_slice(content);
 
         // Verify signature against the record's public key
         let valid = crypto.verify_with(
             &rec.public_key,
-            &self.0.signature_algorithm,
+            &foretis.signature_algorithm,
             &sig_input,
-            &self.0.signature,
+            &foretis.signature,
         ).map_err(|e| CleanAuthError::Crypto(NodeError::Crypto(e)))?;
 
         if !valid {
             return Err(CleanAuthError::InvalidSignature);
         }
 
-        Ok(CleanAuthenticatedForetis::from_trusted(self.0))
+        Ok(CleanAuthenticatedForetis::from_trusted(
+            TrustedInner::<Foretis>::into_inner(self.0)
+        ))
     }
 }
 
@@ -472,43 +633,72 @@ use crate::epoch::snapshot::EpochSnapshot;
 
 /// An EpochSnapshot that has been parsed but not yet verified.
 #[derive(Debug, Clone)]
-pub struct UnprocessedEpochSnapshot(pub EpochSnapshot);
+pub struct UnprocessedEpochSnapshot(pub Unprocessed<EpochSnapshot>);
 
 impl UnprocessedEpochSnapshot {
     /// Parse from raw bytes (JSON). No verification performed.
     pub fn from_bytes(b: &[u8]) -> Result<Self, ParseError> {
         let snapshot: EpochSnapshot = serde_json::from_slice(b)
             .map_err(ParseError::InvalidJson)?;
-        Ok(UnprocessedEpochSnapshot(snapshot))
+        Ok(UnprocessedEpochSnapshot(Unprocessed::from_parsed(snapshot)))
     }
 
     /// Extract the inner snapshot (for inspection only; still untrusted).
     pub fn inner(&self) -> &EpochSnapshot {
-        &self.0
+        TrustedInner::<EpochSnapshot>::inner(&self.0)
+    }
+
+    /// Consume and return the inner snapshot.
+    pub fn into_inner(self) -> EpochSnapshot {
+        TrustedInner::<EpochSnapshot>::into_inner(self.0)
+    }
+
+    delegate! {
+        to TrustedInner::<EpochSnapshot>::inner(&self.0) {
+            pub fn epoch_number(&self) -> &u64;
+            pub fn epoch_start_ns(&self) -> &u64;
+            pub fn epoch_end_ns(&self) -> &u64;
+            pub fn peer_scores(&self) -> &Vec<crate::epoch::snapshot::PeerScore>;
+            pub fn committee(&self) -> &Vec<String>;
+            pub fn threshold(&self) -> &u32;
+            pub fn frost_signature(&self) -> &FTByteVector;
+            pub fn committee_pubkey(&self) -> &FTByteVector;
+        }
     }
 }
 
 /// An EpochSnapshot that has been authenticated and cleansed.
 ///
 /// **Private fields** -- zero external construction.
-pub struct CleanAuthenticatedEpochSnapshot {
-    inner: EpochSnapshot,
-}
+pub struct CleanAuthenticatedEpochSnapshot(CleanAuthenticated<EpochSnapshot>);
 
 impl CleanAuthenticatedEpochSnapshot {
-    /// Trusted construction.
+    /// Trusted construction -- only for locally-produced snapshots.
     pub fn from_trusted(snapshot: EpochSnapshot) -> Self {
-        Self { inner: snapshot }
+        Self(CleanAuthenticated::from_trusted(snapshot))
     }
 
     /// Read-only accessor.
     pub fn inner(&self) -> &EpochSnapshot {
-        &self.inner
+        TrustedInner::<EpochSnapshot>::inner(&self.0)
+    }
+
+    delegate! {
+        to TrustedInner::<EpochSnapshot>::inner(&self.0) {
+            pub fn epoch_number(&self) -> &u64;
+            pub fn epoch_start_ns(&self) -> &u64;
+            pub fn epoch_end_ns(&self) -> &u64;
+            pub fn peer_scores(&self) -> &Vec<crate::epoch::snapshot::PeerScore>;
+            pub fn committee(&self) -> &Vec<String>;
+            pub fn threshold(&self) -> &u32;
+            pub fn frost_signature(&self) -> &FTByteVector;
+            pub fn committee_pubkey(&self) -> &FTByteVector;
+        }
     }
 
     /// Strip to minimal wire form.
     pub fn externalize(self) -> ExternalizedEpochSnapshot {
-        let s = self.inner;
+        let s = TrustedInner::<EpochSnapshot>::into_inner(self.0);
         ExternalizedEpochSnapshot {
             epoch_number: s.epoch_number,
             peer_scores: s.peer_scores
@@ -560,7 +750,7 @@ impl ExternalizedEpochSnapshot {
             frost_signature: self.frost_signature.into(),
             committee_pubkey: self.committee_pubkey.into(),
         };
-        Ok(UnprocessedEpochSnapshot(snapshot))
+        Ok(UnprocessedEpochSnapshot(Unprocessed::from_parsed(snapshot)))
     }
 }
 
@@ -707,13 +897,90 @@ mod tests {
         assert!(err.to_string().contains("invalid signature"));
     }
 
+    // ---------------------------------------------------------------------------
+    // Serialization snapshots — regression guards for wire format
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn snapshot_chronon_record_externalized() {
+        let record = ChrononRecord {
+            chronon_number: 7,
+            public_key: vec![0x11u8; 32].into(),
+            signature_algorithm: "Ed25519".to_string(),
+            forward_foretis: vec![0x22u8; 64].into(),
+            backward_foretis: vec![0x33u8; 64].into(),
+            aa_nonce: [0x44u8; 16].into(),
+            chronon_stamp_count: 3,
+            external_attestations: Vec::new(),
+            tb_version: 0,
+            tbid: Tbid::default(),
+        };
+        let ca = CleanAuthenticatedChrononRecord::from_trusted(record);
+        let ext = ca.externalize();
+        let json_bytes = serde_json::to_vec(&ext).unwrap();
+        let obj: serde_json::Value = serde_json::from_slice(&json_bytes).unwrap();
+        assert_eq!(obj["chronon_number"], 7);
+        assert_eq!(obj["stamps_per_tick"], 3);
+        assert_eq!(obj["signature_algorithm"], "Ed25519");
+        assert_eq!(obj["public_key"].as_array().unwrap().len(), 32);
+    }
+
+    #[test]
+    fn snapshot_foretis_externalized() {
+        let foretis = Foretis {
+            chronon_number: 10,
+            content_hash: [0x55u8; 32].into(),
+            signature: vec![0x66u8; 64].into(),
+            signature_algorithm: "Ed25519".to_string(),
+            tbid: Tbid::default(),
+            echo: "test".to_string(),
+            tbn: "tbn".to_string(),
+            time_being_reference_time: "UE+999ns".to_string(),
+        };
+        let ca = CleanAuthenticatedForetis::from_trusted(foretis);
+        let ext = ca.externalize();
+        let json_bytes = serde_json::to_vec(&ext).unwrap();
+        let obj: serde_json::Value = serde_json::from_slice(&json_bytes).unwrap();
+        assert_eq!(obj["chronon_number"], 10);
+        assert_eq!(obj["signature_algorithm"], "Ed25519");
+        assert_eq!(obj["echo"], "test");
+        assert_eq!(obj["tbn"], 3);
+        assert_eq!(obj["content_hash"].as_array().unwrap().len(), 32);
+    }
+
+    #[test]
+    fn snapshot_epoch_snapshot_externalized() {
+        use crate::epoch::snapshot::PeerScore;
+        let snapshot = EpochSnapshot {
+            epoch_number: 5,
+            epoch_start_ns: 1000,
+            epoch_end_ns: 2000,
+            peer_scores: vec![
+                PeerScore { peer_id: "A".into(), score: 10.0 },
+                PeerScore { peer_id: "B".into(), score: 20.0 },
+            ],
+            committee: vec!["C1".into(), "C2".into()],
+            threshold: 2,
+            frost_signature: vec![0xAAu8; 64].into(),
+            committee_pubkey: vec![0xBBu8; 32].into(),
+        };
+        let ca = CleanAuthenticatedEpochSnapshot::from_trusted(snapshot);
+        let ext = ca.externalize();
+        let json_bytes = serde_json::to_vec(&ext).unwrap();
+        let obj: serde_json::Value = serde_json::from_slice(&json_bytes).unwrap();
+        assert_eq!(obj["epoch_number"], 5);
+        assert_eq!(obj["threshold"], 2);
+        assert_eq!(obj["peer_scores"].as_array().unwrap().len(), 2);
+        assert_eq!(obj["committee"].as_array().unwrap().len(), 2);
+    }
+
     #[test]
     fn test_unprocessed_cannot_be_used_as_clean_authenticated() {
         // This test verifies the type system enforces the distinction.
         // An UnprocessedChrononRecord CANNOT be directly assigned to
         // CleanAuthenticatedChrononRecord -- the compiler rejects it.
         // If this compiles, the type discipline has failed.
-        let _up: UnprocessedChrononRecord = UnprocessedChrononRecord(ChrononRecord {
+        let _up: UnprocessedChrononRecord = UnprocessedChrononRecord(Unprocessed::from_parsed(ChrononRecord {
             chronon_number: 1,
             public_key: vec![0u8; 32].into(),
             signature_algorithm: "Ed25519".to_string(),
@@ -724,7 +991,7 @@ mod tests {
             external_attestations: Vec::new(),
             tb_version: 0,
             tbid: Tbid::default(),
-        });
+        }));
         // The following line would NOT compile:
         // let _: CleanAuthenticatedChrononRecord = _up;
         // This is the desired behavior -- the compiler enforces the gate.
