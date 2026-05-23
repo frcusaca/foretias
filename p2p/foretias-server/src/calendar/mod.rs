@@ -22,6 +22,7 @@
 use std::sync::Arc;
 
 pub mod mirror;
+pub mod task_queue;
 
 use foretias_core::foretias::callbacks::TickObserver;
 use foretias_core::foretias::tick::CalendarLookup;
@@ -32,10 +33,18 @@ use tracing::{debug, info};
 
 pub use foretias_core::foretias::callbacks::PeerChangeCallback;
 pub use mirror::{MirrorStore, compute_hash_sanity};
+pub use task_queue::{CalendarTask, CalendarTaskSender, WorkerPool, DEFAULT_WORKER_COUNT};
 
 pub struct Calendar {
     inner: Arc<RwLock<CoreCalendar>>,
     tbn: String,
+    /// Group 4b: low-priority work channel sender. `None` until
+    /// `start_task_queue()` is called; once set, callers may enqueue
+    /// `CalendarTask`s for the worker pool to process.
+    task_tx: std::sync::Mutex<Option<CalendarTaskSender>>,
+    /// Owned worker pool handles, kept here so Calendar drives the pool's
+    /// lifetime. Phase 4b.6 will wire graceful shutdown through this field.
+    worker_pool: std::sync::Mutex<Option<WorkerPool>>,
 }
 
 impl Calendar {
@@ -44,6 +53,8 @@ impl Calendar {
         Self {
             inner: Arc::new(RwLock::new(CoreCalendar::new(tbid, tbn))),
             tbn: tbn.to_string(),
+            task_tx: std::sync::Mutex::new(None),
+            worker_pool: std::sync::Mutex::new(None),
         }
     }
 
@@ -55,7 +66,47 @@ impl Calendar {
         Ok(Self {
             inner: Arc::new(RwLock::new(cal)),
             tbn,
+            task_tx: std::sync::Mutex::new(None),
+            worker_pool: std::sync::Mutex::new(None),
         })
+    }
+
+    /// Start the Group 4b task queue: spawn the default-sized worker pool
+    /// and store the sender so `enqueue_task` becomes operational. Calling
+    /// twice replaces the existing pool's sender (old workers run until the
+    /// previous channel drains, then exit).
+    pub fn start_task_queue(&self) {
+        let (tx, pool) = task_queue::start_default_pool();
+        *self.task_tx.lock().unwrap() = Some(tx);
+        *self.worker_pool.lock().unwrap() = Some(pool);
+        debug!(
+            component = "calendar",
+            worker_count = task_queue::DEFAULT_WORKER_COUNT,
+            "calendar task queue started"
+        );
+    }
+
+    /// Enqueue a calendar task. Returns `Err` if the task queue hasn't been
+    /// started (callers should call `start_task_queue` once at construction
+    /// time) or if the channel was closed.
+    pub fn enqueue_task(&self, task: CalendarTask) -> Result<(), CalendarTask> {
+        let guard = self.task_tx.lock().unwrap();
+        match guard.as_ref() {
+            Some(tx) => task_queue::enqueue(tx, task),
+            None => {
+                debug!(
+                    component = "calendar",
+                    task_kind = task.kind(),
+                    "task queue not started; dropping enqueue"
+                );
+                Err(task)
+            }
+        }
+    }
+
+    /// True if the task queue has been started.
+    pub fn task_queue_started(&self) -> bool {
+        self.task_tx.lock().unwrap().is_some()
     }
 
     pub fn inner(&self) -> Arc<RwLock<CoreCalendar>> {
@@ -237,5 +288,48 @@ mod tests {
         let cal = Calendar::new(Tbid::from_raw([0x08; 96]), "arc-test");
         let inner = cal.inner();
         assert_eq!(inner.read().ticks.len(), 0);
+    }
+
+    // ── Group 4b: task queue scaffolding ────────────────────────────────────
+
+    #[test]
+    fn task_queue_starts_in_inactive_state() {
+        let cal = Calendar::new(Tbid::from_raw([0x09; 96]), "queue-test");
+        assert!(!cal.task_queue_started());
+    }
+
+    #[test]
+    fn enqueue_before_start_returns_err() {
+        let cal = Calendar::new(Tbid::from_raw([0x0A; 96]), "queue-test");
+        let result = cal.enqueue_task(CalendarTask::FindNewMirror);
+        assert!(
+            result.is_err(),
+            "enqueue must fail before start_task_queue is called"
+        );
+    }
+
+    #[tokio::test]
+    async fn task_queue_accepts_all_variants_after_start() {
+        use foretias_core::foretias::callbacks::PeerAddr;
+        let cal = Calendar::new(Tbid::from_raw([0x0B; 96]), "queue-test");
+        cal.start_task_queue();
+        assert!(cal.task_queue_started());
+
+        let peer = PeerAddr {
+            json_rpc: "127.0.0.1:6001".to_string(),
+        };
+        let variants = vec![
+            CalendarTask::DoAttestation { peer: peer.clone() },
+            CalendarTask::FindNewMirror,
+            CalendarTask::InitiateDump { mirror: peer.clone() },
+            CalendarTask::StartStream { mirror: peer.clone() },
+            CalendarTask::ExploreMirror { mirror: peer.clone() },
+            CalendarTask::ExpireMirror { mirror: peer.clone() },
+        ];
+        for task in variants {
+            cal.enqueue_task(task).expect("enqueue after start succeeds");
+        }
+        // Give the worker pool a tick to drain placeholder dispatches.
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
 }
