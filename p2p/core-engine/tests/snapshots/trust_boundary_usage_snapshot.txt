@@ -2,31 +2,48 @@
 
 file | inner | context | Unprocessed | CleanAuthenticated | Externalized
 ========================================================================================================================
-core-engine/src/foretias/clean_auth.rs | ChrononRecord | struct::CleanAuthenticatedChrononRecord | - | Y | -
-core-engine/src/foretias/clean_auth.rs | ChrononRecord | struct::UnprocessedChrononRecord | Y | - | -
-core-engine/src/foretias/clean_auth.rs | EpochSnapshot | struct::CleanAuthenticatedEpochSnapshot | - | Y | -
-core-engine/src/foretias/clean_auth.rs | EpochSnapshot | struct::UnprocessedEpochSnapshot | Y | - | -
-core-engine/src/foretias/clean_auth.rs | Foretis | struct::CleanAuthenticatedForetis | - | Y | -
-core-engine/src/foretias/clean_auth.rs | Foretis | struct::UnprocessedForetis | Y | - | -
+core-engine/src/foretias/clean_auth.rs | ChrononRecord | impl::CleanAuthenticated | - | Y | -
+core-engine/src/foretias/clean_auth.rs | ChrononRecord | impl::ExternalizedChrononRecord::fn::into_unprocessed | Y | - | -
+core-engine/src/foretias/clean_auth.rs | ChrononRecord | impl::ExternalizedChrononRecord::fn::reconstruct | Y | - | -
+core-engine/src/foretias/clean_auth.rs | ChrononRecord | impl::Unprocessed | Y | - | -
+core-engine/src/foretias/clean_auth.rs | ChrononRecord | impl::Unprocessed::fn::into_clean_authenticated | - | Y | -
+core-engine/src/foretias/clean_auth.rs | ChrononRecord | impl::Unprocessed::fn::into_clean_authenticated_genesis | - | Y | -
+core-engine/src/foretias/clean_auth.rs | ChrononRecord | impl::Unprocessed::fn::verify | - | Y | -
+core-engine/src/foretias/clean_auth.rs | EpochSnapshot | impl::CleanAuthenticated | - | Y | -
+core-engine/src/foretias/clean_auth.rs | EpochSnapshot | impl::ExternalizedEpochSnapshot::fn::into_unprocessed | Y | - | -
+core-engine/src/foretias/clean_auth.rs | EpochSnapshot | impl::ExternalizedEpochSnapshot::fn::reconstruct | Y | - | -
+core-engine/src/foretias/clean_auth.rs | EpochSnapshot | impl::Unprocessed | Y | - | -
+core-engine/src/foretias/clean_auth.rs | EpochSnapshot | impl::Unprocessed::fn::into_clean_authenticated | - | Y | -
+core-engine/src/foretias/clean_auth.rs | EpochSnapshot | impl::Unprocessed::fn::verify | - | Y | -
+core-engine/src/foretias/clean_auth.rs | Foretis | impl::CleanAuthenticated | - | Y | -
+core-engine/src/foretias/clean_auth.rs | Foretis | impl::ExternalizedForetis::fn::into_unprocessed | Y | - | -
+core-engine/src/foretias/clean_auth.rs | Foretis | impl::ExternalizedForetis::fn::reconstruct | Y | - | -
+core-engine/src/foretias/clean_auth.rs | Foretis | impl::Unprocessed | Y | - | -
+core-engine/src/foretias/clean_auth.rs | Foretis | impl::Unprocessed::fn::into_clean_authenticated | - | Y | -
+core-engine/src/foretias/clean_auth.rs | Foretis | impl::Unprocessed::fn::verify | - | Y | -
 core-engine/src/foretias/clean_auth.rs | T | impl::CleanAuthenticated | - | Y | -
 core-engine/src/foretias/clean_auth.rs | T | impl::Externalized | - | - | Y
 core-engine/src/foretias/clean_auth.rs | T | impl::Unprocessed | Y | - | -
-foretias-server/src/probity/clean_auth.rs | ProbityReport | struct::CleanAuthenticatedProbityReport | - | Y | -
-foretias-server/src/probity/clean_auth.rs | ProbityReport | struct::UnprocessedProbityReport | Y | - | -
+core-engine/src/probity/report.rs | ProbityReport | impl::CleanAuthenticated | - | Y | -
+core-engine/src/probity/report.rs | ProbityReport | impl::ExternalizedProbityReport::fn::into_unprocessed | Y | - | -
+core-engine/src/probity/report.rs | ProbityReport | impl::ExternalizedProbityReport::fn::reconstruct | Y | - | -
+core-engine/src/probity/report.rs | ProbityReport | impl::Unprocessed | Y | - | -
+core-engine/src/probity/report.rs | ProbityReport | impl::Unprocessed::fn::into_clean_authenticated | - | Y | -
+core-engine/src/probity/report.rs | ProbityReport | impl::Unprocessed::fn::verify | - | Y | -
 
 
 === Cross-Tabulation ===
 
 crate | wrapper | inner | count
 ================================================================================
-core-engine | CleanAuthenticated | ChrononRecord | 1
-core-engine | CleanAuthenticated | EpochSnapshot | 1
-core-engine | CleanAuthenticated | Foretis | 1
-core-engine | CleanAuthenticated | T | 1
+core-engine | CleanAuthenticated | ChrononRecord | 8
+core-engine | CleanAuthenticated | EpochSnapshot | 3
+core-engine | CleanAuthenticated | Foretis | 3
+core-engine | CleanAuthenticated | ProbityReport | 3
+core-engine | CleanAuthenticated | T | 2
 core-engine | Externalized | T | 1
-core-engine | Unprocessed | ChrononRecord | 1
-core-engine | Unprocessed | EpochSnapshot | 1
-core-engine | Unprocessed | Foretis | 1
-core-engine | Unprocessed | T | 2
-foretias-server | CleanAuthenticated | ProbityReport | 1
-foretias-server | Unprocessed | ProbityReport | 1
+core-engine | Unprocessed | ChrononRecord | 3
+core-engine | Unprocessed | EpochSnapshot | 3
+core-engine | Unprocessed | Foretis | 3
+core-engine | Unprocessed | ProbityReport | 3
+core-engine | Unprocessed | T | 3
