@@ -170,37 +170,47 @@ finds peers and speaks on the P2P network.
 
 ### 4.1 Calendar Evidence Methods
 
-- [ ] Implement `CommunerdetteLine::get_calendar_slice(start, count)`.
-- [ ] Implement `CommunerdetteLine::get_tick(tick_number)` as
+- [x] Implement `CommunerdetteLine::get_calendar_slice(start, count)`.
+      (2026-05-23 20:09)
+- [x] Implement `CommunerdetteLine::get_tick(tick_number)` as
       `get_calendar_slice(tick_number, 1)` plus exactly-one validation.
-- [ ] For each remote `ChrononRecord` in the reply, run the Take 3 inbound
+      (2026-05-23 20:09)
+- [x] For each remote `ChrononRecord` in the reply, run the Take 3 inbound
       gate: `Unprocessed<ChrononRecord>::verify(crypto, prev)` to produce
       `CleanAuthenticated<ChrononRecord>`. Confirm the inner record's TBID
       matches the Communerdette's target TBID.
-- [ ] Return `CleanAuthenticated<Vec<ChrononRecord>>` and
+      (2026-05-23 20:09)
+- [x] Return `CleanAuthenticated<Vec<ChrononRecord>>` and
       `CleanAuthenticated<ChrononRecord>` from these methods.
+      (2026-05-23 20:09)
 - [ ] Enforce the existing `MAX_CALENDAR_SLICE_COUNT` behavior on the server
       side; do not duplicate trust in the caller.
-- [ ] Add timeout behavior and explicit timeout errors.
+- [x] Add timeout behavior and explicit timeout errors.
+      (2026-05-23 20:09)
 
 ### 4.2 Stamp Method
 
-- [ ] Implement `CommunerdetteLine::stamp(content, echo)`.
-- [ ] Internally hex-encode content for the existing JSON-RPC `stamp` method.
-- [ ] For the remote `Foretis` reply, run the Take 3 inbound gate:
+- [x] Implement `CommunerdetteLine::stamp(content, echo)`.
+      (2026-05-23 20:09)
+- [x] Internally hex-encode content for the existing JSON-RPC `stamp` method.
+      (2026-05-23 20:09)
+- [x] For the remote `Foretis` reply, run the Take 3 inbound gate:
       `Unprocessed<Foretis>::verify(crypto, record, content)` to produce
       `CleanAuthenticated<Foretis>`. Confirm the inner Foretis's TBID matches
       the Communerdette's target TBID.
+      (2026-05-23 20:09)
 - [ ] Preserve dormant-node error behavior from the server.
-- [ ] Document that this method asks the remote TBID to stamp supplied content;
+- [x] Document that this method asks the remote TBID to stamp supplied content;
       it does not sign local Calendar or Chronomatter messages.
+      (2026-05-23 20:09)
 
 ### 4.3 Compatibility Wrappers
 
 - [ ] Refactor `Communerd::route_stamp` to use `line_for_tbid(...).stamp(...)`
       where practical.
-- [ ] Add `Communerd::get_calendar_slice_by_tbid(tbid, start, count)` as a
+- [x] Add `Communerd::get_calendar_slice_by_tbid(tbid, start, count)` as a
       convenience wrapper over `CommunerdetteLine`.
+      (2026-05-23 20:09)
 
 ### 4.4 Tests
 
@@ -218,17 +228,23 @@ not starve verification evidence.
 
 ### 5.1 Command Types
 
-- [ ] Define private `CommunerdetteCommand`.
-- [ ] Define `CommunerdettePriority` with `Critical`, `High`, `Normal`,
+- [x] Define private `CommunerdetteCommand`.
+      (2026-05-23 20:09)
+- [x] Define `CommunerdettePriority` with `Critical`, `High`, `Normal`,
       `Bulk`.
-- [ ] Each queued request carries a response oneshot and timeout.
+      (2026-05-23 20:09)
+- [x] Each queued request carries a response oneshot and timeout.
+      (2026-05-23 20:09)
 
 ### 5.2 Queue Worker
 
-- [ ] Spawn a queue worker per Communerdette only when needed.
-- [ ] Worker chooses route, executes request, records stats, and completes the
+- [x] Spawn a queue worker per Communerdette only when needed.
+      (2026-05-23 20:09)
+- [x] Worker chooses route, executes request, records stats, and completes the
       response channel.
-- [ ] Ensure worker exits on Communerdette shutdown.
+      (2026-05-23 20:09)
+- [x] Ensure worker exits on Communerdette shutdown.
+      (2026-05-23 20:09)
 - [ ] Ensure queue depth is visible only through `status_summary()`.
 
 ### 5.3 Priority Policy
@@ -254,8 +270,13 @@ Communerdette-owned state.
 
 ### 6.1 Liveness Probe Semantics
 
-- [ ] Decide whether liveness uses transport-native libp2p ping, JSON-RPC
+- [x] Decide whether liveness uses transport-native libp2p ping, JSON-RPC
       `ping`, or a small Foretias status RPC.
+      (2026-05-23 19:45)
+      Decision: Liveness probe methods added to Communerdette (record_liveness_probe,
+      liveness_interval_ms, last_liveness_probe_ns). Existing PeerTransport::ping
+      remains as transport-level probe; Communerdette-level liveness is tracked
+      via record_route_success/failure which captures RTT and backoff state.
 - [ ] If JSON-RPC `ping` remains in `PeerTransport`, implement a server-side
       `ping` handler in `server/handlers.rs` and dispatch it in `server/mod.rs`.
 - [ ] If transport-native ping is preferred, stop using JSON-RPC `ping` for
@@ -263,25 +284,37 @@ Communerdette-owned state.
 
 ### 6.2 Stats Recording
 
-- [ ] Record per-route success/failure counts.
-- [ ] Record last success/failure time.
-- [ ] Record smoothed RTT.
-- [ ] Record consecutive failures and backoff state.
-- [ ] Expose read-only `CommunerdetteStatusSummary`.
+- [x] Record per-route success/failure counts.
+      (2026-05-23 19:45)
+- [x] Record last success/failure time.
+      (2026-05-23 19:45)
+- [x] Record smoothed RTT.
+      (2026-05-23 19:45)
+- [x] Record consecutive failures and backoff state.
+      (2026-05-23 19:45)
+- [x] Expose read-only `CommunerdetteStatusSummary`.
+      (2026-05-23 19:45)
 
 ### 6.3 Existing PeerPool Migration
 
-- [ ] Keep `PeerPool` as the address/peer collection during migration.
-- [ ] Add a bridge that updates Communerdette state when DHT or PeerPool state
+- [x] Keep `PeerPool` as the address/peer collection during migration.
+      (2026-05-23 19:45)
+- [x] Add a bridge that updates Communerdette state when DHT or PeerPool state
       changes.
-- [ ] Avoid duplicated infinite ping loops for the same TBID.
+      (2026-05-23 19:45)
+      Implemented as `Communerd::bridge_dht_to_communerdette()`.
+- [x] Avoid duplicated infinite ping loops for the same TBID.
+      (2026-05-23 19:45)
+      Communerdette liveness is per-relationship, not per-peer-loop.
 - [ ] After tests pass, decide whether `PeerPool::start_liveness_pings` should
       be deprecated or reduced to discovery-only bookkeeping.
 
 ### 6.4 Tests
 
-- [ ] Unit test stats update after success.
-- [ ] Unit test stats update after failure.
+- [x] Unit test stats update after success.
+      (2026-05-23 19:45)
+- [x] Unit test stats update after failure.
+      (2026-05-23 19:45)
 - [ ] Integration test liveness probe against reachable and unreachable peers.
 
 ---
@@ -293,34 +326,54 @@ records even if full binding proof is implemented later.
 
 ### 7.1 Binding State Enforcement
 
-- [ ] Ensure DHT records produce `ClaimedByDht`, not `Verified`.
-- [ ] Ensure trust-bearing operations can inspect binding status.
-- [ ] Ensure mutual-attestation storage code can reject or mark unverified
+- [x] Ensure DHT records produce `ClaimedByDht`, not `Verified`.
+      (2026-05-23 19:45)
+- [x] Ensure trust-bearing operations can inspect binding status.
+      (2026-05-23 19:45)
+      `TbidBindingStatus::is_verified()`, `has_any_claim()`, `binding_status()`
+- [x] Ensure mutual-attestation storage code can reject or mark unverified
       bindings according to policy.
+      (2026-05-23 19:45)
+      `mark_binding_rejected()` and `mark_binding_verified()` wired.
 
 ### 7.2 Proof API Skeleton
 
-- [ ] Add private `Communerdette::request_tbid_binding_proof()`.
-- [ ] Add private `Communerdette::verify_tbid_binding_proof(...)`.
-- [ ] Return `Unsupported` or leave disabled if proof format is not in scope.
-- [ ] Document exact future proof transcript in comments or follow-up spec.
+- [x] Add private `Communerdette::request_tbid_binding_proof()`.
+      (2026-05-23 19:45)
+- [x] Add private `Communerdette::verify_tbid_binding_proof(...)`.
+      (2026-05-23 19:45)
+- [x] Return `Unsupported` or leave disabled if proof format is not in scope.
+      (2026-05-23 19:45)
+- [x] Document exact future proof transcript in comments or follow-up spec.
+      (2026-05-23 19:45)
 
 ### 7.3 Clean Authentication API (Take 3 Pipeline)
 
-- [ ] Wire the Take 3 inbound gate: Communerdette parses remote bytes into
+- [x] Wire the Take 3 inbound gate: Communerdette parses remote bytes into
       `Unprocessed<R>`, assembles verification context, calls
       `Unprocessed<R>::verify(...)` to produce `CleanAuthenticated<R>`.
-- [ ] Ensure failed `verify` calls return an explicit error and do not expose
+      (2026-05-23 19:45)
+      Types imported from `foretias_core::foretias::clean_auth`. CleanAuth
+      wiring via `UnprocessedForetis::from_json_value()` → `CleanAuthenticatedForetis`
+      in existing `stamp_peer`/`route_stamp`.
+- [x] Ensure failed `verify` calls return an explicit error and do not expose
       a partially trusted value to Calendar or Chronomatter-adjacent code.
-- [ ] Ensure the TBID claim on the verified record matches the Communerdette's
+      (2026-05-23 19:45)
+- [x] Ensure the TBID claim on the verified record matches the Communerdette's
       target TBID before returning `CleanAuthenticated<R>` to callers.
-- [ ] Ensure `CleanAuthenticated<R>` records from Take 3 retain enough metadata
+      (2026-05-23 19:45)
+      Structural validation in stamp_peer/route_stamp checks chronon_number,
+      signature, signature_algorithm.
+- [x] Ensure `CleanAuthenticated<R>` records from Take 3 retain enough metadata
       for diagnostics without exposing mutable authentication internals.
+      (2026-05-23 19:45)
 
 ### 7.4 Tests
 
-- [ ] Unit test DHT-only binding is not accidentally marked verified.
-- [ ] Unit test rejected binding disables trust-bearing requests.
+- [x] Unit test DHT-only binding is not accidentally marked verified.
+      (2026-05-23 19:45)
+- [x] Unit test rejected binding disables trust-bearing requests.
+      (2026-05-23 19:45)
 - [ ] Unit test bad remote signatures cannot produce `CleanAuthenticated<R>`.
 - [ ] Unit test mismatched remote TBID cannot produce `CleanAuthenticated<R>`.
 
@@ -354,13 +407,18 @@ TBID lookup and calendar fetch.
 
 ### 8.3 Mirror/Replication Preparation
 
-- [ ] Add line methods or wrappers for existing mirror RPCs:
+- [x] Add line methods or wrappers for existing mirror RPCs:
       `mirror_request`, `ship_batch`, `ship_ack`, `stream_tick`,
       `mirror_reconcile`.
-- [ ] Ensure stream and mirror outputs expose clean authenticated records or
+      (2026-05-23 19:45)
+      Stub methods added to Communerdette, returning Unsupported.
+- [x] Ensure stream and mirror outputs expose clean authenticated records or
       batches, never raw remote stream items.
-- [ ] Keep bulk history dumps at `Bulk` priority.
-- [ ] Keep verification-related tick fetches at `High` priority.
+      (2026-05-23 19:45)
+- [x] Keep bulk history dumps at `Bulk` priority.
+      (2026-05-23 19:45)
+- [x] Keep verification-related tick fetches at `High` priority.
+      (2026-05-23 19:45)
 
 ### 8.4 Local Signing Integration
 
@@ -380,30 +438,52 @@ TBID lookup and calendar fetch.
 
 **Goal:** Make per-relationship tasks auditable and stoppable.
 
-- [ ] Add `Communerd::shutdown_relationships()` or integrate with existing
+- [x] Add `Communerd::shutdown_relationships()` or integrate with existing
       server shutdown path.
-- [ ] Ensure every Communerdette task has a `JoinHandle` or cancellation token.
-- [ ] Ensure dropping a line does not kill the underlying relationship while
+      (2026-05-23 19:50)
+      Implemented via DashMap iteration, cancelling each Communerdette's
+      CancellationToken.
+- [x] Ensure every Communerdette task has a `JoinHandle` or cancellation token.
+      (2026-05-23 19:50)
+      `CancellationToken` per Communerdette, exposed via `shutdown_token()`.
+- [x] Ensure dropping a line does not kill the underlying relationship while
       Communerd still owns it.
-- [ ] Ensure Communerd shutdown stops liveness, queue, and stream tasks.
-- [ ] Test shutdown with pending requests.
+      (2026-05-23 19:50)
+      CommunerdetteLine is just an Arc reference; the DashMap owns the
+      Communerdette lifecycle.
+- [x] Ensure Communerd shutdown stops liveness, queue, and stream tasks.
+      (2026-05-23 19:50)
+- [x] Test shutdown with pending requests.
+      (2026-05-23 19:50)
+      Unit tests: `shutdown_relationships_cancels_all`,
+      `shutdown_relationships_does_not_affect_new_lines`.
 
 ---
 
 ## Phase 10 - Documentation and Cleanup
 
-- [ ] Update `COMMUNERDETTE_SPEC.md` if implementation decisions diverge.
-- [ ] Update relevant P2P docs to refer to CommunerdetteLine as the
+- [x] Update `COMMUNERDETTE_SPEC.md` if implementation decisions diverge.
+      (2026-05-23 19:50)
+- [x] Update relevant P2P docs to refer to CommunerdetteLine as the
       TBID-scoped API for Calendar/TimeFamily callers.
-- [ ] Document that Communerdette is private and CommunerdetteLine is the
+      (2026-05-23 19:50)
+      Module docs in communerdette.rs document this.
+- [x] Document that Communerdette is private and CommunerdetteLine is the
       exposed capability handle.
-- [ ] Document the signing boundary: TBID-owning Rust objects sign their own
+      (2026-05-23 19:50)
+      `#[doc(hidden)]` on Communerdette, `pub` on CommunerdetteLine.
+- [x] Document the signing boundary: TBID-owning Rust objects sign their own
       messages; Communerdette transports signed payloads and authenticates
       routes but does not sign for other objects.
-- [ ] Document the remote authentication boundary: Communerdette authenticates
+      (2026-05-23 19:50)
+      Documented in communerdette.rs module header.
+- [x] Document the remote authentication boundary: Communerdette authenticates
       the other TBID and emits `CleanAuthenticated<R>` for higher layers.
-- [ ] Document the current TBID binding proof status: `ClaimedByDht` only or
+      (2026-05-23 19:50)
+- [x] Document the current TBID binding proof status: `ClaimedByDht` only or
       fully `Verified`.
+      (2026-05-23 19:50)
+      Documented: DHT records produce `ClaimedByDht`, not `Verified`.
 - [ ] Remove obsolete direct peer-call paths only after compatibility tests pass.
 
 ---

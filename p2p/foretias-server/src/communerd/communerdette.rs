@@ -1,0 +1,2094 @@
+//! Communerdette — per-TBID relationship manager.
+//!
+//! `Communerdette` is private to the `communerd` module. It owns relationship-local
+//! state for exactly one external TBID: binding status, active route, stats, and
+//! a cancellation token for per-relationship tasks.
+//!
+//! `CommunerdetteLine` is the public, cloneable capability handle exposed to
+//! Calendar, Chronomatter-adjacent orchestration, and TimeFamily code. It points
+//! at a `Communerdette` but exposes only safe, TBID-scoped operations.
+//!
+//! Design invariants:
+//! - One Communerdette, one external TBID.
+//! - Communerdette does NOT store private key material.
+//! - Communerdette does NOT sign for Calendar, Chronomatter, or any local TBID.
+//! - `CommunerdetteLine` does NOT expose transport details or mutable state.
+
+use std::collections::BinaryHeap;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+
+use async_trait::async_trait;
+#[allow(unused_imports)]
+use foretias_core::clock::{Clock, SystemClock};
+use foretias_core::crypto_server::CryptoServer;
+use foretias_core::error::NodeError;
+use foretias_core::foretias::clean_auth::{
+    CleanAuthenticated,
+    UnprocessedChrononRecord, UnprocessedForetis, CleanAuthError,
+};
+use foretias_core::foretias::tick::{ChrononRecord, Foretis};
+use foretias_core::foretias::types::Tbid;
+use tokio::sync::{mpsc, oneshot};
+use tokio::time::Duration as TokioDuration;
+use tokio_util::sync::CancellationToken;
+
+use super::transport::{PeerAddr, TransportError};
+use super::PeerRegistrationRecord;
+
+/// Private helper surface that Communerdette uses to ask Communerd for
+/// DHT lookup, namespace, swarm availability, and transport execution.
+///
+/// This trait is private to the `communerd` module.  Communerdette never
+/// owns the DHT, peer pool, libp2p swarm, or transport pools — it always
+/// delegates through this trait.
+#[async_trait]
+pub(super) trait CommunerdetteHost: Send + Sync {
+    /// Look up a TBID in the DHT (cache + live lookup).
+    async fn host_lookup_tbid(&self, tbid_hex: &str, namespace: &str) -> Option<PeerRegistrationRecord>;
+    /// Look up a TBID in the local cache only.
+    fn host_lookup_tbid_cached(&self, tbid_hex: &str) -> Option<PeerRegistrationRecord>;
+    /// Get the current DHT namespace.
+    fn host_namespace(&self) -> String;
+    /// Check if the libp2p swarm is available.
+    fn host_swarm_available(&self) -> bool;
+    /// Get the local PeerId.
+    fn host_local_peer_id(&self) -> Option<libp2p::PeerId>;
+    /// Execute a stamp request via Communerd's transport.
+    async fn host_execute_stamp(
+        &self,
+        peer: &PeerAddr,
+        target_tbid: &str,
+        content_hex: &str,
+        echo: &str,
+    ) -> Result<serde_json::Value, TransportError>;
+    /// Execute a calendar slice request via Communerd's transport.
+    async fn host_execute_calendar_slice(
+        &self,
+        peer: &PeerAddr,
+        tick_start: u64,
+        count: u64,
+    ) -> Result<Vec<ChrononRecord>, TransportError>;
+}
+
+/// Evidence level for a TBID-to-transport binding.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TbidBindingStatus {
+    /// No binding information available yet.
+    Unknown,
+    /// A DHT record claims a transport identity for this TBID (unverified).
+    ClaimedByDht {
+        peer_id: Option<String>,
+        json_rpc: Option<String>,
+        observed_at_ns: u64,
+    },
+    /// An application-level proof verified this transport identity for the TBID.
+    Verified {
+        peer_id: Option<String>,
+        json_rpc: Option<String>,
+        verified_at_ns: u64,
+        proof_expires_at_ns: Option<u64>,
+    },
+    /// This binding was rejected (e.g. proof verification failed).
+    Rejected {
+        reason: String,
+        observed_at_ns: u64,
+    },
+}
+
+impl TbidBindingStatus {
+    /// Returns true if the binding is strong enough for trust-bearing operations.
+    pub fn is_verified(&self) -> bool {
+        matches!(self, TbidBindingStatus::Verified { .. })
+    }
+
+    /// Returns true if there is at least a DHT-level claim (useful for discovery).
+    pub fn has_any_claim(&self) -> bool {
+        !matches!(self, TbidBindingStatus::Unknown | TbidBindingStatus::Rejected { .. })
+    }
+}
+
+/// Currently preferred transport route for this TBID.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ActiveRoute {
+    /// libp2p direct RPC over request_response/yamux.
+    Libp2pDirect,
+    /// Custom Noise_XX TCP with JSON-RPC (fallback).
+    NoiseJsonRpc,
+    /// No usable route is currently available.
+    Unavailable,
+}
+
+/// Per-relationship statistics.
+#[derive(Debug, Clone)]
+pub struct CommunerdetteStats {
+    pub last_success_ns: Option<u64>,
+    pub last_failure_ns: Option<u64>,
+    pub consecutive_failures: u32,
+    pub libp2p_successes: u64,
+    pub libp2p_failures: u64,
+    pub noise_successes: u64,
+    pub noise_failures: u64,
+    pub smoothed_rtt_ms: Option<f64>,
+    pub queue_depth: usize,
+}
+
+impl Default for CommunerdetteStats {
+    fn default() -> Self {
+        Self {
+            last_success_ns: None,
+            last_failure_ns: None,
+            consecutive_failures: 0,
+            libp2p_successes: 0,
+            libp2p_failures: 0,
+            noise_successes: 0,
+            noise_failures: 0,
+            smoothed_rtt_ms: None,
+            queue_depth: 0,
+        }
+    }
+}
+
+/// Per-route stats for granular tracking (Phase 6).
+#[derive(Debug, Clone, Default)]
+pub struct CommunerdetteRouteStats {
+    /// Per-route success count.
+    pub success_count: u64,
+    /// Per-route failure count.
+    pub failure_count: u64,
+    /// Monotonic timestamp (ns) of last successful request on this route.
+    pub last_success_ns: Option<u64>,
+    /// Monotonic timestamp (ns) of last failed request on this route.
+    pub last_failure_ns: Option<u64>,
+    /// Smoothed RTT in milliseconds (exponential moving average, alpha=0.2).
+    pub smoothed_rtt_ms: Option<f64>,
+    /// Consecutive failures on this route (triggers backoff).
+    pub consecutive_failures: u32,
+}
+
+impl CommunerdetteRouteStats {
+    /// Record a successful request with measured RTT (ms).
+    pub fn record_success(&mut self, now_ns: u64, rtt_ms: f64) {
+        self.success_count += 1;
+        self.last_success_ns = Some(now_ns);
+        self.consecutive_failures = 0;
+        self.smoothed_rtt_ms = Some(match self.smoothed_rtt_ms {
+            Some(prev) => 0.2 * rtt_ms + 0.8 * prev,
+            None => rtt_ms,
+        });
+    }
+
+    /// Record a failed request.
+    pub fn record_failure(&mut self, now_ns: u64) {
+        self.failure_count += 1;
+        self.last_failure_ns = Some(now_ns);
+        self.consecutive_failures += 1;
+    }
+
+    /// Return current backoff multiplier (1.0 = no backoff, doubles per failure, capped at 32x).
+    pub fn backoff_multiplier(&self) -> f64 {
+        (2_f64).powi(self.consecutive_failures as i32).min(32.0)
+    }
+}
+
+/// Private state — not exposed through CommunerdetteLine.
+#[doc(hidden)]
+struct CommunerdetteState {
+    binding: TbidBindingStatus,
+    active_route: ActiveRoute,
+    stats: CommunerdetteStats,
+    backoff_until_ns: Option<u64>,
+    /// Per-route stats (Phase 6).
+    route_stats: std::collections::HashMap<ActiveRoute, CommunerdetteRouteStats>,
+    /// Route candidates from DHT/PeerRegistrationRecord (Phase 3).
+    route_candidates: Vec<super::PeerRegistrationRecord>,
+    /// Whether binding proof has been requested (Phase 7).
+    binding_proof_requested: bool,
+    /// Whether binding proof has been verified (Phase 7).
+    binding_proof_verified: bool,
+    /// Last liveness probe timestamp (ns) (Phase 6).
+    last_liveness_probe_ns: Option<u64>,
+    /// Liveness probe interval in milliseconds (Phase 6).
+    liveness_interval_ms: u64,
+}
+
+impl Default for CommunerdetteState {
+    fn default() -> Self {
+        Self {
+            binding: TbidBindingStatus::Unknown,
+            active_route: ActiveRoute::Unavailable,
+            stats: CommunerdetteStats::default(),
+            backoff_until_ns: None,
+            route_stats: std::collections::HashMap::new(),
+            route_candidates: Vec::new(),
+            binding_proof_requested: false,
+            binding_proof_verified: false,
+            last_liveness_probe_ns: None,
+            liveness_interval_ms: 30_000, // default 30s
+        }
+    }
+}
+
+/// Read-only diagnostics surface for a Communerdette.
+#[derive(Debug, Clone)]
+pub struct CommunerdetteStatusSummary {
+    pub target_tbid: String,
+    pub binding: TbidBindingStatus,
+    pub active_route: ActiveRoute,
+    pub stats: CommunerdetteStats,
+}
+
+/// Private per-TBID relationship manager.
+#[doc(hidden)]
+pub(super) struct Communerdette {
+    target_tbid: Tbid,
+    state: std::sync::RwLock<CommunerdetteState>,
+    shutdown: CancellationToken,
+}
+
+impl Communerdette {
+    /// Create a new Communerdette for the given TBID.
+    pub(super) fn new(target_tbid: Tbid) -> Self {
+        Self {
+            target_tbid,
+            state: std::sync::RwLock::new(CommunerdetteState::default()),
+            shutdown: CancellationToken::new(),
+        }
+    }
+
+    /// Returns a read-only snapshot of the current status.
+    fn status_summary(&self) -> CommunerdetteStatusSummary {
+        let state = self.state.read().unwrap();
+        CommunerdetteStatusSummary {
+            target_tbid: self.target_tbid.to_hex(),
+            binding: state.binding.clone(),
+            active_route: state.active_route,
+            stats: state.stats.clone(),
+        }
+    }
+
+    /// Returns the cancellation token for per-relationship tasks.
+    #[doc(hidden)]
+    fn shutdown_token(&self) -> CancellationToken {
+        self.shutdown.clone()
+    }
+
+    // ── Phase 6: Liveness & Stats ───────────────────────────────────────
+
+    /// Record a successful request on the given route.
+    pub(super) fn record_route_success(&self, route: ActiveRoute, now_ns: u64, rtt_ms: f64) {
+        let mut state = self.state.write().unwrap();
+        state.stats.libp2p_successes = match route {
+            ActiveRoute::Libp2pDirect => state.stats.libp2p_successes + 1,
+            _ => state.stats.libp2p_successes,
+        };
+        state.stats.noise_successes = match route {
+            ActiveRoute::NoiseJsonRpc => state.stats.noise_successes + 1,
+            _ => state.stats.noise_successes,
+        };
+        state.stats.last_success_ns = Some(now_ns);
+        state.stats.consecutive_failures = 0;
+        state.backoff_until_ns = None;
+
+        let smoothed = match state.stats.smoothed_rtt_ms {
+            Some(prev) => 0.2 * rtt_ms + 0.8 * prev,
+            None => rtt_ms,
+        };
+        state.stats.smoothed_rtt_ms = Some(smoothed);
+
+        // Per-route stats
+        state.route_stats
+            .entry(route)
+            .or_default()
+            .record_success(now_ns, rtt_ms);
+    }
+
+    /// Record a failed request on the given route.
+    pub(super) fn record_route_failure(&self, route: ActiveRoute, now_ns: u64) {
+        let mut state = self.state.write().unwrap();
+        state.stats.libp2p_failures = match route {
+            ActiveRoute::Libp2pDirect => state.stats.libp2p_failures + 1,
+            _ => state.stats.libp2p_failures,
+        };
+        state.stats.noise_failures = match route {
+            ActiveRoute::NoiseJsonRpc => state.stats.noise_failures + 1,
+            _ => state.stats.noise_failures,
+        };
+        state.stats.last_failure_ns = Some(now_ns);
+        state.stats.consecutive_failures += 1;
+
+        // Exponential backoff: double delay, cap at 32x
+        let current_backoff = state.backoff_until_ns
+            .map(|b| (now_ns - b) as f64)
+            .unwrap_or(1.0);
+        let next_backoff = (current_backoff * 2.0).min(32_000_000_000.0); // 32s cap in ns
+        state.backoff_until_ns = Some(now_ns + next_backoff as u64);
+
+        // Per-route stats
+        state.route_stats
+            .entry(route)
+            .or_default()
+            .record_failure(now_ns);
+    }
+
+    /// Check if the relationship is currently in backoff.
+    pub(super) fn is_in_backoff(&self, now_ns: u64) -> bool {
+        let state = self.state.read().unwrap();
+        state.backoff_until_ns
+            .map(|until| now_ns < until)
+            .unwrap_or(false)
+    }
+
+    /// Get backoff multiplier for adaptive timeout calculation.
+    pub(super) fn backoff_multiplier(&self) -> f64 {
+        let state = self.state.read().unwrap();
+        state.stats.consecutive_failures
+            .max(1)
+            .checked_pow(2)
+            .unwrap_or(32) as f64
+    }
+
+    /// Choose the best available route based on route health.
+    pub(super) fn choose_route(&self) -> ActiveRoute {
+        let state = self.state.read().unwrap();
+        let mut best_route = ActiveRoute::Unavailable;
+        let mut best_score = f64::MAX;
+
+        for (route, stats) in &state.route_stats {
+            // Score: lower is better. Factors: recent failures, backoff, RTT
+            let recent_failures = stats.consecutive_failures as f64;
+            let rtt_factor = stats.smoothed_rtt_ms.unwrap_or(f64::MAX);
+            let score = recent_failures * 10.0 + rtt_factor / 1000.0;
+            if score < best_score {
+                best_score = score;
+                best_route = *route;
+            }
+        }
+
+        // If no route stats yet, fall back to active_route
+        if best_route == ActiveRoute::Unavailable {
+            state.active_route
+        } else {
+            best_route
+        }
+    }
+
+    /// Set the active route (called after DHT discovery or route refresh).
+    pub(super) fn set_active_route(&self, route: ActiveRoute) {
+        let mut state = self.state.write().unwrap();
+        state.active_route = route;
+    }
+
+    /// Add a route candidate from DHT/PeerRegistrationRecord.
+    pub(super) fn add_route_candidate(&self, record: super::PeerRegistrationRecord) {
+        let mut state = self.state.write().unwrap();
+        state.route_candidates.push(record);
+        // Prefer libp2p when PeerId is available
+        state.active_route = ActiveRoute::Libp2pDirect;
+    }
+
+    /// Set liveness probe interval in milliseconds.
+    pub(super) fn set_liveness_interval_ms(&self, interval_ms: u64) {
+        let mut state = self.state.write().unwrap();
+        state.liveness_interval_ms = interval_ms;
+    }
+
+    /// Record that a liveness probe was sent/received.
+    pub(super) fn record_liveness_probe(&self, now_ns: u64) {
+        let mut state = self.state.write().unwrap();
+        state.last_liveness_probe_ns = Some(now_ns);
+    }
+
+    /// Get the last liveness probe timestamp.
+    pub(super) fn last_liveness_probe_ns(&self) -> Option<u64> {
+        self.state.read().unwrap().last_liveness_probe_ns
+    }
+
+    /// Get liveness probe interval in milliseconds.
+    pub(super) fn liveness_interval_ms(&self) -> u64 {
+        self.state.read().unwrap().liveness_interval_ms
+    }
+
+    /// Get per-route stats snapshot.
+    pub(super) fn route_stats_snapshot(&self) -> std::collections::HashMap<ActiveRoute, CommunerdetteRouteStats> {
+        self.state.read().unwrap().route_stats.clone()
+    }
+
+    // ── Phase 3.1: Initial Binding Refresh ──────────────────────────────
+
+    /// Refresh the DHT binding for this TBID.
+    ///
+    /// Calls back into Communerd's `lookup_tbid`.  DHT results are stored as
+    /// `ClaimedByDht`, NOT `Verified`.  Also adds route candidates from the
+    /// DHT record and re-evaluates the active route.
+    ///
+    /// # Arguments
+    /// * `host` — Communerd host helper surface (DHT lookup, namespace, etc.)
+    /// * `now_ns` — Current monotonic timestamp in nanoseconds
+    pub(super) async fn refresh_dht_binding(
+        &self,
+        host: &dyn CommunerdetteHost,
+        now_ns: u64,
+    ) -> TbidBindingStatus {
+        let tbid_hex = self.target_tbid.to_hex();
+        let namespace = host.host_namespace();
+
+        // Check local tbid_index cache first
+        if let Some(record) = host.host_lookup_tbid_cached(&tbid_hex) {
+            self.update_from_dht_record(&record, now_ns);
+            return self.binding_status();
+        }
+
+        // DHT lookup
+        let result = host.host_lookup_tbid(&tbid_hex, &namespace).await;
+
+        match result {
+            Some(record) => {
+                self.update_from_dht_record(&record, now_ns);
+                TbidBindingStatus::ClaimedByDht {
+                    peer_id: Some(record.peer_id),
+                    json_rpc: Some(record.json_rpc),
+                    observed_at_ns: now_ns,
+                }
+            }
+            None => {
+                // No DHT record found — binding stays Unknown
+                TbidBindingStatus::Unknown
+            }
+        }
+    }
+
+    fn update_from_dht_record(&self, record: &PeerRegistrationRecord, now_ns: u64) {
+        // DHT records are ClaimedByDht, never Verified — trust boundary per spec
+        self.mark_binding_claimed_by_dht(
+            Some(record.peer_id.clone()),
+            Some(record.json_rpc.clone()),
+            now_ns,
+        );
+        self.add_route_candidate(record.clone());
+    }
+
+    // ── Phase 3.2: choose_route — improved with libp2p-first policy ─────
+
+    /// Choose the best route using route health and libp2p-first policy.
+    ///
+    /// Policy:
+    /// 1. If swarm available + healthy libp2p candidate → Libp2pDirect
+    /// 2. If healthy Noise candidate → NoiseJsonRpc
+    /// 3. If swarm available + any libp2p candidate (no health data) → Libp2pDirect
+    /// 4. If any Noise candidate (no health data) → NoiseJsonRpc
+    /// 5. Otherwise → Unavailable
+    ///
+    /// # Arguments
+    /// * `host` — Communerd host helper surface (swarm availability check)
+    pub(super) fn choose_route_with_host(&self, host: &dyn CommunerdetteHost) -> ActiveRoute {
+        let swarm_active = host.host_swarm_available();
+        let state = self.state.read().unwrap();
+
+        // First pass: prefer healthy libp2p if swarm active
+        if swarm_active {
+            for candidate in &state.route_candidates {
+                if !candidate.peer_id.is_empty() {
+                    // Check if route health is acceptable
+                    let route_stats = state.route_stats.get(&ActiveRoute::Libp2pDirect);
+                    if route_stats.map(|s| s.consecutive_failures < 5).unwrap_or(true) {
+                        return ActiveRoute::Libp2pDirect;
+                    }
+                }
+            }
+        }
+
+        // Second pass: healthy Noise candidates
+        let noise_stats = state.route_stats.get(&ActiveRoute::NoiseJsonRpc);
+        if noise_stats.map(|s| s.consecutive_failures < 5).unwrap_or(false) {
+            for candidate in &state.route_candidates {
+                if !candidate.json_rpc.is_empty() {
+                    return ActiveRoute::NoiseJsonRpc;
+                }
+            }
+        }
+
+        // Third pass: any libp2p candidate without health data
+        if swarm_active {
+            for candidate in &state.route_candidates {
+                if !candidate.peer_id.is_empty() {
+                    return ActiveRoute::Libp2pDirect;
+                }
+            }
+        }
+
+        // Fourth pass: any Noise candidate without health data
+        for candidate in &state.route_candidates {
+            if !candidate.json_rpc.is_empty() {
+                return ActiveRoute::NoiseJsonRpc;
+            }
+        }
+
+        ActiveRoute::Unavailable
+    }
+
+    /// Route candidates count (for diagnostics).
+    pub(super) fn route_candidates_count(&self) -> usize {
+        self.state.read().unwrap().route_candidates.len()
+    }
+
+    // ── Phase 7: TBID Binding Proof ─────────────────────────────────────
+
+    /// Request TBID binding proof from remote peer.
+    /// Returns Unsupported — proof format not yet in scope.
+    pub(super) fn request_tbid_binding_proof(&self) -> Result<(), foretias_core::error::NodeError> {
+        let mut state = self.state.write().unwrap();
+        state.binding_proof_requested = true;
+        Err(foretias_core::error::NodeError::Unsupported(
+            "TBID binding proof not yet implemented; proof transcript format pending".into(),
+        ))
+    }
+
+    /// Verify TBID binding proof transcript.
+    /// Returns Unsupported — proof verification not yet in scope.
+    pub(super) fn verify_tbid_binding_proof(
+        &self,
+        _proof: &[u8],
+    ) -> Result<(), foretias_core::error::NodeError> {
+        Err(foretias_core::error::NodeError::Unsupported(
+            "TBID binding proof verification not yet implemented".into(),
+        ))
+    }
+
+    /// Mark binding as verified (after successful binding proof).
+    pub(super) fn mark_binding_verified(&self, peer_id: Option<String>, json_rpc: Option<String>, verified_at_ns: u64) {
+        let mut state = self.state.write().unwrap();
+        state.binding = TbidBindingStatus::Verified {
+            peer_id,
+            json_rpc,
+            verified_at_ns,
+            proof_expires_at_ns: None,
+        };
+        state.binding_proof_verified = true;
+    }
+
+    /// Mark binding as rejected.
+    pub(super) fn mark_binding_rejected(&self, reason: String, observed_at_ns: u64) {
+        let mut state = self.state.write().unwrap();
+        state.binding = TbidBindingStatus::Rejected {
+            reason,
+            observed_at_ns,
+        };
+    }
+
+    /// Update binding to ClaimedByDht (from DHT discovery).
+    pub(super) fn mark_binding_claimed_by_dht(&self, peer_id: Option<String>, json_rpc: Option<String>, observed_at_ns: u64) {
+        let mut state = self.state.write().unwrap();
+        state.binding = TbidBindingStatus::ClaimedByDht {
+            peer_id,
+            json_rpc,
+            observed_at_ns,
+        };
+    }
+
+    /// Get binding status.
+    pub(super) fn binding_status(&self) -> TbidBindingStatus {
+        self.state.read().unwrap().binding.clone()
+    }
+
+    /// Check if binding proof has been requested.
+    pub(super) fn is_binding_proof_requested(&self) -> bool {
+        self.state.read().unwrap().binding_proof_requested
+    }
+
+    /// Check if binding proof has been verified.
+    pub(super) fn is_binding_proof_verified(&self) -> bool {
+        self.state.read().unwrap().binding_proof_verified
+    }
+
+    // ── Phase 8: Mirror RPC Stubs ───────────────────────────────────────
+
+    /// Mirror request: request mirror history from remote (stub).
+    pub(super) fn mirror_request(&self, _from_tick: u64) -> Result<serde_json::Value, super::transport::TransportError> {
+        Err(super::transport::TransportError::Unsupported(
+            "mirror_request not yet implemented".into(),
+        ))
+    }
+
+    /// Ship batch: send calendar batch to remote mirror (stub).
+    pub(super) fn ship_batch(&self, _batch: serde_json::Value) -> Result<serde_json::Value, super::transport::TransportError> {
+        Err(super::transport::TransportError::Unsupported(
+            "ship_batch not yet implemented".into(),
+        ))
+    }
+
+    /// Ship ack: acknowledge batch receipt (stub).
+    pub(super) fn ship_ack(&self, _batch_id: &str) -> Result<serde_json::Value, super::transport::TransportError> {
+        Err(super::transport::TransportError::Unsupported(
+            "ship_ack not yet implemented".into(),
+        ))
+    }
+
+    /// Stream tick: stream single tick to remote (stub).
+    pub(super) fn stream_tick(&self, _tick_number: u64) -> Result<serde_json::Value, super::transport::TransportError> {
+        Err(super::transport::TransportError::Unsupported(
+            "stream_tick not yet implemented".into(),
+        ))
+    }
+
+    /// Mirror reconcile: reconcile mirror state between local and remote (stub).
+    pub(super) fn mirror_reconcile(&self, _local_tip: u64, _remote_tip: u64) -> Result<serde_json::Value, super::transport::TransportError> {
+        Err(super::transport::TransportError::Unsupported(
+            "mirror_reconcile not yet implemented".into(),
+        ))
+    }
+
+    // ── Phase 9: Shutdown ───────────────────────────────────────────────
+
+    /// Shutdown this Communerdette: cancel all per-relationship tasks.
+    pub(super) fn shutdown(&self) {
+        self.shutdown.cancel();
+    }
+
+    /// Check if this Communerdette has been shut down.
+    pub(super) fn is_shutdown(&self) -> bool {
+        self.shutdown.is_cancelled()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5.1 - Request Priority
+// ---------------------------------------------------------------------------
+
+/// Request priority within the per-relationship queue.
+///
+/// Variants are declared lowest-first so `#[derive(Ord)]` orders
+/// `Bulk < Normal < High < Critical`. This makes `Critical` the largest value,
+/// which matches both `can_preempt` (Greater = higher priority) and the
+/// `BinaryHeap` max-heap semantics used by the queue worker.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum CommunerdettePriority {
+    /// History dump, large calendar replication batch.
+    Bulk,
+    /// Stamp request, small calendar slice, mirror negotiation.
+    Normal,
+    /// Fetch tick needed to verify a Foretis, mutual-attestation evidence.
+    High,
+    /// TBID binding proof, collision/dormancy control, shutdown-sensitive.
+    Critical,
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5.2 - Queue Worker (spawned on-demand per Communerdette)
+// ---------------------------------------------------------------------------
+
+/// Commands sent into the Communerdette queue worker.
+enum CommunerdetteCommand {
+    /// Fetch a calendar slice.
+    CalendarSlice {
+        tick_start: u64,
+        count: u64,
+        timeout: TokioDuration,
+        reply: oneshot::Sender<Result<Vec<CleanAuthenticated<ChrononRecord>>, CommunerdetteError>>,
+    },
+    /// Stamp content on the remote TBID.
+    Stamp {
+        content: Vec<u8>,
+        echo: String,
+        timeout: TokioDuration,
+        reply: oneshot::Sender<Result<CleanAuthenticated<Foretis>, CommunerdetteError>>,
+    },
+    /// Shutdown — drain or cancel pending work.
+    Shutdown,
+}
+
+/// Errors returned by CommunerdetteLine methods.
+#[derive(Debug, thiserror::Error)]
+pub enum CommunerdetteError {
+    #[error("transport error: {0}")]
+    Transport(#[from] TransportError),
+    #[error("clean-auth verification failed: {0}")]
+    CleanAuth(#[from] CleanAuthError),
+    #[error("TBID mismatch: expected {expected}, got {actual}")]
+    TbidMismatch { expected: String, actual: String },
+    #[error("structurally invalid record: {0}")]
+    Structural(String),
+    #[error("no route available for TBID")]
+    NoRoute,
+    #[error("no peer record for TBID")]
+    NoPeerRecord,
+    #[error("binding insufficient for operation: {0}")]
+    BindingInsufficient(String),
+    #[error("node error: {0}")]
+    Node(#[from] NodeError),
+}
+
+/// Queue entry with priority + sequence for stable ordering.
+struct QueuedCommand {
+    priority: CommunerdettePriority,
+    sequence: u64,
+    command: CommunerdetteCommand,
+}
+
+impl std::fmt::Debug for QueuedCommand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("QueuedCommand")
+            .field("priority", &self.priority)
+            .field("sequence", &self.sequence)
+            .field("command", &"(elided)")
+            .finish()
+    }
+}
+
+impl Eq for QueuedCommand {}
+
+impl PartialEq for QueuedCommand {
+    fn eq(&self, other: &Self) -> bool {
+        self.priority == other.priority && self.sequence == other.sequence
+    }
+}
+
+// BinaryHeap is a max-heap: higher priority + lower sequence = higher heap value
+impl Ord for QueuedCommand {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.priority
+            .cmp(&other.priority)
+            .then(other.sequence.cmp(&self.sequence))
+    }
+}
+
+impl PartialOrd for QueuedCommand {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+/// Internal executor reference that the Communerdette holds for transport calls.
+struct CommunerdetteExecutor {
+    host: Arc<dyn CommunerdetteHost>,
+    target_tbid: Tbid,
+    crypto: Arc<dyn CryptoServer>,
+    clock: Arc<dyn Clock>,
+}
+
+impl CommunerdetteExecutor {
+    fn new(host: Arc<dyn CommunerdetteHost>, target_tbid: Tbid, crypto: Arc<dyn CryptoServer>, clock: Arc<dyn Clock>) -> Self {
+        Self { host, target_tbid, crypto, clock }
+    }
+
+    /// Resolve PeerAddr for the target TBID via DHT lookup.
+    async fn resolve_peer(&self) -> Result<PeerAddr, CommunerdetteError> {
+        let tbid_hex = self.target_tbid.to_hex();
+        let ns = self.host.host_namespace();
+        let owner = self.host.host_lookup_tbid(&tbid_hex, &ns).await
+            .ok_or_else(|| TransportError::Connect(format!("TBID {} not found in DHT", tbid_hex)))?;
+
+        let peer = PeerAddr {
+            json_rpc: owner.json_rpc.clone(),
+            peer_id: owner.peer_id.parse().ok(),
+            last_seen_ns: 0,
+        };
+
+        Ok(peer)
+    }
+
+    /// Execute calendar_slice RPC with libp2p-first, Noise fallback.
+    async fn do_calendar_slice(
+        &self,
+        peer: &PeerAddr,
+        tick_start: u64,
+        count: u64,
+    ) -> Result<Vec<ChrononRecord>, TransportError> {
+        self.host.host_execute_calendar_slice(peer, tick_start, count).await
+    }
+
+    /// Execute stamp RPC with libp2p-first, Noise fallback.
+    async fn do_stamp(
+        &self,
+        peer: &PeerAddr,
+        content_hex: &str,
+        echo: &str,
+    ) -> Result<serde_json::Value, TransportError> {
+        let tbid_hex = self.target_tbid.to_hex();
+        self.host.host_execute_stamp(peer, &tbid_hex, content_hex, echo).await
+    }
+
+    /// Run Take 3 inbound gate for a vector of ChrononRecords.
+    ///
+    /// For each record: parse as Unprocessed<ChrononRecord>, verify TBID matches,
+    /// then run verify(crypto, prev) for chain verification.
+    fn gate_chronon_records(
+        &self,
+        records: Vec<ChrononRecord>,
+    ) -> Result<Vec<CleanAuthenticated<ChrononRecord>>, CommunerdetteError> {
+        let target_tbid = self.target_tbid.clone();
+        let crypto = &*self.crypto;
+        let mut authenticated = Vec::new();
+
+        for (idx, record) in records.into_iter().enumerate() {
+            let unprocessed = UnprocessedChrononRecord::from_parsed(record);
+
+            // Structural validation
+            if unprocessed.chronon_number() == &0 || unprocessed.public_key().is_empty() {
+                return Err(CommunerdetteError::Structural(
+                    "chronon_number == 0 or empty public_key".into(),
+                ));
+            }
+
+            // TBID match
+            if *unprocessed.tbid() != target_tbid {
+                return Err(CommunerdetteError::TbidMismatch {
+                    expected: target_tbid.to_hex(),
+                    actual: unprocessed.tbid().to_hex(),
+                });
+            }
+
+            // Chain verification via Take 3
+            let prev = authenticated.last();
+            let ca = if idx == 0 {
+                // First record: genesis verification (tick 1) or standalone
+                unprocessed.verify(crypto, None).map_err(CommunerdetteError::CleanAuth)?
+            } else {
+                // Subsequent: chain verify against previous
+                unprocessed.into_clean_authenticated(crypto, prev.expect("idx > 0 implies prev exists"))
+                    .map_err(CommunerdetteError::CleanAuth)?
+            };
+
+            authenticated.push(ca);
+        }
+
+        Ok(authenticated)
+    }
+
+    /// Run Take 3 inbound gate for a Foretis reply.
+    ///
+    /// Parse as Unprocessed<Foretis>, verify structural integrity, TBID match.
+    /// Full signature verification (Foretis::verify) requires the ChrononRecord,
+    /// which we don't have at this layer — structural + TBID gate is the
+    /// Communerdette responsibility.
+    fn gate_foretis(
+        &self,
+        raw: serde_json::Value,
+    ) -> Result<CleanAuthenticated<Foretis>, CommunerdetteError> {
+        let unprocessed = UnprocessedForetis::from_json_value(raw)
+            .map_err(|e| TransportError::Decode(e.to_string()))?;
+
+        // Structural validation
+        {
+            let f = unprocessed.inner();
+            if f.chronon_number == 0 || f.signature.is_empty() || f.signature_algorithm.is_empty() {
+                return Err(CommunerdetteError::Structural(
+                    "structurally invalid Foretis: chronon_number == 0, empty signature, or empty signature_algorithm".into(),
+                ));
+            }
+        }
+
+        // TBID match
+        if *unprocessed.tbid() != self.target_tbid {
+            return Err(CommunerdetteError::TbidMismatch {
+                expected: self.target_tbid.to_hex(),
+                actual: unprocessed.tbid().to_hex(),
+            });
+        }
+
+        // Structural + TBID gate passed → wrap as CleanAuthenticated
+        Ok(CleanAuthenticated::from_trusted(unprocessed.into_inner()))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4.1-4.2 - Communerdette request execution
+// ---------------------------------------------------------------------------
+
+impl Communerdette {
+    /// Execute get_calendar_slice with Take 3 inbound gate.
+    async fn execute_calendar_slice(
+        executor: &CommunerdetteExecutor,
+        tick_start: u64,
+        count: u64,
+        timeout: TokioDuration,
+    ) -> Result<Vec<CleanAuthenticated<ChrononRecord>>, CommunerdetteError> {
+        let peer = executor.resolve_peer().await?;
+
+        let raw = tokio::time::timeout(timeout, executor.do_calendar_slice(&peer, tick_start, count))
+            .await
+            .map_err(|_| CommunerdetteError::Transport(TransportError::Timeout))??;
+
+        // Run Take 3 inbound gate
+        executor.gate_chronon_records(raw)
+    }
+
+    /// Execute get_tick as get_calendar_slice(tick_number, 1) with exactly-one validation.
+    async fn execute_tick(
+        executor: &CommunerdetteExecutor,
+        tick_number: u64,
+        timeout: TokioDuration,
+    ) -> Result<CleanAuthenticated<ChrononRecord>, CommunerdetteError> {
+        let slice = Self::execute_calendar_slice(executor, tick_number, 1, timeout).await?;
+        match slice.into_iter().next() {
+            Some(record) => Ok(record),
+            None => Err(CommunerdetteError::Structural(
+                "empty calendar slice for single tick request".into(),
+            )),
+        }
+    }
+
+    /// Execute stamp with Take 3 inbound gate.
+    async fn execute_stamp(
+        executor: &CommunerdetteExecutor,
+        content: Vec<u8>,
+        echo: String,
+        timeout: TokioDuration,
+    ) -> Result<CleanAuthenticated<Foretis>, CommunerdetteError> {
+        let content_hex = hex::encode(&content);
+        let peer = executor.resolve_peer().await?;
+
+        let raw = tokio::time::timeout(timeout, executor.do_stamp(&peer, &content_hex, &echo))
+            .await
+            .map_err(|_| CommunerdetteError::Transport(TransportError::Timeout))??;
+
+        // Run Take 3 inbound gate
+        executor.gate_foretis(raw)
+    }
+
+    /// Spawn queue worker (Phase 5.2).
+    ///
+    /// Each queued request carries a response oneshot and timeout.
+    /// The worker chooses route, executes request, records stats, and completes the channel.
+    fn spawn_queue_task(
+        executor: Arc<CommunerdetteExecutor>,
+        mut rx: mpsc::Receiver<(CommunerdettePriority, CommunerdetteCommand)>,
+        sequence: Arc<AtomicU64>,
+    ) -> tokio::task::JoinHandle<()> {
+        tokio::spawn(async move {
+            let mut heap = BinaryHeap::new();
+
+            loop {
+                tokio::select! {
+                    biased;
+
+                    // Receive new command from channel
+                    Some((priority, command)) = rx.recv() => {
+                        let seq = sequence.fetch_add(1, Ordering::Relaxed);
+                        if let CommunerdetteCommand::Shutdown = &command {
+                            heap.push(QueuedCommand { priority, sequence: seq, command });
+                            // Drain remaining
+                            while let Ok((p, c)) = rx.try_recv() {
+                                let s = sequence.fetch_add(1, Ordering::Relaxed);
+                                heap.push(QueuedCommand { priority: p, sequence: s, command: c });
+                            }
+                            break;
+                        }
+                        heap.push(QueuedCommand { priority, sequence: seq, command });
+                    }
+
+                    // Process highest-priority from heap
+                    else => {
+                        if let Some(cmd) = heap.pop() {
+                            let exec = Arc::clone(&executor);
+                            match cmd.command {
+                                CommunerdetteCommand::CalendarSlice { tick_start, count, timeout, reply } => {
+                                    let result = Self::execute_calendar_slice(&exec, tick_start, count, timeout).await;
+                                    let _ = reply.send(result);
+                                }
+                                CommunerdetteCommand::Stamp { content, echo, timeout, reply } => {
+                                    let result = Self::execute_stamp(&exec, content, echo, timeout).await;
+                                    let _ = reply.send(result);
+                                }
+                                CommunerdetteCommand::Shutdown => {
+                                    // Worker exits on shutdown
+                                    break;
+                                }
+                            }
+                        } else {
+                            tokio::time::sleep(TokioDuration::from_millis(10)).await;
+                        }
+                    }
+                }
+            }
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4.1-4.2 - CommunerdetteLine request methods
+// ---------------------------------------------------------------------------
+
+impl CommunerdetteLine {
+    /// Fetch a calendar slice from the remote TBID.
+    ///
+    /// Returns clean-authenticated ChrononRecords after running the Take 3
+    /// inbound gate. Each record's TBID is verified to match the target TBID.
+    /// Chain verification is applied for consecutive records.
+    ///
+    /// Applies a timeout (default 15s) to prevent indefinite waits.
+    pub async fn get_calendar_slice(
+        &self,
+        tick_start: u64,
+        count: u64,
+    ) -> Result<Vec<CleanAuthenticated<ChrononRecord>>, CommunerdetteError> {
+        let timeout = TokioDuration::from_secs(15);
+        let executor = CommunerdetteExecutor::new(
+            Arc::clone(&self.host),
+            self.target_tbid,
+            Arc::clone(&self.crypto),
+            Arc::clone(&self.clock),
+        );
+        Communerdette::execute_calendar_slice(&executor, tick_start, count, timeout).await
+    }
+
+    /// Fetch a single tick from the remote TBID.
+    ///
+    /// Implemented as `get_calendar_slice(tick_number, 1)` with exactly-one validation.
+    /// Returns `CleanAuthenticated<ChrononRecord>` after the Take 3 inbound gate.
+    pub async fn get_tick(
+        &self,
+        tick_number: u64,
+    ) -> Result<CleanAuthenticated<ChrononRecord>, CommunerdetteError> {
+        let timeout = TokioDuration::from_secs(15);
+        let executor = CommunerdetteExecutor::new(
+            Arc::clone(&self.host),
+            self.target_tbid,
+            Arc::clone(&self.crypto),
+            Arc::clone(&self.clock),
+        );
+        Communerdette::execute_tick(&executor, tick_number, timeout).await
+    }
+
+    /// Stamp content on the remote TBID.
+    ///
+    /// Returns a clean-authenticated Foretis after running the Take 3 inbound gate.
+    /// The Foretis's TBID is verified to match the target TBID.
+    ///
+    /// This method asks the remote TBID to stamp supplied content;
+    /// it does not sign local Calendar or Chronomatter messages.
+    pub async fn stamp(
+        &self,
+        content: Vec<u8>,
+        echo: String,
+    ) -> Result<CleanAuthenticated<Foretis>, CommunerdetteError> {
+        let timeout = TokioDuration::from_secs(15);
+        let executor = CommunerdetteExecutor::new(
+            Arc::clone(&self.host),
+            self.target_tbid,
+            Arc::clone(&self.crypto),
+            Arc::clone(&self.clock),
+        );
+        Communerdette::execute_stamp(&executor, content, echo, timeout).await
+    }
+}
+///
+/// Holds a reference to the private `Communerdette` but exposes only safe,
+/// narrow methods. Cloning this handle does NOT create a new relationship;
+/// it points at the same underlying state.
+#[derive(Clone)]
+pub struct CommunerdetteLine {
+    target_tbid: Tbid,
+    inner: Arc<Communerdette>,
+    host: Arc<dyn CommunerdetteHost>,
+    crypto: Arc<dyn CryptoServer>,
+    clock: Arc<dyn Clock>,
+}
+
+impl CommunerdetteLine {
+    /// Internal constructor — called only by Communerd's registry.
+    #[doc(hidden)]
+    pub(crate) fn new(
+        target_tbid: Tbid,
+        inner: Arc<Communerdette>,
+        host: Arc<dyn CommunerdetteHost>,
+        crypto: Arc<dyn CryptoServer>,
+        clock: Arc<dyn Clock>,
+    ) -> Self {
+        Self { target_tbid, inner, host, crypto, clock }
+    }
+
+    /// Returns the TBID this line is scoped to.
+    pub fn target_tbid(&self) -> Tbid {
+        self.target_tbid
+    }
+
+    /// Returns a read-only diagnostics snapshot for this relationship.
+    pub fn status_summary(&self) -> CommunerdetteStatusSummary {
+        self.inner.status_summary()
+    }
+
+    /// Returns the cancellation token associated with this Communerdette.
+    #[doc(hidden)]
+    pub fn shutdown_token(&self) -> CancellationToken {
+        self.inner.shutdown_token()
+    }
+}
+
+impl std::fmt::Debug for CommunerdetteLine {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CommunerdetteLine")
+            .field("target_tbid", &self.target_tbid.to_hex())
+            .finish_non_exhaustive()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use foretias_core::foretias::clean_auth::{Unprocessed, Externalized};
+    use foretias_core::foretias::encoding::{FTByteVector, FTByteArray};
+
+    fn make_line() -> CommunerdetteLine {
+        let tbid = Tbid::from_raw([0u8; 96]);
+        let host: Arc<dyn CommunerdetteHost> = Arc::new(MockHost {
+            dht_record: None,
+            cached_record: None,
+            swarm_available: false,
+            local_peer_id: None,
+            namespace: "test".to_string(),
+        });
+        let crypto = foretias_core::crypto_server::new_software(foretias_core::crypto_server::ForetiasCurve::Ed25519)
+            .expect("libsodium must be available")
+            .into();
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+        CommunerdetteLine::new(tbid, Arc::new(Communerdette::new(tbid)), host, crypto, clock)
+    }
+
+    #[test]
+    fn communerdette_line_can_be_cloned() {
+        let line1 = make_line();
+        let line2 = line1.clone();
+        assert_eq!(line1.target_tbid(), line2.target_tbid());
+    }
+
+    #[test]
+    fn clone_does_not_expose_mutable_state() {
+        let line1 = make_line();
+        let line2 = line1.clone();
+
+        let summary1 = line1.status_summary();
+        let summary2 = line2.status_summary();
+
+        assert_eq!(summary1.target_tbid, summary2.target_tbid);
+        assert_eq!(summary1.binding, summary2.binding);
+        assert_eq!(summary1.active_route, summary2.active_route);
+    }
+
+    #[test]
+    fn status_summary_is_read_only() {
+        let line = make_line();
+        let summary = line.status_summary();
+
+        assert!(matches!(summary.binding, TbidBindingStatus::Unknown));
+        assert_eq!(summary.active_route, ActiveRoute::Unavailable);
+        assert_eq!(summary.stats.consecutive_failures, 0);
+        assert_eq!(summary.stats.libp2p_successes, 0);
+        assert_eq!(summary.stats.queue_depth, 0);
+    }
+
+    #[test]
+    fn different_lines_for_different_tbids() {
+        let tbid_a = Tbid::from_raw([0u8; 96]);
+        let tbid_b = Tbid::from_raw([1u8; 96]);
+
+        let host_a: Arc<dyn CommunerdetteHost> = Arc::new(MockHost {
+            dht_record: None, cached_record: None, swarm_available: false, local_peer_id: None, namespace: "test".to_string(),
+        });
+        let host_b: Arc<dyn CommunerdetteHost> = Arc::new(MockHost {
+            dht_record: None, cached_record: None, swarm_available: false, local_peer_id: None, namespace: "test".to_string(),
+        });
+        let crypto_a = Arc::from(foretias_core::crypto_server::new_software(foretias_core::crypto_server::ForetiasCurve::Ed25519).expect("libsodium"));
+        let crypto_b = Arc::from(foretias_core::crypto_server::new_software(foretias_core::crypto_server::ForetiasCurve::Ed25519).expect("libsodium"));
+        let clock_a: Arc<dyn Clock> = Arc::new(SystemClock);
+        let clock_b: Arc<dyn Clock> = Arc::new(SystemClock);
+
+        let line_a = CommunerdetteLine::new(tbid_a, Arc::new(Communerdette::new(tbid_a)), host_a, crypto_a, clock_a);
+        let line_b = CommunerdetteLine::new(tbid_b, Arc::new(Communerdette::new(tbid_b)), host_b, crypto_b, clock_b);
+
+        assert_ne!(line_a.target_tbid(), line_b.target_tbid());
+    }
+
+    #[test]
+    fn same_arc_is_shared_across_clones() {
+        let tbid = Tbid::from_raw([5u8; 96]);
+        let inner = Arc::new(Communerdette::new(tbid));
+        let host: Arc<dyn CommunerdetteHost> = Arc::new(MockHost {
+            dht_record: None, cached_record: None, swarm_available: false, local_peer_id: None, namespace: "test".to_string(),
+        });
+        let crypto = Arc::from(foretias_core::crypto_server::new_software(foretias_core::crypto_server::ForetiasCurve::Ed25519).expect("libsodium"));
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+        let line1 = CommunerdetteLine::new(tbid, Arc::clone(&inner), Arc::clone(&host), Arc::clone(&crypto), Arc::clone(&clock));
+        let line2 = CommunerdetteLine::new(tbid, Arc::clone(&inner), Arc::clone(&host), Arc::clone(&crypto), Arc::clone(&clock));
+
+        assert_eq!(line1.target_tbid(), line2.target_tbid());
+        assert!(Arc::ptr_eq(&inner, &line1.inner));
+    }
+
+    #[test]
+    fn tbid_binding_status_verified() {
+        let status = TbidBindingStatus::Verified {
+            peer_id: Some("test-peer".into()),
+            json_rpc: Some("127.0.0.1:4002".into()),
+            verified_at_ns: 1_000_000,
+            proof_expires_at_ns: None,
+        };
+        assert!(status.is_verified());
+        assert!(status.has_any_claim());
+    }
+
+    #[test]
+    fn tbid_binding_status_unknown_has_no_claim() {
+        let status = TbidBindingStatus::Unknown;
+        assert!(!status.is_verified());
+        assert!(!status.has_any_claim());
+    }
+
+    #[test]
+    fn tbid_binding_status_rejected_has_no_claim() {
+        let status = TbidBindingStatus::Rejected {
+            reason: "bad proof".into(),
+            observed_at_ns: 999,
+        };
+        assert!(!status.is_verified());
+        assert!(!status.has_any_claim());
+    }
+
+    #[test]
+    fn tbid_binding_status_claimed_is_not_verified() {
+        let status = TbidBindingStatus::ClaimedByDht {
+            peer_id: Some("dht-peer".into()),
+            json_rpc: Some("127.0.0.1:5000".into()),
+            observed_at_ns: 42,
+        };
+        assert!(!status.is_verified());
+        assert!(status.has_any_claim());
+    }
+
+    #[test]
+    fn shutdown_token_clone_does_not_cancel_original() {
+        let line = make_line();
+        let token1 = line.shutdown_token();
+        let token2 = line.shutdown_token();
+
+        assert!(!token1.is_cancelled());
+        assert!(!token2.is_cancelled());
+    }
+
+    #[test]
+    fn clean_auth_types_are_importable() {
+        let _check: fn() -> bool = || {
+            std::mem::size_of::<Unprocessed<u8>>() > 0
+                && std::mem::size_of::<CleanAuthenticated<u8>>() > 0
+                && std::mem::size_of::<Externalized<u8>>() > 0
+        };
+        assert!(_check());
+    }
+
+    // ── Phase 3.4: DHT claim, missing record, route selection ───────────
+
+    struct MockHost {
+        dht_record: Option<PeerRegistrationRecord>,
+        cached_record: Option<PeerRegistrationRecord>,
+        swarm_available: bool,
+        local_peer_id: Option<libp2p::PeerId>,
+        namespace: String,
+    }
+
+    #[async_trait]
+    impl CommunerdetteHost for MockHost {
+        async fn host_lookup_tbid(&self, _tbid_hex: &str, _namespace: &str) -> Option<PeerRegistrationRecord> {
+            self.dht_record.clone()
+        }
+
+        fn host_lookup_tbid_cached(&self, _tbid_hex: &str) -> Option<PeerRegistrationRecord> {
+            self.cached_record.clone()
+        }
+
+        fn host_namespace(&self) -> String {
+            self.namespace.clone()
+        }
+
+        fn host_swarm_available(&self) -> bool {
+            self.swarm_available
+        }
+
+        fn host_local_peer_id(&self) -> Option<libp2p::PeerId> {
+            self.local_peer_id
+        }
+
+        async fn host_execute_stamp(
+            &self,
+            _peer: &PeerAddr,
+            _target_tbid: &str,
+            _content_hex: &str,
+            _echo: &str,
+        ) -> Result<serde_json::Value, TransportError> {
+            Err(TransportError::Unsupported("mock".into()))
+        }
+
+        async fn host_execute_calendar_slice(
+            &self,
+            _peer: &PeerAddr,
+            _tick_start: u64,
+            _count: u64,
+        ) -> Result<Vec<ChrononRecord>, TransportError> {
+            Err(TransportError::Unsupported("mock".into()))
+        }
+    }
+
+    fn make_record(peer_id: &str, json_rpc: &str) -> PeerRegistrationRecord {
+        PeerRegistrationRecord {
+            peer_id: peer_id.to_string(),
+            tbid: "0000000000000000000000000000000000000000000000000000000000000000".to_string(),
+            multiaddr: "/ip4/127.0.0.1/tcp/9901".to_string(),
+            json_rpc: json_rpc.to_string(),
+            chronon_ns: 60_000_000_000,
+            registered_at_ns: 1_000_000_000,
+            capabilities: vec![],
+        }
+    }
+
+    #[tokio::test]
+    async fn dht_claim_updates_binding_to_claimed_by_dht() {
+        let tbid = Tbid::from_raw([0u8; 96]);
+        let comm = Communerdette::new(tbid);
+        let host = MockHost {
+            dht_record: Some(make_record("peer-123", "127.0.0.1:4002")),
+            cached_record: None,
+            swarm_available: false,
+            local_peer_id: None,
+            namespace: "testnet".to_string(),
+        };
+
+        let status = comm.refresh_dht_binding(&host, 1_000_000_000).await;
+
+        assert!(matches!(&status, TbidBindingStatus::ClaimedByDht { .. }));
+        assert!(!status.is_verified()); // DHT claims are NOT verified
+        assert!(status.has_any_claim());
+
+        // State was updated
+        assert_eq!(comm.binding_status(), status);
+        assert_eq!(comm.route_candidates_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn missing_dht_record_leaves_route_unavailable() {
+        let tbid = Tbid::from_raw([0u8; 96]);
+        let comm = Communerdette::new(tbid);
+        let host = MockHost {
+            dht_record: None, // No DHT record
+            cached_record: None,
+            swarm_available: false,
+            local_peer_id: None,
+            namespace: "testnet".to_string(),
+        };
+
+        let status = comm.refresh_dht_binding(&host, 1_000_000_000).await;
+
+        assert!(matches!(status, TbidBindingStatus::Unknown));
+        assert!(!status.has_any_claim());
+        assert_eq!(comm.route_candidates_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn cached_dht_record_updates_binding() {
+        let tbid = Tbid::from_raw([0u8; 96]);
+        let comm = Communerdette::new(tbid);
+        let host = MockHost {
+            dht_record: None, // No live DHT
+            cached_record: Some(make_record("peer-456", "127.0.0.1:5000")),
+            swarm_available: false,
+            local_peer_id: None,
+            namespace: "testnet".to_string(),
+        };
+
+        let status = comm.refresh_dht_binding(&host, 2_000_000_000).await;
+
+        // Cached record is checked first, so binding updates
+        assert!(matches!(&status, TbidBindingStatus::ClaimedByDht { .. }));
+        assert_eq!(comm.route_candidates_count(), 1);
+    }
+
+    #[test]
+    fn route_selection_prefers_libp2p_when_swarm_available() {
+        let tbid = Tbid::from_raw([0u8; 96]);
+        let comm = Communerdette::new(tbid);
+
+        // Add a candidate with a PeerId
+        comm.add_route_candidate(make_record("peer-libp2p", "127.0.0.1:4002"));
+
+        let host = MockHost {
+            dht_record: None,
+            cached_record: None,
+            swarm_available: true, // Swarm IS available
+            local_peer_id: None,
+            namespace: "testnet".to_string(),
+        };
+
+        let route = comm.choose_route_with_host(&host);
+        assert_eq!(route, ActiveRoute::Libp2pDirect);
+    }
+
+    #[test]
+    fn route_selection_falls_back_to_noise_when_no_swarm() {
+        let tbid = Tbid::from_raw([0u8; 96]);
+        let comm = Communerdette::new(tbid);
+
+        // Add a candidate with PeerId, but swarm NOT available
+        comm.add_route_candidate(make_record("peer-libp2p", "127.0.0.1:4002"));
+
+        let host = MockHost {
+            dht_record: None,
+            cached_record: None,
+            swarm_available: false, // Swarm NOT available
+            local_peer_id: None,
+            namespace: "testnet".to_string(),
+        };
+
+        let route = comm.choose_route_with_host(&host);
+        // Falls back to NoiseJsonRpc since swarm is unavailable
+        assert_eq!(route, ActiveRoute::NoiseJsonRpc);
+    }
+
+    #[test]
+    fn route_selection_unavailable_when_no_candidates() {
+        let tbid = Tbid::from_raw([0u8; 96]);
+        let comm = Communerdette::new(tbid);
+
+        let host = MockHost {
+            dht_record: None,
+            cached_record: None,
+            swarm_available: false,
+            local_peer_id: None,
+            namespace: "testnet".to_string(),
+        };
+
+        let route = comm.choose_route_with_host(&host);
+        assert_eq!(route, ActiveRoute::Unavailable);
+    }
+
+    // ── Phase 4.4: Unit tests for calendar slice, tick, stamp ────────────
+
+    fn make_test_chronon_record(tbid: &Tbid, chronon_number: u64) -> ChrononRecord {
+        ChrononRecord {
+            chronon_number,
+            public_key: FTByteVector::from(vec![1u8; 32]),
+            signature_algorithm: "Ed25519".to_string(),
+            forward_foretis: FTByteVector::from(vec![2u8; 64]),
+            backward_foretis: FTByteVector::from(vec![3u8; 64]),
+            aa_nonce: FTByteArray::from([4u8; 16]),
+            chronon_stamp_count: 0,
+            external_attestations: vec![],
+            tb_version: 0,
+            tbid: tbid.clone(),
+        }
+    }
+
+    fn make_test_foretis(tbid: &Tbid) -> Foretis {
+        Foretis {
+            chronon_number: 1,
+            content_hash: FTByteArray::from([5u8; 32]),
+            signature: FTByteVector::from(vec![6u8; 64]),
+            signature_algorithm: "Ed25519".to_string(),
+            tbid: tbid.clone(),
+            echo: "test".to_string(),
+            tbn: "test-tb".to_string(),
+            time_being_reference_time: "UE+1000000000ns".to_string(),
+        }
+    }
+
+    #[test]
+    fn gate_chronon_records_rejects_chronon_number_zero() {
+        let tbid = Tbid::from_raw([0u8; 96]);
+        let crypto = Arc::from(foretias_core::crypto_server::new_software(
+            foretias_core::crypto_server::ForetiasCurve::Ed25519,
+        )
+        .expect("libsodium"));
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+
+        let executor = CommunerdetteExecutor::new(
+            Arc::new(MockHost {
+                dht_record: None,
+                cached_record: None,
+                swarm_available: false,
+                local_peer_id: None,
+                namespace: "test".to_string(),
+            }),
+            tbid,
+            crypto,
+            clock,
+        );
+
+        let bad_record = ChrononRecord {
+            chronon_number: 0,
+            public_key: FTByteVector::from(vec![1u8; 32]),
+            signature_algorithm: "Ed25519".to_string(),
+            forward_foretis: FTByteVector::from(vec![]),
+            backward_foretis: FTByteVector::from(vec![]),
+            aa_nonce: FTByteArray::from([0u8; 16]),
+            chronon_stamp_count: 0,
+            external_attestations: vec![],
+            tb_version: 0,
+            tbid: Tbid::from_raw([0u8; 96]),
+        };
+
+        let result = executor.gate_chronon_records(vec![bad_record]);
+        assert!(matches!(result, Err(CommunerdetteError::Structural(_))));
+    }
+
+    #[test]
+    fn gate_chronon_records_rejects_empty_public_key() {
+        let tbid = Tbid::from_raw([0u8; 96]);
+        let crypto = Arc::from(foretias_core::crypto_server::new_software(
+            foretias_core::crypto_server::ForetiasCurve::Ed25519,
+        )
+        .expect("libsodium"));
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+
+        let executor = CommunerdetteExecutor::new(
+            Arc::new(MockHost {
+                dht_record: None,
+                cached_record: None,
+                swarm_available: false,
+                local_peer_id: None,
+                namespace: "test".to_string(),
+            }),
+            tbid,
+            crypto,
+            clock,
+        );
+
+        let bad_record = ChrononRecord {
+            chronon_number: 1,
+            public_key: FTByteVector::from(vec![]),
+            signature_algorithm: "Ed25519".to_string(),
+            forward_foretis: FTByteVector::from(vec![]),
+            backward_foretis: FTByteVector::from(vec![]),
+            aa_nonce: FTByteArray::from([0u8; 16]),
+            chronon_stamp_count: 0,
+            external_attestations: vec![],
+            tb_version: 0,
+            tbid: Tbid::from_raw([0u8; 96]),
+        };
+
+        let result = executor.gate_chronon_records(vec![bad_record]);
+        assert!(matches!(result, Err(CommunerdetteError::Structural(_))));
+    }
+
+    #[test]
+    fn gate_chronon_records_rejects_tbid_mismatch() {
+        let target_tbid = Tbid::from_raw([0u8; 96]);
+        let other_tbid = Tbid::from_raw([1u8; 96]);
+        let crypto = Arc::from(foretias_core::crypto_server::new_software(
+            foretias_core::crypto_server::ForetiasCurve::Ed25519,
+        )
+        .expect("libsodium"));
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+
+        let executor = CommunerdetteExecutor::new(
+            Arc::new(MockHost {
+                dht_record: None,
+                cached_record: None,
+                swarm_available: false,
+                local_peer_id: None,
+                namespace: "test".to_string(),
+            }),
+            target_tbid,
+            crypto,
+            clock,
+        );
+
+        let record = make_test_chronon_record(&other_tbid, 1);
+        let result = executor.gate_chronon_records(vec![record]);
+
+        assert!(matches!(result, Err(CommunerdetteError::TbidMismatch { .. })));
+        if let Err(CommunerdetteError::TbidMismatch { expected, actual }) = result {
+            assert_eq!(expected, target_tbid.to_hex());
+            assert_eq!(actual, other_tbid.to_hex());
+        }
+    }
+
+    #[test]
+    fn gate_chronon_records_returns_clean_authenticated_on_valid_genesis() {
+        let target_tbid = Tbid::from_raw([0u8; 96]);
+        let crypto = Arc::from(foretias_core::crypto_server::new_software(
+            foretias_core::crypto_server::ForetiasCurve::Ed25519,
+        )
+        .expect("libsodium"));
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+
+        let executor = CommunerdetteExecutor::new(
+            Arc::new(MockHost {
+                dht_record: None,
+                cached_record: None,
+                swarm_available: false,
+                local_peer_id: None,
+                namespace: "test".to_string(),
+            }),
+            target_tbid,
+            crypto,
+            clock,
+        );
+
+        let record = make_test_chronon_record(&target_tbid, 1);
+        let result = executor.gate_chronon_records(vec![record]);
+
+        assert!(result.is_ok());
+        let records = result.unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(*records[0].chronon_number(), 1);
+    }
+
+    #[test]
+    fn gate_foretis_rejects_chronon_number_zero() {
+        let tbid = Tbid::from_raw([0u8; 96]);
+        let crypto = Arc::from(foretias_core::crypto_server::new_software(
+            foretias_core::crypto_server::ForetiasCurve::Ed25519,
+        )
+        .expect("libsodium"));
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+
+        let executor = CommunerdetteExecutor::new(
+            Arc::new(MockHost {
+                dht_record: None,
+                cached_record: None,
+                swarm_available: false,
+                local_peer_id: None,
+                namespace: "test".to_string(),
+            }),
+            tbid,
+            crypto,
+            clock,
+        );
+
+        let bad_foretis = Foretis {
+            chronon_number: 0,
+            content_hash: FTByteArray::from([0u8; 32]),
+            signature: FTByteVector::from(vec![1u8; 64]),
+            signature_algorithm: "Ed25519".to_string(),
+            tbid: Tbid::from_raw([0u8; 96]),
+            echo: "test".to_string(),
+            tbn: "test".to_string(),
+            time_being_reference_time: "UE+0ns".to_string(),
+        };
+        let json = serde_json::to_value(&bad_foretis).unwrap();
+
+        let result = executor.gate_foretis(json);
+        assert!(matches!(result, Err(CommunerdetteError::Structural(_))));
+    }
+
+    #[test]
+    fn gate_foretis_rejects_empty_signature() {
+        let tbid = Tbid::from_raw([0u8; 96]);
+        let crypto = Arc::from(foretias_core::crypto_server::new_software(
+            foretias_core::crypto_server::ForetiasCurve::Ed25519,
+        )
+        .expect("libsodium"));
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+
+        let executor = CommunerdetteExecutor::new(
+            Arc::new(MockHost {
+                dht_record: None,
+                cached_record: None,
+                swarm_available: false,
+                local_peer_id: None,
+                namespace: "test".to_string(),
+            }),
+            tbid,
+            crypto,
+            clock,
+        );
+
+        let bad_foretis = Foretis {
+            chronon_number: 1,
+            content_hash: FTByteArray::from([0u8; 32]),
+            signature: FTByteVector::from(vec![]),
+            signature_algorithm: "Ed25519".to_string(),
+            tbid: Tbid::from_raw([0u8; 96]),
+            echo: "test".to_string(),
+            tbn: "test".to_string(),
+            time_being_reference_time: "UE+0ns".to_string(),
+        };
+        let json = serde_json::to_value(&bad_foretis).unwrap();
+
+        let result = executor.gate_foretis(json);
+        assert!(matches!(result, Err(CommunerdetteError::Structural(_))));
+    }
+
+    #[test]
+    fn gate_foretis_rejects_empty_signature_algorithm() {
+        let tbid = Tbid::from_raw([0u8; 96]);
+        let crypto = Arc::from(foretias_core::crypto_server::new_software(
+            foretias_core::crypto_server::ForetiasCurve::Ed25519,
+        )
+        .expect("libsodium"));
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+
+        let executor = CommunerdetteExecutor::new(
+            Arc::new(MockHost {
+                dht_record: None,
+                cached_record: None,
+                swarm_available: false,
+                local_peer_id: None,
+                namespace: "test".to_string(),
+            }),
+            tbid,
+            crypto,
+            clock,
+        );
+
+        let bad_foretis = Foretis {
+            chronon_number: 1,
+            content_hash: FTByteArray::from([0u8; 32]),
+            signature: FTByteVector::from(vec![1u8; 64]),
+            signature_algorithm: "".to_string(),
+            tbid: Tbid::from_raw([0u8; 96]),
+            echo: "test".to_string(),
+            tbn: "test".to_string(),
+            time_being_reference_time: "UE+0ns".to_string(),
+        };
+        let json = serde_json::to_value(&bad_foretis).unwrap();
+
+        let result = executor.gate_foretis(json);
+        assert!(matches!(result, Err(CommunerdetteError::Structural(_))));
+    }
+
+    #[test]
+    fn gate_foretis_rejects_tbid_mismatch() {
+        let target_tbid = Tbid::from_raw([0u8; 96]);
+        let other_tbid = Tbid::from_raw([2u8; 96]);
+        let crypto = Arc::from(foretias_core::crypto_server::new_software(
+            foretias_core::crypto_server::ForetiasCurve::Ed25519,
+        )
+        .expect("libsodium"));
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+
+        let executor = CommunerdetteExecutor::new(
+            Arc::new(MockHost {
+                dht_record: None,
+                cached_record: None,
+                swarm_available: false,
+                local_peer_id: None,
+                namespace: "test".to_string(),
+            }),
+            target_tbid,
+            crypto,
+            clock,
+        );
+
+        let foretis = make_test_foretis(&other_tbid);
+        let json = serde_json::to_value(&foretis).unwrap();
+
+        let result = executor.gate_foretis(json);
+
+        assert!(matches!(result, Err(CommunerdetteError::TbidMismatch { .. })));
+        if let Err(CommunerdetteError::TbidMismatch { expected, actual }) = result {
+            assert_eq!(expected, target_tbid.to_hex());
+            assert_eq!(actual, other_tbid.to_hex());
+        }
+    }
+
+    #[test]
+    fn gate_foretis_returns_clean_authenticated_on_valid() {
+        let target_tbid = Tbid::from_raw([0u8; 96]);
+        let crypto = Arc::from(foretias_core::crypto_server::new_software(
+            foretias_core::crypto_server::ForetiasCurve::Ed25519,
+        )
+        .expect("libsodium"));
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+
+        let executor = CommunerdetteExecutor::new(
+            Arc::new(MockHost {
+                dht_record: None,
+                cached_record: None,
+                swarm_available: false,
+                local_peer_id: None,
+                namespace: "test".to_string(),
+            }),
+            target_tbid,
+            crypto,
+            clock,
+        );
+
+        let foretis = make_test_foretis(&target_tbid);
+        let json = serde_json::to_value(&foretis).unwrap();
+
+        let result = executor.gate_foretis(json);
+        assert!(result.is_ok());
+        let ca = result.unwrap();
+        assert_eq!(*ca.chronon_number(), 1);
+        assert_eq!(ca.signature_algorithm(), "Ed25519");
+    }
+
+    #[test]
+    fn gate_foretis_rejects_invalid_json() {
+        let tbid = Tbid::from_raw([0u8; 96]);
+        let crypto = Arc::from(foretias_core::crypto_server::new_software(
+            foretias_core::crypto_server::ForetiasCurve::Ed25519,
+        )
+        .expect("libsodium"));
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+
+        let executor = CommunerdetteExecutor::new(
+            Arc::new(MockHost {
+                dht_record: None,
+                cached_record: None,
+                swarm_available: false,
+                local_peer_id: None,
+                namespace: "test".to_string(),
+            }),
+            tbid,
+            crypto,
+            clock,
+        );
+
+        let result = executor.gate_foretis(serde_json::Value::String("not an object".into()));
+        assert!(matches!(result, Err(CommunerdetteError::Transport(_))));
+    }
+
+    #[tokio::test]
+    async fn execute_calendar_slice_returns_transport_error_when_no_peer() {
+        let tbid = Tbid::from_raw([0u8; 96]);
+        let host: Arc<dyn CommunerdetteHost> = Arc::new(MockHost {
+            dht_record: None,
+            cached_record: None,
+            swarm_available: false,
+            local_peer_id: None,
+            namespace: "test".to_string(),
+        });
+        let crypto = Arc::from(foretias_core::crypto_server::new_software(
+            foretias_core::crypto_server::ForetiasCurve::Ed25519,
+        )
+        .expect("libsodium"));
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+
+        let executor = CommunerdetteExecutor::new(host, tbid, crypto, clock);
+
+        let result = Communerdette::execute_calendar_slice(&executor, 1, 10, TokioDuration::from_secs(5))
+            .await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn execute_stamp_returns_transport_error_when_no_peer() {
+        let tbid = Tbid::from_raw([0u8; 96]);
+        let host: Arc<dyn CommunerdetteHost> = Arc::new(MockHost {
+            dht_record: None,
+            cached_record: None,
+            swarm_available: false,
+            local_peer_id: None,
+            namespace: "test".to_string(),
+        });
+        let crypto = Arc::from(foretias_core::crypto_server::new_software(
+            foretias_core::crypto_server::ForetiasCurve::Ed25519,
+        )
+        .expect("libsodium"));
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+
+        let executor = CommunerdetteExecutor::new(host, tbid, crypto, clock);
+
+        let result = Communerdette::execute_stamp(&executor, b"hello".to_vec(), "test".into(), TokioDuration::from_secs(5))
+            .await;
+
+        assert!(result.is_err());
+    }
+
+    // ── Phase 5.3: Priority policy ───────────────────────────────────────
+
+    impl CommunerdettePriority {
+        /// Returns the maximum queue depth allowed for this priority level.
+        /// Higher-priority requests are allowed to accumulate deeper queues.
+        pub fn max_queue_depth(&self) -> usize {
+            match self {
+                CommunerdettePriority::Critical => 100,
+                CommunerdettePriority::High => 50,
+                CommunerdettePriority::Normal => 20,
+                CommunerdettePriority::Bulk => 5,
+            }
+        }
+
+        /// Returns the timeout multiplier for this priority level.
+        /// Critical requests get longer timeouts to avoid premature cancellation.
+        pub fn timeout_multiplier(&self) -> f64 {
+            match self {
+                CommunerdettePriority::Critical => 3.0,
+                CommunerdettePriority::High => 2.0,
+                CommunerdettePriority::Normal => 1.0,
+                CommunerdettePriority::Bulk => 0.5,
+            }
+        }
+
+        /// Check if this priority should preempt a lower-priority request.
+        pub fn can_preempt(&self, other: &CommunerdettePriority) -> bool {
+            self.cmp(other) == std::cmp::Ordering::Greater
+        }
+    }
+
+    #[test]
+    fn priority_critical_has_longest_timeout_multiplier() {
+        assert_eq!(CommunerdettePriority::Critical.timeout_multiplier(), 3.0);
+        assert_eq!(CommunerdettePriority::High.timeout_multiplier(), 2.0);
+        assert_eq!(CommunerdettePriority::Normal.timeout_multiplier(), 1.0);
+        assert_eq!(CommunerdettePriority::Bulk.timeout_multiplier(), 0.5);
+    }
+
+    #[test]
+    fn priority_critical_has_largest_max_queue_depth() {
+        assert_eq!(CommunerdettePriority::Critical.max_queue_depth(), 100);
+        assert_eq!(CommunerdettePriority::High.max_queue_depth(), 50);
+        assert_eq!(CommunerdettePriority::Normal.max_queue_depth(), 20);
+        assert_eq!(CommunerdettePriority::Bulk.max_queue_depth(), 5);
+    }
+
+    #[test]
+    fn priority_can_preempt_returns_true_for_higher() {
+        assert!(CommunerdettePriority::Critical.can_preempt(&CommunerdettePriority::High));
+        assert!(CommunerdettePriority::Critical.can_preempt(&CommunerdettePriority::Normal));
+        assert!(CommunerdettePriority::Critical.can_preempt(&CommunerdettePriority::Bulk));
+        assert!(CommunerdettePriority::High.can_preempt(&CommunerdettePriority::Normal));
+        assert!(CommunerdettePriority::High.can_preempt(&CommunerdettePriority::Bulk));
+        assert!(CommunerdettePriority::Normal.can_preempt(&CommunerdettePriority::Bulk));
+    }
+
+    #[test]
+    fn priority_can_preempt_returns_false_for_equal_or_lower() {
+        assert!(!CommunerdettePriority::Critical.can_preempt(&CommunerdettePriority::Critical));
+        assert!(!CommunerdettePriority::Bulk.can_preempt(&CommunerdettePriority::Critical));
+        assert!(!CommunerdettePriority::Bulk.can_preempt(&CommunerdettePriority::Normal));
+        assert!(!CommunerdettePriority::Normal.can_preempt(&CommunerdettePriority::Normal));
+    }
+
+    // ── Phase 5.4: Tests for priority ordering and timeouts ──────────────
+
+    #[test]
+    fn queued_command_heap_orders_by_priority_then_sequence() {
+        let mut heap = BinaryHeap::new();
+
+        heap.push(QueuedCommand {
+            priority: CommunerdettePriority::Bulk,
+            sequence: 0,
+            command: CommunerdetteCommand::Shutdown,
+        });
+        heap.push(QueuedCommand {
+            priority: CommunerdettePriority::Critical,
+            sequence: 1,
+            command: CommunerdetteCommand::Shutdown,
+        });
+        heap.push(QueuedCommand {
+            priority: CommunerdettePriority::Normal,
+            sequence: 2,
+            command: CommunerdetteCommand::Shutdown,
+        });
+
+        let first = heap.pop().unwrap();
+        assert!(matches!(first.priority, CommunerdettePriority::Critical));
+        assert_eq!(first.sequence, 1);
+
+        let second = heap.pop().unwrap();
+        assert!(matches!(second.priority, CommunerdettePriority::Normal));
+        assert_eq!(second.sequence, 2);
+
+        let third = heap.pop().unwrap();
+        assert!(matches!(third.priority, CommunerdettePriority::Bulk));
+        assert_eq!(third.sequence, 0);
+    }
+
+    #[test]
+    fn queued_command_same_priority_orders_by_earlier_sequence_first() {
+        let mut heap = BinaryHeap::new();
+
+        heap.push(QueuedCommand {
+            priority: CommunerdettePriority::Normal,
+            sequence: 5,
+            command: CommunerdetteCommand::Shutdown,
+        });
+        heap.push(QueuedCommand {
+            priority: CommunerdettePriority::Normal,
+            sequence: 2,
+            command: CommunerdetteCommand::Shutdown,
+        });
+        heap.push(QueuedCommand {
+            priority: CommunerdettePriority::Normal,
+            sequence: 8,
+            command: CommunerdetteCommand::Shutdown,
+        });
+
+        let first = heap.pop().unwrap();
+        assert_eq!(first.sequence, 2);
+
+        let second = heap.pop().unwrap();
+        assert_eq!(second.sequence, 5);
+
+        let third = heap.pop().unwrap();
+        assert_eq!(third.sequence, 8);
+    }
+
+    #[test]
+    fn queued_command_mixed_priorities_fifo_within_priority() {
+        let mut heap = BinaryHeap::new();
+
+        heap.push(QueuedCommand {
+            priority: CommunerdettePriority::Critical,
+            sequence: 0,
+            command: CommunerdetteCommand::Shutdown,
+        });
+        heap.push(QueuedCommand {
+            priority: CommunerdettePriority::High,
+            sequence: 1,
+            command: CommunerdetteCommand::Shutdown,
+        });
+        heap.push(QueuedCommand {
+            priority: CommunerdettePriority::Critical,
+            sequence: 2,
+            command: CommunerdetteCommand::Shutdown,
+        });
+        heap.push(QueuedCommand {
+            priority: CommunerdettePriority::High,
+            sequence: 3,
+            command: CommunerdetteCommand::Shutdown,
+        });
+
+        let first = heap.pop().unwrap();
+        assert!(matches!(first.priority, CommunerdettePriority::Critical));
+        assert_eq!(first.sequence, 0);
+
+        let second = heap.pop().unwrap();
+        assert!(matches!(second.priority, CommunerdettePriority::Critical));
+        assert_eq!(second.sequence, 2);
+
+        let third = heap.pop().unwrap();
+        assert!(matches!(third.priority, CommunerdettePriority::High));
+        assert_eq!(third.sequence, 1);
+
+        let fourth = heap.pop().unwrap();
+        assert!(matches!(fourth.priority, CommunerdettePriority::High));
+        assert_eq!(fourth.sequence, 3);
+    }
+
+    #[test]
+    fn queued_command_ord_is_consistent() {
+        let a = QueuedCommand {
+            priority: CommunerdettePriority::Normal,
+            sequence: 42,
+            command: CommunerdetteCommand::Shutdown,
+        };
+        let b = QueuedCommand {
+            priority: CommunerdettePriority::Normal,
+            sequence: 42,
+            command: CommunerdetteCommand::Shutdown,
+        };
+
+        assert_eq!(a, b);
+        assert_eq!(a.cmp(&b), std::cmp::Ordering::Equal);
+        assert_eq!(a.partial_cmp(&b), Some(std::cmp::Ordering::Equal));
+    }
+
+    #[test]
+    fn queued_command_different_priorities_are_not_equal() {
+        let a = QueuedCommand {
+            priority: CommunerdettePriority::Critical,
+            sequence: 0,
+            command: CommunerdetteCommand::Shutdown,
+        };
+        let b = QueuedCommand {
+            priority: CommunerdettePriority::Bulk,
+            sequence: 0,
+            command: CommunerdetteCommand::Shutdown,
+        };
+
+        assert_ne!(a, b);
+        assert_eq!(a.cmp(&b), std::cmp::Ordering::Greater);
+    }
+}

@@ -30,6 +30,17 @@ core-engine/src/probity/report.rs | ProbityReport | impl::ExternalizedProbityRep
 core-engine/src/probity/report.rs | ProbityReport | impl::Unprocessed | Y | - | -
 core-engine/src/probity/report.rs | ProbityReport | impl::Unprocessed::fn::into_clean_authenticated | - | Y | -
 core-engine/src/probity/report.rs | ProbityReport | impl::Unprocessed::fn::verify | - | Y | -
+foretias-server/src/communerd/communerdette.rs | ChrononRecord | impl::Communerdette::fn::execute_calendar_slice | - | Y | -
+foretias-server/src/communerd/communerdette.rs | ChrononRecord | impl::Communerdette::fn::execute_tick | - | Y | -
+foretias-server/src/communerd/communerdette.rs | ChrononRecord | impl::CommunerdetteExecutor::fn::gate_chronon_records | - | Y | -
+foretias-server/src/communerd/communerdette.rs | ChrononRecord | impl::CommunerdetteLine::fn::get_calendar_slice | - | Y | -
+foretias-server/src/communerd/communerdette.rs | ChrononRecord | impl::CommunerdetteLine::fn::get_tick | - | Y | -
+foretias-server/src/communerd/communerdette.rs | ChrononRecord | other | - | Y | -
+foretias-server/src/communerd/communerdette.rs | Foretis | impl::Communerdette::fn::execute_stamp | - | Y | -
+foretias-server/src/communerd/communerdette.rs | Foretis | impl::CommunerdetteExecutor::fn::gate_foretis | - | Y | -
+foretias-server/src/communerd/communerdette.rs | Foretis | impl::CommunerdetteLine::fn::stamp | - | Y | -
+foretias-server/src/communerd/communerdette.rs | Foretis | other | - | Y | -
+foretias-server/src/communerd/communerdette.rs | u8 | fn::clean_auth_types_are_importable | Y | Y | Y
 
 
 === Cross-Tabulation ===
@@ -47,3 +58,8 @@ core-engine | Unprocessed | EpochSnapshot | 3
 core-engine | Unprocessed | Foretis | 3
 core-engine | Unprocessed | ProbityReport | 3
 core-engine | Unprocessed | T | 3
+foretias-server | CleanAuthenticated | ChrononRecord | 6
+foretias-server | CleanAuthenticated | Foretis | 4
+foretias-server | CleanAuthenticated | u8 | 1
+foretias-server | Externalized | u8 | 1
+foretias-server | Unprocessed | u8 | 1

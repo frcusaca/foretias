@@ -1,9 +1,10 @@
 # COMBINED_GROUP1_TYPE_BASED_SAFETY_ENFORCEMENT_TAKE_3_PLAN.md
 
-**Date:** 2026-05-22
+**Date:** 2026-05-22 (completed 2026-05-23)
 **Application:** Foretias v0.3+
 **Paired Spec:** `COMBINED_GROUP1_TYPE_BASED_SAFETY_ENFORCEMENT_TAKE_3_SPEC.md`
 **Supersedes Plan for:** `GENERIC_TRUST_BOUNDARY_WRAPPERS_SPEC.md` (Take 2)
+**Status:** ✅ MERGED to alpha 2026-05-23 (commits 7fb2549, 0442683)
 
 ---
 

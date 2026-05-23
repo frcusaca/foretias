@@ -60,6 +60,12 @@ impl Tbid {
         hex::encode(&self.inner[..])
     }
 
+    /// Parse from a hex-encoded string (192 hex chars = 96 bytes).
+    pub fn from_hex(s: &str) -> Result<Self, crate::error::CryptoError> {
+        let bytes = hex::decode(s).map_err(|_| crate::error::CryptoError::BadInput("invalid hex TBID"))?;
+        Self::from_bytes(&bytes)
+    }
+
     /// Create a test TBID with all bytes set to the given value.
     #[cfg(test)]
     pub fn test() -> Self {

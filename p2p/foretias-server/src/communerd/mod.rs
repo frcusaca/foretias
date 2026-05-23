@@ -3,6 +3,7 @@
 //! A Communerd is a communard of a time family commune where timing information
 //! is shared in communal communion between families, AND he's a nerd about communications.
 
+mod communerdette;
 pub mod transport;
 pub mod json_rpc_transport;
 pub mod libp2p_transport;
@@ -13,8 +14,10 @@ pub mod p2p;
 pub mod tiers;
 
 pub use tiers::{CommunerdServer, CommunerdP2P};
+pub use communerdette::{CommunerdetteLine, CommunerdetteStatusSummary, TbidBindingStatus, ActiveRoute, CommunerdetteStats};
 
 use std::sync::{Arc, OnceLock};
+use dashmap::DashMap;
 use rand::seq::SliceRandom;
 
 use foretias_core::clock::{Clock, SystemClock};
@@ -27,6 +30,8 @@ use foretias_core::foretias::callbacks::{CommunityQuery, CommunityResponse, Peer
 use foretias_core::foretias::clean_auth::{UnprocessedForetis, CleanAuthenticatedForetis};
 use foretias_core::foretias::tick::{Foretis, ChrononRecord};
 use foretias_core::foretias::types::Tbid;
+
+use self::communerdette::Communerdette;
 
 use crate::calendar::Calendar;
 use self::json_rpc_transport::JsonRpcTransport;
@@ -97,6 +102,7 @@ pub struct Communerd {
     tbid_index: Arc<std::sync::RwLock<HashMap<String, PeerRegistrationRecord>>>,
     pending_lookups: Arc<std::sync::Mutex<HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<PeerRegistrationRecord>>>>>,
     calendar: Arc<std::sync::RwLock<Option<Arc<Calendar>>>>,
+    communerdettes: Arc<DashMap<Tbid, Arc<communerdette::Communerdette>>>,
 }
 
 impl Clone for Communerd {
@@ -122,6 +128,7 @@ impl Clone for Communerd {
             tbid_index: Arc::clone(&self.tbid_index),
             pending_lookups: Arc::clone(&self.pending_lookups),
             calendar: Arc::clone(&self.calendar),
+            communerdettes: Arc::clone(&self.communerdettes),
         }
     }
 }
@@ -160,7 +167,32 @@ impl Communerd {
             tbid_index: Arc::new(std::sync::RwLock::new(HashMap::new())),
             pending_lookups: Arc::new(std::sync::Mutex::new(HashMap::new())),
             calendar: Arc::new(std::sync::RwLock::new(None)),
+            communerdettes: Arc::new(DashMap::new()),
         }
+    }
+
+    /// Returns a CommunerdetteLine for the given TBID, creating one if needed.
+    pub fn line_for_tbid(&self, tbid: Tbid) -> CommunerdetteLine {
+        let host: Arc<dyn communerdette::CommunerdetteHost> = Arc::new(self.clone());
+        let crypto = Arc::clone(&self.crypto);
+        let clock = Arc::clone(&self.clock);
+        if let Some(entry) = self.communerdettes.get(&tbid) {
+            CommunerdetteLine::new(tbid, Arc::clone(entry.value()), Arc::clone(&host), Arc::clone(&crypto), Arc::clone(&clock))
+        } else {
+            let communerdette = Arc::new(Communerdette::new(tbid));
+            self.communerdettes.insert(tbid, Arc::clone(&communerdette));
+            CommunerdetteLine::new(tbid, communerdette, host, crypto, clock)
+        }
+    }
+
+    /// Returns a CommunerdetteLine for the given TBID only if one already exists.
+    pub fn try_line_for_tbid(&self, tbid: Tbid) -> Option<CommunerdetteLine> {
+        let host: Arc<dyn communerdette::CommunerdetteHost> = Arc::new(self.clone());
+        let crypto = Arc::clone(&self.crypto);
+        let clock = Arc::clone(&self.clock);
+        self.communerdettes.get(&tbid).map(|entry| {
+            CommunerdetteLine::new(tbid, Arc::clone(entry.value()), Arc::clone(&host), Arc::clone(&crypto), Arc::clone(&clock))
+        })
     }
 
     pub fn start_liveness_pings(&self) {
@@ -752,6 +784,127 @@ impl Communerd {
             }
         }
     }
+
+    /// Phase 9: Shutdown all Communerdette relationships.
+    ///
+    /// Cancels all per-relationship tasks, drops cancellation tokens.
+    /// After this call, all CommunerdetteLines for affected TBIDs
+    /// will report their shutdown tokens as cancelled.
+    pub fn shutdown_relationships(&self) {
+        tracing::info!(component = "communerd", "shutting down all communerdette relationships");
+        for entry in self.communerdettes.iter() {
+            entry.value().shutdown();
+        }
+    }
+
+    /// Phase 6: PeerPool migration bridge.
+    ///
+    /// When DHT or PeerPool state changes, update the relevant Communerdette
+    /// so that relationship-local memory stays current.
+    ///
+    /// This is called from the gossip event loop when a TBID record is retrieved.
+    pub(super) fn bridge_dht_to_communerdette(&self, tbid_hex: &str, record: &PeerRegistrationRecord) {
+        let tbid = match Tbid::from_hex(tbid_hex) {
+            Ok(t) => t,
+            Err(_) => {
+                tracing::warn!(tbid = %tbid_hex, "invalid TBID in DHT bridge, skipping");
+                return;
+            }
+        };
+        if let Some(entry) = self.communerdettes.get(&tbid) {
+            let now_ns = self.clock.now_ns().unwrap_or(0);
+            entry.value().mark_binding_claimed_by_dht(
+                Some(record.peer_id.clone()),
+                Some(record.json_rpc.clone()),
+                now_ns,
+            );
+            entry.value().add_route_candidate(record.clone());
+        }
+    }
+
+    /// Get calendar slice by TBID via CommunerdetteLine.
+    pub async fn get_calendar_slice_by_tbid(
+        &self,
+        tbid_hex: &str,
+        tick_start: u64,
+        count: u64,
+    ) -> Result<Vec<ChrononRecord>, TransportError> {
+        let tbid = Tbid::from_hex(tbid_hex)
+            .map_err(|e| TransportError::Decode(format!("invalid TBID: {e}")))?;
+        let _line = self.line_for_tbid(tbid);
+        let owner = self.lookup_tbid(tbid_hex, &self.namespace()).await
+            .ok_or_else(|| TransportError::Decode(format!("TBID {} not found in DHT", tbid_hex)))?;
+        let peer = PeerAddr {
+            json_rpc: owner.json_rpc,
+            peer_id: owner.peer_id.parse().ok(),
+            last_seen_ns: 0,
+        };
+        self.get_calendar_slice(&peer, tick_start, count).await
+    }
+}
+
+// ── Phase 3.3: CommunerdetteHost trait implementation ────────────────────
+
+#[async_trait::async_trait]
+impl communerdette::CommunerdetteHost for Communerd {
+    async fn host_lookup_tbid(&self, tbid_hex: &str, namespace: &str) -> Option<PeerRegistrationRecord> {
+        self.lookup_tbid(tbid_hex, namespace).await
+    }
+
+    fn host_lookup_tbid_cached(&self, tbid_hex: &str) -> Option<PeerRegistrationRecord> {
+        self.lookup_tbid_cached(tbid_hex)
+    }
+
+    fn host_namespace(&self) -> String {
+        self.namespace()
+    }
+
+    fn host_swarm_available(&self) -> bool {
+        self.p2p_cmd_tx().is_some()
+    }
+
+    fn host_local_peer_id(&self) -> Option<libp2p::PeerId> {
+        self.local_peer_id()
+    }
+
+    async fn host_execute_stamp(
+        &self,
+        peer: &PeerAddr,
+        target_tbid: &str,
+        content_hex: &str,
+        echo: &str,
+    ) -> Result<serde_json::Value, TransportError> {
+        if peer.peer_id.is_some() && self.p2p_cmd_tx().is_some() {
+            match self.libp2p_transport.route_stamp(peer, target_tbid, content_hex, echo).await {
+                Ok(r) => Ok(r),
+                Err(e) => {
+                    tracing::debug!(%peer, ?e, "communerdette: libp2p stamp failed, falling back");
+                    self.transport.route_stamp(peer, target_tbid, content_hex, echo).await
+                }
+            }
+        } else {
+            self.transport.route_stamp(peer, target_tbid, content_hex, echo).await
+        }
+    }
+
+    async fn host_execute_calendar_slice(
+        &self,
+        peer: &PeerAddr,
+        tick_start: u64,
+        count: u64,
+    ) -> Result<Vec<ChrononRecord>, TransportError> {
+        if peer.peer_id.is_some() && self.p2p_cmd_tx().is_some() {
+            match self.libp2p_transport.get_calendar_slice(peer, tick_start, count).await {
+                Ok(r) => Ok(r),
+                Err(e) => {
+                    tracing::debug!(%peer, ?e, "communerdette: libp2p calendar_slice failed, falling back");
+                    self.transport.get_calendar_slice(peer, tick_start, count).await
+                }
+            }
+        } else {
+            self.transport.get_calendar_slice(peer, tick_start, count).await
+        }
+    }
 }
 
 fn resolve_known_server(addr_str: &str) -> Result<libp2p::Multiaddr, NodeError> {
@@ -908,5 +1061,77 @@ mod tests {
         let (score, count) = communerd.get_peer_score("unknown-peer");
         assert_eq!(score, 0.0);
         assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn line_for_tbid_creates_and_returns_line() {
+        let communerd = Communerd::new(make_config());
+        let tbid = Tbid::from_raw([0u8; 96]);
+        let line = communerd.line_for_tbid(tbid);
+        assert_eq!(line.target_tbid(), tbid);
+    }
+
+    #[test]
+    fn same_tbid_returns_shared_state() {
+        let communerd = Communerd::new(make_config());
+        let tbid = Tbid::from_raw([1u8; 96]);
+        let line1 = communerd.line_for_tbid(tbid);
+        let line2 = communerd.line_for_tbid(tbid);
+        assert_eq!(line1.target_tbid(), line2.target_tbid());
+    }
+
+    #[test]
+    fn try_line_for_tbid_returns_none_for_unknown() {
+        let communerd = Communerd::new(make_config());
+        let tbid = Tbid::from_raw([0u8; 96]);
+        assert!(communerd.try_line_for_tbid(tbid).is_none());
+    }
+
+    #[test]
+    fn try_line_for_tbid_returns_some_after_line_for_tbid() {
+        let communerd = Communerd::new(make_config());
+        let tbid = Tbid::from_raw([5u8; 96]);
+        communerd.line_for_tbid(tbid);
+        assert!(communerd.try_line_for_tbid(tbid).is_some());
+    }
+
+    #[test]
+    fn different_tbids_get_different_lines() {
+        let communerd = Communerd::new(make_config());
+        let tbid_a = Tbid::from_raw([10u8; 96]);
+        let tbid_b = Tbid::from_raw([20u8; 96]);
+        let line_a = communerd.line_for_tbid(tbid_a);
+        let line_b = communerd.line_for_tbid(tbid_b);
+        assert_ne!(line_a.target_tbid(), line_b.target_tbid());
+    }
+
+    #[test]
+    fn clone_shares_communerdette_registry() {
+        let communerd = Communerd::new(make_config());
+        let tbid = Tbid::from_raw([42u8; 96]);
+        communerd.line_for_tbid(tbid);
+        let c2 = communerd.clone();
+        assert!(c2.try_line_for_tbid(tbid).is_some());
+    }
+
+    #[test]
+    fn shutdown_relationships_cancels_all() {
+        let communerd = Communerd::new(make_config());
+        let tbid = Tbid::from_raw([100u8; 96]);
+        let line = communerd.line_for_tbid(tbid);
+        assert!(!line.shutdown_token().is_cancelled());
+
+        communerd.shutdown_relationships();
+        assert!(line.shutdown_token().is_cancelled());
+    }
+
+    #[test]
+    fn shutdown_relationships_does_not_affect_new_lines() {
+        let communerd = Communerd::new(make_config());
+        communerd.shutdown_relationships();
+
+        let tbid = Tbid::from_raw([200u8; 96]);
+        let line = communerd.line_for_tbid(tbid);
+        assert!(!line.shutdown_token().is_cancelled());
     }
 }
