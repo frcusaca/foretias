@@ -1,6 +1,7 @@
 //! Concurrent stamp stress test — verifies that `fetch_add` eliminates tick counter conflicts.
 
 use foretias_core::chronomatter::Chronomatter;
+use foretias_core::crypto_server::{self, ForetiasCurve};
 use foretias_core::foretias::callbacks::TickObserver;
 use foretias_core::foretias::types::{Tbid, TickNumber};
 use foretias_core::foretias::ChrononRecord;
@@ -31,8 +32,9 @@ async fn concurrent_stamps_no_conflicts() {
         last_tick: Arc::clone(&last_tick),
         calendar: Arc::clone(&calendar),
     });
+    let crypto = Arc::from(crypto_server::new_software(ForetiasCurve::Ed25519).expect("crypto server"));
     let cm = Arc::new(
-        Chronomatter::new(1_000_000_000, observer).expect("create Chronomatter"),
+        Chronomatter::new(1_000_000_000, observer, crypto).expect("create Chronomatter"),
     );
     calendar.write().tbid = cm.get_tbid();
     calendar.write().tbn = cm.get_tbn().to_string();

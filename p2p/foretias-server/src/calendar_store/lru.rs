@@ -12,8 +12,10 @@ use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use foretias_core::clock::{Clock, SystemClock};
 use foretias_core::error::NodeError;
 
 /// Sentinel: no eviction budget configured.
@@ -67,15 +69,22 @@ pub struct BinBasedLru {
     max_bytes: u64,
     current_bytes: AtomicU64,
     records: RwLock<HashMap<String, CalendarRecord>>,
+    clock: Arc<dyn Clock>,
 }
 
 impl BinBasedLru {
     /// Create a new LRU with the given byte budget.
     pub fn new(max_bytes: u64) -> Self {
+        Self::with_clock(max_bytes, Arc::new(SystemClock))
+    }
+
+    /// Create a new LRU with an injected clock (for testing).
+    pub fn with_clock(max_bytes: u64, clock: Arc<dyn Clock>) -> Self {
         Self {
             max_bytes,
             current_bytes: AtomicU64::new(0),
             records: RwLock::new(HashMap::new()),
+            clock,
         }
     }
 
@@ -99,14 +108,14 @@ impl BinBasedLru {
     pub fn touch(&self, peer_id: &str) {
         let mut guard = self.records.write();
         if let Some(rec) = guard.get_mut(peer_id) {
-            rec.last_touch = now_ns();
+            rec.last_touch = self.clock.now_ns().unwrap_or_default();
             rec.bin = CalendarBin::Used;
         }
     }
 
     /// Demote stale Used records to Unused.
     pub fn demote_stale_to_unused(&self, stale_threshold_ns: u64) {
-        let now = now_ns();
+        let now = self.clock.now_ns().unwrap_or_default();
         let mut guard = self.records.write();
         for rec in guard.values_mut() {
             if matches!(rec.bin, CalendarBin::Used)
@@ -186,14 +195,6 @@ impl BinBasedLru {
     }
 }
 
-/// Current time in nanoseconds since Unix epoch.
-fn now_ns() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos() as u64
-}
-
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -201,6 +202,13 @@ fn now_ns() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn now_ns() -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos() as u64
+    }
 
     fn make_record(peer_id: &str, bin: CalendarBin, size: u64) -> CalendarRecord {
         CalendarRecord {

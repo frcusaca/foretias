@@ -257,11 +257,8 @@ fn read_foretis(foretis: Option<String>, foretis_file: Option<String>) -> Result
 }
 
 fn client_echo() -> String {
-    let now_ns = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "system time before UNIX epoch"))
-        .unwrap_or_else(|_| std::time::Duration::from_secs(0))
-        .as_nanos() as u64;
+    use foretias_core::clock::Clock;
+    let now_ns = foretias_core::clock::SystemClock.now_ns().unwrap_or(0);
     format!("UE+{}ns", now_ns)
 }
 
