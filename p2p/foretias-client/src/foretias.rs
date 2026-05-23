@@ -13,6 +13,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use foretias_core::chronomatter::Chronomatter;
+use foretias_core::clock::Clock;
 use foretias_core::crypto_server::{self, CryptoServer, ForetiasCurve};
 use foretias_core::error::{CryptoError, NodeError};
 use foretias_core::foretias::callbacks::TickObserver;
@@ -156,7 +157,8 @@ impl Foretias {
     pub fn new(tbn: String, persist_path: Option<PathBuf>) -> Result<Self, ForetiasError> {
         let chronon_ns = 60_000_000_000u64;
         let calendar = Arc::new(Calendar::new(Tbid::default(), &tbn));
-        let mut cm = Chronomatter::new(chronon_ns, Arc::clone(&calendar) as Arc<dyn TickObserver>)?;
+        let crypto = Arc::from(crypto_server::new_software(ForetiasCurve::Ed25519)?);
+        let mut cm = Chronomatter::new(chronon_ns, Arc::clone(&calendar) as Arc<dyn TickObserver>, crypto)?;
 
         struct NoOpMutualAttest;
         impl foretias_core::foretias::callbacks::MutualAttestObserver for NoOpMutualAttest {
@@ -442,7 +444,8 @@ impl Foretias {
     fn create_standalone_state(tbn: &str) -> Result<StandaloneState, ForetiasError> {
         let chronon_ns = 60_000_000_000u64;
         let calendar = Arc::new(Calendar::new(Tbid::default(), tbn));
-        let mut cm = Chronomatter::new(chronon_ns, Arc::clone(&calendar) as Arc<dyn TickObserver>)?;
+        let crypto = Arc::from(crypto_server::new_software(ForetiasCurve::Ed25519)?);
+        let mut cm = Chronomatter::new(chronon_ns, Arc::clone(&calendar) as Arc<dyn TickObserver>, crypto)?;
         struct NoOpMutualAttest;
         impl foretias_core::foretias::callbacks::MutualAttestObserver for NoOpMutualAttest {
             fn on_mutual_attest_sent(&self) {}
@@ -526,10 +529,7 @@ impl Foretias {
     }
 
     fn client_echo() -> String {
-        let now_ns = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos() as u64;
+        let now_ns = foretias_core::clock::SystemClock.now_ns().unwrap_or(0);
         format!("UE+{}ns", now_ns)
     }
 }

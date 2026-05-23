@@ -75,11 +75,7 @@ mod tests {
         crypto_server::new_software(ForetiasCurve::Ed25519).unwrap()
     }
 
-    fn build_heartbeat(peer_id: &str, nonce: [u8; 16], server: &dyn CryptoServer) -> Heartbeat {
-        let timestamp_ns = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos() as u64;
+    fn build_heartbeat(peer_id: &str, nonce: [u8; 16], server: &dyn CryptoServer, timestamp_ns: u64) -> Heartbeat {
         let mut hb = Heartbeat {
             peer_id: peer_id.to_string(),
             timestamp_ns,
@@ -101,7 +97,7 @@ mod tests {
 
         let mut nonce = [0u8; 16];
         crate::core::rng::random_bytes(&mut nonce).unwrap();
-        let hb = build_heartbeat("other-peer", nonce, server.as_ref());
+        let hb = build_heartbeat("other-peer", nonce, server.as_ref(), 0);
 
         assert!(detector.on_heartbeat(&hb, server.as_ref()).is_none());
     }
@@ -116,7 +112,7 @@ mod tests {
         crate::core::rng::random_bytes(&mut nonce).unwrap();
         detector.register_own_nonce(nonce);
 
-        let mut hb = build_heartbeat("my-peer", nonce, server.as_ref());
+        let mut hb = build_heartbeat("my-peer", nonce, server.as_ref(), 0);
         hb.peer_id = "my-peer".to_string();
 
         assert!(detector.on_heartbeat(&hb, server.as_ref()).is_none());
@@ -130,7 +126,7 @@ mod tests {
 
         let mut nonce = [0u8; 16];
         crate::core::rng::random_bytes(&mut nonce).unwrap();
-        let hb = build_heartbeat("my-peer", nonce, server.as_ref());
+        let hb = build_heartbeat("my-peer", nonce, server.as_ref(), 0);
 
         assert!(detector.on_heartbeat(&hb, server.as_ref()).is_none());
     }

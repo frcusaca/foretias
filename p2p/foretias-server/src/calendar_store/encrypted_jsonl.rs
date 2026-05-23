@@ -13,6 +13,7 @@ use std::sync::Arc;
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
+use foretias_core::clock::{Clock, SystemClock};
 use foretias_core::crypto_server::{CryptoServer, SealedBlob};
 use foretias_core::foretias::ChrononRecord;
 use foretias_core::foretias::clean_auth::{ExternalizedChrononRecord, CleanAuthenticatedChrononRecord};
@@ -37,6 +38,7 @@ pub struct CalendarBlock {
 pub struct EncryptedJsonlCalendarStore {
     path: PathBuf,
     server: Arc<dyn CryptoServer>,
+    clock: Arc<dyn Clock>,
     next_block_id: AtomicU64,
 }
 
@@ -46,10 +48,16 @@ impl EncryptedJsonlCalendarStore {
     /// If the file already exists, the next block ID is computed from
     /// the highest block ID found in the file.
     pub fn new(path: PathBuf, server: Arc<dyn CryptoServer>) -> Self {
+        Self::with_clock(path, server, Arc::new(SystemClock))
+    }
+
+    /// Creates a store with an injected clock (for testing).
+    pub fn with_clock(path: PathBuf, server: Arc<dyn CryptoServer>, clock: Arc<dyn Clock>) -> Self {
         let next_block_id = Self::compute_next_block_id(&path, &server).unwrap_or(0);
         Self {
             path,
             server,
+            clock,
             next_block_id: AtomicU64::new(next_block_id),
         }
     }
@@ -61,10 +69,8 @@ impl EncryptedJsonlCalendarStore {
     /// and appended as a newline-terminated line to the backing file.
     pub fn append_block(&self, ticks: Vec<ExternalizedChrononRecord>) -> Result<(), NodeError> {
         let block_id = self.next_block_id.fetch_add(1, Ordering::SeqCst);
-        let written_at_ns = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|e| NodeError::Internal(format!("SystemTime before UNIX_EPOCH: {}", e)))?
-            .as_nanos() as u64;
+        let written_at_ns = self.clock.now_ns()
+            .map_err(|e| NodeError::Internal(format!("clock error: {}", e)))?;
 
         let block = CalendarBlock {
             block_id,
@@ -210,7 +216,7 @@ pub fn migrate_plaintext(
     #[cfg(test)]
 mod tests {
     use super::*;
-    use foretias_core::{crypto_server, foretias::Tbid};
+    use foretias_core::{clock::FixedClock, crypto_server, foretias::Tbid};
 
     fn make_server() -> Arc<dyn CryptoServer> {
         let server: Box<dyn CryptoServer> = crypto_server::new_software(crypto_server::ForetiasCurve::Ed25519)
@@ -240,7 +246,9 @@ mod tests {
         let tmp_dir = std::env::temp_dir().join(format!("foretias-ejl-test-{}", std::process::id()));
         let path = tmp_dir.join("calendar.jsonl");
         let server = make_server();
-        let store = EncryptedJsonlCalendarStore::new(path.clone(), server.clone());
+        const FIXED_NS: u64 = 1_700_000_000_000_000_000;
+        let clock: Arc<dyn Clock> = Arc::new(FixedClock::new(FIXED_NS));
+        let store = EncryptedJsonlCalendarStore::with_clock(path.clone(), server.clone(), clock);
 
         // Append 5 blocks
         for i in 0..5u64 {
@@ -257,7 +265,7 @@ mod tests {
             assert_eq!(block.ticks.len(), 2);
             assert_eq!(block.ticks[0].chronon_number, i as u64);
             assert_eq!(block.ticks[1].chronon_number, (i as u64 + 100));
-            assert!(block.written_at_ns > 0);
+            assert_eq!(block.written_at_ns, FIXED_NS);
         }
 
         // Cleanup

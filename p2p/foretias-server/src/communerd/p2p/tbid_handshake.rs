@@ -3,6 +3,7 @@
 //! After the Noise handshake establishes encryption, each side proves its
 //! Foretias TBID by signing a challenge with the C11 enclave's `sign()` method.
 
+use foretias_core::clock::{Clock, SystemClock};
 use foretias_core::crypto_server::CryptoServer;
 use foretias_core::error::NodeError;
 use foretias_core::foretias::types::{PublicKeyBytes, Tbid};
@@ -40,11 +41,16 @@ pub enum TbidProofResult {
 pub struct TbidHandshake {
     crypto: Arc<dyn CryptoServer>,
     local_tbid: Tbid,
+    clock: Arc<dyn Clock>,
 }
 
 impl TbidHandshake {
     pub fn new(crypto: Arc<dyn CryptoServer>, local_tbid: Tbid) -> Self {
-        Self { crypto, local_tbid }
+        Self { crypto, local_tbid, clock: Arc::new(SystemClock) }
+    }
+
+    pub fn with_clock(crypto: Arc<dyn CryptoServer>, local_tbid: Tbid, clock: Arc<dyn Clock>) -> Self {
+        Self { crypto, local_tbid, clock }
     }
 
     pub fn generate_request(&self) -> TbidProofRequest {
@@ -64,10 +70,7 @@ impl TbidHandshake {
             _ => return Err(NodeError::Internal("non-Ed25519 public key".into())),
         };
 
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+        let timestamp = self.clock.now_ns().unwrap_or(0) / 1_000_000_000;
 
         let mut signed_payload = Vec::with_capacity(96 + 64 + 32 + 8);
         signed_payload.extend_from_slice(&tbid.raw_bytes());

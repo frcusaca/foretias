@@ -11,7 +11,7 @@ use parking_lot::{Mutex, RwLock};
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
 
-use crate::crypto_server::{self, CryptoServer};
+use crate::crypto_server::CryptoServer;
 use crate::core::identity::PrivKeyHandle;
 use crate::error::NodeError;
 use crate::clock::Clock;
@@ -46,11 +46,7 @@ pub struct Chronomatter {
 }
 
 impl Chronomatter {
-    pub fn new(chronon_ns: u64, tick_observer: Arc<dyn TickObserver>) -> Result<Self, NodeError> {
-        let crypto: Arc<dyn CryptoServer> = Arc::from(crypto_server::new_software(
-            crypto_server::ForetiasCurve::Ed25519,
-        )?);
-
+    pub fn new(chronon_ns: u64, tick_observer: Arc<dyn TickObserver>, crypto: Arc<dyn CryptoServer>) -> Result<Self, NodeError> {
         let (tbid, tbid_secret) = TbidSecret::generate()
             .map_err(|e| NodeError::Crypto(e))?;
         let tbn = format!("tf-{}", &tbid.to_hex()[..16]);
@@ -507,6 +503,7 @@ impl Chronomatter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::crypto_server;
     use crate::foretias::types::TickNumber;
     use std::sync::atomic::AtomicU64 as AtomicU64Std;
     use parking_lot::RwLock;
@@ -527,7 +524,10 @@ mod tests {
         let last_tick = Arc::new(AtomicU64Std::new(0));
         let calendar = Arc::new(RwLock::new(Calendar::new(Tbid::from_raw([0u8; 96]), "test")));
         let observer = Arc::new(DummyObserver { last_tick: Arc::clone(&last_tick), calendar: Arc::clone(&calendar) });
-        let cm = Chronomatter::new(1_000_000_000, observer)
+        let crypto: Arc<dyn crate::crypto_server::CryptoServer> = Arc::from(
+            crypto_server::new_software(crypto_server::ForetiasCurve::Ed25519).unwrap()
+        );
+        let cm = Chronomatter::new(1_000_000_000, observer, crypto)
             .expect("failed to create Chronomatter");
         calendar.write().tbid = cm.get_tbid();
         calendar.write().tbn = cm.get_tbn().to_string();

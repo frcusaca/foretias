@@ -10,6 +10,7 @@ use tokio::net::TcpListener;
 use foretias_core::chronomatter::Chronomatter;
 use foretias_core::config::CommunerdConfig;
 use foretias_core::core::identity::generate_ed25519_keypair;
+use foretias_core::crypto_server::{self, ForetiasCurve};
 use foretias_core::foretias::callbacks::{TickObserver, MutualAttestObserver};
 use foretias_core::foretias::{ChrononRecord, types::{TickNumber, Tbid}};
 use foretias_core::error::NodeError;
@@ -66,7 +67,8 @@ impl TimeFamilyServer {
     ) -> Result<Self, NodeError> {
         let metrics = Arc::new(NodeMetrics::new());
         let calendar = Arc::new(Calendar::new(Tbid::default(), "init"));
-        let mut cm = Chronomatter::new(chronon_ns, Arc::clone(&calendar) as Arc<dyn TickObserver>)?;
+        let crypto = Arc::from(crypto_server::new_software(ForetiasCurve::Ed25519)?);
+        let mut cm = Chronomatter::new(chronon_ns, Arc::clone(&calendar) as Arc<dyn TickObserver>, crypto)?;
         cm.set_mutual_attest_observer(Arc::clone(&metrics) as Arc<dyn MutualAttestObserver>);
         let (tbid, tbn) = (cm.get_tbid(), cm.get_tbn().to_string());
         let binding = calendar.inner();

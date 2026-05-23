@@ -17,6 +17,7 @@ pub use tiers::{CommunerdServer, CommunerdP2P};
 use std::sync::{Arc, OnceLock};
 use rand::seq::SliceRandom;
 
+use foretias_core::clock::{Clock, SystemClock};
 use foretias_core::config::CommunerdConfig;
 use foretias_core::collision::{CollisionDetector, CollisionEvent};
 use foretias_core::core::bindings::ForetiasPubKey32;
@@ -86,6 +87,7 @@ pub struct Communerd {
     p2p_cmd_tx: Arc<OnceLock<tokio::sync::mpsc::UnboundedSender<SwarmCommand>>>,
     probity_store: Arc<ProbityStore>,
     crypto: Arc<dyn CryptoServer>,
+    clock: Arc<dyn Clock>,
     namespace: Arc<std::sync::Mutex<String>>,
     gossip_task: Arc<OnceLock<tokio::task::JoinHandle<()>>>,
     recompute_task: Arc<OnceLock<tokio::task::JoinHandle<()>>>,
@@ -110,6 +112,7 @@ impl Clone for Communerd {
             p2p_cmd_tx: Arc::clone(&self.p2p_cmd_tx),
             probity_store: Arc::clone(&self.probity_store),
             crypto: Arc::clone(&self.crypto),
+            clock: Arc::clone(&self.clock),
             namespace: Arc::clone(&self.namespace),
             gossip_task: Arc::clone(&self.gossip_task),
             recompute_task: Arc::clone(&self.recompute_task),
@@ -147,6 +150,7 @@ impl Communerd {
             p2p_cmd_tx: Arc::new(OnceLock::new()),
             probity_store: Arc::new(ProbityStore::new()),
             crypto,
+            clock: Arc::new(SystemClock),
             namespace: Arc::new(std::sync::Mutex::new("mainnet".to_string())),
             gossip_task: Arc::new(OnceLock::new()),
             recompute_task: Arc::new(OnceLock::new()),
@@ -339,25 +343,24 @@ impl Communerd {
         let cmd_tx = self.p2p_cmd_tx.get().cloned();
         let probity_store = Arc::clone(&self.probity_store);
         let crypto = Arc::clone(&self.crypto);
+        let clock_gossip = Arc::clone(&self.clock);
         let det = Arc::clone(&detector);
         let peer_pool = self.peer_pool.clone();
         let tbid_index = Arc::clone(&self.tbid_index);
         let pending_lookups = Arc::clone(&self.pending_lookups);
         let task = tokio::spawn(async move {
-            Self::gossip_event_loop(events, cmd_tx, probity_store, crypto, Some(det), peer_pool, tbid_index, pending_lookups).await;
+            Self::gossip_event_loop(events, cmd_tx, probity_store, crypto, clock_gossip, Some(det), peer_pool, tbid_index, pending_lookups).await;
         });
         let _ = self.gossip_task.set(task);
 
         // Start probity score recompute timer
         let probity_store = Arc::clone(&self.probity_store);
+        let clock_rt = Arc::clone(&self.clock);
         let recompute_task = tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
             loop {
                 interval.tick().await;
-                let now_ns = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_nanos() as u64)
-                    .unwrap_or(0);
+                let now_ns = clock_rt.now_ns().unwrap_or(0);
                 probity_store.recompute_all(now_ns);
             }
         });
@@ -368,11 +371,12 @@ impl Communerd {
         let ns = self.namespace.clone();
         let interval_secs = self.config.collision.heartbeat_interval_secs.max(5) as u64;
         let crypto_hb = Arc::clone(&self.crypto);
+        let clock_hb = Arc::clone(&self.clock);
         let peer_id_str = peer_id.to_string();
         let det_hb = Arc::clone(&detector);
         let heartbeat_broadcaster = tokio::spawn(async move {
             Self::heartbeat_broadcast_loop(
-                cmd_tx, ns, interval_secs, crypto_hb, peer_id_str, det_hb,
+                cmd_tx, ns, interval_secs, crypto_hb, clock_hb, peer_id_str, det_hb,
             ).await;
         });
         let _ = self.heartbeat_task.set(heartbeat_broadcaster);
@@ -385,6 +389,7 @@ impl Communerd {
         ns: Arc<std::sync::Mutex<String>>,
         interval_secs: u64,
         crypto: Arc<dyn CryptoServer>,
+        clock: Arc<dyn Clock>,
         peer_id_str: String,
         detector: Arc<CollisionDetector>,
     ) {
@@ -398,10 +403,7 @@ impl Communerd {
                 continue;
             }
             detector.register_own_nonce(nonce);
-            let timestamp_ns = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_nanos() as u64)
-                .unwrap_or(0);
+            let timestamp_ns = clock.now_ns().unwrap_or(0);
             let mut hb = foretias_core::collision::Heartbeat {
                 peer_id: peer_id_str.clone(),
                 timestamp_ns,
@@ -424,6 +426,7 @@ impl Communerd {
         cmd_tx: Option<tokio::sync::mpsc::UnboundedSender<SwarmCommand>>,
         probity_store: Arc<ProbityStore>,
         crypto: Arc<dyn CryptoServer>,
+        clock: Arc<dyn Clock>,
         detector: Option<Arc<CollisionDetector>>,
         peer_pool: PeerPool,
         tbid_index: Arc<std::sync::RwLock<HashMap<String, PeerRegistrationRecord>>>,
@@ -432,10 +435,7 @@ impl Communerd {
         while let Some(event) = events.recv().await {
             match event {
                 NetworkEvent::GossipMessage { data, .. } => {
-                    let now_ns = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map(|d| d.as_nanos() as u64)
-                        .unwrap_or(0);
+                    let now_ns = clock.now_ns().unwrap_or(0);
                     if let Err(e) = handle_gossip_message(&data, &probity_store, crypto.as_ref(), now_ns) {
                         tracing::warn!("gossip message rejected: {e}");
                     }
@@ -468,10 +468,7 @@ impl Communerd {
                                 let peer_addr = PeerAddr {
                                     json_rpc: peer_record.json_rpc.clone(),
                                     peer_id: peer_record.peer_id.parse().ok(),
-                                    last_seen_ns: std::time::SystemTime::now()
-                                        .duration_since(std::time::UNIX_EPOCH)
-                                        .map(|d| d.as_nanos() as u64)
-                                        .unwrap_or(0),
+                                    last_seen_ns: clock.now_ns().unwrap_or(0),
                                 };
                                 peer_pool.add_peer(peer_addr).await;
                                 tracing::info!(component = "communerd", peer = %peer_record.peer_id, "communerd: DHT-discovered peer added to pool");
@@ -506,10 +503,7 @@ impl Communerd {
                     let peer_addr = PeerAddr {
                         json_rpc: String::new(),
                         peer_id: Some(peer_id),
-                        last_seen_ns: std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .map(|d| d.as_nanos() as u64)
-                            .unwrap_or(0),
+                        last_seen_ns: clock.now_ns().unwrap_or(0),
                     };
                     peer_pool.add_peer(peer_addr).await;
                     tracing::info!(component = "communerd", peer = %peer_id, "communerd: DHT-discovered peer added to pool");
@@ -540,10 +534,7 @@ impl Communerd {
     }
 
     pub fn report_probity(&self, subject: &str, attribute: &str, value: f32) {
-        let now_ns = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos() as u64)
-            .unwrap_or(0);
+        let now_ns = self.clock.now_ns().unwrap_or(0);
         let reporter = match self.local_peer_id() {
             Some(pid) => pid.to_string(),
             None => return,
@@ -633,10 +624,7 @@ impl Communerd {
             multiaddr: my_multiaddr.to_string(),
             json_rpc: json_rpc_addr.to_string(),
             chronon_ns,
-            registered_at_ns: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_nanos() as u64)
-                .unwrap_or(0),
+            registered_at_ns: self.clock.now_ns().unwrap_or(0),
             capabilities: vec![PeerCapability::AttestWilling],
         };
         let record = kad::Record {
@@ -672,12 +660,13 @@ impl Communerd {
         let rpc = json_rpc_addr.to_string();
         let ma_arc = self._local_multiaddr_arc.clone();
         let pid = peer_id;
+        let clock_refresh = Arc::clone(&self.clock);
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
             loop {
                 interval.tick().await;
                 Self::refresh_self_registration(
-                    cmd_tx_clone.clone(), ns.clone(), tbid_arc, chronon, &rpc, ma_arc.clone(), pid,
+                    cmd_tx_clone.clone(), ns.clone(), tbid_arc, chronon, &rpc, ma_arc.clone(), pid, Arc::clone(&clock_refresh),
                 ).await;
             }
         });
@@ -693,6 +682,7 @@ impl Communerd {
         json_rpc_addr: &str,
         local_multiaddr: Arc<std::sync::Mutex<Option<libp2p::Multiaddr>>>,
         peer_id: libp2p::PeerId,
+        clock: Arc<dyn Clock>,
     ) {
         let ns = namespace.lock().unwrap().clone();
         let key = kad::RecordKey::new(&format!("/foretias/{}/peers/v1", ns));
@@ -706,10 +696,7 @@ impl Communerd {
             multiaddr: ma,
             json_rpc: json_rpc_addr.to_string(),
             chronon_ns,
-            registered_at_ns: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_nanos() as u64)
-                .unwrap_or(0),
+            registered_at_ns: clock.now_ns().unwrap_or(0),
             capabilities: vec![PeerCapability::AttestWilling],
         };
         let record = match serde_json::to_vec(&peer_record) {
