@@ -92,62 +92,81 @@ impl JsonRpcTransport {
             .map_err(|e| TransportError::Decode(e.to_string()))?
             .into_bytes();
 
-        let timeout = Duration::from_secs(self.timeout_secs);
-        let result = tokio::time::timeout(timeout, async {
-            let stream = tokio::net::TcpStream::connect(&peer.json_rpc)
-                .await
+        let peer_addr = peer.json_rpc.clone();
+        let timeout_secs = self.timeout_secs;
+
+        // INVARIANT: NoiseSession is !Send (mutable nonce counters that must not be
+        // accessed from multiple threads). We run the entire Noise session lifecycle
+        // on a dedicated blocking thread with its own current_thread runtime so the
+        // session is never present in a Send future.
+        tokio::task::spawn_blocking(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_io()
+                .enable_time()
+                .build()
                 .map_err(|e| TransportError::Connect(e.to_string()))?;
 
-            let (_pub_key, priv_key) = generate_ed25519_keypair()
-                .map_err(|e| TransportError::Connect(e.to_string()))?;
-            let (mut session, stream) = noise::noise_handshake(stream, &priv_key.bytes, None, true).await
-                .map_err(|e| TransportError::Connect(e.to_string()))?;
+            let timeout = Duration::from_secs(timeout_secs);
+            rt.block_on(async move {
+                let result = tokio::time::timeout(timeout, async move {
+                    let stream = tokio::net::TcpStream::connect(&peer_addr)
+                        .await
+                        .map_err(|e| TransportError::Connect(e.to_string()))?;
 
-            let (reader, mut writer) = stream.into_split();
-            let mut reader = tokio::io::BufReader::new(reader);
+                    let (_pub_key, priv_key) = generate_ed25519_keypair()
+                        .map_err(|e| TransportError::Connect(e.to_string()))?;
+                    let (mut session, stream) = noise::noise_handshake(stream, &priv_key.bytes, None, true).await
+                        .map_err(|e| TransportError::Connect(e.to_string()))?;
 
-            let ct = session.send(&request_bytes)
-                .map_err(|e| TransportError::Connect(e.to_string()))?;
-            let ct_len = (ct.len() as u32).to_le_bytes();
-            writer.write_all(&ct_len).await
-                .map_err(|e| TransportError::Connect(e.to_string()))?;
-            writer.write_all(&ct).await
-                .map_err(|e| TransportError::Connect(e.to_string()))?;
-            writer.flush().await
-                .map_err(|e| TransportError::Connect(e.to_string()))?;
+                    let (reader, mut writer) = stream.into_split();
+                    let mut reader = tokio::io::BufReader::new(reader);
 
-            let mut len_buf = [0u8; 4];
-            tokio::io::AsyncReadExt::read_exact(&mut reader, &mut len_buf).await
-                .map_err(|e| TransportError::Connect(e.to_string()))?;
-            let resp_len = u32::from_le_bytes(len_buf) as usize;
-            let mut resp_buf = vec![0u8; resp_len];
-            tokio::io::AsyncReadExt::read_exact(&mut reader, &mut resp_buf).await
-                .map_err(|e| TransportError::Connect(e.to_string()))?;
+                    let ct = session.send(&request_bytes)
+                        .map_err(|e| TransportError::Connect(e.to_string()))?;
+                    let ct_len = (ct.len() as u32).to_le_bytes();
+                    writer.write_all(&ct_len).await
+                        .map_err(|e| TransportError::Connect(e.to_string()))?;
+                    writer.write_all(&ct).await
+                        .map_err(|e| TransportError::Connect(e.to_string()))?;
+                    writer.flush().await
+                        .map_err(|e| TransportError::Connect(e.to_string()))?;
 
-            let plaintext = session.recv(&resp_buf)
-                .map_err(|e| TransportError::Decode(e.to_string()))?;
-            let response: serde_json::Value =
-                serde_json::from_slice(&plaintext)
-                    .map_err(|e| TransportError::Decode(e.to_string()))?;
+                    let mut len_buf = [0u8; 4];
+                    tokio::io::AsyncReadExt::read_exact(&mut reader, &mut len_buf).await
+                        .map_err(|e| TransportError::Connect(e.to_string()))?;
+                    let resp_len = u32::from_le_bytes(len_buf) as usize;
+                    let mut resp_buf = vec![0u8; resp_len];
+                    tokio::io::AsyncReadExt::read_exact(&mut reader, &mut resp_buf).await
+                        .map_err(|e| TransportError::Connect(e.to_string()))?;
 
-            if let Some(err) = response.get("error") {
-                let code = err.get("code").and_then(|c| c.as_i64()).unwrap_or(-1) as i32;
-                let message = err.get("message")
-                    .and_then(|m| m.as_str())
-                    .unwrap_or("unknown")
-                    .to_string();
-                return Err(TransportError::Rpc { code, message });
-            }
+                    let plaintext = session.recv(&resp_buf)
+                        .map_err(|e| TransportError::Decode(e.to_string()))?;
+                    let response: serde_json::Value =
+                        serde_json::from_slice(&plaintext)
+                            .map_err(|e| TransportError::Decode(e.to_string()))?;
 
-            response.get("result")
-                .cloned()
-                .ok_or_else(|| TransportError::Decode("missing result".to_string()))
+                    if let Some(err) = response.get("error") {
+                        let code = err.get("code").and_then(|c| c.as_i64()).unwrap_or(-1) as i32;
+                        let message = err.get("message")
+                            .and_then(|m| m.as_str())
+                            .unwrap_or("unknown")
+                            .to_string();
+                        return Err(TransportError::Rpc { code, message });
+                    }
+
+                    response.get("result")
+                        .cloned()
+                        .ok_or_else(|| TransportError::Decode("missing result".to_string()))
+                })
+                .await;
+
+                match result {
+                    Ok(inner_result) => inner_result,
+                    Err(_) => Err(TransportError::Timeout),
+                }
+            })
         })
-        .await;
-
-        match result {
-            Ok(inner_result) => inner_result,
-            Err(_) => Err(TransportError::Timeout),
-        }
+        .await
+        .map_err(|e| TransportError::Connect(format!("worker thread panic: {e}")))?
     }
 }

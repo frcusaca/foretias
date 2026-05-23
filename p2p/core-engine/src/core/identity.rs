@@ -14,9 +14,11 @@ use crate::error::{CryptoError, c_result_to_error};
 /// accidental key exposure through copies or debug output.
 pub struct PrivKeyHandle(ManuallyDrop<NonNull<ForetiasPrivKey>>);
 
-// SAFETY: PrivKeyHandle wraps a C11 allocated key; Drop ensures deterministic cleanup.
+// SAFETY: PrivKeyHandle wraps a KEK-encrypted opaque key in C memory. All methods
+// take &self (not &mut self) — there are no mutable nonce counters or other
+// interior mutation. libsodium operations (sign, derive_public) are thread-safe.
+// Drop (free) can safely run on any thread. Therefore both Send and Sync are correct.
 unsafe impl Send for PrivKeyHandle {}
-// SAFETY: C11 key operations are thread-safe (libsodium internals).
 unsafe impl Sync for PrivKeyHandle {}
 
 impl PrivKeyHandle {

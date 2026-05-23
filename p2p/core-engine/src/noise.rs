@@ -31,10 +31,12 @@ const HANDSHAKE_MAX: usize = 128;
 /// Opaque handle to a C11 `ForetiasNoiseState` with RAII cleanup.
 pub struct NoiseSession(ManuallyDrop<NonNull<ForetiasNoiseState>>);
 
-// SAFETY: NoiseSession wraps a C11 `ForetiasNoiseState` allocated via std::alloc.
-// The C11 state is only accessed through this handle, and Drop ensures deterministic
-// cleanup via foretias_noise_destroy + dealloc. No interior mutability exists in C.
-unsafe impl Send for NoiseSession {}
+// NoiseSession is intentionally NOT Send. The wrapped C11 ForetiasNoiseState
+// contains mutable nonce counters (`send_nonce`, `recv_nonce`) advanced by
+// foretias_noise_send/recv. Cross-thread access without synchronization
+// can corrupt the nonce sequence and trigger ChaCha20-Poly1305 nonce reuse.
+// If you need to send a session across threads, wrap it in
+// Arc<tokio::sync::Mutex<NoiseSession>> at the call site.
 
 impl NoiseSession {
     /// Create a new initiator (client) session.

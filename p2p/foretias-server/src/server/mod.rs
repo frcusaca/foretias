@@ -241,8 +241,16 @@ impl TimeFamilyServer {
                 match listener.accept().await {
                     Ok((stream, _addr)) => {
                         let server = Arc::clone(&self);
-                        tokio::spawn(async move {
-                            if let Err(e) = handle_connection(server, stream).await {
+                        // INVARIANT: NoiseSession is !Send (mutable nonce counters).
+                        // Each connection gets a dedicated blocking thread with its own
+                        // current_thread runtime — the session never crosses thread boundaries.
+                        tokio::task::spawn_blocking(move || {
+                            let rt = tokio::runtime::Builder::new_current_thread()
+                                .enable_io()
+                                .enable_time()
+                                .build()
+                                .expect("current_thread runtime");
+                            if let Err(e) = rt.block_on(handle_connection(server, stream)) {
                                 tracing::error!("connection error: {}", e);
                             }
                         });
