@@ -231,11 +231,14 @@ foretias/                               # Repository root
  ┌──────────▼──────┐
  │   communerd     │  (libp2p P2P)
  │                 │
- │ - DHT           │
- │ - GossipSub     │
- │ - Peer pool     │
- │ - Mutual attest │
- └────────┬────────┘
+ │ - DHT           │   ┌───────────────────────────────────┐
+ │ - GossipSub     │   │ Communerdette (per-TBID)          │
+ │ - Peer pool     │ ──│ - relationship state + stats      │
+ │ - Mutual attest │   │ - binding status + route choice   │
+ │ - DHT signing   │   │ - Take 3 inbound gate per TBID    │
+ │   (per g3-d)    │   │ - CommunerdetteLine = the only    │
+ │                 │   │   handle Calendar/Chronomatter use│
+ └────────┬────────┘   └───────────────────────────────────┘
           │
           │        ┌─────────▼───────────────────────────┐
           │        │       foretias-core                 │
@@ -596,6 +599,43 @@ Never construct `CleanAuthenticated<X>` directly. The compiler enforces this.
 
 ---
 
+## COMMUNERDETTE AND PER-TBID RELATIONSHIPS (Mandatory)
+
+Communerd is the only component with extra-family network access. Within Communerd, **`Communerdette`** is the private per-external-TBID relationship manager, and **`CommunerdetteLine`** is the narrow capability handle that Calendar / Chronomatter-adjacent orchestration / TimeFamily code uses for all TBID-scoped network services.
+
+### Invariants
+
+1. **Communerd remains the only network authority.** Calendar and Chronomatter never receive raw transport objects, PeerPool mutation access, swarm command channels, or `&Communerd` directly. They obtain `CommunerdetteLine` handles via `Communerd::line_for_tbid(tbid)`.
+2. **One Communerdette, one external TBID.** A `CommunerdetteLine` must never send a request to a different TBID than the one it was created for. Enforced by the line's `target_tbid` field being copied into every request.
+3. **Communerdette is private to the `communerd` module.** Internal admin methods (`mark_binding_*`, `record_route_*`, `set_active_route`, `add_route_candidate`, `shutdown`, queue spawning, etc.) are `pub(super)` and never reachable from Calendar/Chronomatter.
+4. **Take 3 inbound gate runs inside Communerdette.** Raw remote replies enter as untrusted bytes and exit as `CleanAuthenticated<R>` only after `Unprocessed<R>::verify(...)` and a TBID-match check. Calendar may NOT store remote replies as trust-bearing evidence except via this path.
+5. **TBID signing authority is not transport authority.** Communerd may authenticate connections, verify signed payloads, and route requests, but it must never produce a signature for Calendar, Chronomatter, or any other local TBID owner. Calendar that needs a Chronomatter-signed payload obtains it through Chronomatter's internal signing API and hands the already-signed bytes to `CommunerdetteLine` for delivery.
+6. **Binding status is not transport identity.** `TbidBindingStatus::ClaimedByDht` is a discovery hint (transport identity claimed but not proven). `Verified` requires an application-level binding proof. Until binding proof is implemented, trust-bearing code must not treat a DHT claim as a verified TBID binding.
+7. **All Communerdette requests are bounded.** `get_calendar_slice`, `get_tick`, and `stamp` carry per-call timeouts (default 15s) and return `TransportError::Timeout` rather than waiting forever.
+
+### When to Use `CommunerdetteLine`
+
+| Calendar / Chronomatter wants to … | Use … |
+|------------------------------------|-------|
+| Fetch a tick for local verification | `line.get_tick(n).await` — returns `CleanAuthenticated<ChrononRecord>` |
+| Fetch a calendar slice | `line.get_calendar_slice(start, count).await` |
+| Request a stamp from a remote TBID (mutual attestation) | `line.stamp(content, echo).await` — returns `CleanAuthenticated<Foretis>` |
+| Start a calendar stream (mirroring, see Group 4b) | `line.start_calendar_stream(from_tick).await` |
+| Inspect relationship status (read-only) | `line.status_summary()` |
+
+### Do NOT
+
+- Call `Communerd::stamp_peer` / `get_calendar_slice` directly from Calendar — go through a `CommunerdetteLine`.
+- Construct `Communerdette` or pass `Arc<Communerdette>` outside the `communerd` module.
+- Store raw remote replies as trust-bearing evidence; insist on `CleanAuthenticated<R>`.
+- Add new methods to `CommunerdetteLine` without scoping them to one TBID and returning either `CleanAuthenticated<R>` or `Unsupported` for not-yet-implemented capabilities.
+
+### Spec References
+
+See `specs/COMBINED_GROUP7_COMMUNERDETTE_SPEC.md` for the full design (invariants, transport selection, request priority, binding state, remote authentication product).
+
+---
+
 ## How To Write Rust Code
 
 This chapter applies to Rust code in both projects:
@@ -861,6 +901,17 @@ Do not ignore `JoinHandle`s unless the task is intentionally detached and docume
 
 **Atomic Counter Idioms.** Use `fetch_add`, `fetch_sub`, `fetch_or` for unconditional read-modify-write on `Atomic*`. Reserve `compare_exchange` for operations that branch on the previous value's content. CAS-as-counter creates a spurious failure mode under contention and is forbidden.
 
+**`!Send` Types Crossing Async Boundaries.** Some FFI-backed types in `foretias-core` are deliberately `!Send` because the wrapped C state contains mutable counters or stream cursors. Examples:
+
+- **`foretias_core::noise::NoiseSession`** — wraps a C11 `ForetiasNoiseState` with mutable `send_nonce`/`recv_nonce` counters. Cross-thread access risks ChaCha20-Poly1305 nonce reuse. There is a compile-time gate: `assert_not_impl_any!(NoiseSession: Send)` in `core-engine/tests/secret_no_debug.rs`.
+
+When such a type must live across `.await` points (e.g., a full request/response cycle), the future containing it is also `!Send` and cannot be passed to `tokio::spawn` or returned from an `#[async_trait]` method whose trait bounds require `Send`. Two acceptable patterns:
+
+1. **Dedicated blocking thread with a current_thread runtime.** Use `tokio::task::spawn_blocking(move || { let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().expect(...); rt.block_on(async move { /* !Send work here */ }) })`. The closure must capture only `Send` values; the `!Send` type is created and dropped entirely on the blocking thread. See `foretias-server/src/server/mod.rs::start_tcp` and `foretias-server/src/communerd/json_rpc_transport.rs::json_rpc_call` for the canonical pattern.
+2. **`LocalSet` + `spawn_local`** when the entire subsystem can run on one OS thread. Less appropriate for a server that must accept many concurrent connections.
+
+Do NOT add `unsafe impl Send` to bypass the bound. Each existing `unsafe impl Send` in this crate has been audited; reintroducing one for a type with interior mutable C state is a security regression.
+
 ### Cryptographic and Security-Sensitive Code
 
 For Foretias, cryptographic code must be conservative.
@@ -897,7 +948,36 @@ Only trusted constructors should create verified types.
 
 **Secret Material Handling.** Wrap secret key material in `zeroize::Zeroizing<T>` or an opaque handle; never hold raw key bytes in a plain `Vec<u8>` or array outside a zeroizing wrapper. Do not `#[derive(Debug)]` on secret types; use `.no_debug()` for bindgen-generated structs. Do not `#[derive(Clone, Copy, Serialize)]` on secret types unless the protocol requires it — each clone must itself be `Zeroizing`.
 
+Specifically:
+
+- Extracted TBID secret bytes (in `signing_tbid::tbid_keypair`) are wrapped in `Zeroizing<Vec<u8>>` from allocation until the function returns. When handing the inner `Vec` to a downstream type, use `std::mem::take(&mut *zeroizing)` so the wrapper is left holding an empty Vec (no copy) and zeroizes harmlessly when it drops.
+- `SignatureBytes` is a Vec-backed wrapper with `impl Zeroize` but **not** `ZeroizeOnDrop`. Treat any `SignatureBytes` value that contains secret material as requiring explicit zeroize before drop, or move it into a `Zeroizing<SignatureBytes>` wrapper. A future audit will tighten this; until then, callers are responsible.
+- `PrivKeyHandle` in `core-engine/src/core/identity.rs` is intentionally `Send + Sync`. The justification is documented inline: it wraps a KEK-encrypted opaque key in C memory, all methods take `&self`, and libsodium operations are thread-safe. Do not weaken these impls without a documented replacement.
+
 Do not expose test-only shortcuts in production APIs.
+
+**DHT and Discovery Records Must Be Signed.** Any record stored in the Kademlia DHT that claims a TBID (e.g., `PeerRegistrationRecord`) must carry an Ed25519 signature over a canonical byte representation produced by a `canonical_payload()` method. Verification extracts the Ed25519 pubkey from the first 32 bytes of the claimed TBID hex and checks the signature via `CryptoServer::verify_with(pubkey, "Ed25519", &canonical, &signature)`. Records that fail signature verification must be discarded (skip + warn log). A transitional legacy-compat window accepts records with empty `signature` for upgrade rollout; TODO comments document the deprecation date.
+
+Pattern for new DHT record types:
+
+```rust
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct MyRecord {
+    // ...claimed fields...
+    pub tbid: String,
+    // ...
+    #[serde(default)]
+    pub signature: Vec<u8>,
+}
+
+impl MyRecord {
+    /// Fixed-order canonical byte layout for signing.
+    /// Signature field is intentionally excluded.
+    pub fn canonical_payload(&self) -> Vec<u8> { /* ... */ }
+}
+```
+
+See `p2p/foretias-server/src/communerd/mod.rs::PeerRegistrationRecord` and the `validate_peer_registration(record, crypto)` function for the reference implementation. New DHT consumers MUST call a signature-verifying validator on every retrieved record.
 
 ### Time Handling
 
@@ -1137,6 +1217,15 @@ Before finishing Rust changes, check:
 * Is the code readable by a human maintainer?
 * Is performance acceptable without obscuring intent?
 * Did public APIs, wire formats, FFI contracts, or serialized formats change?
+
+**Security-specific additions (must check):**
+
+* Is any new `unsafe impl Send` justified by a current audit, and does it match the actual interior mutability of the wrapped C state? (See NoiseSession history — adding Send to a type with mutable C counters is a regression.)
+* If the change handles secret key material, is it wrapped in `Zeroizing<T>` from allocation through hand-off? Are any intermediate `Vec<u8>` copies eliminated via `std::mem::take`?
+* If the change adds a new DHT record type or extra-family wire format, is the record signed by the TBID owner over a `canonical_payload()` and verified by consumers? Is there a regression test covering tampered records?
+* If the change introduces a remote-data path into Calendar/Chronomatter/TimeFamily, does it route through a `CommunerdetteLine` and return `CleanAuthenticated<R>` (never raw bytes or `Unprocessed<R>`)?
+* If the change touches `Communerd`, does it preserve the invariant that Calendar/Chronomatter cannot reach private `Communerdette` internals? (admin methods are `pub(super)`, transports/swarm/peer pool are not exposed.)
+* Are `.unwrap()` and `.expect(...)` reachable from external input? Bounded checks must precede slice indexing; parse errors from JSON-RPC params must surface as `INVALID_PARAMS`, not silent `.ok()` discards.
 
 If a change affects security, protocol compatibility, storage compatibility, language semantics, or public bindings, treat it as high-risk and document the reasoning in the code, tests, or commit notes.
 
