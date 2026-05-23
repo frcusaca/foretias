@@ -29,8 +29,14 @@ pub fn tbid_keypair() -> Result<(SignatureBytes, SignatureBytes), CryptoError> {
     let rc = unsafe { foretias_tbid_v1_keypair(&mut secret, &mut public) };
     c_result_to_error(rc)?;
 
-    // Secret is now encrypted: ed25519 (48 bytes ct + 24 nonce) + slh_dsa (144 bytes ct + 24 nonce)
-    let mut secret_bytes = Vec::with_capacity(240);
+    // Secret is now encrypted: ed25519 (48 bytes ct + 24 nonce) + slh_dsa (144 bytes ct + 24 nonce).
+    // Wrap in Zeroizing so a panic between here and the function return zeroes the heap allocation.
+    // TODO(g3-f follow-up): SignatureBytes does not implement ZeroizeOnDrop, so once we hand the
+    // inner Vec off below it persists in caller memory until SignatureBytes is explicitly zeroized
+    // or dropped. A separate audit should add ZeroizeOnDrop to SignatureBytes (or split secret/
+    // public byte types) to extend zeroize discipline beyond this function's local scope.
+    let mut secret_bytes: zeroize::Zeroizing<Vec<u8>> =
+        zeroize::Zeroizing::new(Vec::with_capacity(240));
     secret_bytes.extend_from_slice(&secret.encrypted_ed25519);
     secret_bytes.extend_from_slice(&secret.ed25519_nonce);
     secret_bytes.extend_from_slice(&secret.encrypted_slh_dsa);
@@ -43,7 +49,10 @@ pub fn tbid_keypair() -> Result<(SignatureBytes, SignatureBytes), CryptoError> {
     // SAFETY: zeroize secret key material immediately after extraction.
     unsafe { foretias_tbid_v1_secret_zeroize(&mut secret) };
 
-    Ok((SignatureBytes::from(public_bytes), SignatureBytes::from(secret_bytes)))
+    // Move the inner Vec out of the Zeroizing wrapper (no copy). The Zeroizing wrapper now holds
+    // an empty Vec which is harmlessly zeroized when it drops.
+    let secret_inner = std::mem::take(&mut *secret_bytes);
+    Ok((SignatureBytes::from(public_bytes), SignatureBytes::from(secret_inner)))
 }
 
 /* ── TBID V1 signing ─────────────────────────────────── */
