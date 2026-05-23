@@ -14,6 +14,10 @@ checkbox tasks here following `AGENTS.md`.
 
 - [ ] Re-read `COMMUNERDETTE_SPEC.md` end to end.
 - [ ] Verify no broken tests on alpha before starting implementation.
+- [ ] Confirm `COMBINED_GROUP1_TYPE_BASED_SAFETY_ENFORCEMENT_TAKE_3` is code
+      complete on alpha (all checkboxes in its PLAN.md are checked). Communerdette
+      depends on `Unprocessed<T>`, `CleanAuthenticated<T>`, and `Externalized<T>`
+      being available from `core-engine/src/foretias/clean_auth.rs`.
 - [ ] Confirm whether TBID binding proof is in scope for this implementation
       or whether phase 1 will only represent `ClaimedByDht` distinctly from
       `Verified`.
@@ -62,16 +66,30 @@ checkbox tasks here following `AGENTS.md`.
 - [ ] Add compile-time or unit-test coverage showing Communerdette can send an
       already-signed payload but cannot sign for Chronomatter or Calendar.
 
-### 1.5 Clean Authenticated Remote Records
+### 1.5 Clean Authenticated Remote Records (Take 3 Integration)
 
-- [ ] Define `CleanAuthenticated<R>` or the final equivalent typed wrapper for
-      remote records authenticated by Communerdette.
-- [ ] Keep `CleanAuthenticated<R>` constructors private to `communerd` or to a
-      narrow verifier helper owned by `communerd`.
-- [ ] Define the proof/metadata shape needed to explain how the remote TBID was
-      authenticated.
+`CleanAuthenticated<R>` and `Unprocessed<R>` are already defined by
+`COMBINED_GROUP1_TYPE_BASED_SAFETY_ENFORCEMENT_TAKE_3` in
+`core-engine/src/foretias/clean_auth.rs`. Communerdette does NOT define new
+wrapper types; it orchestrates the conversion from `Unprocessed<R>` to
+`CleanAuthenticated<R>` using the existing Take 3 pipeline.
+
+- [ ] Import `Unprocessed<T>`, `CleanAuthenticated<T>`, and `Externalized<T>`
+      from `foretias_core` (core-engine) in the `communerd` module.
+- [ ] Implement the inbound gate orchestration in Communerdette:
+      parse transport bytes → `Unprocessed<R>` → gather verification context
+      → call `Unprocessed<R>::verify(...)` → `CleanAuthenticated<R>`.
+- [ ] For `CleanAuthenticated<ChrononRecord>`: supply crypto server and optional
+      previous record to `Unprocessed<ChrononRecord>::verify(crypto, prev)`.
+- [ ] For `CleanAuthenticated<Foretis>`: supply crypto server, authenticated
+      ChrononRecord, and content bytes to
+      `Unprocessed<Foretis>::verify(crypto, record, content)`.
+- [ ] For `CleanAuthenticated<ProbityReport>`: supply crypto server to
+      `Unprocessed<ProbityReport>::verify(crypto)`.
+- [ ] After `verify` succeeds, confirm the inner record's TBID matches the
+      Communerdette's target TBID before returning to callers.
 - [ ] Ensure raw transport replies cannot be stored as trust-bearing evidence
-      without first passing through Communerdette authentication.
+      without first passing through the full `Unprocessed<R>::verify(...)` call.
 
 ---
 
@@ -155,9 +173,12 @@ finds peers and speaks on the P2P network.
 - [ ] Implement `CommunerdetteLine::get_calendar_slice(start, count)`.
 - [ ] Implement `CommunerdetteLine::get_tick(tick_number)` as
       `get_calendar_slice(tick_number, 1)` plus exactly-one validation.
-- [ ] Return `CleanAuthenticated<Vec<TickRecord>>` and
-      `CleanAuthenticated<TickRecord>` from these methods after verifying the
-      remote TBID and record signatures.
+- [ ] For each remote `ChrononRecord` in the reply, run the Take 3 inbound
+      gate: `Unprocessed<ChrononRecord>::verify(crypto, prev)` to produce
+      `CleanAuthenticated<ChrononRecord>`. Confirm the inner record's TBID
+      matches the Communerdette's target TBID.
+- [ ] Return `CleanAuthenticated<Vec<ChrononRecord>>` and
+      `CleanAuthenticated<ChrononRecord>` from these methods.
 - [ ] Enforce the existing `MAX_CALENDAR_SLICE_COUNT` behavior on the server
       side; do not duplicate trust in the caller.
 - [ ] Add timeout behavior and explicit timeout errors.
@@ -166,8 +187,10 @@ finds peers and speaks on the P2P network.
 
 - [ ] Implement `CommunerdetteLine::stamp(content, echo)`.
 - [ ] Internally hex-encode content for the existing JSON-RPC `stamp` method.
-- [ ] Return parsed `Foretis` as `CleanAuthenticated<Foretis>` after verifying
-      that the remote stamp is authenticated for the target TBID.
+- [ ] For the remote `Foretis` reply, run the Take 3 inbound gate:
+      `Unprocessed<Foretis>::verify(crypto, record, content)` to produce
+      `CleanAuthenticated<Foretis>`. Confirm the inner Foretis's TBID matches
+      the Communerdette's target TBID.
 - [ ] Preserve dormant-node error behavior from the server.
 - [ ] Document that this method asks the remote TBID to stamp supplied content;
       it does not sign local Calendar or Chronomatter messages.
@@ -282,15 +305,17 @@ records even if full binding proof is implemented later.
 - [ ] Return `Unsupported` or leave disabled if proof format is not in scope.
 - [ ] Document exact future proof transcript in comments or follow-up spec.
 
-### 7.3 Clean Authentication API
+### 7.3 Clean Authentication API (Take 3 Pipeline)
 
-- [ ] Add private helper(s) that transform untrusted parsed remote records into
-      `CleanAuthenticated<R>` after verifying TBID, signature/hash material,
-      and operation-specific freshness rules.
-- [ ] Ensure failed authentication returns an explicit error and does not expose
+- [ ] Wire the Take 3 inbound gate: Communerdette parses remote bytes into
+      `Unprocessed<R>`, assembles verification context, calls
+      `Unprocessed<R>::verify(...)` to produce `CleanAuthenticated<R>`.
+- [ ] Ensure failed `verify` calls return an explicit error and do not expose
       a partially trusted value to Calendar or Chronomatter-adjacent code.
-- [ ] Ensure `CleanAuthenticated<R>` records retain enough metadata for
-      diagnostics without exposing mutable authentication internals.
+- [ ] Ensure the TBID claim on the verified record matches the Communerdette's
+      target TBID before returning `CleanAuthenticated<R>` to callers.
+- [ ] Ensure `CleanAuthenticated<R>` records from Take 3 retain enough metadata
+      for diagnostics without exposing mutable authentication internals.
 
 ### 7.4 Tests
 
@@ -313,7 +338,7 @@ TBID lookup and calendar fetch.
 - [ ] Preserve local verification of hash/signature after fetching the remote
       tick.
 - [ ] Require the fetched remote tick to arrive as
-      `CleanAuthenticated<TickRecord>` before local content verification uses
+      `CleanAuthenticated<ChrononRecord>` before local content verification uses
       it as evidence.
 - [ ] Keep response shape unchanged: `{ "valid": bool, "method": "cross_node" }`.
 

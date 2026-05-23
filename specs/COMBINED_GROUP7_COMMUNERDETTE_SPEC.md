@@ -1,9 +1,29 @@
 # Communerdette - Per-TBID Relationship Handle Specification
 
 **Prefix:** `COMMUNERDETTE`
-**Pairs with:** `COMMUNERDETTE_PLAN.md`
+**Group:** COMBINED_GROUP7
+**Pairs with:** `COMBINED_GROUP7_COMMUNERDETTE_PLAN.md`
 **Status:** Draft - pending human review
 **Date:** 2026-05-23
+**Master Coordination:** `COMBINED_GROUP2_SPEC.md` §2.2
+
+---
+
+## Completed Prerequisites
+
+The following specifications are code-complete and their implementations are
+available on `alpha`. The Communerdette design depends on these types and
+constructors being present:
+
+- **`COMBINED_GROUP1_TYPE_BASED_SAFETY_ENFORCEMENT_TAKE_3_SPEC.md`** — Defines
+  `Unprocessed<T>`, `CleanAuthenticated<T>`, and `Externalized<T>` as generic
+  wrappers in `core-engine/src/foretias/clean_auth.rs`. No concrete newtype
+  structs. `CleanAuthenticated<T>` has private constructors:
+  `from_trusted()` for locally created data and `verify()` on
+  `Unprocessed<T>` for the inbound gate. Type aliases via
+  `create_type_gated_classes!` macro (e.g., `CleanAuthenticatedChrononRecord`
+  is an alias for `CleanAuthenticated<ChrononRecord>`). `ProbityReport` moved
+  to `core-engine`.
 
 ---
 
@@ -17,7 +37,9 @@
 3. Re-read `COMMUNERD_LIBP2P_DIRECT_SPEC.md`: libp2p direct transport is the
    preferred RPC pipe when a PeerId is known; custom Noise_XX TCP remains the
    fallback.
-4. Read this document end to end before implementing.
+4. Read `COMBINED_GROUP1_TYPE_BASED_SAFETY_ENFORCEMENT_TAKE_3_SPEC.md` to
+   understand the `CleanAuthenticated<R>` type used throughout this spec.
+5. Read this document end to end before implementing.
 
 ---
 
@@ -138,7 +160,7 @@ Communerdette(T):
    evidence fetches, and calendar slice requests must have timeouts. No request
    may wait forever.
 12. **Local verification remains local.** Prefer fetching signed public evidence
-   such as `TickRecord` and verifying locally over asking a remote peer for a
+   such as `ChrononRecord` and verifying locally over asking a remote peer for a
    true/false answer.
 13. **Fallback is a relationship policy.** Transport fallback is decided using
    the Communerdette's route state and stats, not repeated ad hoc at call sites.
@@ -181,12 +203,12 @@ impl CommunerdetteLine {
         &self,
         tick_start: u64,
         count: u64,
-    ) -> Result<CleanAuthenticated<Vec<TickRecord>>, TransportError>;
+    ) -> Result<CleanAuthenticated<Vec<ChrononRecord>>, TransportError>;
 
     pub async fn get_tick(
         &self,
         tick_number: u64,
-    ) -> Result<CleanAuthenticated<TickRecord>, TransportError>;
+    ) -> Result<CleanAuthenticated<ChrononRecord>, TransportError>;
 
     pub async fn start_calendar_stream(
         &self,
@@ -398,7 +420,7 @@ local -> remote:
 
 remote -> local:
   signature over challenge using TBID-controlled signing capability
-  optional current TickRecord or TBID public proof material
+  optional current ChrononRecord or TBID public proof material
 
 local:
   verify signature against TBID proof rules
@@ -412,31 +434,63 @@ a DHT claim is equivalent to a verified TBID binding.
 
 ## 11. Remote Authentication Product
 
-Communerdette is responsible for authenticating the other TBID. It may use the
-Foretias crypto libraries, verified tick material, binding proofs, transport
-identity, DHT claims, and protocol-specific signatures to decide whether a
-remote record is clean enough for higher layers.
+Communerdette is the **inbound gate orchestrator** for all remote records. It
+converts `Unprocessed<R>` into `CleanAuthenticated<R>` by calling the existing
+`verify` methods defined in `core-engine/src/foretias/clean_auth.rs` (Take 3).
+Communerdette does not invent new verification logic; it gathers the verification
+context and invokes the Take 3 pipeline.
 
-The intended type-level shape is:
+### 11.1 Inbound Pipeline
 
-```rust
-pub struct CleanAuthenticated<R> {
-    target_tbid: Tbid,
-    record: R,
-    proof: RemoteAuthenticationProof,
-    authenticated_at_ns: u64,
-}
+```text
+transport bytes
+  -> Unprocessed<R>          (Unprocessed::<R>::from_bytes() or from_json_value())
+  -> Communerdette gathers context:
+       - target TBID (from the Communerdette's scope)
+       - crypto server (from Communerd)
+       - binding state (from the Communerdette's relationship state)
+       - previous record, if chain verification is required
+  -> Unprocessed<R>::verify(...)   (Take 3 method, defined in core-engine)
+  -> CleanAuthenticated<R>
+  -> Calendar / Chronomatter-adjacent code / TimeFamily code
 ```
 
-The exact fields may differ, but the fields and constructors must stay narrow.
-Only Communerdette or a small verifier helper owned by the `communerd` module
-should be able to construct `CleanAuthenticated<R>` from untrusted remote data.
+### 11.2 Communerdette's Role in Verification
 
-A `CleanAuthenticated<R>` value means:
+Communerdette is responsible for:
+
+1. **Parsing** — Convert raw transport bytes into `Unprocessed<R>` using the
+   Take 3 constructors (`from_bytes`, `from_json_value`, `from_parsed`).
+2. **Context assembly** — Gather the verification parameters that
+   `Unprocessed<R>::verify(...)` requires:
+   - For `Unprocessed<ChrononRecord>::verify(crypto, prev)`: supply the crypto
+     server and the previous `CleanAuthenticated<ChrononRecord>` if chain
+     verification is needed.
+   - For `Unprocessed<Foretis>::verify(crypto, record, content)`: supply the
+     crypto server, the authenticated `ChrononRecord`, and the content bytes.
+   - For `Unprocessed<ProbityReport>::verify(crypto)`: supply the crypto server.
+3. **Binding state enforcement** — Before calling `verify`, check that the
+   Communerdette's `TbidBindingStatus` is sufficient for the operation's trust
+   level. A `ClaimedByDht` binding may be sufficient for evidence fetch but not
+   for trust-bearing mutual attestation storage.
+4. **TBID claim validation** — After `verify` succeeds, confirm that the
+   `CleanAuthenticated<R>` inner record's TBID matches the Communerdette's
+   target TBID. If not, reject with an explicit error.
+
+Communerdette does NOT:
+
+- Define new `verify` methods — those live in `core-engine` per Take 3.
+- Construct `CleanAuthenticated<R>` directly — only `Unprocessed<R>::verify(...)`
+  and `CleanAuthenticated::<R>::from_trusted()` can do that (private constructors).
+- Bypass the Take 3 pipeline for any record type.
+
+### 11.3 What CleanAuthenticated<R> Means
+
+A `CleanAuthenticated<R>` value returned by Communerdette means:
 
 - the remote bytes were parsed using the expected schema for `R`
 - the claimed remote TBID matches the Communerdette's target TBID
-- required signatures, hashes, tick references, or binding proofs were checked
+- `Unprocessed<R>::verify(...)` passed (signatures, hashes, chain links, etc.)
 - the route/binding state was strong enough for the operation's trust level
 - protocol freshness or replay checks were applied where the protocol defines
   them
@@ -447,16 +501,6 @@ A `CleanAuthenticated<R>` value does not mean:
 - the local node agrees with the remote statement
 - Communerdette signed anything
 - Communerdette may sign for any local TBID
-
-This creates a clean inbound pipeline:
-
-```text
-transport bytes
-  -> untrusted parsed record
-  -> Communerdette authentication checks
-  -> CleanAuthenticated<R>
-  -> Calendar / Chronomatter-adjacent code / TimeFamily code
-```
 
 Calendar may store trust-bearing external-attestation material only after the
 relevant remote record has become `CleanAuthenticated<R>` and any
