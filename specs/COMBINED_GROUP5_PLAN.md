@@ -1,9 +1,9 @@
 # COMBINED_GROUP5_PLAN.md
 # Architectural Foundations — Parallel Agent Plan
 
-**Date:** 2026-05-22
+**Date:** 2026-05-22 (updated 2026-05-23)
 **Paired Spec:** `COMBINED_GROUP5_SPEC.md`
-**Status:** Ready for execution. Sections A, B, D are immediately actionable. Section C is blocked on a human decision.
+**Status:** g5-b merged 2026-05-22. g5-d merged 2026-05-22. g5-a in progress (worktree g5-a-clock-inject-1779518843). g5-c blocked on human decision.
 **Pre-flight:** `COMBINED_GROUP2_PLAN.md` Phase A
 
 ---
@@ -198,8 +198,8 @@
 
 ## Group-Level Completion Criteria
 
-- [ ] `g5-b-crash-recovery` merged: corrupt `.tmp` is removed
-- [ ] `g5-d-agents-rules` merged: AGENTS.md gap-fill complete (or rules verified present)
+- [x] `g5-b-crash-recovery` merged 2026-05-22: corrupt `.tmp` is removed
+- [x] `g5-d-agents-rules` merged 2026-05-22: AGENTS.md gap-fill complete (4 rules added)
 - [ ] `g5-a-clock-inject` merged: zero `SystemTime::now()` calls outside `clock.rs`
 - [ ] `g5-c-rpc-auth` decision made; if A or B, implementation merged
 - [ ] `cargo test --workspace` passes deterministically (two runs identical)
