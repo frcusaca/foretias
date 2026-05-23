@@ -463,6 +463,13 @@ pub(crate) fn process_request_from_value(server: &TimeFamilyServer, req: serde_j
         "stream_ack" => Ok(handlers::handle_stream_ack(server, params)),
         "mirror_mutual" => Ok(handlers::handle_mirror_mutual(server, params)),
         "mirror_reconcile" => Ok(handlers::handle_mirror_reconcile(server, params)),
+        // Group 4b — Active Mirroring wire methods
+        "mirror_announce" => Ok(handlers::handle_mirror_announce(server, params)),
+        "history_dump_request" => Ok(handlers::handle_history_dump_request(server, params)),
+        "history_dump_ack" => Ok(handlers::handle_history_dump_ack(server, params)),
+        "history_dump_chunk" => Ok(handlers::handle_history_dump_chunk(server, params)),
+        "history_dump_complete" => Ok(handlers::handle_history_dump_complete(server, params)),
+        "mirror_health_check" => Ok(handlers::handle_mirror_health_check(server, params)),
         _ => Ok(jsonrpc::JsonRpcResponse::error(
             id.cloned(),
             jsonrpc::METHOD_NOT_FOUND,

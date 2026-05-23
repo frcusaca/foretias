@@ -674,6 +674,269 @@ pub fn handle_mirror_reconcile(server: &TimeFamilyServer, params: Value) -> Json
     resp_success(server, id, result)
 }
 
+// ── Group 4b: Active Mirroring wire handlers ───────────────────────────────
+//
+// Six JSON-RPC methods that drive the active-mirror dance defined in
+// COMBINED_GROUP4_SPEC.md §3.4. These run on the *receiving* side of each
+// arrow in that table; sender-side flow is driven by Calendar's task queue
+// (Phase 4b.4) which constructs requests and processes responses.
+
+/// `mirror_announce` — a source node asking this node "I have TBID X, will
+/// you mirror?". Response status is "accept" if MirrorStore has capacity for
+/// the requested TBID; "reject" otherwise.
+pub fn handle_mirror_announce(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    let id = params.get("id").cloned();
+    let tbid = match params.get("tbid").and_then(|v| v.as_str()) {
+        Some(t) if !t.is_empty() => t.to_string(),
+        _ => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                "missing or empty 'tbid'".into(),
+            );
+        }
+    };
+
+    let mirror_store = server.mirror_store();
+    if mirror_store.can_accept_mirror(&tbid) {
+        resp_success(server, id, serde_json::json!({
+            "status": "accept",
+            "tbid": tbid,
+            "current_tick_count": mirror_store.mirror_tick_count(&tbid),
+        }))
+    } else {
+        resp_success(server, id, serde_json::json!({
+            "status": "reject",
+            "tbid": tbid,
+            "reason": "mirror capacity exhausted",
+        }))
+    }
+}
+
+/// `history_dump_request` — source asking mirror to open a chunked dump
+/// stream for chronons [start..=end]. Response is accept/reject.
+pub fn handle_history_dump_request(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    let id = params.get("id").cloned();
+    let tbid = match params.get("tbid").and_then(|v| v.as_str()) {
+        Some(t) if !t.is_empty() => t.to_string(),
+        _ => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                "missing or empty 'tbid'".into(),
+            );
+        }
+    };
+    let chronon_start = params
+        .get("chronon_start")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let chronon_end = params
+        .get("chronon_end")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+
+    if chronon_end < chronon_start {
+        return resp_error(
+            server,
+            id,
+            jsonrpc::INVALID_PARAMS,
+            format!(
+                "chronon_end ({chronon_end}) < chronon_start ({chronon_start})"
+            ),
+        );
+    }
+
+    let mirror_store = server.mirror_store();
+    if !mirror_store.can_accept_mirror(&tbid) {
+        return resp_success(server, id, serde_json::json!({
+            "status": "reject",
+            "tbid": tbid,
+            "reason": "mirror capacity exhausted",
+        }));
+    }
+
+    resp_success(server, id, serde_json::json!({
+        "status": "accept",
+        "tbid": tbid,
+        "chronon_start": chronon_start,
+        "chronon_end": chronon_end,
+        "current_tick_count": mirror_store.mirror_tick_count(&tbid),
+    }))
+}
+
+/// `history_dump_ack` — mirror acknowledging a dump request to the source.
+/// Server-side this is a passthrough echo (the source consumes the ack on
+/// its side). Provided for dispatch-table symmetry.
+pub fn handle_history_dump_ack(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    let id = params.get("id").cloned();
+    let tbid = params
+        .get("tbid")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let status = params
+        .get("status")
+        .and_then(|v| v.as_str())
+        .unwrap_or("accept")
+        .to_string();
+    resp_success(server, id, serde_json::json!({
+        "status": "noted",
+        "tbid": tbid,
+        "echoed_status": status,
+    }))
+}
+
+/// `history_dump_chunk` — source delivering one chunk of N
+/// ExternalizedChrononRecords. Each record is parsed as
+/// `UnprocessedChrononRecord` and chain-verified against the previous
+/// authenticated record (or genesis) before insertion into the mirror
+/// store. Preserves the trust boundary.
+pub fn handle_history_dump_chunk(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    let id = params.get("id").cloned();
+    let tbid = match params.get("tbid").and_then(|v| v.as_str()) {
+        Some(t) if !t.is_empty() => t.to_string(),
+        _ => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                "missing or empty 'tbid'".into(),
+            );
+        }
+    };
+    let empty_vec: Vec<Value> = vec![];
+    let raw_records = params
+        .get("records")
+        .and_then(|v| v.as_array())
+        .unwrap_or(&empty_vec);
+
+    if raw_records.len() > MAX_CALENDAR_SLICE_COUNT {
+        return resp_error(
+            server,
+            id,
+            jsonrpc::INVALID_PARAMS,
+            format!("chunk size exceeds maximum of {MAX_CALENDAR_SLICE_COUNT}"),
+        );
+    }
+
+    let unprocessed: Result<Vec<UnprocessedChrononRecord>, _> = raw_records
+        .iter()
+        .map(|v| UnprocessedChrononRecord::from_json_value(v.clone()))
+        .collect();
+    let unprocessed = match unprocessed {
+        Ok(r) => r,
+        Err(e) => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                format!("failed to parse records: {e}"),
+            );
+        }
+    };
+
+    let crypto = server.chronomatter().crypto_server();
+    let mirror_store = server.mirror_store();
+
+    let mut verified: Vec<CleanAuthenticatedChrononRecord> = Vec::new();
+    for (i, unproc) in unprocessed.into_iter().enumerate() {
+        // First record in chunk: chain against the latest stored record if any,
+        // else treat as genesis (chronon_number must be 1).
+        let clean = if let Some(prev_record) = verified.last() {
+            unproc.into_clean_authenticated(crypto.as_ref(), prev_record)
+        } else if let Some(prev_trusted) = mirror_store.latest_record(&tbid) {
+            let prev = CleanAuthenticatedChrononRecord::from_trusted(prev_trusted);
+            unproc.into_clean_authenticated(crypto.as_ref(), &prev)
+        } else if unproc.inner().chronon_number == 1 {
+            unproc.into_clean_authenticated_genesis(crypto.as_ref())
+        } else {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                "non-genesis record without predecessor in store".into(),
+            );
+        };
+        match clean {
+            Ok(v) => verified.push(v),
+            Err(e) => {
+                return resp_error(
+                    server,
+                    id,
+                    jsonrpc::INVALID_PARAMS,
+                    format!("chain verification failed at record {i}: {e}"),
+                );
+            }
+        }
+    }
+
+    let accepted = verified.len();
+    for record in verified {
+        if let Err(e) = mirror_store.insert_mirrored(&tbid, record.into_inner()) {
+            tracing::warn!(tbid = %tbid, "mirror insert failed: {e}");
+        }
+    }
+
+    resp_success(server, id, serde_json::json!({
+        "status": "ok",
+        "tbid": tbid,
+        "accepted_count": accepted,
+        "tick_count": mirror_store.mirror_tick_count(&tbid),
+    }))
+}
+
+/// `history_dump_complete` — source marking end-of-stream for a dump.
+/// Mirror finalizes and returns its current tick count for sanity check.
+pub fn handle_history_dump_complete(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    let id = params.get("id").cloned();
+    let tbid = params
+        .get("tbid")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let claimed_total = params.get("total_records").and_then(|v| v.as_u64());
+
+    let mirror_store = server.mirror_store();
+    let tick_count = mirror_store.mirror_tick_count(&tbid);
+
+    resp_success(server, id, serde_json::json!({
+        "status": "complete",
+        "tbid": tbid,
+        "tick_count": tick_count,
+        "claimed_total": claimed_total,
+    }))
+}
+
+/// `mirror_health_check` — liveness probe from source. Mirror echoes the
+/// current tick count + latest tick number for the TBID under mirror.
+pub fn handle_mirror_health_check(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    let id = params.get("id").cloned();
+    let tbid = match params.get("tbid").and_then(|v| v.as_str()) {
+        Some(t) if !t.is_empty() => t.to_string(),
+        _ => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                "missing or empty 'tbid'".into(),
+            );
+        }
+    };
+    let mirror_store = server.mirror_store();
+    let tick_count = mirror_store.mirror_tick_count(&tbid);
+    let info = mirror_store.mirror_info(&tbid);
+    let latest = info.as_ref().map(|(_, latest, _)| *latest);
+    resp_success(server, id, serde_json::json!({
+        "alive": true,
+        "tbid": tbid,
+        "tick_count": tick_count,
+        "latest_tick": latest,
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -923,5 +1186,169 @@ mod tests {
         let error = resp.error.unwrap();
         assert_eq!(error.code, jsonrpc::INTERNAL_ERROR);
         assert!(error.message.contains("FROST epoch data not yet implemented"));
+    }
+
+    // ── Group 4b: mirror wire handler tests ─────────────────────────────────
+
+    fn sample_tbid_hex() -> String {
+        // 96 bytes, all 0xAB → 192-char lowercase hex.
+        "ab".repeat(96)
+    }
+
+    #[test]
+    fn handle_mirror_announce_accepts_when_capacity_available() {
+        let server = make_server();
+        let params = serde_json::json!({ "tbid": sample_tbid_hex() });
+        let resp = handle_mirror_announce(&server, params);
+        let result = resp.result.expect("expected success on accept");
+        assert_eq!(result.get("status").and_then(|v| v.as_str()), Some("accept"));
+    }
+
+    #[test]
+    fn handle_mirror_announce_rejects_missing_tbid() {
+        let server = make_server();
+        let resp = handle_mirror_announce(&server, serde_json::json!({}));
+        let err = resp.error.expect("missing tbid must error");
+        assert_eq!(err.code, jsonrpc::INVALID_PARAMS);
+    }
+
+    #[test]
+    fn handle_history_dump_request_accepts_valid_range() {
+        let server = make_server();
+        let params = serde_json::json!({
+            "tbid": sample_tbid_hex(),
+            "chronon_start": 1,
+            "chronon_end": 10,
+        });
+        let resp = handle_history_dump_request(&server, params);
+        let result = resp.result.expect("expected success");
+        assert_eq!(result.get("status").and_then(|v| v.as_str()), Some("accept"));
+    }
+
+    #[test]
+    fn handle_history_dump_request_rejects_inverted_range() {
+        let server = make_server();
+        let params = serde_json::json!({
+            "tbid": sample_tbid_hex(),
+            "chronon_start": 100,
+            "chronon_end": 10,
+        });
+        let resp = handle_history_dump_request(&server, params);
+        let err = resp.error.expect("inverted range must error");
+        assert_eq!(err.code, jsonrpc::INVALID_PARAMS);
+    }
+
+    #[test]
+    fn handle_history_dump_ack_echoes_status() {
+        let server = make_server();
+        let params = serde_json::json!({
+            "tbid": sample_tbid_hex(),
+            "status": "accept",
+        });
+        let resp = handle_history_dump_ack(&server, params);
+        let result = resp.result.expect("expected success");
+        assert_eq!(result.get("status").and_then(|v| v.as_str()), Some("noted"));
+        assert_eq!(
+            result.get("echoed_status").and_then(|v| v.as_str()),
+            Some("accept")
+        );
+    }
+
+    #[test]
+    fn handle_history_dump_chunk_with_empty_records_succeeds() {
+        let server = make_server();
+        let params = serde_json::json!({
+            "tbid": sample_tbid_hex(),
+            "records": Vec::<Value>::new(),
+        });
+        let resp = handle_history_dump_chunk(&server, params);
+        let result = resp.result.expect("empty chunk should succeed");
+        assert_eq!(result.get("accepted_count").and_then(|v| v.as_u64()), Some(0));
+    }
+
+    #[test]
+    fn handle_history_dump_chunk_rejects_non_genesis_first_record() {
+        use foretias_core::foretias::tick::ChrononRecord;
+        use foretias_core::foretias::types::Tbid;
+        let server = make_server();
+        let bad_record = ChrononRecord {
+            chronon_number: 999,
+            public_key: vec![0u8; 32].into(),
+            signature_algorithm: "Ed25519".to_string(),
+            forward_foretis: vec![].into(),
+            backward_foretis: vec![].into(),
+            aa_nonce: [0u8; 16].into(),
+            chronon_stamp_count: 0,
+            external_attestations: Vec::new(),
+            tb_version: 0,
+            tbid: Tbid::default(),
+        };
+        let bad_json = serde_json::to_value(&bad_record).expect("serialize bad record");
+        let params = serde_json::json!({
+            "tbid": sample_tbid_hex(),
+            "records": [bad_json],
+        });
+        let resp = handle_history_dump_chunk(&server, params);
+        let err = resp.error.expect("non-genesis first record must error");
+        assert_eq!(err.code, jsonrpc::INVALID_PARAMS);
+        assert!(
+            err.message.contains("genesis") || err.message.contains("predecessor"),
+            "unexpected error message: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn handle_history_dump_chunk_rejects_oversized() {
+        let server = make_server();
+        // Construct a fake records array exceeding MAX_CALENDAR_SLICE_COUNT.
+        let bloat: Vec<Value> = (0..(MAX_CALENDAR_SLICE_COUNT + 1))
+            .map(|_| serde_json::json!({}))
+            .collect();
+        let params = serde_json::json!({
+            "tbid": sample_tbid_hex(),
+            "records": bloat,
+        });
+        let resp = handle_history_dump_chunk(&server, params);
+        let err = resp.error.expect("oversized chunk must error");
+        assert_eq!(err.code, jsonrpc::INVALID_PARAMS);
+        assert!(err.message.contains("exceeds maximum"));
+    }
+
+    #[test]
+    fn handle_history_dump_complete_returns_tick_count() {
+        let server = make_server();
+        let params = serde_json::json!({
+            "tbid": sample_tbid_hex(),
+            "total_records": 42,
+        });
+        let resp = handle_history_dump_complete(&server, params);
+        let result = resp.result.expect("expected success");
+        assert_eq!(
+            result.get("status").and_then(|v| v.as_str()),
+            Some("complete")
+        );
+        assert_eq!(
+            result.get("claimed_total").and_then(|v| v.as_u64()),
+            Some(42)
+        );
+    }
+
+    #[test]
+    fn handle_mirror_health_check_reports_alive() {
+        let server = make_server();
+        let params = serde_json::json!({ "tbid": sample_tbid_hex() });
+        let resp = handle_mirror_health_check(&server, params);
+        let result = resp.result.expect("expected success");
+        assert_eq!(result.get("alive").and_then(|v| v.as_bool()), Some(true));
+        assert!(result.get("tick_count").is_some());
+    }
+
+    #[test]
+    fn handle_mirror_health_check_rejects_missing_tbid() {
+        let server = make_server();
+        let resp = handle_mirror_health_check(&server, serde_json::json!({}));
+        let err = resp.error.expect("missing tbid must error");
+        assert_eq!(err.code, jsonrpc::INVALID_PARAMS);
     }
 }
