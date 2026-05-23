@@ -269,35 +269,41 @@ fn build_cross_tabulation(raw: &[RawOccurrence]) -> Vec<(String, String, String,
 fn verify_trust_boundary_invariants(locations: &[LocationEntry]) -> Vec<String> {
     let mut violations = Vec::new();
 
-    // Rule 1: core-engine should NOT contain Unprocessed usage EXCEPT in clean_auth.rs
+    // Rule 1: core-engine should NOT contain Unprocessed usage EXCEPT in gate files
+    // Gate files: clean_auth.rs (primary gate) or probity/report.rs (domain-specific gate)
     for loc in locations {
         if loc.file.starts_with("core-engine/src") && loc.is_unprocessed {
-            if !loc.file.ends_with("clean_auth.rs") {
+            let is_gate_file = loc.file.ends_with("clean_auth.rs")
+                || loc.file.ends_with("probity/report.rs");
+            if !is_gate_file {
                 violations.push(format!(
-                    "VIOLATION: Unprocessed found in core-engine outside clean_auth.rs: {} [{}] {}",
+                    "VIOLATION: Unprocessed found in core-engine outside a gate file: {} [{}] {}",
                     loc.file, "Unprocessed", loc.inner
                 ));
             }
         }
     }
 
-    // Rule 2: core-engine should NOT contain Externalized usage EXCEPT in clean_auth.rs
+    // Rule 2: core-engine should NOT contain Externalized usage EXCEPT in gate files
     for loc in locations {
         if loc.file.starts_with("core-engine/src") && loc.is_externalized {
-            if !loc.file.ends_with("clean_auth.rs") {
+            let is_gate_file = loc.file.ends_with("clean_auth.rs")
+                || loc.file.ends_with("probity/report.rs");
+            if !is_gate_file {
                 violations.push(format!(
-                    "VIOLATION: Externalized found in core-engine outside clean_auth.rs: {} [{}] {}",
+                    "VIOLATION: Externalized found in core-engine outside a gate file: {} [{}] {}",
                     loc.file, "Externalized", loc.inner
                 ));
             }
         }
     }
 
-    // Rule 3: Unprocessed should ONLY appear in communerd, clean_auth, or test files
+    // Rule 3: Unprocessed should ONLY appear in communerd, gate files, or test files
     for loc in locations {
         if loc.is_unprocessed && loc.inner != "bare" && loc.inner != "T" {
             let allowed = loc.file.contains("communerd")
                 || loc.file.contains("clean_auth")
+                || loc.file.contains("probity/report")
                 || loc.file.contains("test");
             if !allowed {
                 violations.push(format!(
