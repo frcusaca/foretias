@@ -676,6 +676,8 @@ pub struct AttestationId([u8; 32]);
 
 Do not pass unrelated byte arrays, strings, or integers through the same generic type if the values mean different things.
 
+**Stubs return errors, not false success.** A handler that has not yet implemented its operation must return an explicit error (`Err(NodeError::Unsupported(...))`, JSON-RPC error object, etc.) rather than a success value like `valid: true` or a zero signature. Mark with `todo!("TRACKING: <issue>")` for cases where a panic is acceptable in dev-only paths.
+
 ### Error Handling
 
 Use `Result<T, E>` for recoverable failures.
@@ -857,6 +859,8 @@ Keep task lifetimes clear. Every spawned task should have:
 
 Do not ignore `JoinHandle`s unless the task is intentionally detached and documented.
 
+**Atomic Counter Idioms.** Use `fetch_add`, `fetch_sub`, `fetch_or` for unconditional read-modify-write on `Atomic*`. Reserve `compare_exchange` for operations that branch on the previous value's content. CAS-as-counter creates a spurious failure mode under contention and is forbidden.
+
 ### Cryptographic and Security-Sensitive Code
 
 For Foretias, cryptographic code must be conservative.
@@ -890,6 +894,8 @@ pub struct VerifiedAttestation {
 ```
 
 Only trusted constructors should create verified types.
+
+**Secret Material Handling.** Wrap secret key material in `zeroize::Zeroizing<T>` or an opaque handle; never hold raw key bytes in a plain `Vec<u8>` or array outside a zeroizing wrapper. Do not `#[derive(Debug)]` on secret types; use `.no_debug()` for bindgen-generated structs. Do not `#[derive(Clone, Copy, Serialize)]` on secret types unless the protocol requires it — each clone must itself be `Zeroizing`.
 
 Do not expose test-only shortcuts in production APIs.
 
@@ -949,6 +955,8 @@ pub fn verify_with_c_core(input: &[u8]) -> Result<VerificationResult, CoreError>
 Every `unsafe` block must have a nearby safety comment explaining the invariant being upheld.
 
 Unsafe code should be rare, isolated, and easy to audit.
+
+**FFI length validation at both layers.** Every C function that accepts a `*_with_len` or length parameter must validate the length in C before use. The Rust wrapper must independently validate the length before calling into C. Validation in one layer does not exempt the other — both must check, so that neither layer can be bypassed independently.
 
 ### Serialization and Parsing
 
