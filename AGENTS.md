@@ -636,6 +636,73 @@ See `specs/COMBINED_GROUP7_COMMUNERDETTE_SPEC.md` for the full design (invariant
 
 ---
 
+## CALENDAR ACTIVE MIRRORING (Group 4b — Mandatory for mirror work)
+
+Calendar is a **task-driven orchestrator** with a documented five-priority hierarchy. Mirror replication is priority 4 (persist family's calendar via mirrors); mirroring other calendars is priority 5 (starvable). Priorities 1–3 (record ticks, support local verify, mutual attestation) are synchronous and cannot be blocked by mirror back-pressure.
+
+### Priority Invariant
+
+| # | Priority    | Responsibility                                                  |
+|---|-------------|-----------------------------------------------------------------|
+| 1 | Critical    | Record every tick for the family's chronomatter                 |
+| 2 | High        | Support local verify requests (look up ticks, validate chains)  |
+| 3 | Medium-High | Mutual attestation with peers                                   |
+| 4 | Medium      | Persist family's calendar in the P2P network (find mirrors)     |
+| 5 | Low         | Mirror other calendars' ticks (starvable)                       |
+
+This ordering is reproduced in `p2p/foretias-server/src/calendar/mod.rs`'s module doc comment. Any change to it requires updating both that doc and this section.
+
+### Task Queue + MirrorDispatcher
+
+Mirror work flows through Calendar's task queue (`calendar::task_queue`):
+
+- `CalendarTask` enum has six variants (DoAttestation, FindNewMirror, InitiateDump, StartStream, ExploreMirror, ExpireMirror).
+- Worker pool (4 workers by default) pulls tasks from a `tokio::sync::mpsc::UnboundedReceiver` and dispatches to per-variant handlers.
+- Handlers route network calls through the narrow `MirrorDispatcher` async trait. **Communerd implements this trait; Calendar holds an `Arc<dyn MirrorDispatcher>`.** Do not give Calendar a direct reference to Communerd or its transports.
+
+### MirrorDispatcher Surface
+
+```rust
+#[async_trait]
+pub trait MirrorDispatcher: Send + Sync {
+    async fn known_peers(&self) -> Vec<PeerAddr>;
+    async fn mirror_announce(&self, peer: &PeerAddr, local_tbid_hex: &str)
+        -> Result<bool, String>;
+    async fn history_dump_chunk(&self, peer: &PeerAddr, local_tbid_hex: &str,
+        records: Vec<ChrononRecord>) -> Result<u64, String>;
+    async fn history_dump_complete(&self, peer: &PeerAddr, local_tbid_hex: &str,
+        total_records: u64) -> Result<u64, String>;
+    async fn mirror_health_check(&self, peer: &PeerAddr, local_tbid_hex: &str)
+        -> Result<u64, String>;
+}
+```
+
+Add new mirror RPCs by extending this trait, not by reaching into Communerd internals from worker handlers.
+
+### Wire Methods (Server-Side Handlers)
+
+Six new JSON-RPC methods are registered in `server/jsonrpc.rs` dispatch table:
+
+- `mirror_announce` — Source → Candidate. Mirror accepts iff `MirrorStore::can_accept_mirror`.
+- `history_dump_request` — Source → Mirror. Validate range and capacity.
+- `history_dump_ack` — Mirror → Source. Symmetric echo.
+- `history_dump_chunk` — Source → Mirror. Each record goes through the Take 3 inbound gate (`Unprocessed<ChrononRecord>::verify` + chain link) before insertion into the MirrorStore.
+- `history_dump_complete` — Source → Mirror. End-of-stream marker.
+- `mirror_health_check` — Source → Mirror. Liveness + tick_count probe.
+
+All chunk-handling preserves the type-enforced trust boundary — no raw `ChrononRecord` enters the mirror's store except via `into_clean_authenticated_*`.
+
+### Known Limitations
+
+- `Unprocessed<ChrononRecord>::verify` in `core-engine/src/foretias/clean_auth.rs:269` returns `CleanAuthError::NotYetImplemented` for `tb_version >= 1`. Until PQC genesis verification ships, the full source→mirror dump cannot complete end-to-end; the wire path works but the receiver's chain verifier stubs out. The blocked integration test (`tests/mirror_integration.rs::source_dumps_history_to_mirror`) is `#[ignore]` with that reason.
+- `DUMP_CHUNK_SIZE` is currently 1 (the spec target is 64 records or 1 MB). Raised once the verifier ships and chunk-size sweeps are measured.
+
+### Spec References
+
+See `specs/COMBINED_GROUP4_SPEC.md` §3 and `specs/COMBINED_GROUP4_PLAN.md` §4b for the full design and phase plan.
+
+---
+
 ## How To Write Rust Code
 
 This chapter applies to Rust code in both projects:
