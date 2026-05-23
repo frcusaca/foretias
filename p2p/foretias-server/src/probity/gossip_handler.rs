@@ -110,7 +110,6 @@ mod tests {
     use super::*;
     use foretias_core::crypto_server;
     use foretias_core::crypto_server::ForetiasCurve;
-    use foretias_core::crypto_server::SignOps;
 
     fn make_crypto() -> Box<dyn CryptoServer> {
         crypto_server::new_software(ForetiasCurve::Ed25519).unwrap()

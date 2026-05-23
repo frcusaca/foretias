@@ -5,7 +5,7 @@
 //! before reaching trusted state.
 
 use foretias_core::foretias::calendar::Calendar;
-use foretias_core::foretias::clean_auth::{Unprocessed, UnprocessedChrononRecord};
+use foretias_core::foretias::clean_auth::Unprocessed;
 use foretias_core::foretias::types::Tbid;
 use foretias_core::crypto_server;
 
