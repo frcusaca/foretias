@@ -114,12 +114,10 @@ If scoping was incorrect for any task, and and it became many tasks, It is possi
         (2026-05-06 14:31)
   - [ ] Repair ALL tests in alpha
   - [ ] Finalize:
-    - [ ] cleanup ${FULL_WORKTREE_PATH}
     - [ ] Check that _PLAN.md has all but Cleanup checkboxes completed
-    - [ ] Remove "${FULL_WORKTREE_PATH}"
     - [ ] This is the last checkbox to be checked in my _PLAN.md
 ```
-This example also illustrates that because foretias uses git merge and not rebase this situation where a fix to merge on alpha may be required. The final stage, to finalize, means to cleanup the work path and just sanity check everything before completely wiping the work directory and marking the plan complete.
+This example also illustrates that because foretias uses git merge and not rebase this situation where a fix to merge on alpha may be required. The final stage, to finalize, means to cleanup the sanity check everything before completely wiping the work directory and marking the plan complete.
 
 ## PROJECT STRUCTURE (Permanent Reference — Do Not Rescan)
 
