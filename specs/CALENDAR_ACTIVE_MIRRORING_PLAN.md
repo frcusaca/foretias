@@ -1,7 +1,8 @@
 # Calendar Active Mirroring — Implementation Plan
 
 **Parent Major**: Calendar Replication (CALENDAR_REPLICATION_SPEC.md)
-**Status**: Plan — pending human review
+**Status**: DEPRECATED — superseded by `COMBINED_GROUP4_SPEC.md` §3 and `COMBINED_GROUP4_PLAN.md` Stream 4b (2026-05-22).
+           All open tasks re-listed in COMBINED_GROUP4_PLAN.md. Do not update this file.
 **Date**: 2026-05-06
 **Prereqs**: `query_community` returns peers (done), MirrorStore exists (done), mirror RPC handlers exist (done), `JobQueue<T>` abstraction (JOB_QUEUE_PLAN.md)
 

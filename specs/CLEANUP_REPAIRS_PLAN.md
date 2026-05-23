@@ -2,6 +2,7 @@
 
 **Plan: Dead Code Removal, Deprecation Cleanup, Full Config Migration**
 **Paired Spec: CLEANUP_REPAIRS_SPEC.md**
+**Status: COMPLETED — All phases done, merged to alpha 2026-05-12. Superseded by `COMBINED_GROUP2_PLAN.md`.**
 **Date: 2026-05-11**
 **Revised: 2026-05-11 (CommunerdConfig design per time-being pattern)**
 **FULL_WORKTREE_PATH=/home/hcbusy/tmp/foretias-worktrees/CLEANUP_REPAIRS_32410**

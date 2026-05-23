@@ -1,7 +1,8 @@
 # Plan: Calendar Proof-of-Storage for Chrononchain Ranges
 
 **Paired with:** `CALENDAR_PROOF_OF_STORAGE_SPEC.md`
-**Status:** Draft plan — implementation pending
+**Status:** DEPRECATED — superseded by `COMBINED_GROUP4_PLAN.md` Stream 4c (2026-05-22).
+           All open tasks re-listed in COMBINED_GROUP4_PLAN.md. Do not update this file.
 **Target milestone:** v0.7 (aligned with encrypted calendar persistence)
 
 ---

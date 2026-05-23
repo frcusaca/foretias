@@ -1,6 +1,9 @@
 # Communerd libp2p Direct Transport — Implementation Plan
 
 **Pairs with:** `COMMUNERD_LIBP2P_DIRECT_SPEC.md`
+**Status:** DEPRECATED — Phases 1–5 all complete (checked). Remaining open tasks (Phase 6 docs,
+            Phase 7.1 unit tests) are tracked in `COMBINED_GROUP4_PLAN.md` Stream 4a. Do not update
+            this file; cancel any remaining open tasks by marking them [-].
 
 **Worktree path:** `FULL_WORKTREE_PATH=/home/hcbusy/tmp/foretias-worktrees/COMMUNERD_LIBP2P_DIRECT_3137`
 **Branch:** `feat/communerd-libp2p-direct`
@@ -184,7 +187,7 @@ When peer A sends a JSON-RPC request over libp2p to peer B, B's server must hand
 
 ### 6.1 Transport comparison table in README.md / AGENTS.md
 
-- [ ] Update the architecture table to show both transports: ⚠️ PARTIAL [2026-05-10] AGENTS.md has build caching but NOT transport table yet
+- [-] Update the architecture table to show both transports (CANCELED — already done in AGENTS.md lines 265-271; tracked in COMBINED_GROUP4_PLAN)
 
   | Layer | Protocol | Encryption | Purpose |
   |-------|----------|-----------|---------|
@@ -205,8 +208,8 @@ When peer A sends a JSON-RPC request over libp2p to peer B, B's server must hand
 
 ### 7.1 Unit tests for Libp2pTransport
 
-- [ ] Test that JSON-RPC request is correctly serialized before sending ⚠️ PARTIAL [2026-05-10] no dedicated unit tests, integration test covers serialization
-- [ ] Test that oneshot error returns `TransportError::Connect` or similar ⚠️ PARTIAL [2026-05-10] no dedicated unit tests
+- [-] Test that JSON-RPC request is correctly serialized before sending (CANCELED — tracked in COMBINED_GROUP4_PLAN Stream 4a.2)
+- [-] Test that oneshot error returns `TransportError::Connect` or similar (CANCELED — tracked in COMBINED_GROUP4_PLAN Stream 4a.3)
 
 ### 7.2 Integration test — two swarms, RPC over libp2p direct
 
@@ -219,7 +222,7 @@ When peer A sends a JSON-RPC request over libp2p to peer B, B's server must hand
 
 ### 7.3 Integration test — fallback chain
 
-- [ ] Spawn two swarms, connect, then disconnect libp2p ❌ NOT DONE [2026-05-10] no test for fallback behavior
+- [-] Spawn two swarms, connect, then disconnect libp2p (CANCELED — fallback test deferred; not in COMBINED_GROUP4 scope)
   - Verify RPC falls back to JSON-RPC TCP
   - Verify final result is correct
 
@@ -232,6 +235,6 @@ When peer A sends a JSON-RPC request over libp2p to peer B, B's server must hand
 ## Phase 8 — Final Verification
 
 - [x] Verify all work is complete in `/home/hcbusy/tmp/foretias-worktrees/COMMUNERD_LIBP2P_DIRECT_3137` and committed to `feat/communerd-libp2p-direct` ✅ [2026-05-10] commit 140c431
-- [ ] Run `cargo clippy --workspace` — no new warnings ❌ NOT DONE [2026-05-10] not run yet
+- [-] Run `cargo clippy --workspace` (CANCELED — rolled into COMBINED_GROUP4 final verification)
 - [x](2026-05-10 13:44) Merge `feat/communerd-libp2p-direct` to alpha ✅ merged
 - [x](2026-05-10 13:44) Cleanup `/home/hcbusy/tmp/foretias-worktrees/COMMUNERD_LIBP2P_DIRECT_3137` after successful merge ✅ worktree removed

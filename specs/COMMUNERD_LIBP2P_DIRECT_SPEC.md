@@ -2,6 +2,8 @@
 
 **Prefix:** `COMMUNERD_LIBP2P_DIRECT`
 **Pairs with:** `COMMUNERD_LIBP2P_DIRECT_PLAN.md`
+**Status:** DEPRECATED — Phases 1–5 complete. Remaining work (libp2p unit tests; AGENTS.md transport
+            table — already done) is tracked in `COMBINED_GROUP4_SPEC.md` Stream 4a. Do not update this file.
 
 ## Overview
 

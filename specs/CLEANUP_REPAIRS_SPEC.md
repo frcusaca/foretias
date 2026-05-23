@@ -1,7 +1,8 @@
 # CLEANUP_REPAIRS_SPEC.md
 
 **Spec: Dead Code Removal, Deprecation Cleanup, Full Config Migration**
-**Status: DRAFT — Pending Human Approval**
+**Status: COMPLETED — all phases implemented and merged to alpha 2026-05-12**
+**Superseded by: `COMBINED_GROUP2_SPEC.md` (2026-05-22)**
 **Date: 2026-05-11**
 **Revised: 2026-05-11 (CommunerdConfig design per time-being pattern)**
 

@@ -2,6 +2,8 @@
 
 **Scope:** Step
 **Status:** Completed — merged to alpha (2026-05-18, commit b75d10a)
+**Superseded by:** `COMBINED_GROUP2_SPEC.md` (2026-05-22)
+**Note:** Per-file checkboxes below were stale at merge time; confirmed done by grep (no TickRecord in source as of 2026-05-22).
 
 ---
 

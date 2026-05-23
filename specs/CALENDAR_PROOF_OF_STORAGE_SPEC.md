@@ -1,7 +1,8 @@
 # Spec: Calendar Proof-of-Storage for Chrononchain Ranges
 
 **Scope:** Feature (cross-cuts v0.4 probity gossip and v0.7 calendar persistence)
-**Status:** Draft — speculative design, pending review
+**Status:** DEPRECATED — superseded by `COMBINED_GROUP4_SPEC.md` §4 (2026-05-22).
+           Design content preserved here for reference. Do not update this file.
 **Companion:** `CALENDAR_PROOF_OF_STORAGE_PLAN.md`
 
 ---
