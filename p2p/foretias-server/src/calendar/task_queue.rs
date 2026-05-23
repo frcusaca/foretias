@@ -162,9 +162,12 @@ pub const DEFAULT_MIN_MIRRORS: usize = 1;
 pub const DEFAULT_TARGET_MIRRORS: usize = 3;
 
 /// Bounded chunk size for history dumps. Spec §3.3 target: 64 records or
-/// 1 MB, whichever comes first. We use the record count here; the per-byte
-/// cap is enforced by the recipient via MAX_CALENDAR_SLICE_COUNT.
-pub const DUMP_CHUNK_SIZE: usize = 64;
+/// 1 MB, whichever comes first. The current server-side per-connection cap
+/// is `MAX_REQUEST_LINE_BYTES = 4096` (plaintext), which only fits a handful
+/// of records. A follow-up will raise that cap (and the cipher cap) to
+/// allow the spec-target 64-record chunks; for now we ship one record per
+/// chunk so the dump correctly traverses the existing transport.
+pub const DUMP_CHUNK_SIZE: usize = 1;
 
 /// Internal handle returned by `spawn_workers` so callers can join the pool
 /// during shutdown (currently unused — workers run for the lifetime of the
