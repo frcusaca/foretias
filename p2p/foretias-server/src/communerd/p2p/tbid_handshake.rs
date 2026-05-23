@@ -115,9 +115,20 @@ impl TbidHandshake {
         }
 
         let nonce_offset = 96 + peer_id.to_bytes().len();
-        let payload_nonce: [u8; 32] = response.signed_payload[nonce_offset..nonce_offset + 32]
-            .try_into()
-            .unwrap();
+        // Bounds-check before slicing — a malicious peer can return a too-short
+        // signed_payload that was signed legitimately. Without this check, the
+        // index into signed_payload[nonce_offset..nonce_offset + 32] panics.
+        if response.signed_payload.len() < nonce_offset + 32 {
+            return TbidProofResult::Failed {
+                reason: "malformed signed_payload (too short for nonce)".into(),
+            };
+        }
+        let payload_nonce: [u8; 32] = match response.signed_payload[nonce_offset..nonce_offset + 32].try_into() {
+            Ok(n) => n,
+            Err(_) => return TbidProofResult::Failed {
+                reason: "malformed signed_payload nonce slice".into(),
+            },
+        };
         if payload_nonce != *expected_nonce {
             return TbidProofResult::Failed {
                 reason: "nonce mismatch".into(),
@@ -194,5 +205,49 @@ mod tests {
 
         let result = h1.verify_proof(&response, &request.nonce, peer_id).await;
         assert!(matches!(result, TbidProofResult::Failed { .. }));
+    }
+
+    /// g3-e regression: a malicious peer can supply a too-short signed_payload
+    /// that is legitimately signed. Before the bounds-check fix, indexing into
+    /// `signed_payload[nonce_offset..nonce_offset + 32]` panicked. After the fix,
+    /// verify_proof returns a `Failed` result with a malformed-payload reason.
+    #[tokio::test]
+    async fn tbid_proof_rejects_short_signed_payload_without_panic() {
+        let (h1, _tbid) = test_handshake();
+        let crypto2 = test_crypto();
+        let h2 = TbidHandshake::new(Arc::clone(&crypto2), Tbid::from_raw([0xCD; 96]));
+
+        let request = h1.generate_request();
+        let peer_id = libp2p::identity::Keypair::generate_ed25519().public().to_peer_id();
+
+        // Build a syntactically signed but semantically too-short payload.
+        // signed_payload is 50 bytes; nonce_offset alone (96 + peer_id len) exceeds it.
+        let short_payload = vec![0u8; 50];
+        let sig = crypto2.sign(&short_payload).expect("sign short payload");
+
+        let pk_bytes = match crypto2.public_key() {
+            foretias_core::crypto_server::PublicKeyBytes::Ed25519(pk) => pk.bytes.to_vec(),
+            _ => panic!("expected Ed25519 public key from software crypto"),
+        };
+
+        let response = TbidProofResponse {
+            tbid: Tbid::from_raw([0xCD; 96]),
+            public_key: PublicKeyBytes::from(pk_bytes),
+            signed_payload: short_payload,
+            signature: sig.bytes,
+        };
+
+        // The signature verifies (it's a legitimate signature over 50 bytes),
+        // but the subsequent nonce-offset index must NOT panic.
+        let result = h2.verify_proof(&response, &request.nonce, peer_id).await;
+        match result {
+            TbidProofResult::Failed { reason } => {
+                assert!(
+                    reason.contains("malformed"),
+                    "expected malformed-payload reason, got: {reason}"
+                );
+            }
+            TbidProofResult::Success { .. } => panic!("short payload must not succeed"),
+        }
     }
 }

@@ -752,6 +752,29 @@ mod tests {
         assert!(resp.error.is_some());
     }
 
+    /// g3-e regression: a malformed `foretis` field (e.g., an object with the
+    /// wrong shape or a string instead of an object) must produce INVALID_PARAMS
+    /// rather than panicking or silently returning a 500. Verifies the
+    /// `UnprocessedForetis::from_json_value` error surfaces correctly.
+    #[test]
+    fn handle_verify_malformed_foretis_returns_invalid_params() {
+        let server = make_server();
+        // 'foretis' is a string instead of the expected object shape.
+        let params = serde_json::json!({
+            "content": hex::encode(b"test"),
+            "foretis": "this-is-not-a-foretis-object",
+        });
+        let resp = handle_verify(&server, params);
+        let err = resp.error.expect("malformed foretis must produce an error response");
+        assert_eq!(
+            err.code,
+            jsonrpc::INVALID_PARAMS,
+            "expected INVALID_PARAMS (-32602), got {} ({})",
+            err.code,
+            err.message
+        );
+    }
+
     #[test]
     fn handle_verify_valid_foretis_returns_valid_true() {
         let server = make_server();
