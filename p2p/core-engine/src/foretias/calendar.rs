@@ -111,21 +111,32 @@ impl Calendar {
             .ok()
             .and_then(|data| serde_json::from_str::<Calendar>(&data).ok());
 
-        // Try loading the .tmp file (potential crash recovery)
-        let tmp_cal = std::fs::read_to_string(&tmp_path)
-            .ok()
-            .and_then(|data| serde_json::from_str::<Calendar>(&data).ok());
+        // Load .tmp if it exists; on deserialization failure remove it and warn.
+        let tmp_cal = if std::path::Path::new(&tmp_path).exists() {
+            match std::fs::read_to_string(&tmp_path)
+                .ok()
+                .and_then(|data| serde_json::from_str::<Calendar>(&data).ok())
+            {
+                Some(cal) => Some(cal),
+                None => {
+                    tracing::warn!(path = %tmp_path, "removing corrupt .tmp during crash-recovery scan");
+                    let _ = std::fs::remove_file(&tmp_path);
+                    None
+                }
+            }
+        } else {
+            None
+        };
 
         match (main_cal, tmp_cal) {
             (Some(cal), None) => Ok(cal),
             (Some(main), Some(tmp)) => {
                 // .tmp has more ticks → it's a newer write that didn't rename yet
                 if tmp.ticks.len() >= main.ticks.len() {
-                    // Clean up the leftover .tmp
                     let _ = std::fs::remove_file(&tmp_path);
                     Ok(tmp)
                 } else {
-                    // .tmp is stale or corrupt → ignore it
+                    // .tmp is stale — discard it
                     let _ = std::fs::remove_file(&tmp_path);
                     Ok(main)
                 }
@@ -514,13 +525,12 @@ mod tests {
 
         std::fs::write(&tmp_path, "this is not json").unwrap();
 
-        // Load should ignore corrupt .tmp and load main file
+        // Load should ignore corrupt .tmp and load main file, removing the corrupt .tmp
         let loaded = Calendar::load(path).unwrap();
         assert_eq!(loaded.latest(), Some(1));
-        assert!(Path::new(&tmp_path).exists(), "corrupt .tmp not removed by current implementation");
+        assert!(!Path::new(&tmp_path).exists(), "corrupt .tmp must be removed by crash-recovery scan");
 
         std::fs::remove_file(path).ok();
-        std::fs::remove_file(&tmp_path).ok();
     }
 
     #[test]
