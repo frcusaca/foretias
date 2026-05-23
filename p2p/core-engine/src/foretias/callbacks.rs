@@ -74,3 +74,16 @@ pub trait MutualAttestObserver: Send + Sync {
     fn on_mutual_attest_ok(&self);
     fn on_mutual_attest_failed(&self);
 }
+
+/// Peer-pool change notification, fired by Communerd when its peer pool
+/// changes (peer added, removed, or refreshed). Calendar implements this
+/// to drive Group 4b active-mirroring decisions (when to look for a new
+/// mirror, when to expire an unreachable one, etc.).
+///
+/// Implementations must be cheap (no blocking I/O); push work into the
+/// Calendar task queue rather than performing it inline.
+pub trait PeerChangeCallback: Send + Sync {
+    /// Called with the full current peer-pool snapshot. The Vec is freshly
+    /// constructed on each call; the callee may move or retain entries.
+    fn on_peer_change(&self, peers: Vec<PeerAddr>);
+}

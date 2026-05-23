@@ -1,4 +1,23 @@
-//! Calendar component — owns calendar data, receives tick notifications.
+//! Calendar component — task-driven orchestrator for one TimeFamily's chrononchain.
+//!
+//! # Priority Hierarchy (Invariant — Group 4b)
+//!
+//! Calendar's responsibilities are explicitly ordered. Resource allocation, task
+//! scheduling, and back-pressure decisions must respect this ordering: a lower
+//! priority must NEVER cause a higher priority to miss its deadline.
+//!
+//! | # | Priority    | Responsibility                                                  |
+//! |---|-------------|-----------------------------------------------------------------|
+//! | 1 | Critical    | Record every tick for the family's chronomatter                 |
+//! | 2 | High        | Support local verify requests (look up ticks, validate chains)  |
+//! | 3 | Medium-High | Mutual attestation with peers                                   |
+//! | 4 | Medium      | Persist family's calendar in the P2P network (find mirrors)     |
+//! | 5 | Low         | Mirror other calendars' ticks (starvable)                       |
+//!
+//! Priorities 4–5 are driven by the task queue (see `calendar::task_queue`) and
+//! receive peer-pool change notifications via [`PeerChangeCallback`] from
+//! Communerd. Priorities 1–3 are synchronous (Chronomatter ticks the calendar
+//! directly) and cannot be starved by mirror/replication work.
 
 use std::sync::Arc;
 
@@ -11,6 +30,7 @@ use foretias_core::error::NodeError;
 use parking_lot::RwLock;
 use tracing::{debug, info};
 
+pub use foretias_core::foretias::callbacks::PeerChangeCallback;
 pub use mirror::{MirrorStore, compute_hash_sanity};
 
 pub struct Calendar {

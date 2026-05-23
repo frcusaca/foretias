@@ -26,7 +26,7 @@ use foretias_core::collision::{CollisionDetector, CollisionEvent};
 use foretias_core::core::bindings::ForetiasPubKey32;
 use foretias_core::crypto_server::{CryptoServer, new_software, ForetiasCurve};
 use foretias_core::error::NodeError;
-use foretias_core::foretias::callbacks::{CommunityQuery, CommunityResponse, PeerAddr as CorePeerAddr, PeerMessenger, TransportError as CoreTransportError};
+use foretias_core::foretias::callbacks::{CommunityQuery, CommunityResponse, PeerAddr as CorePeerAddr, PeerChangeCallback, PeerMessenger, TransportError as CoreTransportError};
 use foretias_core::foretias::clean_auth::{UnprocessedForetis, CleanAuthenticatedForetis};
 use foretias_core::foretias::tick::{Foretis, ChrononRecord};
 use foretias_core::foretias::types::Tbid;
@@ -199,6 +199,9 @@ pub struct Communerd {
     pending_lookups: Arc<std::sync::Mutex<HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<PeerRegistrationRecord>>>>>,
     calendar: Arc<std::sync::RwLock<Option<Arc<Calendar>>>>,
     communerdettes: Arc<DashMap<Tbid, Arc<communerdette::Communerdette>>>,
+    /// Group 4b: peer-pool change callback (typically the Calendar).
+    /// Fires after every peer add/remove with the current peer-pool snapshot.
+    peer_change_cb: Arc<std::sync::Mutex<Option<Arc<dyn PeerChangeCallback>>>>,
 }
 
 impl Clone for Communerd {
@@ -225,6 +228,7 @@ impl Clone for Communerd {
             pending_lookups: Arc::clone(&self.pending_lookups),
             calendar: Arc::clone(&self.calendar),
             communerdettes: Arc::clone(&self.communerdettes),
+            peer_change_cb: Arc::clone(&self.peer_change_cb),
         }
     }
 }
@@ -264,6 +268,7 @@ impl Communerd {
             pending_lookups: Arc::new(std::sync::Mutex::new(HashMap::new())),
             calendar: Arc::new(std::sync::RwLock::new(None)),
             communerdettes: Arc::new(DashMap::new()),
+            peer_change_cb: Arc::new(std::sync::Mutex::new(None)),
         }
     }
 
@@ -389,14 +394,40 @@ impl Communerd {
 
     pub async fn add_peer(&self, addr: PeerAddr) {
         self.peer_pool.add_peer(addr).await;
+        self.notify_peer_change().await;
     }
 
     pub async fn remove_peer(&self, addr: &PeerAddr) {
         self.peer_pool.remove_peer(addr).await;
+        self.notify_peer_change().await;
     }
 
     pub async fn get_peers(&self) -> Vec<PeerAddr> {
         self.peer_pool.get_peers().await
+    }
+
+    /// Register a callback that fires after every peer-pool change.
+    ///
+    /// Typically wired by `TimeFamilyServer` so the Calendar can react to
+    /// peer-pool churn (Group 4b mirror discovery). Overwrites any prior
+    /// callback; passing `None` clears it.
+    pub fn set_peer_change_callback(&self, cb: Option<Arc<dyn PeerChangeCallback>>) {
+        *self.peer_change_cb.lock().unwrap() = cb;
+    }
+
+    /// Fire the peer-change callback (if registered) with the current snapshot
+    /// of the peer pool. The snapshot is converted to `foretias_core` PeerAddr
+    /// so Calendar code does not depend on Communerd transport types.
+    async fn notify_peer_change(&self) {
+        let cb = self.peer_change_cb.lock().unwrap().clone();
+        if let Some(cb) = cb {
+            let peers = self.peer_pool.get_peers().await;
+            let core_peers: Vec<CorePeerAddr> = peers
+                .into_iter()
+                .map(|p| CorePeerAddr { json_rpc: p.json_rpc })
+                .collect();
+            cb.on_peer_change(core_peers);
+        }
     }
 
     pub fn config(&self) -> &CommunerdConfig {
@@ -1274,5 +1305,98 @@ mod tests {
         let tbid = Tbid::from_raw([200u8; 96]);
         let line = communerd.line_for_tbid(tbid);
         assert!(!line.shutdown_token().is_cancelled());
+    }
+
+    // ── Group 4b: peer-change callback ──────────────────────────────────────
+
+    /// Captures `on_peer_change` invocations for assertions.
+    #[derive(Default)]
+    struct CaptureCallback {
+        events: std::sync::Mutex<Vec<Vec<CorePeerAddr>>>,
+    }
+
+    impl PeerChangeCallback for CaptureCallback {
+        fn on_peer_change(&self, peers: Vec<CorePeerAddr>) {
+            self.events.lock().unwrap().push(peers);
+        }
+    }
+
+    impl CaptureCallback {
+        fn events(&self) -> Vec<Vec<CorePeerAddr>> {
+            self.events.lock().unwrap().clone()
+        }
+    }
+
+    #[tokio::test]
+    async fn peer_change_callback_fires_on_add_peer() {
+        let communerd = Communerd::new(make_config());
+        let cb = Arc::new(CaptureCallback::default());
+        communerd.set_peer_change_callback(Some(Arc::clone(&cb) as Arc<dyn PeerChangeCallback>));
+
+        let starting = cb.events().len();
+        communerd
+            .add_peer(PeerAddr {
+                json_rpc: "127.0.0.1:7777".into(),
+                peer_id: None,
+                last_seen_ns: 0,
+            })
+            .await;
+
+        let events = cb.events();
+        assert!(
+            events.len() > starting,
+            "add_peer must fire at least one peer-change event"
+        );
+        let latest = events.last().expect("at least one event");
+        assert!(
+            latest.iter().any(|p| p.json_rpc == "127.0.0.1:7777"),
+            "snapshot must include the newly-added peer"
+        );
+    }
+
+    #[tokio::test]
+    async fn peer_change_callback_fires_on_remove_peer() {
+        let communerd = Communerd::new(make_config());
+        let new_peer = PeerAddr {
+            json_rpc: "127.0.0.1:8888".into(),
+            peer_id: None,
+            last_seen_ns: 0,
+        };
+        communerd.add_peer(new_peer.clone()).await;
+
+        let cb = Arc::new(CaptureCallback::default());
+        communerd.set_peer_change_callback(Some(Arc::clone(&cb) as Arc<dyn PeerChangeCallback>));
+
+        communerd.remove_peer(&new_peer).await;
+
+        let events = cb.events();
+        assert!(!events.is_empty(), "remove_peer must fire a peer-change event");
+        let latest = events.last().expect("at least one event");
+        assert!(
+            !latest.iter().any(|p| p.json_rpc == "127.0.0.1:8888"),
+            "snapshot after remove_peer must not include the removed peer"
+        );
+    }
+
+    #[tokio::test]
+    async fn peer_change_callback_can_be_cleared() {
+        let communerd = Communerd::new(make_config());
+        let cb = Arc::new(CaptureCallback::default());
+        communerd.set_peer_change_callback(Some(Arc::clone(&cb) as Arc<dyn PeerChangeCallback>));
+
+        // Clear the callback before any pool change.
+        communerd.set_peer_change_callback(None);
+        communerd
+            .add_peer(PeerAddr {
+                json_rpc: "127.0.0.1:9999".into(),
+                peer_id: None,
+                last_seen_ns: 0,
+            })
+            .await;
+
+        assert!(
+            cb.events().is_empty(),
+            "cleared callback must not receive events"
+        );
     }
 }
