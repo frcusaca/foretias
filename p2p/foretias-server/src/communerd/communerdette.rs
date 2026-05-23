@@ -1336,6 +1336,7 @@ mod tests {
             chronon_ns: 60_000_000_000,
             registered_at_ns: 1_000_000_000,
             capabilities: vec![],
+            signature: Vec::new(),
         }
     }
 

@@ -46,6 +46,11 @@ use libp2p::kad;
 use std::collections::HashMap;
 
 /// Peer registration record stored in the DHT for self-registration and peer discovery.
+///
+/// The `signature` field is an Ed25519 signature over `canonical_payload()` produced
+/// by the TBID owner's signing key. Records without a signature are accepted under
+/// a legacy compatibility window; tighten to required after all peers upgrade
+/// (TODO(post-v0.7): require signature).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PeerRegistrationRecord {
     pub peer_id: String,
@@ -56,25 +61,116 @@ pub struct PeerRegistrationRecord {
     pub registered_at_ns: u64,
     #[serde(default = "default_capabilities")]
     pub capabilities: Vec<PeerCapability>,
+    /// Ed25519 signature over canonical_payload(). `#[serde(default)]` allows
+    /// legacy un-signed records from pre-signing peers to deserialize; the
+    /// consume path treats empty as "legacy" and logs a warn.
+    #[serde(default)]
+    pub signature: Vec<u8>,
 }
 
 fn default_capabilities() -> Vec<PeerCapability> {
     vec![PeerCapability::AttestWilling]
 }
 
-/// Structural validation for a DHT-retrieved PeerRegistrationRecord.
-/// Rejects records with empty or malformed fields before trusting any data.
-fn validate_peer_registration(record: &PeerRegistrationRecord) -> bool {
+/// Stable per-variant discriminant byte for canonical capability encoding.
+/// Changing this is a wire-breaking change.
+fn capability_discriminant(cap: &PeerCapability) -> u8 {
+    match cap {
+        PeerCapability::AttestWilling => 1,
+        PeerCapability::MirrorWilling => 2,
+        PeerCapability::VerifierWilling => 3,
+    }
+}
+
+impl PeerRegistrationRecord {
+    /// Canonical byte representation for signing — fixed field order, no signature.
+    /// Layout (all multi-byte ints little-endian, all string lengths u16-LE):
+    ///   u16 peer_id_len    || peer_id_bytes
+    ///   u16 tbid_len       || tbid_bytes
+    ///   u16 multiaddr_len  || multiaddr_bytes
+    ///   u16 json_rpc_len   || json_rpc_bytes
+    ///   u64 chronon_ns
+    ///   u64 registered_at_ns
+    ///   u16 capability_count || (u8 per capability discriminant)
+    /// Any change to this function is a wire-breaking change.
+    pub fn canonical_payload(&self) -> Vec<u8> {
+        let mut buf = Vec::new();
+        let peer_id = self.peer_id.as_bytes();
+        buf.extend_from_slice(&(peer_id.len() as u16).to_le_bytes());
+        buf.extend_from_slice(peer_id);
+        let tbid = self.tbid.as_bytes();
+        buf.extend_from_slice(&(tbid.len() as u16).to_le_bytes());
+        buf.extend_from_slice(tbid);
+        let multiaddr = self.multiaddr.as_bytes();
+        buf.extend_from_slice(&(multiaddr.len() as u16).to_le_bytes());
+        buf.extend_from_slice(multiaddr);
+        let json_rpc = self.json_rpc.as_bytes();
+        buf.extend_from_slice(&(json_rpc.len() as u16).to_le_bytes());
+        buf.extend_from_slice(json_rpc);
+        buf.extend_from_slice(&self.chronon_ns.to_le_bytes());
+        buf.extend_from_slice(&self.registered_at_ns.to_le_bytes());
+        buf.extend_from_slice(&(self.capabilities.len() as u16).to_le_bytes());
+        for cap in &self.capabilities {
+            buf.push(capability_discriminant(cap));
+        }
+        buf
+    }
+}
+
+/// Structural + cryptographic validation for a DHT-retrieved PeerRegistrationRecord.
+///
+/// Returns Ok(true) for a record that passes both checks, Ok(false) for one that
+/// fails structural or signature validation, and Err for an unexpected crypto error
+/// (caller treats both Ok(false) and Err the same: skip the record with a warn log).
+///
+/// Legacy compatibility (transitional): a record with `signature.is_empty()` is
+/// accepted with a debug log. TODO(post-v0.7): drop the legacy branch and reject.
+#[doc(hidden)]
+pub fn validate_peer_registration(
+    record: &PeerRegistrationRecord,
+    crypto: &dyn CryptoServer,
+) -> Result<bool, NodeError> {
+    // Structural checks (unchanged).
     if record.peer_id.is_empty() {
-        return false;
+        return Ok(false);
     }
     if record.tbid.len() < 64 || record.tbid.chars().any(|c| !c.is_ascii_hexdigit()) {
-        return false;
+        return Ok(false);
     }
     if record.json_rpc.is_empty() {
-        return false;
+        return Ok(false);
     }
-    true
+
+    // Signature check.
+    if record.signature.is_empty() {
+        tracing::debug!(
+            tbid = %record.tbid,
+            "DHT record without signature (pre-signing peer); accepted under legacy compat"
+        );
+        return Ok(true);
+    }
+    let pubkey = match hex::decode(&record.tbid) {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::warn!(tbid = %record.tbid, "DHT record TBID is not valid hex: {e}");
+            return Ok(false);
+        }
+    };
+    if pubkey.len() < 32 {
+        tracing::warn!(tbid = %record.tbid, "DHT record TBID too short for Ed25519 pubkey extraction");
+        return Ok(false);
+    }
+    let canonical = record.canonical_payload();
+    let valid = crypto
+        .verify_with(&pubkey[..32], "Ed25519", &canonical, &record.signature)
+        .map_err(|e| NodeError::Crypto(e))?;
+    if !valid {
+        tracing::warn!(
+            tbid = %record.tbid,
+            "DHT record signature verification failed; discarding"
+        );
+    }
+    Ok(valid)
 }
 
 /// Communerd — all P2P traffic flows through this component.
@@ -493,9 +589,16 @@ impl Communerd {
                     if (&*key.to_vec()).ends_with(b"/peers/v1") {
                         for record in &records {
                             if let Ok(peer_record) = serde_json::from_slice::<PeerRegistrationRecord>(&record.value) {
-                                if !validate_peer_registration(&peer_record) {
-                                    tracing::warn!(component = "communerd", peer_id = %peer_record.peer_id, "communerd: DHT peer record failed structural validation, skipping");
-                                    continue;
+                                match validate_peer_registration(&peer_record, crypto.as_ref()) {
+                                    Ok(true) => {}
+                                    Ok(false) => {
+                                        tracing::warn!(component = "communerd", peer_id = %peer_record.peer_id, "communerd: DHT peer record failed structural or signature validation, skipping");
+                                        continue;
+                                    }
+                                    Err(e) => {
+                                        tracing::warn!(component = "communerd", peer_id = %peer_record.peer_id, error = %e, "communerd: DHT peer record validation errored, skipping");
+                                        continue;
+                                    }
                                 }
                                 let peer_addr = PeerAddr {
                                     json_rpc: peer_record.json_rpc.clone(),
@@ -513,9 +616,16 @@ impl Communerd {
                         if key_str.contains("/tbid/") {
                             for record in &records {
                                 if let Ok(peer_record) = serde_json::from_slice::<PeerRegistrationRecord>(&record.value) {
-                                    if !validate_peer_registration(&peer_record) {
-                                        tracing::warn!(component = "communerd", tbid = %peer_record.tbid, "communerd: DHT TBID record failed structural validation, skipping");
-                                        continue;
+                                    match validate_peer_registration(&peer_record, crypto.as_ref()) {
+                                        Ok(true) => {}
+                                        Ok(false) => {
+                                            tracing::warn!(component = "communerd", tbid = %peer_record.tbid, "communerd: DHT TBID record failed structural or signature validation, skipping");
+                                            continue;
+                                        }
+                                        Err(e) => {
+                                            tracing::warn!(component = "communerd", tbid = %peer_record.tbid, error = %e, "communerd: DHT TBID record validation errored, skipping");
+                                            continue;
+                                        }
                                     }
                                     let tbid_hex = peer_record.tbid.clone();
                                     tbid_index.write().unwrap().insert(tbid_hex.clone(), peer_record.clone());
@@ -524,7 +634,14 @@ impl Communerd {
                             }
                             if let Some(sender) = pending_lookups.lock().unwrap().remove(&key) {
                                 let result = records.iter().find_map(|r| {
-                                    serde_json::from_slice::<PeerRegistrationRecord>(&r.value).ok().filter(|rec| validate_peer_registration(rec))
+                                    serde_json::from_slice::<PeerRegistrationRecord>(&r.value)
+                                        .ok()
+                                        .filter(|rec| {
+                                            matches!(
+                                                validate_peer_registration(rec, crypto.as_ref()),
+                                                Ok(true)
+                                            )
+                                        })
                                 });
                                 let _ = sender.send(result);
                             }
@@ -648,9 +765,12 @@ impl Communerd {
         let _ = cmd_tx.send(SwarmCommand::Bootstrap);
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-        // Step 4: Self-register (PUT record)
+        // Step 4: Self-register (PUT record).
+        // Build the record with empty signature, sign canonical_payload, then
+        // populate the signature field before serialization. Both DHT records
+        // (peers/v1 and tbid/v1) carry the same signed PeerRegistrationRecord.
         let key = kad::RecordKey::new(&format!("/foretias/{}/peers/v1", namespace));
-        let peer_record = PeerRegistrationRecord {
+        let mut peer_record = PeerRegistrationRecord {
             peer_id: peer_id.to_string(),
             tbid: tbid.to_hex(),
             multiaddr: my_multiaddr.to_string(),
@@ -658,7 +778,15 @@ impl Communerd {
             chronon_ns,
             registered_at_ns: self.clock.now_ns().unwrap_or(0),
             capabilities: vec![PeerCapability::AttestWilling],
+            signature: Vec::new(),
         };
+        let canonical = peer_record.canonical_payload();
+        let sig = self
+            .crypto
+            .sign(&canonical)
+            .map_err(|e| NodeError::Internal(format!("DHT record sign: {e}")))?;
+        peer_record.signature = sig.bytes.to_vec();
+
         let record = kad::Record {
             key: key.clone(),
             value: serde_json::to_vec(&peer_record)
@@ -693,12 +821,13 @@ impl Communerd {
         let ma_arc = self._local_multiaddr_arc.clone();
         let pid = peer_id;
         let clock_refresh = Arc::clone(&self.clock);
+        let crypto_refresh = Arc::clone(&self.crypto);
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
             loop {
                 interval.tick().await;
                 Self::refresh_self_registration(
-                    cmd_tx_clone.clone(), ns.clone(), tbid_arc, chronon, &rpc, ma_arc.clone(), pid, Arc::clone(&clock_refresh),
+                    cmd_tx_clone.clone(), ns.clone(), tbid_arc, chronon, &rpc, ma_arc.clone(), pid, Arc::clone(&clock_refresh), Arc::clone(&crypto_refresh),
                 ).await;
             }
         });
@@ -715,6 +844,7 @@ impl Communerd {
         local_multiaddr: Arc<std::sync::Mutex<Option<libp2p::Multiaddr>>>,
         peer_id: libp2p::PeerId,
         clock: Arc<dyn Clock>,
+        crypto: Arc<dyn CryptoServer>,
     ) {
         let ns = namespace.lock().unwrap().clone();
         let key = kad::RecordKey::new(&format!("/foretias/{}/peers/v1", ns));
@@ -722,7 +852,7 @@ impl Communerd {
             Some(m) => m.to_string(),
             None => return,
         };
-        let peer_record = PeerRegistrationRecord {
+        let mut peer_record = PeerRegistrationRecord {
             peer_id: peer_id.to_string(),
             tbid: tbid.to_hex(),
             multiaddr: ma,
@@ -730,7 +860,18 @@ impl Communerd {
             chronon_ns,
             registered_at_ns: clock.now_ns().unwrap_or(0),
             capabilities: vec![PeerCapability::AttestWilling],
+            signature: Vec::new(),
         };
+        let canonical = peer_record.canonical_payload();
+        match crypto.sign(&canonical) {
+            Ok(sig) => {
+                peer_record.signature = sig.bytes.to_vec();
+            }
+            Err(e) => {
+                tracing::warn!("failed to sign refresh peer record: {e}");
+                return;
+            }
+        }
         let record = match serde_json::to_vec(&peer_record) {
             Ok(v) => kad::Record {
                 key: key.clone(),
