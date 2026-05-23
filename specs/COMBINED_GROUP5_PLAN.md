@@ -148,10 +148,10 @@
 
 ### Step 0 — Human decision gate
 
-- [ ] **(@human)** Choose Option A, B, or C from spec §4.1
-- [ ] **(@human)** Record decision and brief rationale below:
-      `Decision: ___________`
-      `Rationale: ___________`
+- [x] **(@human)** Choose Option A, B, or C from spec §4.1
+- [x] **(@human)** Record decision and brief rationale below:
+      `Decision: Option B — mTLS`
+      `Rationale: Stronger security than bearer token; requires dedicated mTLS spec/plan (out of scope here).`
 
 ### Steps if A (Bearer Token) was chosen
 
@@ -201,6 +201,6 @@
 - [x] `g5-b-crash-recovery` merged 2026-05-22: corrupt `.tmp` is removed
 - [x] `g5-d-agents-rules` merged 2026-05-22: AGENTS.md gap-fill complete (4 rules added)
 - [ ] `g5-a-clock-inject` merged: zero `SystemTime::now()` calls outside `clock.rs`
-- [ ] `g5-c-rpc-auth` decision made; if A or B, implementation merged
+- [x] `g5-c-rpc-auth` decision made: Option B (mTLS) — dedicated mTLS spec required; g5-c deferred to separate plan
 - [ ] `cargo test --workspace` passes deterministically (two runs identical)
 - [ ] `cargo build --workspace` zero warnings
