@@ -1,21 +1,22 @@
-//! Calendar task queue — Group 4b Phase 4b.2 scaffold.
+//! Calendar task queue — Group 4b Phases 4b.2 + 4b.4.
 //!
 //! Calendar's lower-priority responsibilities (priority 4 = persist family's
 //! calendar via mirrors; priority 5 = mirror other calendars' ticks) are
 //! driven by a bounded `tokio::sync::mpsc` channel and a small worker pool.
 //!
-//! This module defines the `CalendarTask` enum and the worker spawning
-//! plumbing. Concrete handler implementations land in Phase 4b.4 — for
-//! now, workers dispatch to a placeholder handler that records what it
-//! received and emits a debug log. That is sufficient to wire up calling
-//! code (PeerChangeCallback, integration tests) without coupling to the
-//! still-to-be-built mirror RPC stack.
+//! Phase 4b.2 introduced the `CalendarTask` enum and the worker spawning
+//! plumbing. Phase 4b.4 wires the workers to a `MirrorDispatcher` trait so
+//! they can make real RPC calls without coupling Calendar to Communerd's
+//! transport stack. Communerd implements the trait; Calendar receives an
+//! `Arc<dyn MirrorDispatcher>` via `start_task_queue_with_dispatcher`.
 
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use foretias_core::foretias::callbacks::PeerAddr;
+use foretias_core::foretias::tick::ChrononRecord;
 use tokio::sync::mpsc;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 /// Default size of the Calendar worker pool. Each worker is a long-lived
 /// `tokio::spawn` future that pulls one task at a time from the channel.
@@ -83,6 +84,88 @@ impl CalendarTask {
 /// shrinks.
 pub type CalendarTaskSender = mpsc::UnboundedSender<CalendarTask>;
 
+/// MirrorDispatcher — the narrow surface Calendar's task workers use to make
+/// network calls. Communerd implements this; Calendar holds it as
+/// `Arc<dyn MirrorDispatcher>` so the worker pool can stay decoupled from
+/// the transport stack.
+///
+/// All methods are async and bounded — implementations apply per-call
+/// timeouts. The trait intentionally only exposes the small set of
+/// operations needed by the six `CalendarTask` variants.
+#[async_trait]
+pub trait MirrorDispatcher: Send + Sync {
+    /// Snapshot the currently-known peer pool. Source of candidates for
+    /// `FindNewMirror`. Cheap; safe to call frequently.
+    async fn known_peers(&self) -> Vec<PeerAddr>;
+
+    /// "I have TBID X, will you mirror?" — Source → Candidate.
+    /// Returns Ok(true) if the candidate accepted, Ok(false) if declined.
+    async fn mirror_announce(
+        &self,
+        peer: &PeerAddr,
+        local_tbid_hex: &str,
+    ) -> Result<bool, String>;
+
+    /// Stream a chunk of locally-authoritative ChrononRecords to a mirror.
+    /// Returns the number the mirror reports as accepted, or an error.
+    async fn history_dump_chunk(
+        &self,
+        peer: &PeerAddr,
+        local_tbid_hex: &str,
+        records: Vec<ChrononRecord>,
+    ) -> Result<u64, String>;
+
+    /// Mark end-of-dump. Returns the mirror's reported tick_count.
+    async fn history_dump_complete(
+        &self,
+        peer: &PeerAddr,
+        local_tbid_hex: &str,
+        total_records: u64,
+    ) -> Result<u64, String>;
+
+    /// Liveness probe. Returns Ok(tick_count) on success; Err on RPC failure.
+    /// Drives `ExploreMirror`'s consecutive-failure counter.
+    async fn mirror_health_check(
+        &self,
+        peer: &PeerAddr,
+        local_tbid_hex: &str,
+    ) -> Result<u64, String>;
+}
+
+/// State the worker pool keeps between tasks: which peers are active
+/// mirrors, the local TBID being mirrored, and a small consecutive-failure
+/// counter per mirror for the `ExploreMirror` task.
+#[derive(Debug, Default)]
+pub struct MirrorState {
+    /// Hex TBID of the local TimeFamily being mirrored. Set by
+    /// `Calendar::set_local_tbid` before the queue is useful.
+    pub local_tbid_hex: parking_lot::RwLock<String>,
+    /// Active mirrors that have accepted the relationship.
+    pub mirrors: parking_lot::RwLock<std::collections::HashSet<String>>,
+    /// Per-mirror consecutive failures from `mirror_health_check`. After
+    /// `MAX_HEALTH_FAILURES`, the worker enqueues `ExpireMirror`.
+    pub health_failures:
+        parking_lot::RwLock<std::collections::HashMap<String, u32>>,
+    /// Lower-bound mirror count target. Below this, `ExpireMirror` enqueues
+    /// a fresh `FindNewMirror`.
+    pub min_mirrors: parking_lot::RwLock<usize>,
+    /// Upper-bound mirror count target. `FindNewMirror` stops when reached.
+    pub target_mirrors: parking_lot::RwLock<usize>,
+}
+
+/// Threshold for `mirror_health_check` failures before a mirror is expired.
+pub const MAX_HEALTH_FAILURES: u32 = 3;
+
+/// Default mirror count target. Calendars can override via
+/// `set_target_mirrors` after `start_task_queue_with_dispatcher`.
+pub const DEFAULT_MIN_MIRRORS: usize = 1;
+pub const DEFAULT_TARGET_MIRRORS: usize = 3;
+
+/// Bounded chunk size for history dumps. Spec §3.3 target: 64 records or
+/// 1 MB, whichever comes first. We use the record count here; the per-byte
+/// cap is enforced by the recipient via MAX_CALENDAR_SLICE_COUNT.
+pub const DUMP_CHUNK_SIZE: usize = 64;
+
 /// Internal handle returned by `spawn_workers` so callers can join the pool
 /// during shutdown (currently unused — workers run for the lifetime of the
 /// process; Phase 4b.6 wires graceful shutdown).
@@ -91,19 +174,30 @@ pub struct WorkerPool {
     pub handles: Vec<tokio::task::JoinHandle<()>>,
 }
 
-/// Spawn `worker_count` worker tasks that all pull from `rx` and dispatch
-/// to the placeholder handler. The returned `WorkerPool` owns the join
-/// handles so callers can shut down the workers later.
+/// Per-worker context: dispatcher, mirror state, and a self-reference to the
+/// task sender so handlers can enqueue follow-up work.
+#[derive(Clone)]
+pub struct WorkerContext {
+    pub dispatcher: Option<Arc<dyn MirrorDispatcher>>,
+    pub mirror_state: Arc<MirrorState>,
+    pub task_tx: CalendarTaskSender,
+    pub calendar_lookup:
+        Arc<parking_lot::RwLock<foretias_core::foretias::Calendar>>,
+}
+
+/// Spawn `worker_count` worker tasks that pull from `rx`, dispatch via the
+/// provided context (with optional MirrorDispatcher). The returned
+/// `WorkerPool` owns the join handles so callers can shut down later.
 pub fn spawn_workers(
     mut rx: mpsc::UnboundedReceiver<CalendarTask>,
     worker_count: usize,
+    ctx: WorkerContext,
 ) -> WorkerPool {
-    // mpsc::UnboundedReceiver is single-consumer; share via Arc<Mutex<...>>
-    // so multiple workers can pull from the same channel.
     let rx = Arc::new(tokio::sync::Mutex::new(rx_take(&mut rx)));
     let mut handles = Vec::with_capacity(worker_count);
     for worker_id in 0..worker_count {
         let rx = Arc::clone(&rx);
+        let ctx = ctx.clone();
         let handle = tokio::spawn(async move {
             loop {
                 let task_opt = {
@@ -114,7 +208,7 @@ pub fn spawn_workers(
                     debug!(worker_id, "calendar task channel closed; worker exiting");
                     break;
                 };
-                handle_task(worker_id, task).await;
+                handle_task(worker_id, task, &ctx).await;
             }
         });
         handles.push(handle);
@@ -122,40 +216,247 @@ pub fn spawn_workers(
     WorkerPool { handles }
 }
 
-/// Workaround helper: move the receiver out of its existing position. Required
-/// because `mpsc::UnboundedReceiver` is `!Clone` and we want to share it
-/// across workers via `Arc<Mutex<...>>`.
+/// Workaround helper: move the receiver out of its existing position.
 fn rx_take(rx: &mut mpsc::UnboundedReceiver<CalendarTask>) -> mpsc::UnboundedReceiver<CalendarTask> {
-    // Replace `rx` with a placeholder receiver — the placeholder is
-    // immediately dropped after this function returns. Callers should
-    // not use the original `rx` after calling this.
     let (_placeholder_tx, placeholder_rx) = mpsc::unbounded_channel();
     std::mem::replace(rx, placeholder_rx)
 }
 
-/// Placeholder dispatch — Phase 4b.4 replaces each arm with the real handler.
-///
-/// For now we just log; an integration test can subscribe to tracing output
-/// or wire a real handler via a Phase 4b.4 follow-up.
-async fn handle_task(worker_id: usize, task: CalendarTask) {
+/// Real dispatch — Phase 4b.4. Each variant has its own handler function
+/// to keep this top-level dispatch readable.
+async fn handle_task(worker_id: usize, task: CalendarTask, ctx: &WorkerContext) {
     debug!(
         worker_id,
         task_kind = task.kind(),
-        task = ?task,
-        "calendar worker received task (placeholder dispatch — full implementation pending Phase 4b.4)"
+        "calendar worker dispatching task"
     );
-    // Intentionally no-op: each handler will get its own real implementation
-    // when Phase 4b.4 lands. The placeholder ensures the channel and worker
-    // pool plumbing is exercisable by tests and PeerChangeCallback integration
-    // even before the RPC stack is in place.
+    match task {
+        CalendarTask::FindNewMirror => handle_find_new_mirror(worker_id, ctx).await,
+        CalendarTask::InitiateDump { mirror } => {
+            handle_initiate_dump(worker_id, mirror, ctx).await
+        }
+        CalendarTask::StartStream { mirror } => {
+            // Phase 4b.4c: subscribe to TickObserver and push via stream_tick.
+            // Currently a structural stub — InitiateDump covers the initial
+            // history transfer; ongoing streaming relies on Chronomatter's
+            // existing stream_tick path which already runs on tick advance.
+            debug!(worker_id, mirror = %mirror.json_rpc, "start_stream placeholder (Phase 4b.4c follow-up)");
+        }
+        CalendarTask::ExploreMirror { mirror } => {
+            handle_explore_mirror(worker_id, mirror, ctx).await
+        }
+        CalendarTask::ExpireMirror { mirror } => {
+            handle_expire_mirror(worker_id, mirror, ctx).await
+        }
+        CalendarTask::DoAttestation { peer } => {
+            // Phase 4b.4d: move existing mutual-attestation into this task.
+            // Existing path in Chronomatter remains the source of truth until
+            // we refactor it; this handler is a structural placeholder so the
+            // task variant is wired end-to-end.
+            debug!(worker_id, peer = %peer.json_rpc, "do_attestation placeholder (Phase 4b.4d follow-up)");
+        }
+    }
 }
 
-/// Convenience: build the channel + spawn the default-sized worker pool.
-/// Returns the sender (held by Calendar) and the worker pool (held for shutdown).
-pub fn start_default_pool() -> (CalendarTaskSender, WorkerPool) {
+async fn handle_find_new_mirror(worker_id: usize, ctx: &WorkerContext) {
+    let Some(dispatcher) = ctx.dispatcher.as_ref() else {
+        debug!(worker_id, "find_new_mirror: no dispatcher wired; skipping");
+        return;
+    };
+    let target = *ctx.mirror_state.target_mirrors.read();
+    let current = ctx.mirror_state.mirrors.read().len();
+    if current >= target {
+        debug!(worker_id, current, target, "find_new_mirror: at target; skipping");
+        return;
+    }
+
+    let local_tbid = ctx.mirror_state.local_tbid_hex.read().clone();
+    if local_tbid.is_empty() {
+        warn!(worker_id, "find_new_mirror: local_tbid not set on Calendar; cannot announce");
+        return;
+    }
+
+    let candidates = dispatcher.known_peers().await;
+    let already_mirroring = ctx.mirror_state.mirrors.read().clone();
+
+    for peer in candidates {
+        if already_mirroring.contains(&peer.json_rpc) {
+            continue;
+        }
+        match dispatcher.mirror_announce(&peer, &local_tbid).await {
+            Ok(true) => {
+                info!(worker_id, peer = %peer.json_rpc, "mirror_announce accepted; enrolling and enqueueing InitiateDump");
+                ctx.mirror_state
+                    .mirrors
+                    .write()
+                    .insert(peer.json_rpc.clone());
+                let _ = enqueue(
+                    &ctx.task_tx,
+                    CalendarTask::InitiateDump { mirror: peer.clone() },
+                );
+                if ctx.mirror_state.mirrors.read().len()
+                    >= *ctx.mirror_state.target_mirrors.read()
+                {
+                    break;
+                }
+            }
+            Ok(false) => {
+                debug!(worker_id, peer = %peer.json_rpc, "mirror_announce declined; trying next");
+            }
+            Err(e) => {
+                warn!(worker_id, peer = %peer.json_rpc, "mirror_announce failed: {e}");
+            }
+        }
+    }
+}
+
+async fn handle_initiate_dump(worker_id: usize, mirror: PeerAddr, ctx: &WorkerContext) {
+    let Some(dispatcher) = ctx.dispatcher.as_ref() else {
+        debug!(worker_id, "initiate_dump: no dispatcher wired; skipping");
+        return;
+    };
+    let local_tbid = ctx.mirror_state.local_tbid_hex.read().clone();
+    if local_tbid.is_empty() {
+        warn!(worker_id, mirror = %mirror.json_rpc, "initiate_dump: local_tbid not set");
+        return;
+    }
+
+    // Snapshot the calendar — clone the records out of the read lock so we
+    // don't hold the lock across the dispatcher's awaits.
+    let records: Vec<ChrononRecord> = {
+        let cal = ctx.calendar_lookup.read();
+        cal.ticks.clone()
+    };
+    if records.is_empty() {
+        debug!(worker_id, mirror = %mirror.json_rpc, "initiate_dump: no records to send");
+        let _ = dispatcher
+            .history_dump_complete(&mirror, &local_tbid, 0)
+            .await;
+        return;
+    }
+
+    let total = records.len();
+    let mut sent: u64 = 0;
+    for chunk in records.chunks(DUMP_CHUNK_SIZE) {
+        match dispatcher
+            .history_dump_chunk(&mirror, &local_tbid, chunk.to_vec())
+            .await
+        {
+            Ok(accepted) => sent += accepted,
+            Err(e) => {
+                warn!(worker_id, mirror = %mirror.json_rpc, "history_dump_chunk failed: {e}; aborting dump");
+                return;
+            }
+        }
+    }
+    match dispatcher
+        .history_dump_complete(&mirror, &local_tbid, total as u64)
+        .await
+    {
+        Ok(reported_count) => {
+            info!(worker_id, mirror = %mirror.json_rpc, sent, reported_count, "initiate_dump complete; enqueueing StartStream");
+            let _ = enqueue(
+                &ctx.task_tx,
+                CalendarTask::StartStream { mirror: mirror.clone() },
+            );
+        }
+        Err(e) => {
+            warn!(worker_id, mirror = %mirror.json_rpc, "history_dump_complete failed: {e}");
+        }
+    }
+}
+
+async fn handle_explore_mirror(worker_id: usize, mirror: PeerAddr, ctx: &WorkerContext) {
+    let Some(dispatcher) = ctx.dispatcher.as_ref() else {
+        debug!(worker_id, "explore_mirror: no dispatcher wired; skipping");
+        return;
+    };
+    let local_tbid = ctx.mirror_state.local_tbid_hex.read().clone();
+    if local_tbid.is_empty() {
+        return;
+    }
+    match dispatcher
+        .mirror_health_check(&mirror, &local_tbid)
+        .await
+    {
+        Ok(tick_count) => {
+            debug!(worker_id, mirror = %mirror.json_rpc, tick_count, "mirror health ok");
+            ctx.mirror_state
+                .health_failures
+                .write()
+                .insert(mirror.json_rpc.clone(), 0);
+        }
+        Err(e) => {
+            let failures = {
+                let mut guard = ctx.mirror_state.health_failures.write();
+                let entry = guard.entry(mirror.json_rpc.clone()).or_insert(0);
+                *entry += 1;
+                *entry
+            };
+            warn!(worker_id, mirror = %mirror.json_rpc, failures, "mirror_health_check failed: {e}");
+            if failures >= MAX_HEALTH_FAILURES {
+                info!(worker_id, mirror = %mirror.json_rpc, failures, "mirror exceeded MAX_HEALTH_FAILURES; expiring");
+                let _ = enqueue(
+                    &ctx.task_tx,
+                    CalendarTask::ExpireMirror { mirror: mirror.clone() },
+                );
+            }
+        }
+    }
+}
+
+async fn handle_expire_mirror(worker_id: usize, mirror: PeerAddr, ctx: &WorkerContext) {
+    {
+        let mut mirrors = ctx.mirror_state.mirrors.write();
+        if !mirrors.remove(&mirror.json_rpc) {
+            debug!(worker_id, mirror = %mirror.json_rpc, "expire_mirror: not active; noop");
+            return;
+        }
+    }
+    ctx.mirror_state
+        .health_failures
+        .write()
+        .remove(&mirror.json_rpc);
+    info!(worker_id, mirror = %mirror.json_rpc, "mirror expired");
+    // If the active mirror count fell below min_mirrors, enqueue a fresh
+    // FindNewMirror to refill the pool.
+    let active = ctx.mirror_state.mirrors.read().len();
+    let min = *ctx.mirror_state.min_mirrors.read();
+    if active < min {
+        debug!(worker_id, active, min, "active mirrors below min; enqueueing FindNewMirror");
+        let _ = enqueue(&ctx.task_tx, CalendarTask::FindNewMirror);
+    }
+}
+
+/// Convenience: build the channel + spawn the default-sized worker pool with
+/// no dispatcher (placeholder mode — used by Phase 4b.2 tests that don't
+/// exercise the network path).
+pub fn start_default_pool(
+    calendar_lookup: Arc<parking_lot::RwLock<foretias_core::foretias::Calendar>>,
+) -> (CalendarTaskSender, WorkerPool, Arc<MirrorState>) {
+    start_default_pool_with_dispatcher(calendar_lookup, None)
+}
+
+/// Build the channel + spawn the default-sized worker pool with an optional
+/// `MirrorDispatcher`. Returns the sender, the worker pool, and the
+/// MirrorState handle (so callers can set local_tbid_hex, target_mirrors,
+/// inspect active mirrors, etc.).
+pub fn start_default_pool_with_dispatcher(
+    calendar_lookup: Arc<parking_lot::RwLock<foretias_core::foretias::Calendar>>,
+    dispatcher: Option<Arc<dyn MirrorDispatcher>>,
+) -> (CalendarTaskSender, WorkerPool, Arc<MirrorState>) {
     let (tx, rx) = mpsc::unbounded_channel();
-    let pool = spawn_workers(rx, DEFAULT_WORKER_COUNT);
-    (tx, pool)
+    let mirror_state = Arc::new(MirrorState::default());
+    *mirror_state.min_mirrors.write() = DEFAULT_MIN_MIRRORS;
+    *mirror_state.target_mirrors.write() = DEFAULT_TARGET_MIRRORS;
+    let ctx = WorkerContext {
+        dispatcher,
+        mirror_state: Arc::clone(&mirror_state),
+        task_tx: tx.clone(),
+        calendar_lookup,
+    };
+    let pool = spawn_workers(rx, DEFAULT_WORKER_COUNT, ctx);
+    (tx, pool, mirror_state)
 }
 
 /// Convenience: enqueue a task. Returns Err if the receiver has been dropped
@@ -213,7 +514,11 @@ mod tests {
 
     #[tokio::test]
     async fn workers_drain_enqueued_tasks() {
-        let (tx, _pool) = start_default_pool();
+        use foretias_core::foretias::types::Tbid;
+        let cal = Arc::new(parking_lot::RwLock::new(
+            foretias_core::foretias::Calendar::new(Tbid::default(), "queue-test"),
+        ));
+        let (tx, _pool, _state) = start_default_pool(cal);
         for i in 0..10 {
             enqueue(
                 &tx,
@@ -227,9 +532,9 @@ mod tests {
         }
         // Give workers a moment to drain.
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        // No assertion on side-effects — Phase 4b.4 will add observable
-        // behavior. For now this test just confirms the channel and workers
-        // accept and process all variants without panic or deadlock.
+        // No assertion on side-effects — workers run the real Phase 4b.4
+        // handlers but in placeholder mode (no dispatcher), so all variants
+        // are processed without panic or deadlock.
     }
 
     #[tokio::test]

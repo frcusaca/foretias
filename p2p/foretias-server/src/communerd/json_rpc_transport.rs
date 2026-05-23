@@ -76,7 +76,10 @@ impl PeerTransport for JsonRpcTransport {
 }
 
 impl JsonRpcTransport {
-    async fn json_rpc_call(
+    /// Generic JSON-RPC dispatch over Noise_XX TCP. Made `pub(crate)` in
+    /// Phase 4b.4 so MirrorDispatcher can use it for the new mirror RPC
+    /// methods that don't fit the legacy stamp/route/slice/ping shape.
+    pub(crate) async fn json_rpc_call(
         &self,
         peer: &PeerAddr,
         method: &str,

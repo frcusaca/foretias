@@ -1015,6 +1015,137 @@ impl Communerd {
     }
 }
 
+// ── Group 4b: MirrorDispatcher implementation ─────────────────────────────
+
+#[async_trait::async_trait]
+impl crate::calendar::MirrorDispatcher for Communerd {
+    async fn known_peers(&self) -> Vec<foretias_core::foretias::callbacks::PeerAddr> {
+        self.peer_pool
+            .get_peers()
+            .await
+            .into_iter()
+            .filter(|p| !p.json_rpc.is_empty())
+            .map(|p| foretias_core::foretias::callbacks::PeerAddr {
+                json_rpc: p.json_rpc,
+            })
+            .collect()
+    }
+
+    async fn mirror_announce(
+        &self,
+        peer: &foretias_core::foretias::callbacks::PeerAddr,
+        local_tbid_hex: &str,
+    ) -> Result<bool, String> {
+        let resp = mirror_rpc(
+            &self.json_rpc_transport(),
+            peer,
+            "mirror_announce",
+            serde_json::json!({ "tbid": local_tbid_hex }),
+        )
+        .await?;
+        Ok(resp
+            .get("status")
+            .and_then(|s| s.as_str())
+            .map(|s| s == "accept")
+            .unwrap_or(false))
+    }
+
+    async fn history_dump_chunk(
+        &self,
+        peer: &foretias_core::foretias::callbacks::PeerAddr,
+        local_tbid_hex: &str,
+        records: Vec<ChrononRecord>,
+    ) -> Result<u64, String> {
+        let resp = mirror_rpc(
+            &self.json_rpc_transport(),
+            peer,
+            "history_dump_chunk",
+            serde_json::json!({
+                "tbid": local_tbid_hex,
+                "records": records,
+            }),
+        )
+        .await?;
+        Ok(resp
+            .get("accepted_count")
+            .and_then(|c| c.as_u64())
+            .unwrap_or(0))
+    }
+
+    async fn history_dump_complete(
+        &self,
+        peer: &foretias_core::foretias::callbacks::PeerAddr,
+        local_tbid_hex: &str,
+        total_records: u64,
+    ) -> Result<u64, String> {
+        let resp = mirror_rpc(
+            &self.json_rpc_transport(),
+            peer,
+            "history_dump_complete",
+            serde_json::json!({
+                "tbid": local_tbid_hex,
+                "total_records": total_records,
+            }),
+        )
+        .await?;
+        Ok(resp
+            .get("tick_count")
+            .and_then(|c| c.as_u64())
+            .unwrap_or(0))
+    }
+
+    async fn mirror_health_check(
+        &self,
+        peer: &foretias_core::foretias::callbacks::PeerAddr,
+        local_tbid_hex: &str,
+    ) -> Result<u64, String> {
+        let resp = mirror_rpc(
+            &self.json_rpc_transport(),
+            peer,
+            "mirror_health_check",
+            serde_json::json!({ "tbid": local_tbid_hex }),
+        )
+        .await?;
+        Ok(resp
+            .get("tick_count")
+            .and_then(|c| c.as_u64())
+            .unwrap_or(0))
+    }
+}
+
+impl Communerd {
+    /// Borrow the JsonRpcTransport for direct RPC use. Used by
+    /// MirrorDispatcher to invoke methods that don't fit the legacy
+    /// `PeerTransport` surface (mirror_announce, history_dump_*, etc.).
+    fn json_rpc_transport(&self) -> Arc<JsonRpcTransport> {
+        // Concrete transport — for MirrorDispatcher we always want the
+        // direct Noise_XX TCP path because mirror methods are not yet
+        // wired into the libp2p request_response surface.
+        Arc::new(JsonRpcTransport::new(
+            self.config.mutual_attest.request_timeout_secs.max(1),
+        ))
+    }
+}
+
+/// Issue a JSON-RPC call via the Noise_XX TCP transport and return the
+/// "result" object on success.
+async fn mirror_rpc(
+    transport: &JsonRpcTransport,
+    peer: &foretias_core::foretias::callbacks::PeerAddr,
+    method: &str,
+    params: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let transport_peer = PeerAddr {
+        json_rpc: peer.json_rpc.clone(),
+        peer_id: None,
+        last_seen_ns: 0,
+    };
+    transport
+        .json_rpc_call(&transport_peer, method, params)
+        .await
+        .map_err(|e| format!("{e}"))
+}
+
 // ── Phase 3.3: CommunerdetteHost trait implementation ────────────────────
 
 #[async_trait::async_trait]

@@ -214,6 +214,18 @@ impl TimeFamilyServer {
         self.chronomatter.start_daemon();
         if let Some(ref communerd) = self.communerd {
             communerd.start_liveness_pings();
+            // Group 4b: wire the Calendar's task queue to use Communerd as
+            // its MirrorDispatcher. Idempotent — starting twice replaces
+            // the existing pool but keeps the channel open.
+            if !self.calendar.task_queue_started() {
+                let dispatcher: Arc<dyn crate::calendar::MirrorDispatcher> =
+                    Arc::clone(communerd) as Arc<dyn crate::calendar::MirrorDispatcher>;
+                let _state = self.calendar.start_task_queue_with_dispatcher(dispatcher);
+                tracing::info!(
+                    component = "server",
+                    "calendar task queue wired with Communerd MirrorDispatcher"
+                );
+            }
         }
     }
 

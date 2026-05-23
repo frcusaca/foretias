@@ -33,7 +33,10 @@ use tracing::{debug, info};
 
 pub use foretias_core::foretias::callbacks::PeerChangeCallback;
 pub use mirror::{MirrorStore, compute_hash_sanity};
-pub use task_queue::{CalendarTask, CalendarTaskSender, WorkerPool, DEFAULT_WORKER_COUNT};
+pub use task_queue::{
+    CalendarTask, CalendarTaskSender, MirrorDispatcher, MirrorState, WorkerPool,
+    DEFAULT_WORKER_COUNT,
+};
 
 pub struct Calendar {
     inner: Arc<RwLock<CoreCalendar>>,
@@ -45,6 +48,10 @@ pub struct Calendar {
     /// Owned worker pool handles, kept here so Calendar drives the pool's
     /// lifetime. Phase 4b.6 will wire graceful shutdown through this field.
     worker_pool: std::sync::Mutex<Option<WorkerPool>>,
+    /// Mirror-state handle returned by `start_default_pool_with_dispatcher`.
+    /// Callers can set the local TBID hex, target/min mirror counts, and
+    /// inspect the active mirror set. `None` until the queue is started.
+    mirror_state: std::sync::Mutex<Option<Arc<MirrorState>>>,
 }
 
 impl Calendar {
@@ -55,6 +62,7 @@ impl Calendar {
             tbn: tbn.to_string(),
             task_tx: std::sync::Mutex::new(None),
             worker_pool: std::sync::Mutex::new(None),
+            mirror_state: std::sync::Mutex::new(None),
         }
     }
 
@@ -68,22 +76,57 @@ impl Calendar {
             tbn,
             task_tx: std::sync::Mutex::new(None),
             worker_pool: std::sync::Mutex::new(None),
+            mirror_state: std::sync::Mutex::new(None),
         })
     }
 
-    /// Start the Group 4b task queue: spawn the default-sized worker pool
-    /// and store the sender so `enqueue_task` becomes operational. Calling
-    /// twice replaces the existing pool's sender (old workers run until the
-    /// previous channel drains, then exit).
+    /// Start the Group 4b task queue in placeholder mode (no MirrorDispatcher).
+    /// Useful for tests of the queue plumbing that don't exercise network
+    /// behavior. Production callers should use `start_task_queue_with_dispatcher`.
     pub fn start_task_queue(&self) {
-        let (tx, pool) = task_queue::start_default_pool();
+        let (tx, pool, state) = task_queue::start_default_pool(self.inner());
+        // The mirror state carries the local TBID — populate it from the
+        // calendar's current TBID so worker handlers can address themselves.
+        let local_tbid = self.tbid().to_hex();
+        *state.local_tbid_hex.write() = local_tbid;
         *self.task_tx.lock().unwrap() = Some(tx);
         *self.worker_pool.lock().unwrap() = Some(pool);
+        *self.mirror_state.lock().unwrap() = Some(state);
         debug!(
             component = "calendar",
             worker_count = task_queue::DEFAULT_WORKER_COUNT,
-            "calendar task queue started"
+            "calendar task queue started (placeholder mode)"
         );
+    }
+
+    /// Start the Group 4b task queue with a `MirrorDispatcher`. This is the
+    /// production wiring: TimeFamilyServer passes Communerd as the
+    /// dispatcher so worker handlers can make real RPC calls. Returns the
+    /// `MirrorState` Arc so the caller can adjust target/min mirror counts
+    /// or read the active mirror set for diagnostics.
+    pub fn start_task_queue_with_dispatcher(
+        &self,
+        dispatcher: Arc<dyn MirrorDispatcher>,
+    ) -> Arc<MirrorState> {
+        let (tx, pool, state) =
+            task_queue::start_default_pool_with_dispatcher(self.inner(), Some(dispatcher));
+        let local_tbid = self.tbid().to_hex();
+        *state.local_tbid_hex.write() = local_tbid;
+        *self.task_tx.lock().unwrap() = Some(tx);
+        *self.worker_pool.lock().unwrap() = Some(pool);
+        let returned = Arc::clone(&state);
+        *self.mirror_state.lock().unwrap() = Some(state);
+        info!(
+            component = "calendar",
+            worker_count = task_queue::DEFAULT_WORKER_COUNT,
+            "calendar task queue started with mirror dispatcher"
+        );
+        returned
+    }
+
+    /// Read-only access to the MirrorState (if the queue has been started).
+    pub fn mirror_state(&self) -> Option<Arc<MirrorState>> {
+        self.mirror_state.lock().unwrap().clone()
     }
 
     /// Enqueue a calendar task. Returns `Err` if the task queue hasn't been
