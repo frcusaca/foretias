@@ -1,10 +1,18 @@
 # COMBINED_GROUP4_PLAN.md
 # P2P Major Features — Parallel Agent Plan
 
-**Date:** 2026-05-22
+**Date:** 2026-05-22; deferral notice 2026-05-26
 **Paired Spec:** `COMBINED_GROUP4_SPEC.md`
-**Status:** Ready for parallel-agent execution
-**Pre-flight:** `COMBINED_GROUP2_PLAN.md` Phase A
+**Status:** **PARTIALLY EXECUTED + REMAINING WORK PAUSED.** Stream 4a is merged. Stream 4b is merged through Phase 4b.5 inclusive (see commits 74e06d3, b56915f, c2040c7, 83ba4d9, e742e23). **All remaining tasks** — the rest of Stream 4b (Phases 4b.4c StartStream, 4b.4d DoAttestation refactor, 4b.6 graceful shutdown) and the entirety of Stream 4c (Calendar Proof of Storage) — **are PAUSED.** Do not start them yet.
+
+  Resumption preconditions (must all be true before remaining work begins):
+    1. `COMBINED_GROUP7_COMMUNERDETTE_SPEC.md` reaches feature completion (current state: initial implementation committed at 082488a, ongoing).
+    2. `COMBINED_GROUP6_MUTUAL_ATTESTATION_SPEC.md` is approved and either implemented or close enough that its interfaces are stable.
+    3. **This plan is rewritten** to reflect (a) Communerdette as the mirror-traffic carrier and (b) shared task queue with FB/GNF cadence. The current step-by-step lists in this file MAY be discarded in favor of a new task layout aligned with the post-Communerdette architecture.
+
+  Already-landed work (4a + Phases 4b.1–4b.5) is NOT to be reverted. It stays on alpha and continues to be tested.
+
+**Pre-flight:** `COMBINED_GROUP2_PLAN.md` Phase A (applies when work resumes)
 
 ---
 

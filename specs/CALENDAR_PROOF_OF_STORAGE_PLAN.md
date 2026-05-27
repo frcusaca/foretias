@@ -3,6 +3,7 @@
 **Paired with:** `CALENDAR_PROOF_OF_STORAGE_SPEC.md`
 **Status:** DEPRECATED — superseded by `COMBINED_GROUP4_PLAN.md` Stream 4c (2026-05-22).
            All open tasks re-listed in COMBINED_GROUP4_PLAN.md. Do not update this file.
+           **Further note (2026-05-26):** Stream 4c is itself now DEFERRED until Communerdette (Group 7) reaches feature completion. See `COMBINED_GROUP4_SPEC.md` header for resumption preconditions.
 **Target milestone:** v0.7 (aligned with encrypted calendar persistence)
 
 ---

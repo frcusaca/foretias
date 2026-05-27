@@ -3,6 +3,7 @@
 **Parent Major**: Calendar Replication (CALENDAR_REPLICATION_SPEC.md)
 **Status**: DEPRECATED — superseded by `COMBINED_GROUP4_SPEC.md` §3 and `COMBINED_GROUP4_PLAN.md` Stream 4b (2026-05-22).
            All open tasks re-listed in COMBINED_GROUP4_PLAN.md. Do not update this file.
+           **Further note (2026-05-26):** the successor (`COMBINED_GROUP4_*`) is itself now DEFERRED until Communerdette (Group 7) reaches feature completion AND a revised plan reflecting Communerdette / Group 6 integration is written. See `COMBINED_GROUP4_SPEC.md` and `COMBINED_GROUP4_PLAN.md` headers for the resumption preconditions.
 **Date**: 2026-05-06
 **Prereqs**: `query_community` returns peers (done), MirrorStore exists (done), mirror RPC handlers exist (done), `JobQueue<T>` abstraction (JOB_QUEUE_PLAN.md)
 

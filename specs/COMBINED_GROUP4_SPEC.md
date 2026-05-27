@@ -1,10 +1,11 @@
 # COMBINED_GROUP4_SPEC.md
 # P2P Major Features — libp2p Direct Tests, Calendar Mirroring, Proof of Storage
 
-**Date:** 2026-05-22 (re-verified against alpha @ 80f0714)
-**Status:** Approved — three independent streams ready for parallel agents
+**Date:** 2026-05-22 (re-verified against alpha @ 80f0714); deferral notice 2026-05-26
+**Status:** **PARTIALLY MERGED + DEFERRED.** Stream 4a (libp2p unit tests) and Phases 4b.1–4b.5 of Stream 4b (Calendar Active Mirroring) are merged to alpha. All remaining mirror work — Stream 4b.4c (StartStream), 4b.4d (DoAttestation refactor), 4b.6 (graceful shutdown), and the entirety of Stream 4c (Calendar Proof of Storage) — is **POSTPONED**. This spec must be **REVISED** to integrate with Communerdette (`COMBINED_GROUP7_COMMUNERDETTE_SPEC.md`) and the mutual-attestation cadence (`COMBINED_GROUP6_MUTUAL_ATTESTATION_SPEC.md`) **BEFORE** the remaining work resumes. Do not start implementation on the open items until both prerequisite groups reach feature completion AND this spec has been updated to reflect their integration points (specifically: `MirrorDispatcher` per-TBID surface, `CommunerdetteLine` as the mirror-traffic carrier, and the Calendar task queue's role in coordinating both mirroring and FB/GNF cadence).
 **Paired Plan:** `COMBINED_GROUP4_PLAN.md`
 **Master Coordination:** `COMBINED_GROUP2_SPEC.md` §2.2
+**Postponement reason:** Group 7 (Communerdette) establishes a per-external-TBID relationship manager that the mirror protocol should route through, replacing the ad-hoc direct calls currently used in `MirrorDispatcher`. Group 6 (Mutual Attestation) defines Fast Buddies + GanzNeueFreundschaft cadences that share infrastructure with the mirror task queue. Landing further mirror work before Group 7's interface stabilizes risks rework. The already-merged Phases 4b.1–4b.5 stand and continue to compile/test cleanly; they will be revisited (not reverted) when this spec is updated.
 
 ---
 

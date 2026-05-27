@@ -1,6 +1,7 @@
 # CALENDAR REPLICATION SPEC (v0.1)
 
-**Status**: Draft — pending implementation
+**Status**: Draft — superseded by `COMBINED_GROUP4_SPEC.md` (2026-05-22).
+           **Further note (2026-05-26):** the successor `COMBINED_GROUP4_*` is itself now DEFERRED. Mirror specifications and plans (this file and its successors) will be REVISED and EXECUTED only AFTER Communerdette (Group 7) reaches feature completion. See `COMBINED_GROUP4_SPEC.md` header for resumption preconditions. Do not update this file.
 **Date**: 2026-05-05
 **Depends on**: DHT TBID index (PEERING_V1_PLAN.md), cross-node verify (handlers.rs)
 

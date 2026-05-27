@@ -3,6 +3,7 @@
 **Scope:** Feature (cross-cuts v0.4 probity gossip and v0.7 calendar persistence)
 **Status:** DEPRECATED — superseded by `COMBINED_GROUP4_SPEC.md` §4 (2026-05-22).
            Design content preserved here for reference. Do not update this file.
+           **Further note (2026-05-26):** the successor §4 (Stream 4c) is itself now DEFERRED until Communerdette (Group 7) reaches feature completion. Proof-of-storage implementation will be re-planned alongside the rest of the mirror work after the post-Communerdette spec rewrite.
 **Companion:** `CALENDAR_PROOF_OF_STORAGE_PLAN.md`
 
 ---

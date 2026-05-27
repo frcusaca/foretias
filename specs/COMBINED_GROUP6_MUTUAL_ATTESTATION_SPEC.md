@@ -4,8 +4,8 @@
 **Prefix:** `COMBINED_GROUP6_MUTUAL_ATTESTATION`
 **Group:** COMBINED_GROUP6
 **Pairs with:** `COMBINED_GROUP6_MUTUAL_ATTESTATION_PLAN.md` (to be written after this spec is approved)
-**Status:** Draft — second revision incorporating human review feedback
-**Date:** 2026-05-24
+**Status:** Draft — second revision incorporating human review feedback. **Execution DEFERRED until Communerdette (`COMBINED_GROUP7_COMMUNERDETTE_SPEC.md`) reaches feature completion.** This spec depends load-bearingly on `MirrorDispatcher`, `CommunerdetteLine`, and the per-TBID lifecycle state machine that Group 7 owns; finalizing FB/GNF before Communerdette is settled risks rework. Spec authoring continues in parallel with Communerdette; implementation does not begin until Group 7 lands AND any required interface updates land in this spec.
+**Date:** 2026-05-24 (deferral notice 2026-05-26)
 **Master Coordination:** `COMBINED_GROUP2_SPEC.md` §2.2
 
 ---
