@@ -4,6 +4,16 @@
 **Status:** Draft - pending human review
 **Date:** 2026-05-23
 
+**Downstream dependency (2026-05-26):** The remaining mirror work in
+Group 4 (`COMBINED_GROUP4_SPEC.md` Stream 4b open items + Stream 4c)
+and the mutual attestation work in Group 6
+(`COMBINED_GROUP6_MUTUAL_ATTESTATION_SPEC.md`) are explicitly
+**DEFERRED** until this plan reaches completion. When making changes
+to Communerdette's public interface (`MirrorDispatcher`,
+`CommunerdetteLine`, per-TBID lifecycle state machine), note them
+here so the dependent specs can be updated in lockstep before
+implementation resumes downstream.
+
 **Worktree:** No implementation worktree is allocated by this draft. If a
 future implementation uses a worktree branch, add explicit worktree lifecycle
 checkbox tasks here following `AGENTS.md`.
@@ -515,6 +525,323 @@ TBID lookup and calendar fetch.
       error on empty slice, `stamp` request-shape test, two-server integration test).
       `route_stamp` and `stamp_peer` in `communerd/mod.rs` still use direct transport;
       these are the paths to remove once Phase 4 compatibility work is merged.
+
+---
+
+## Phase 11 — Fast-Key Authentication Enforcement
+
+**Goal:** Enforce the universal inbound authentication invariant (Spec §4
+invariants 17, 19) across all Communerdette gate functions. No remote data
+may become `CleanAuthenticated<R>` without passing fast-key verification.
+Annotate slow-key hooks for future insertion.
+
+**Spec refs:** §11.4, §11.5, §4 invariants 17–22, §15 criteria 10–12.
+
+### 11.0 Core-Engine Auth Type Extensions
+
+These additions to `core-engine/src/foretias/clean_auth.rs` are prerequisites
+for Phase 12.0 channel-binding and for any code that needs to distinguish fast-
+only vs dual-key authentication.
+
+- [ ] Add `is_authenticated_quickly() -> bool { true }` as an inherent method on
+      `CleanAuthenticated<T>`. This is a runtime-checkable guarantee that fast-
+      key verification has been performed.
+- [ ] Add `CleanFullyAuthenticated<T>` struct in `clean_auth.rs`:
+  ```rust
+  /// A record authenticated against both the fast key and the slow key.
+  #[derive(Debug, Clone)]
+  pub struct CleanFullyAuthenticated<T> {
+      inner: T,
+  }
+
+  impl<T> CleanFullyAuthenticated<T> {
+      /// Construct from data verified against both keys.
+      /// Private — only produced by dual-key verification paths.
+      pub(crate) fn from_dual_verified(inner: T) -> Self { Self { inner } }
+      pub fn inner(&self) -> &T { &self.inner }
+      pub fn into_inner(self) -> T { self.inner }
+      pub fn is_authenticated_quickly(&self) -> bool { true }
+      pub fn is_authenticated_fully(&self) -> bool { true }
+  }
+
+  impl<T: Clone> From<CleanFullyAuthenticated<T>> for CleanAuthenticated<T> {
+      fn from(full: CleanFullyAuthenticated<T>) -> CleanAuthenticated<T> {
+          CleanAuthenticated::from_trusted(full.into_inner())
+      }
+  }
+  ```
+- [ ] Unit test: `CleanFullyAuthenticated` converts to `CleanAuthenticated` via `From`.
+- [ ] Unit test: `is_authenticated_quickly()` returns true on both types.
+- [ ] Unit test: `is_authenticated_fully()` returns true only on `CleanFullyAuthenticated`.
+
+### 11.1 Fix gate_foretis
+
+The current implementation calls `CleanAuthenticated::from_trusted(...)` on
+remote Foretis data — a correctness bug (spec §11.5).
+
+- [ ] Change `gate_foretis` signature to accept an authenticated
+      `CleanAuthenticated<ChrononRecord>` as an additional parameter, or to
+      accept the raw content bytes and fetch the tick internally via
+      `CommunerdetteExecutor`.
+- [ ] Replace `CleanAuthenticated::from_trusted(unprocessed.into_inner())`
+      with `Unprocessed<Foretis>::verify(crypto, chronon_record, content)`.
+- [ ] All callers of `gate_foretis` must supply the `ChrononRecord`. For
+      `execute_stamp`, chain a `get_tick(foretis.chronon_number)` call to
+      obtain the record before calling `gate_foretis`.
+- [ ] Update tests: the existing `gate_foretis_returns_clean_authenticated_on_valid`
+      test must supply a real authenticated `ChrononRecord`; if that requires
+      a real crypto key-pair in the test fixture, update `make_test_foretis` or
+      add a new fixture accordingly.
+- [ ] Add test: `gate_foretis_rejects_foretis_with_wrong_signature` — a Foretis
+      whose signature does not verify against the provided ChrononRecord's
+      public key must return `Err(CommunerdetteError::CleanAuth(...))`.
+
+### 11.2 Audit from_trusted Usage
+
+- [ ] Search the entire `communerd/` module for `from_trusted` calls.
+      Any call on data that did not originate locally is a bug.
+      ```bash
+      grep -rn "from_trusted" p2p/foretias-server/src/communerd/
+      ```
+- [ ] For each hit, document whether the data is local (acceptable) or remote
+      (must be replaced with `Unprocessed<R>::verify(...)`).
+- [ ] Fix any non-local uses found.
+
+### 11.3 Slow-Key Gate Stubs
+
+- [ ] In each gate function (`gate_chronon_records`, the fixed `gate_foretis`,
+      and any future gate functions), add a clearly marked stub comment
+      after fast-key verification passes:
+      ```rust
+      // TODO(slow-key): if record carries a slow-key signature, verify it here
+      // against target_tbid's slow public key. Reject if signature is present
+      // but invalid. Absence is acceptable. Slow-key verification is currently
+      // only required at channel-binding establishment; see Phase 12.0.
+      ```
+- [ ] Do not implement slow-key verification in general gate functions yet — only
+      the stub comment. The full slow-key implementation belongs in Phase 12.0.
+
+### 11.4 Externalized Outbound Stubs
+
+- [ ] For each outbound message Communerdette dispatches via
+      `CommunerdetteHost::call_peer`, document in a comment that the payload
+      should eventually be wrapped as `Externalized<R>` once the outbound
+      type wrapper is wired.
+      ```rust
+      // TODO(externalized): wrap params as Externalized<R> before dispatch
+      // once outbound type enforcement is implemented.
+      ```
+- [ ] Do not implement `Externalized<R>` wrapping yet — only the stub comment.
+
+### 11.5 Crypto Call-Site Snapshot Test
+
+**Goal:** establish `p2p/tests/snapshots/crypto_call_sites.txt` as a committed
+golden file for all signing and verification call sites (Spec §11.6, §15 criterion 13).
+
+- [ ] Create `p2p/tests/crypto_callsite_snapshot.rs` (or equivalent):
+  - Runs `grep -rn` (or an AST-walk script) over `p2p/` source for:
+    1. Calls to `CryptoServer` methods that dispatch to C++ primitives
+       (sign, verify, hash, key-gen variants).
+    2. All `sign(` and `verify(` call sites in `communerd/`, `clean_auth.rs`,
+       and any future auth-path files.
+  - Produces a sorted list: `<crate>/<file>:<line>  <fn>  <call_type>`.
+  - Compares against `p2p/tests/snapshots/crypto_call_sites.txt`.
+  - Test fails on any diff (new or removed call site).
+- [ ] Generate the initial snapshot with all current call sites:
+  ```bash
+  scripts/gen_crypto_snapshot.sh > p2p/tests/snapshots/crypto_call_sites.txt
+  git add p2p/tests/snapshots/crypto_call_sites.txt
+  ```
+  (@human: `scripts/gen_crypto_snapshot.sh` is a new shell script wrapping the
+  grep pass; create it as part of this step. The snapshot is regenerated — not
+  edited by hand — whenever a new crypto call site lands.)
+- [ ] Add `// SIGN(...)` or `// VERIFY(...)` annotation comment at each call
+      site found, naming the signing authority and authentication level.
+      Example: `// SIGN(local-tbid, fast-key)` at the `channel_bind_response`
+      signing site; `// VERIFY(remote-tbid, fast-key)` at each gate function.
+- [ ] Confirm snapshot test passes on a clean workspace.
+- [ ] Document: any PR that adds a new crypto call site must update the snapshot
+      and add the annotation. Reviewers use the snapshot diff to gate crypto
+      surface area.
+
+### 11.6 Tests
+
+- [ ] Confirm all existing gate tests still pass after 11.1 fix.
+- [ ] `gate_foretis_rejects_foretis_with_wrong_signature` (see 11.1).
+- [ ] Crypto call-site snapshot test passes (see 11.5).
+- [ ] Confirm workspace tests pass: `cargo test --workspace`.
+
+---
+
+## Phase 12 — Channel Binding + Three Liveness Levels
+
+**Goal:** Implement channel-binding establishment (§12.0) and all three
+liveness levels inside Communerdette (Spec §12).
+Deprecate `PeerPool::start_liveness_pings`.
+
+**Spec refs:** §12.0–§12.4, §11.4.1, §4 invariants 16, 21–22, §15 criterion 7.
+
+**Prerequisites:** Phase 11.0 (CleanFullyAuthenticated<R> and is_authenticated_quickly() in core-engine) must land before Phase 12.0 channel-binding work begins.
+
+### 12.0 Channel-Binding Establishment
+
+**Goal:** Implement the one-time dual-key binding protocol (Spec §12.0, §11.4.1).
+A channel becomes usable for application messages only after it is `FullyBound`.
+
+- [ ] Add `ChannelBinding` struct in `communerdette.rs` (or a new
+      `channel_binding.rs`):
+      ```rust
+      struct ChannelBinding {
+          responder_tbid: Tbid,
+          nonce_echo: Vec<u8>,
+          channel_id: String,
+          fast_sig: Vec<u8>,
+          slow_sig: Vec<u8>,
+      }
+      ```
+- [ ] Add `UnprocessedChannelBinding` following the Take 3 pattern. Add
+      `verify_dual_key(crypto, nonce, channel_id, target_tbid) ->
+      Result<CleanFullyAuthenticated<ChannelBinding>, CommunerdetteError>`
+      that checks: (a) TBID match, (b) nonce echo match, (c) channel_id match,
+      (d) fast-key signature, (e) slow-key signature. Both (d) and (e) must pass.
+- [ ] Add `handle_channel_bind_challenge` in `server/handlers.rs`. The handler
+      must sign the response using the local TBID owner (not the handler directly).
+      Signs `(nonce || channel_id || responder_tbid_hex)` with both fast and slow keys.
+- [ ] Wire `"channel_bind_challenge"` into the dispatch table in `server/mod.rs`.
+- [ ] Add per-channel `BindingState` to `CommunerdetteState`:
+      ```rust
+      enum ChannelBindingState {
+          Unbound,
+          FullyBound(CleanFullyAuthenticated<ChannelBinding>),
+          Rejected { reason: String },
+      }
+      ```
+- [ ] Add `spawn_channel_bind_task(channel_id, transport_addr)` to `Communerdette`.
+      On invocation:
+      1. Generate 32-byte random nonce.
+      2. Call `channel_bind_challenge` via the transport.
+      3. Parse response → `UnprocessedChannelBinding`.
+      4. Call `verify_dual_key(...)` → `CleanFullyAuthenticated<ChannelBinding>`.
+      5. On success: channel state → `FullyBound`. Emit binding event.
+      6. On failure: channel state → `Rejected`. Log binding violation.
+- [ ] Communerd triggers `spawn_channel_bind_task` when it notifies Communerdette
+      of a new channel (PeerId or direct address).
+- [ ] Unit test: `verify_dual_key` accepts a correctly dual-signed response.
+- [ ] Unit test: `verify_dual_key` rejects wrong fast-key signature.
+- [ ] Unit test: `verify_dual_key` rejects wrong slow-key signature.
+- [ ] Unit test: `verify_dual_key` rejects nonce mismatch.
+- [ ] Unit test: `verify_dual_key` rejects TBID mismatch.
+- [ ] Integration test: two real servers, source initiates channel bind → mirror
+      responds → source reaches `FullyBound`.
+- [ ] Integration test: second independent channel can be bound simultaneously.
+
+### 12.1 Level 1 — Network Stack Alive
+
+L1 uses the existing `ping` / `{ "pong": true }` RPC already wired in Phase 6.
+The remaining work is moving the liveness loop from `PeerPool` into
+Communerdette.
+
+- [ ] Add `spawn_l1_liveness_task` to `Communerdette`. This task loops on a
+      configurable interval, calls `ping` via `CommunerdetteHost::call_peer`,
+      and records success/failure in `CommunerdetteRouteStats`.
+- [ ] The task exits when the Communerdette's `CancellationToken` is cancelled.
+- [ ] Verify the response is `{ "pong": true }`. Record transport success/failure
+      only — no `CleanAuthenticated<R>` gate needed for L1 (transport-only
+      evidence; see Spec §12.1).
+- [ ] Unit test: L1 task records success when ping returns pong.
+- [ ] Unit test: L1 task records failure when ping times out or returns error.
+
+### 12.2 Deprecate PeerPool::start_liveness_pings
+
+- [ ] Remove the `communerd.start_liveness_pings()` call from
+      `server/mod.rs` (currently line 216).
+- [ ] Mark `PeerPool::start_liveness_pings` as `#[deprecated]` with message:
+      "Use Communerdette L1 liveness loop instead."
+- [ ] Verify no other callers exist:
+      ```bash
+      grep -rn "start_liveness_pings" p2p/
+      ```
+- [ ] All tests still pass after removal.
+
+### 12.3 Level 2 — TBID Identity Confirmed (Ongoing Health)
+
+**Prerequisite:** Phase 12.0 (channel-binding) must be `FullyBound` before L2
+health checks begin. L2 only needs fast-key verification — the dual-key proof
+was already established at binding time.
+
+- [ ] Define `AuthenticatedPong` struct in `communerdette.rs`:
+      ```rust
+      struct AuthenticatedPong {
+          responder_tbid: Tbid,
+          challenge_echo: Vec<u8>,
+          signature: Vec<u8>,
+          signature_algorithm: String,
+      }
+      ```
+- [ ] Add `UnprocessedAuthenticatedPong` wrapper following the Take 3 pattern
+      (`from_json_value`, inner accessor). Add `verify(crypto, challenge,
+      target_tbid)` method that checks: (a) TBID match, (b) challenge echo
+      match, (c) fast-key signature over `(challenge || responder_tbid_hex_bytes)`.
+- [ ] Add `handle_authenticated_ping` in `server/handlers.rs`. The handler
+      must ask the local TBID owner (Chronomatter or the server's signing
+      surface) to sign the response — it must NOT sign directly with a key
+      stored inside the handler.
+- [ ] Wire `"authenticated_ping"` into the dispatch table in `server/mod.rs`.
+- [ ] Add `spawn_l2_liveness_task` to `Communerdette`. On each interval:
+      1. Generate a 32-byte random challenge.
+      2. Call `authenticated_ping` via `CommunerdetteHost::call_peer`.
+      3. Parse response as `UnprocessedAuthenticatedPong`.
+      4. Call `verify(crypto, challenge, target_tbid)` → `CleanAuthenticated<AuthenticatedPong>`.
+      5. On success: if binding was `ClaimedByDht`, upgrade to `Verified`.
+         Record L2 success.
+      6. On failure: record binding violation, set `TbidBindingStatus::Rejected`
+         with reason.
+- [ ] Unit test: L2 task promotes `ClaimedByDht` to `Verified` on valid response.
+- [ ] Unit test: L2 task sets `Rejected` on wrong TBID in response.
+- [ ] Unit test: L2 task sets `Rejected` on wrong challenge echo.
+- [ ] Unit test: L2 task sets `Rejected` on invalid fast-key signature.
+- [ ] Integration test: two real servers, L2 succeeds and binding is `Verified`.
+
+### 12.4 Level 3 — Chronomatter Responsive
+
+L3 reuses the existing `stamp` RPC. The prerequisite is Phase 11 (gate_foretis
+fix) — L3 is meaningless without a real fast-key gate on the Foretis response.
+
+**This phase is blocked on Phase 11 completion.**
+
+- [ ] Add `spawn_l3_liveness_task` to `Communerdette`. On each interval:
+      1. Generate a short test payload (e.g. `b"liveness-probe"`).
+      2. Call `stamp(payload, "liveness")` via `CommunerdetteLine` (or directly
+         via the executor).
+      3. Parse the returned `Foretis`.
+      4. Call `get_tick(foretis.chronon_number)` to obtain
+         `CleanAuthenticated<ChrononRecord>`.
+      5. Call the fixed `gate_foretis(foretis_json, chronon_record, payload)` →
+         `CleanAuthenticated<Foretis>`.
+      6. On success: record L3 success in `CommunerdetteStats`.
+      7. On failure (gate error, timeout, missing tick): record L3 failure.
+         Do not change `TbidBindingStatus` — L3 failure is health only.
+- [ ] Unit test: L3 records success when stamp returns a valid Foretis that
+      passes the fast-key gate.
+- [ ] Unit test: L3 records failure when gate_foretis rejects the response.
+- [ ] Integration test: two real servers, L3 succeeds end-to-end.
+
+### 12.5 Liveness Loop Policy
+
+- [ ] Add `liveness_policy: LivenessPolicy` to `CommunerdetteState`:
+      ```rust
+      struct LivenessPolicy {
+          l1_interval_ms: u64,
+          l2_interval_ms: u64,
+          l3_interval_ms: u64,
+          run_l2: bool,
+          run_l3: bool,
+      }
+      ```
+- [ ] Default policy: L1 enabled, L2 enabled, L3 enabled, intervals configurable.
+- [ ] Run order enforced: L2 skipped if L1 failed in current cycle. L3 skipped
+      if L2 failed or `TbidBindingStatus` is `Rejected`.
+- [ ] Expose current policy in `CommunerdetteStatusSummary`.
 
 ---
 

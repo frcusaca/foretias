@@ -3,9 +3,19 @@
 **Prefix:** `COMMUNERDETTE`
 **Group:** COMBINED_GROUP7
 **Pairs with:** `COMBINED_GROUP7_COMMUNERDETTE_PLAN.md`
-**Status:** Draft - pending human review
-**Date:** 2026-05-23
+**Status:** Draft - updated 2026-05-26, pending human review
+**Date:** 2026-05-23 (updated 2026-05-26 — authentication model, liveness levels, key model)
 **Master Coordination:** `COMBINED_GROUP2_SPEC.md` §2.2
+
+**Downstream dependency (2026-05-26):** This specification is now a
+**hard prerequisite** for the remaining mirror work in Group 4 (active
+mirroring StartStream / DoAttestation refactor / graceful shutdown +
+all of proof-of-storage) and for mutual attestation work in Group 6
+(`COMBINED_GROUP6_MUTUAL_ATTESTATION_SPEC.md`). Both of those groups
+have been explicitly DEFERRED pending this spec's feature completion.
+Treat Communerdette's interface stability — particularly
+`MirrorDispatcher`, `CommunerdetteLine`, and the per-TBID lifecycle
+state machine — as load-bearing for those downstream specs.
 
 ---
 
@@ -97,7 +107,7 @@ CommunerdetteLine(T):
   "I can do that."
 
 Communerdette(T):
-  resolves, binds, chooses transport, queues, awaits, retries, records stats.
+  resolves, binds, chooses transport, queues, awaits, retries, records stats, authenticate responses.
 ```
 
 ---
@@ -106,14 +116,20 @@ Communerdette(T):
 
 | Term | Meaning |
 |------|---------|
-| Communerd | Global extra-family communication owner. Owns swarm participation, transports, DHT state, peer discovery, and the Communerdette registry. |
-| Communerdette | Private per-external-TBID relationship manager. Owns what to do to maintain and use communication with exactly one remote TBID: state, tasks, queues, stats, transport preference, retry policy, and binding status. |
+| Communerd | Global extra-family communication owner. Owns swarm participation, transports, DHT state, peer discovery, and the Communerdette registry. Routes all inbound traffic from a remote TBID to the owning Communerdette for authentication. |
+| Communerdette | Private per-external-TBID relationship manager. Owns the full health and authentication picture for exactly one remote TBID: liveness at all three levels, inbound authentication gate, outbound message wrapping, routing, retries, queues, stats, and binding status. |
 | CommunerdetteLine | Public, cloneable, narrow proxy for Calendar/Chronomatter/TimeFamily use. It physically points at a Communerdette but exposes only safe TBID-scoped operations. |
 | External TBID | A TBID not owned by the local family. Each Communerdette is scoped to exactly one external TBID. |
 | Local TBID owner | The one Rust object that owns a local TBID and its signing capability. Only that object may sign for that TBID. |
 | Binding | Evidence that a transport identity, such as libp2p PeerId or direct Noise key/address, is authorized to speak for a TBID. |
 | Route | A currently usable way to reach the external TBID: libp2p direct, custom Noise_XX TCP, or unavailable. |
-| `CleanAuthenticated<R>` | A remote record `R` that Communerdette has parsed, checked, and authenticated against the target external TBID. Higher layers may consume it as authenticated remote evidence, but not as proof that the remote statement is semantically true. |
+| `CleanAuthenticated<R>` | A remote record `R` that Communerdette has parsed and authenticated against the target external TBID's fast key. Higher layers may consume it as authenticated remote evidence, but not as proof that the remote statement is semantically true. Carries `is_authenticated_quickly() -> bool` (always `true`) as a runtime-checkable guarantee of fast-key authentication. |
+| `CleanFullyAuthenticated<R>` | A remote record `R` authenticated against **both** the fast key and the slow key of the target TBID. Subsumes `CleanAuthenticated<R>` — a `CleanFullyAuthenticated<R>` converts to `CleanAuthenticated<R>` and may be used wherever one is accepted. Carries `is_authenticated_quickly() -> bool` (true, fast-key verified) and `is_authenticated_fully() -> bool` (true, slow-key also verified). Required for initial channel-binding: the remote must produce a `CleanFullyAuthenticated<ChannelBinding>` the first time Communerdette establishes a channel to a new TBID. |
+| `ChannelBinding` | The message signed during initial channel-binding establishment. Contains the remote TBID, a nonce challenge, and the transport identity (libp2p PeerId, ip/port, or other). Must be dual-key signed (fast + slow) by the remote. Becomes `CleanFullyAuthenticated<ChannelBinding>` after verification. |
+| `Externalized<R>` | A wrapper for data that is leaving the local trust boundary. Every message Communerdette sends to the remote TBID must be wrapped in `Externalized<R>` before dispatch. Only locally produced or already-`CleanAuthenticated` data may be externalized. |
+| Fast key | The faster of the two signing keys embedded in a TBID (Ed25519 in current implementations). Used to sign every message. All inbound remote messages must be verified against the remote TBID's fast key before being promoted to `CleanAuthenticated<R>`. |
+| Slow key | The slower of the two signing keys embedded in a TBID (PQC/SPHINCS+ in future implementations). A message may carry an additional slow-key signature alongside the mandatory fast-key signature. Absence of a slow-key signature is acceptable. An incorrect slow-key signature is a hard rejection. No current protocol operation requires slow-key verification; the use case is deferred. |
+| Liveness level | One of three grades of relationship health check, all owned by Communerdette. L1: network stack alive (Noise/TCP transport responsive). L2: TBID identity confirmed (remote signs a challenge with its fast key). L3: Chronomatter responsive (remote stamps content; returned Foretis passes full fast-key verification). |
 
 ---
 
@@ -170,52 +186,94 @@ Communerdette(T):
 15. **Existing transports remain valid.** libp2p direct remains preferred where
     available; custom Noise_XX TCP remains supported as fallback and for direct
     known peer calls.
+16. **Communerdette owns all liveness for its relationship.** L1 (transport
+    alive), L2 (TBID identity confirmed), and L3 (Chronomatter responsive) are
+    all Communerdette's responsibility. Communerd routes inbound messages but
+    does not drive liveness loops for individual TBID relationships.
+    `PeerPool::start_liveness_pings` is superseded by Communerdette-driven
+    liveness and must be deprecated once all three levels are implemented.
+17. **Every inbound message is gated through fast-key verification.** Any data
+    arriving from the remote TBID enters Communerdette as `Unprocessed<R>`. It
+    must pass fast-key signature verification before becoming
+    `CleanAuthenticated<R>`. There are no exceptions: liveness responses,
+    calendar records, stamp replies, and any future message types all follow
+    this invariant.
+18. **Every outbound message is wrapped as `Externalized<R>`.** Communerdette
+    never sends raw bytes to the remote TBID. All outbound payloads are
+    constructed from locally produced or already-authenticated data and wrapped
+    in `Externalized<R>` before dispatch.
+19. **`from_trusted` is for locally produced data only.** It must never be
+    called on data that arrived from a remote peer. Using `from_trusted` on
+    remote data silently bypasses fast-key verification and is a correctness
+    bug. The only correct way to authenticate a remote record is
+    `Unprocessed<R>::verify(...)`.
+20. **Slow-key rule.** When an inbound message carries a slow-key signature in
+    addition to the fast-key signature, both must be verified. A wrong slow-key
+    signature is a hard rejection. Absence of a slow-key signature is
+    acceptable. The first and currently only operation that requires a slow-key
+    signature is channel-binding establishment (see §12.0 and §11.4).
+21. **Initial channel-binding requires dual-key proof.** The first time
+    Communerdette contacts a remote TBID on any channel (libp2p PeerId, direct
+    ip/port, or other), the remote must respond with a `ChannelBinding` message
+    dual-signed with both the fast key and the slow key, producing a
+    `CleanFullyAuthenticated<ChannelBinding>`. Once the channel is bound,
+    subsequent messages on that channel need only fast-key signatures to produce
+    `CleanAuthenticated<R>`. Re-binding is required if the channel disconnects
+    and a new transport identity is presented.
+22. **Communerdette may hold multiple simultaneous channels to the same TBID.**
+    Each channel is independently bound. The TBID relationship persists as long
+    as at least one fully-bound channel is active. This enables both
+    multi-transport operation and transparent reconnection: when a channel drops,
+    Communerdette initiates a fresh binding challenge on a new channel without
+    tearing down the relationship.
 
 ---
 
 ## 5. Public Interface: CommunerdetteLine
 
-`CommunerdetteLine` is the only type intended for Calendar/Chronomatter/TimeFamily
-callers.
+`CommunerdetteLine` is a **trait** — the restricted interface granted to
+Calendar, Chronomatter, and TimeFamily callers. It is not a struct.
+
+Communerd has direct access to the full `Communerdette` object and all its
+private methods (liveness loops, binding updates, route management, stats
+mutation, and shutdown). Calendar, Chronomatter, and TimeFamily receive only an
+`Arc<dyn CommunerdetteLine>` handle, which limits their access to the safe
+TBID-scoped operations defined by the trait. `Communerdette` implements
+`CommunerdetteLine` (plus its private body); callers never construct or store
+`Communerdette` directly.
+
+The trait must support async callers. All methods that contact the network are
+async. Communerdette handles queuing, retries, channel selection, and binding
+refreshes behind the trait boundary so callers never see transport details.
 
 ```rust
-#[derive(Clone)]
-pub struct CommunerdetteLine {
-    target_tbid: Tbid,
-    inner: Arc<Communerdette>,
-}
-```
+#[async_trait]
+pub trait CommunerdetteLine: Send + Sync {
+    fn target_tbid(&self) -> Tbid;
 
-The actual fields should stay private. Public methods should be narrow and
-TBID-scoped:
-
-```rust
-impl CommunerdetteLine {
-    pub fn target_tbid(&self) -> Tbid;
-
-    pub async fn stamp(
+    async fn stamp(
         &self,
         content: Vec<u8>,
         echo: String,
     ) -> Result<CleanAuthenticated<Foretis>, TransportError>;
 
-    pub async fn get_calendar_slice(
+    async fn get_calendar_slice(
         &self,
         tick_start: u64,
         count: u64,
     ) -> Result<CleanAuthenticated<Vec<ChrononRecord>>, TransportError>;
 
-    pub async fn get_tick(
+    async fn get_tick(
         &self,
         tick_number: u64,
     ) -> Result<CleanAuthenticated<ChrononRecord>, TransportError>;
 
-    pub async fn start_calendar_stream(
+    async fn start_calendar_stream(
         &self,
         from_tick: u64,
     ) -> Result<CalendarStreamHandle, TransportError>;
 
-    pub fn status_summary(&self) -> CommunerdetteStatusSummary;
+    fn status_summary(&self) -> CommunerdetteStatusSummary;
 }
 ```
 
@@ -311,7 +369,7 @@ This is illustrative, not a required exact trait. The important split is:
 
 - Communerd owns global discovery, DHT, peer pool, swarm, and transport pools.
 - Communerdette owns the policy and memory for one TBID relationship.
-- CommunerdetteLine exposes only safe operations for that relationship.
+- CommunerdetteLine exposes only safe operations for that relationship to Calendars and Chronomatters.
 
 ---
 
@@ -409,8 +467,7 @@ This centralizes the fallback currently repeated by `stamp_peer`,
 DHT records map TBIDs to PeerIds and addresses, but a DHT record alone is not
 proof that the transport peer is authorized for the TBID.
 
-The Communerdette must represent this distinction even if the first
-implementation only supports `ClaimedByDht`.
+The Communerdette must represent this distinction.
 
 Expected future proof shape:
 
@@ -427,8 +484,7 @@ local:
   mark binding Verified
 ```
 
-Until this is fully implemented, trust-bearing code must avoid pretending that
-a DHT claim is equivalent to a verified TBID binding.
+This should be fully implemented.
 
 ---
 
@@ -491,6 +547,8 @@ A `CleanAuthenticated<R>` value returned by Communerdette means:
 - the remote bytes were parsed using the expected schema for `R`
 - the claimed remote TBID matches the Communerdette's target TBID
 - `Unprocessed<R>::verify(...)` passed (signatures, hashes, chain links, etc.)
+- the fast-key signature was verified against the remote TBID's current fast
+  public key
 - the route/binding state was strong enough for the operation's trust level
 - protocol freshness or replay checks were applied where the protocol defines
   them
@@ -501,14 +559,314 @@ A `CleanAuthenticated<R>` value does not mean:
 - the local node agrees with the remote statement
 - Communerdette signed anything
 - Communerdette may sign for any local TBID
+- the slow-key signature (if present) has been verified — that is a separate
+  step if the operation requires it
 
 Calendar may store trust-bearing external-attestation material only after the
 relevant remote record has become `CleanAuthenticated<R>` and any
 Calendar-specific policy checks have also passed.
 
+### 11.4 TBID Key Model
+
+Every TBID embeds two signing keys:
+
+- **Fast key** (Ed25519 in current implementations): signs every message.
+  Communerdette verifies the fast-key signature on every inbound message from
+  the remote TBID. This is the mandatory authentication step.
+
+- **Slow key** (PQC/SPHINCS+ in future implementations): may optionally
+  co-sign a message alongside the fast key for high-assurance operations.
+  Rules:
+  - A message that carries no slow-key signature is accepted after fast-key
+    verification passes.
+  - A message that carries a slow-key signature where the signature is
+    incorrect is rejected, regardless of whether the fast-key signature is
+    valid.
+  - Channel-binding establishment is the first and currently only protocol
+    operation that requires a slow-key signature. All other protocol messages
+    use fast-key only.
+
+Implementation note: the slow-key verification path must exist in the gate
+functions even if it only fires during channel-binding establishment. The path
+must be explicit rather than silently absent.
+
+#### 11.4.1 Channel-Binding Establishment Protocol
+
+When Communerdette receives a new channel from Communerd (libp2p PeerId,
+direct ip/port, or future transport), it initiates a one-time binding challenge
+before accepting any application messages on that channel:
+
+```text
+1. Communerd notifies Communerdette of a new channel (transport identity T for target TBID X).
+2. Communerdette generates a 32-byte random nonce N.
+3. Communerdette sends a channel_bind_challenge { nonce: N, channel_id: T, requester_tbid: local_tbid } to the remote.
+4. Remote constructs ChannelBinding { responder_tbid: X, nonce_echo: N, channel_id: T }.
+5. Remote signs ChannelBinding bytes with fast key → fast_sig.
+6. Remote signs ChannelBinding bytes with slow key → slow_sig.
+7. Remote returns channel_bind_response { channel_binding: ..., fast_sig, slow_sig }.
+8. Communerdette parses → Unprocessed<ChannelBinding>.
+9. Verifies: TBID matches target, nonce_echo matches N, channel_id matches T.
+10. Verifies fast_sig against TBID's fast key.
+11. Verifies slow_sig against TBID's slow key.
+12. On success → CleanFullyAuthenticated<ChannelBinding>; channel state → FullyBound.
+13. On any failure → channel state → Rejected; channel is not used.
+```
+
+Once a channel is `FullyBound`, all subsequent messages on that channel pass
+through the normal fast-key gate (`Unprocessed<R>` → `CleanAuthenticated<R>`).
+The slow key is not re-verified per message.
+
+Multi-channel: Communerdette may hold N fully-bound channels to the same TBID
+simultaneously. Each channel has its own binding state. The TBID relationship
+is healthy as long as at least one fully-bound channel is active.
+
+### 11.5 Known Gap: gate_foretis Uses from_trusted
+
+**This is a correctness bug to be fixed in Phase 11.**
+
+The current `CommunerdetteExecutor::gate_foretis` implementation calls
+`CleanAuthenticated::from_trusted(unprocessed.into_inner())` after structural
+and TBID checks pass. `from_trusted` bypasses fast-key verification. A remote
+`Foretis` is not locally produced data; it is an inbound remote record that
+must pass the fast-key gate.
+
+The correct implementation:
+
+```text
+1. Parse raw JSON → Unprocessed<Foretis>
+2. Structural check (chronon_number != 0, signature non-empty, algorithm set)
+3. TBID match check (foretis.tbid == communerdette.target_tbid)
+4. Obtain the authenticated ChrononRecord for foretis.chronon_number
+   (either passed in by the caller, or fetched via get_tick)
+5. Call Unprocessed<Foretis>::verify(crypto, chronon_record, content_bytes)
+6. On success → CleanAuthenticated<Foretis>
+```
+
+Step 4 is the reason `from_trusted` was used as a shortcut: the caller
+does not always have the `ChrononRecord` available at the time `gate_foretis`
+is called. The fix is to require callers to supply the authenticated record,
+or to chain a `get_tick` call into the gate.
+
+Until Phase 11 lands, `CleanAuthenticated<Foretis>` values produced by
+`gate_foretis` have NOT been fast-key verified. Code that stores or acts on
+those values is accepting a structurally-valid but cryptographically unverified
+remote statement.
+
+### 11.6 Crypto Call-Site Snapshot Audit
+
+To prevent silent introduction of new signing or verification operations —
+particularly as Communerdette adds channel-binding, liveness, and gate functions
+— the project maintains a committed **crypto call-site snapshot file**.
+
+**Snapshot file location:** `p2p/tests/snapshots/crypto_call_sites.txt`
+
+**What the snapshot captures:**
+
+1. **Crypto primitive call sites** — every place in the Rust source that calls
+   through the crypto plugin/FFI layer (e.g., calls to `CryptoServer` methods
+   that dispatch to C++ primitives: sign, verify, hash, key generation). This
+   maps the Rust → FFI → C++ boundary exhaustively.
+
+2. **Signature call sites** — every place in the Rust source where a signature
+   is generated (`sign(...)` or equivalent) or verified (`verify(...)` or
+   equivalent), regardless of transport layer. Each line in the snapshot is:
+   ```
+   <crate>/<file>:<line>  <function_name>  <call_type: sign|verify|other>
+   ```
+
+**How the snapshot is produced and checked:**
+
+```bash
+# Regenerate the snapshot (run after any crypto call site changes):
+cd p2p && cargo test --test crypto_callsite_snapshot -- --nocapture --include-ignored > /dev/null
+# Or via the dedicated script:
+scripts/gen_crypto_snapshot.sh > p2p/tests/snapshots/crypto_call_sites.txt
+```
+
+The snapshot test (`cargo test crypto_callsite_snapshot`) runs the grep/AST
+pass and fails if the current output differs from the committed snapshot. Any
+new crypto call site requires:
+1. A deliberate code review of the new site.
+2. Updating the snapshot file in the same commit.
+3. A comment at the call site annotating the signing authority and authentication
+   level (e.g., `// SIGN(local-tbid, fast-key)` or `// VERIFY(remote-tbid, fast-key)`).
+
+**Why this matters for Communerdette:** Communerdette is the primary consumer of
+remote crypto verification (gate functions) and the trigger for local signing
+(channel-binding response, authenticated-ping response). Every new gate function
+or signing handoff that lands in `communerd/` must appear in the snapshot.
+Reviewers checking the snapshot diff can immediately see whether new crypto
+operations are expected or accidental.
+
 ---
 
-## 12. Local TBID Signing Authority
+## 12. Three Liveness Levels
+
+Communerdette owns all liveness for its relationship (Invariant 16). All three
+levels are driven by Communerdette and are distinct in what they prove.
+
+Channel-binding establishment (§12.0) is a prerequisite for L2 and L3.
+L1 may run before binding is established to confirm reachability.
+
+### 12.0 Channel-Binding Establishment
+
+This is not a periodic health check — it is a one-time protocol that runs when
+Communerdette first acquires a channel to the target TBID.
+
+**What it proves:** the remote party holds BOTH the fast key and the slow key
+for the target TBID. The transport identity (PeerId, ip/port, etc.) is bound to
+the TBID with strong dual-key proof.
+
+**Result type:** `CleanFullyAuthenticated<ChannelBinding>`. The channel state
+transitions from `Unbound` to `FullyBound`. Only a fully-bound channel may carry
+application messages.
+
+**Wire:** new `channel_bind_challenge` / `channel_bind_response` JSON-RPC method pair.
+
+Challenge request:
+```json
+{
+  "method": "channel_bind_challenge",
+  "params": {
+    "nonce": "<hex-encoded 32-byte random>",
+    "channel_id": "<transport identity string>",
+    "requester_tbid": "<hex>"
+  }
+}
+```
+
+Response:
+```json
+{
+  "responder_tbid": "<hex>",
+  "nonce_echo": "<hex — must match request nonce>",
+  "channel_id": "<hex — must match request channel_id>",
+  "fast_sig": "<hex — fast-key Ed25519 sig over (nonce || channel_id || responder_tbid_hex)>",
+  "slow_sig": "<hex — slow-key SPHINCS+ sig over same bytes>"
+}
+```
+
+**Binding state machine per channel:**
+- `Unbound` → send challenge → receive dual-signed response → `verify()` succeeds → `FullyBound`
+- `Unbound` → verify failure → `Rejected` (channel not used; log binding violation)
+- `FullyBound` → channel disconnect → `Unbound` for that channel (other channels unaffected)
+
+**Re-binding:** if a channel disconnects and a new connection arrives from the
+same transport address, a fresh challenge is required. No proof from a previous
+session is reused.
+
+### 12.1 Level 1 — Network Stack Alive
+
+**What it proves:** the Noise/TCP transport to the remote address is reachable
+and a connection can be established.
+
+**Wire:** existing `ping` JSON-RPC method → `{ "pong": true }` response.
+
+**Authentication:** none at the application level. The Noise_XX handshake
+provides transport-layer mutual key proof, but the remote's Noise keypair is
+not bound to a TBID at this level. L1 proves connectivity only.
+
+**Owner:** Communerdette drives the L1 loop. Communerd provides the transport;
+Communerdette owns the liveness state and decides whether to ping and how to
+record the outcome. `PeerPool::start_liveness_pings` is superseded by
+Communerdette L1 and must be deprecated (see Phase 12 in the plan).
+
+**Response handling:** `{ "pong": true }` is a trusted-local response since it
+is evidence only of transport availability, not of remote TBID identity. It
+does not need to pass through the `CleanAuthenticated<R>` gate. Record L1
+success/failure in `CommunerdetteRouteStats`.
+
+### 12.2 Level 2 — TBID Identity Confirmed (Ongoing Health)
+
+**Prerequisite:** channel binding (§12.0) must be `FullyBound` before L2 health
+checks begin. If binding has not been established or was rejected, L2 is skipped.
+
+**What it proves:** the remote party continues to hold the fast signing key for
+the target TBID on the currently-bound channel. This is the ongoing health
+check after binding is established — it does **not** re-verify the slow key.
+
+**Wire:** new `authenticated_ping` JSON-RPC method.
+
+Request:
+```json
+{
+  "method": "authenticated_ping",
+  "params": {
+    "challenge": "<hex-encoded random nonce, 32 bytes>",
+    "sender_tbid": "<hex>"
+  }
+}
+```
+
+Response:
+```json
+{
+  "responder_tbid": "<hex>",
+  "challenge_echo": "<hex — must match request challenge>",
+  "signature": "<hex — fast-key sig over (challenge || responder_tbid_hex_bytes)>",
+  "signature_algorithm": "Ed25519"
+}
+```
+
+**Authentication:** the response is `Unprocessed<AuthenticatedPong>` and must
+pass fast-key verification before Communerdette records L2 success. Verify:
+1. `responder_tbid` matches `communerdette.target_tbid`.
+2. `challenge_echo` matches the sent challenge (replay/mismatch guard).
+3. Signature verifies over `(challenge || responder_tbid_hex_bytes)` using the
+   remote TBID's fast public key from the current DHT/binding record.
+4. Promote to `CleanAuthenticated<AuthenticatedPong>` only after all checks
+   pass.
+
+A failed L2 check (wrong TBID, wrong signature, challenge mismatch) is a
+binding violation and must be recorded as `TbidBindingStatus::Rejected` with
+reason.
+
+**Server-side handler:** `handle_authenticated_ping` in `server/handlers.rs`.
+The server signs the response with its own TBID's fast key (via Chronomatter's
+signing API — Communerdette does not sign on behalf of the local TBID).
+
+### 12.3 Level 3 — Chronomatter Responsive
+
+**What it proves:** the remote node's Chronomatter is alive and capable of
+stamping content. The returned `Foretis` must pass full fast-key verification.
+
+**Wire:** existing `stamp` JSON-RPC method. Level 3 liveness is a `stamp` call
+with a known short test payload, followed by full `CleanAuthenticated<Foretis>`
+verification through the corrected Take 3 gate (Phase 11 fix required first).
+
+**Authentication:** the `Foretis` response enters as `Unprocessed<Foretis>` and
+must pass full `Unprocessed<Foretis>::verify(crypto, chronon_record, content)`
+(see §11.5 for the gate_foretis fix). This requires:
+1. The caller knows the content bytes (it sent them).
+2. After receiving the `Foretis`, obtain `CleanAuthenticated<ChrononRecord>`
+   for `foretis.chronon_number` via `get_tick`.
+3. Call `Unprocessed<Foretis>::verify(crypto, chronon_record, content)`.
+4. Verify `foretis.tbid == communerdette.target_tbid`.
+5. Promote to `CleanAuthenticated<Foretis>`.
+
+A failed L3 check means Chronomatter is not responding correctly and must be
+recorded in `CommunerdetteStats`. The binding status remains unchanged (L3
+failure is a health signal, not a binding violation).
+
+### 12.4 Liveness Loop Policy
+
+Communerdette runs a per-relationship liveness background task that cycles
+through L1 → L2 → L3 on a configurable interval. The levels are ordered:
+
+- Run L1 first. If L1 fails, skip L2 and L3 and record transport failure.
+- Run L2 after L1 passes. If L2 fails, skip L3 and record a binding violation.
+- Run L3 after L2 passes. L3 failure is a health signal only.
+
+The liveness interval and which levels to run are relationship policy
+(stored in `CommunerdetteState`) and may be configured differently per
+use case (e.g. mutual-attestation peers run all three; bootstrap peers
+run L1 only).
+
+---
+
+## 13. Local TBID Signing Authority
+
+(@human — this was §12 before the liveness section was inserted)
 
 Communerdette is not a time-being and does not own the signing authority of
 Calendar, Chronomatter, or any other local TBID-bearing object. A local TBID
@@ -551,7 +909,7 @@ only by the TBID-owning object.
 
 ---
 
-## 13. Calendar and Chronomatter Usage
+## 14. Calendar and Chronomatter Usage
 
 Calendar is the first intended consumer:
 
@@ -572,7 +930,7 @@ a dependency from `core-engine` back to `foretias-node`.
 
 ---
 
-## 14. Acceptance Criteria
+## 15. Acceptance Criteria
 
 1. Calendar or TimeFamily code can obtain a `CommunerdetteLine` for a TBID and
    fetch a tick without manually handling `PeerRegistrationRecord`, `PeerAddr`,
@@ -586,20 +944,40 @@ a dependency from `core-engine` back to `foretias-node`.
    preserving local verification of signatures.
 6. Per-TBID stats record liveness and route health without exposing mutable
    internals to Calendar or Chronomatter.
-7. The plan includes an explicit step to address current liveness ping routing:
-   either implement JSON-RPC `ping` on the server or switch liveness to
-   transport-native probes.
+7. Communerdette implements all three liveness levels (L1 transport, L2
+   TBID identity via fast key, L3 Chronomatter via stamp+verify). Liveness
+   loops are driven by Communerdette. `PeerPool::start_liveness_pings` is
+   deprecated and removed.
 8. No Communerdette or CommunerdetteLine API can sign as Calendar,
    Chronomatter, or another local TBID owner. Outbound messages that claim a
    local TBID are signed by the owning Rust object before handoff to
    Communerdette.
 9. Remote records returned to Calendar or Chronomatter-adjacent code for
    trust-bearing use are wrapped in `CleanAuthenticated<R>` after
-   Communerdette verifies the remote TBID and record.
+   Communerdette verifies the remote TBID and fast-key signature.
+10. `from_trusted` is never called on data that arrived from a remote peer.
+    The `gate_foretis` function uses full `Unprocessed<Foretis>::verify(...)`
+    with an authenticated `ChrononRecord` supplied by the caller or fetched
+    via `get_tick`.
+11. All outbound payloads dispatched by Communerdette are wrapped in
+    `Externalized<R>`.
+12. Inbound messages that carry a slow-key signature and fail slow-key
+    verification are rejected even if the fast-key signature is valid.
+    Absent slow-key signatures are not treated as failures.
+13. A committed snapshot file `p2p/tests/snapshots/crypto_call_sites.txt`
+    enumerates every Rust call site that invokes a crypto primitive (sign,
+    verify, hash, key generation via the crypto plugin) and every location
+    where a signature is generated or checked. The snapshot test passes on a
+    clean workspace. Any new crypto call site requires updating the snapshot
+    in the same commit with an explanatory annotation.
+14. Channel-binding establishment (§12.0) requires dual-key (fast + slow)
+    proof from the remote TBID. A channel with a missing or incorrect slow-key
+    binding proof must not reach `FullyBound` state. L2 and L3 liveness checks
+    must not run on unbound channels.
 
 ---
 
-## 15. Non-Goals
+## 16. Non-Goals
 
 - Do not remove custom Noise_XX TCP JSON-RPC.
 - Do not require libp2p direct for all peers.
@@ -614,3 +992,7 @@ a dependency from `core-engine` back to `foretias-node`.
   unreviewed methods.
 - Do not implement full TBID binding proof in the first phase unless scoped
   separately by the implementation plan.
+- Do not implement slow-key verification in these phases; annotate the gate
+  functions with a clear TODO marking where slow-key verification will be
+  inserted.
+- Do not use `from_trusted` on any data arriving from a remote peer.
