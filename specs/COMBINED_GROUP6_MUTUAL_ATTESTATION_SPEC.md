@@ -1,5 +1,5 @@
 # COMBINED_GROUP6_MUTUAL_ATTESTATION_SPEC.md
-# Mutual Attestation — Fast Buddies (scheduled, bilateral) and GanzNeuFreund (random, one-way)
+# Mutual Attestation — Fast Buddies (scheduled, bilateral) and GanzNeueFreundschaft (random, one-way)
 
 **Prefix:** `COMBINED_GROUP6_MUTUAL_ATTESTATION`
 **Group:** COMBINED_GROUP6
@@ -54,12 +54,31 @@ epochs — not through any single high-stakes ceremony.
 
 Two distinct cadences run in parallel (when enabled), each with its **own
 dedicated wire API surface** so an observer can distinguish them by RPC
-method name:
+method name. The cadences are differentiated by **the initiator's
+motive** — which determines content-flow direction, which calendar's
+attestation store grows, and which side carries the freshness obligation:
 
-| Cadence | Wire API | Discovery | Cadence trigger | Trust signal |
-|---------|----------|-----------|-----------------|--------------|
-| **Fast Buddies (FB)** | `bruderschaft_init`, `fb_epoch_attestation`, `is_fast_buddy` | Derived from mirroring + Brüderschaft initiation (P2P mode); preconfigured TBID list (Server mode) | End of each (local) epoch | "We have a maintained, bilaterally-declared relationship that is continuing as expected." |
-| **GanzNeuFreund (GNF)** | `what_time_do_you_have`, `witness_attestation` | Random sample from known peer pool | Jittered scheduler across the epoch | "I am willing to be observed by, and observe, strangers. This is a one-off." |
+| Cadence | Initiator's motive | Content flow | Whose calendar grows | Wire API (protocol-specific) | Discovery | Trigger | Trust signal |
+|---------|--------------------|--------------|----------------------|------------------------------|-----------|---------|--------------|
+| **Fast Buddies (FB)** | "I want stamps for MY chronon, NOW." | **Push**: A pushes its own content (a ChrononRecord to be stamped) to its FBs. | The initiator's (A's) calendar — A's `ChrononRecord.external_attestations` grows. | `bruderschaft_init`, `fb_stamp_demand`, `is_fast_buddy` | Derived from mirroring + Brüderschaft initiation (P2P mode); preconfigured TBID list (Server mode) | End of each (local) epoch | "We have a maintained, bilaterally-declared relationship; my FBs respond to my demand with high alacrity." |
+| **GanzNeueFreundschaft (GNF)** | "I want to bear witness to a stranger." (German: "Eine ganz neue Freundschaft" — "a completely new friendship.") | **Pull, then push-stamp**: A pulls B's current chronon (via wtdyh), stamps it locally, then pushes the stamp to B. | The responder's (B's) calendar — B's `ChrononRecord.external_attestations` grows. A's outbound-attestation store grows in parallel. | `witness_attestation` (GNF-specific) + base `wtdyh` (shared) | Random sample from known peer pool | Jittered scheduler across the epoch | "I (and others doing GNF) am willing to bear witness for, and be witnessed by, strangers. This particular exchange is a one-off." |
+
+**Base (non-protocol-specific) API.** Three primitives are open to any
+caller and are NOT FB- or GNF-flavored:
+
+- `stamp(content)` — produce a Foretis stamping the caller-supplied content.
+  The existing v0.1 primitive.
+- `verify(foretis, content)` — verify a Foretis against content. v0.1.
+- `what_time_do_you_have()` (`wtdyh`) — return the responder's current
+  chronon info (plus an optional `not_accepting_attestations` flag for
+  dormancy hinting). Added by this spec.
+
+FB and GNF compose on top of these. GNF uses `wtdyh` to learn what to
+stamp; FB does not need `wtdyh` because the initiator already has the
+content it wants stamped. Both protocols use the underlying signature
+mechanism that `stamp`/`verify` exposes, even though FB invokes it via
+the FB-specific `fb_stamp_demand` (which is `stamp` + an FB-membership
+gate).
 
 Both cadences MUST fire reliably when enabled (FB more so — it is
 deterministic; GNF is rate-limited but its non-occurrence is itself a
@@ -98,7 +117,7 @@ For this to be a usable network-level health signal:
 3. It must include **diverse counterparties** — repeated attestation only
    with one peer becomes a single point of trust failure.
 4. It must **distinguish** stable relationships (Fast Buddies) from
-   single-encounter exchanges (GanzNeuFreund) so downstream consumers can
+   single-encounter exchanges (GanzNeueFreundschaft) so downstream consumers can
    weight them appropriately, both in wire traffic and in stored evidence.
 
 Today the codebase has the wire primitives (`stamp_peer`, `route_stamp`,
@@ -116,11 +135,13 @@ cadences above.
 | **Epoch (local)** | A fixed number of consecutive chronons defined per Calendar via `epoch_length_chronons`. Epoch N spans chronons `[N * epoch_length_chronons + 1, (N+1) * epoch_length_chronons]`. Each Calendar's epochs are entirely local — there is no network-wide global epoch in this spec. |
 | **FROST EpochSnapshot (orthogonal)** | A separately-defined network-level concept in `p2p/core-engine/src/epoch/snapshot.rs` for FROST probity scoring. It uses its own wall-clock-driven scheduler and is unrelated to FB/GNF cadence. Operators MAY align the two cadences in configuration but the two are independent. |
 | **Mutual Attestation Exchange (MAE)** | A protocol exchange where one Calendar produces and stores an attestation of another Calendar's chronon. The FB MAE is intrinsically bilateral (both sides exchange stamps per epoch); the GNF "MAE" is intrinsically one-way per exchange (initiator stamps responder; responder stores via Witness API). |
-| **Fast Buddy (FB)** | A remote TBID T that the local Calendar has explicitly entered into via the Brüderschaft protocol AND continues to back up to / back up from across epochs. FB status is bilaterally declared, maintained per epoch, and stored. Calendar exposes a yes/no API. |
+| **Fast Buddy (FB)** | A remote TBID T that the local Calendar has explicitly entered into via the Brüderschaft protocol AND continues to back up to / back up from across epochs. FB status is bilaterally declared, maintained per epoch, and stored. Calendar exposes a yes/no API. **Initiator motive**: A Calendar pushes content it wants stamped to its FBs and expects high-alacrity stamping in return. FBs are committed responders. |
 | **Brüderschaft protocol** | The initiation handshake that promotes a peer pair into FB. Requires four cross-stamps (origin chronon + last-completed-epoch chronon, each direction). |
-| **GanzNeuFreund (GNF)** | A remote TBID treated as never-before-seen for the purposes of a single attestation, even if we have history with it. GNF MAEs are one-way per exchange, fire-and-forget, not promoted into FB. |
+| **GanzNeueFreundschaft (GNF)** | Literally "a completely new friendship" in German — the name describes the *relationship state* of an exchange treated as never-before-seen, not a person ("Freundschaft" is the state-noun "friendship," not the agent-noun "friend"). A GNF exchange involves a remote TBID treated as never-before-seen for the purposes of a single attestation, even if we have history with it. **Initiator motive**: a Calendar that wants to bear witness for a stranger pulls the stranger's current chronon (via `wtdyh`), stamps it, and pushes the stamp into the stranger's Witness API. GNF MAEs are one-way per exchange, fire-and-forget, not promoted into FB. |
 | **Witness API** | The receiver-side API of GNF: an open `witness_attestation` RPC that accepts an inbound attestation, verifies it, and stores it on the local Calendar's `ChrononRecord.external_attestations`. |
-| **`wtdyh` (what_time_do_you_have)** | Universal time-probe RPC. Always returns the responder's current chronon info; may additionally signal dormancy and attestation acceptance status. |
+| **`wtdyh` (what_time_do_you_have)** | **Base** (non-protocol-specific) universal time-probe RPC. Always returns the responder's current chronon info; may additionally signal dormancy and attestation acceptance status. Used by GNF to learn what to stamp, but also available to any caller for any purpose. Not gated by FB-membership. |
+| **Push (FB)** | The initiator brings its own content to the responder for stamping. "Push of content." |
+| **Pull-then-stamp (GNF)** | The initiator first pulls the responder's content (via `wtdyh`), stamps it locally, then pushes the stamp back to the responder. The data direction is asymmetric in two phases. |
 | **Outbound attestation store** | A per-Calendar record of attestations the local node has **given to others** (i.e., foretis we signed about someone else's chronon, dispatched via FB or GNF). Distinct from the existing `ChrononRecord.external_attestations`, which records attestations **received from others** about our own chronons. |
 
 ---
@@ -133,11 +154,17 @@ cadences above.
    FB-MAE goes through `CommunerdetteLine` because we have an ongoing
    relationship to track. GNF goes through stateless `wtdyh` +
    `witness_attestation` RPCs because each exchange is one-off.
-3. **FB and GNF wire methods are strictly non-overlapping.** A node
-   observing RPC traffic can tell which cadence is running by the method
-   name alone. FB uses `bruderschaft_init` / `fb_epoch_attestation` /
-   `is_fast_buddy`. GNF uses `wtdyh` / `witness_attestation`. Neither
-   crosses into the other's namespace.
+3. **FB and GNF protocol-specific wire methods are strictly
+   non-overlapping.** A node observing RPC traffic can tell which cadence
+   is running by the protocol-specific method name alone. FB-specific:
+   `bruderschaft_init`, `fb_stamp_demand`, `is_fast_buddy`. GNF-specific:
+   `witness_attestation`. The **base API layer** (`stamp`, `verify`,
+   `wtdyh`) is shared and may be invoked outside either cadence. GNF uses
+   `wtdyh` to learn what to stamp; FB does not need `wtdyh` because the
+   initiator already holds the content. Observing a `wtdyh` call in
+   isolation does not identify the cadence; observing a subsequent
+   `witness_attestation` does (→ GNF). Observing `fb_stamp_demand` does
+   (→ FB).
 4. **MAE failure is normal.** Network and peer faults are expected. A
    single MAE failure must never block other MAEs, must never crash the
    task worker, and SHOULD produce a `ProbityReport` that other peers can
@@ -163,7 +190,7 @@ cadences above.
    corrupts the attestation graph.
 10. **Stored attestations are tagged.** Every `ExternalAttestation` carries
     an `AttestationKind` enum distinguishing `FastBuddy` from
-    `GanzNeuFreund`. A third party reading a Calendar's stored records can
+    `GanzNeueFreundschaft`. A third party reading a Calendar's stored records can
     tell which cadence produced each attestation.
 11. **No attestation may bypass the Take 3 inbound gate.** Records stored
     in `ChrononRecord.external_attestations` or in the outbound store come
@@ -405,7 +432,7 @@ pub enum CalendarTask {
     /// Fire a single GNF attestation against a randomly-selected
     /// non-FB peer. Discovery happens inside the handler; the task
     /// itself carries no specific target.
-    DoGanzNeuFreund {
+    DoGanzNeueFreundschaft {
         scheduled_for_chronon: u64,
     },
 }
@@ -460,14 +487,14 @@ pub struct ExternalAttestation {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AttestationKind {
     FastBuddy,
-    GanzNeuFreund,
+    GanzNeueFreundschaft,
 }
 
 fn default_attestation_kind() -> AttestationKind {
     // Records persisted before this field existed are treated as GNF
     // (the more conservative interpretation — no FB relationship is
     // inferred from missing tags).
-    AttestationKind::GanzNeuFreund
+    AttestationKind::GanzNeueFreundschaft
 }
 ```
 
@@ -663,7 +690,12 @@ which differ by `OperatingMode`:
 - There is no automatic promotion via repeated GNF attestations — see
   Invariant 8.
 
-### 6.3 FB End-of-Epoch MAE
+### 6.3 FB End-of-Epoch MAE (Push)
+
+**Motive recap.** A Calendar wants stamps for its own just-completed
+epoch chronon — A wants ITS calendar grown with `ExternalAttestation`s
+from FBs. The protocol is **a push of content** from A to each FB:
+"stamp this, NOW; I am your FB and you committed to alacrity."
 
 When the local Calendar's chronon advances such that
 `floor(prev_chronon / epoch_length) < floor(current_chronon / epoch_length)`,
@@ -679,50 +711,89 @@ CalendarTask::DoFastBuddyMAE {
 }
 ```
 
-**Wire surface:** `fb_epoch_attestation(FbEpochAttestationRequest)
--> FbEpochAttestationResponse`.
+**Wire surface:** `fb_stamp_demand(FbStampDemandRequest)
+-> FbStampDemandResponse`.
 
 ```rust
-pub struct FbEpochAttestationRequest {
+pub struct FbStampDemandRequest {
     pub initiator_tbid: String,
     pub epoch_number:   u64,
-    /// Initiator's last chronon of the epoch being attested.
-    pub initiator_epoch_chronon: ChrononRecord,
-    /// Initiator's stamp of responder's last chronon of the same epoch
-    /// (fetched via wtdyh + get_tick beforehand).
-    pub stamp_of_responder_epoch_chronon: Foretis,
+    /// The content the initiator wants stamped — typically the
+    /// initiator's just-completed-epoch ChrononRecord. The responder
+    /// (FB) does not need to fetch this from the initiator; it arrived
+    /// in this request.
+    pub content_to_stamp: ChrononRecord,
 }
 
-pub struct FbEpochAttestationResponse {
-    /// Responder's stamp of initiator's epoch chronon.
-    pub stamp_of_initiator_epoch_chronon: Foretis,
+pub struct FbStampDemandResponse {
+    /// Responder's stamp (Foretis) over `content_to_stamp`. The
+    /// chronon_number embedded in this Foretis is the responder's own
+    /// current chronon at the moment of stamping — that's how the
+    /// initiator learns when the FB witnessed it.
+    pub stamp: Foretis,
     /// Responder's confirmation that it still considers the initiator
     /// an FB. If false, the relationship is over from responder's side
-    /// (Invariant 5 abandonment — see §6.4).
+    /// (Invariant 5 abandonment — see §6.4). The responder MAY still
+    /// produce a stamp out of courtesy even when this flag is false,
+    /// or it MAY refuse and return an error instead — implementation
+    /// choice.
     pub still_fast_buddy: bool,
 }
 ```
 
-**Worker handler `handle_do_fast_buddy_mae`:**
+**Worker handler `handle_do_fast_buddy_mae` (initiator side, A):**
 
 ```text
 1. Check is_fast_buddy(T) is still yes (Calendar may have flipped during
    the latency between enqueue and worker pickup). If no → drop task.
 2. Obtain CommunerdetteLine for T.
-3. wtdyh -> get T's last_epoch_bounds for the epoch we are attesting.
-4. line.get_tick(epoch_end_chronon) -> CleanAuthenticated<ChrononRecord>.
-5. Sign Foretis over the responder's epoch chronon.
-6. Call fb_epoch_attestation RPC with our epoch chronon + our stamp.
-7. Verify the returned stamp; check still_fast_buddy.
-8. If verification ok: append ExternalAttestation { kind: FastBuddy }
-   to our ChrononRecord's external_attestations; append our outbound
-   stamp to OutboundAttestation log.
-9. If still_fast_buddy == false on response: Calendar flips
+3. Resolve A's just-completed-epoch ChrononRecord via the local
+   chrononchain. Call it CR_a_epoch.
+4. Push: line.fb_stamp_demand({ content_to_stamp: CR_a_epoch,
+                                 epoch_number,
+                                 initiator_tbid: A's TBID }).
+5. Receive the response. Verify the stamp via Take 3 inbound gate
+   (signature over CR_a_epoch, signed by T's TBID).
+6. If verification ok: append ExternalAttestation { kind: FastBuddy,
+   attester_tbid: T, foretis: response.stamp,
+   attester_tick_record: <fetched lazily via line.get_tick(stamp.chronon_number)
+                          OR included in response in a future revision>,
+   ... } to A's CR_a_epoch.external_attestations; append our own
+   no-op outbound entry (A did not produce a stamp in this exchange,
+   but the request itself is auditable).
+7. If response.still_fast_buddy == false: Calendar flips
    is_fast_buddy(T) -> false locally too (mirror the unilateral
-   abandonment).
-10. Record FB cycle outcome in MirrorState::fb_state for use by the
-    abandonment check in §6.4.
+   abandonment from §6.4).
+8. Record FB cycle outcome in MirrorState::fb_state.
 ```
+
+**Responder handler (FB side, B):**
+
+```text
+1. Verify caller's TBID == request.initiator_tbid via transport auth.
+2. is_fast_buddy(caller_tbid): if false, return `still_fast_buddy: false`
+   AND refuse the stamp (return error) — we're not their FB.
+3. Verify request.content_to_stamp passes Take 3 inbound gate as a
+   well-formed ChrononRecord signed by caller's TBID.
+4. Sign Foretis over content_to_stamp using B's TBID at B's current chronon.
+5. Return { stamp, still_fast_buddy: true }.
+6. Record outbound entry in B's OutboundAttestation log
+   (B provided a stamp; this is B's outbound, not B's inbound).
+7. Update fb_state for caller: this counts as a successful FB-MAE
+   from B's perspective (B serviced an FB demand).
+```
+
+**Storage outcome:**
+- A's calendar grew: new `ExternalAttestation { kind: FastBuddy }` on
+  A's just-completed-epoch ChrononRecord.
+- B's outbound store grew: new `OutboundAttestation { kind: FastBuddy }`
+  recording the stamp B provided to A.
+- Notably, B's calendar does NOT grow in this exchange. For B's calendar
+  to grow on this same epoch, B must initiate its OWN
+  `fb_stamp_demand` to A (typically also at epoch end). That second
+  exchange is INDEPENDENT — the "mutual" in mutual attestation emerges
+  because each side independently demands stamps from the other at end
+  of their own epochs.
 
 Errors at any step: record as a failed FB-cycle in MirrorState. Probity
 report attribute `"fb_mae_failed"`.
@@ -742,12 +813,12 @@ For each T in `fast_buddies`:
 - If T had **only failed attempts** during the just-completed epoch (no
   successes in either direction), `is_fast_buddy(T)` flips to false.
   T is removed from `fast_buddies` AND the next attempt by T to call
-  `fb_epoch_attestation` on us will receive `still_fast_buddy: false`.
+  `fb_stamp_demand` on us will receive `still_fast_buddy: false`.
 - If T had **no attempts at all** (quiet epoch — neither side initiated
   any work), FB status is preserved. Absence of failure ≠ failure.
 
 **Counterparty discovery of abandonment:** When the abandoned counterparty's
-worker next tries `fb_epoch_attestation`, our handler:
+worker next tries `fb_stamp_demand`, our handler:
 - Detects `is_fast_buddy(caller_tbid) == false`.
 - Returns success/failure of THIS stamp normally, but with
   `still_fast_buddy: false`.
@@ -825,7 +896,24 @@ to the stamp-exchange.
 
 ---
 
-## 7. GanzNeuFreund Cadence
+## 7. GanzNeueFreundschaft Cadence
+
+**Motive recap.** A Calendar wants to **bear witness for a stranger** —
+A's goal is to grow some random peer B's calendar with a fresh
+`ExternalAttestation` and, in passing, to record an outbound stamp in
+A's own outbound-attestation store. Crucially, A's own
+`ChrononRecord.external_attestations` is NOT what GNF grows from A's
+side as initiator; that growth happens when some OTHER node randomly
+picks A as ITS GNF target and arrives at A's Witness API. The
+network-wide effect of every Calendar independently running GNF is
+that each Calendar's external_attestations accretes random witnesses
+over time — mutuality emerges across the population, not within each
+exchange.
+
+The protocol is **pull-then-stamp**: A pulls B's current chronon (via
+the base `wtdyh` RPC, which is open to any caller for any purpose),
+stamps it locally, then pushes the stamp to B via the GNF-specific
+Witness API.
 
 ### 7.1 Scheduler
 
@@ -835,7 +923,7 @@ time. The scheduler:
 - Tracks the current local epoch E (derived from
   `current_chronon / epoch_length_chronons`).
 - At epoch rollover (E → E+1), enqueues `gnf_peers_per_epoch` instances
-  of `CalendarTask::DoGanzNeuFreund` with `scheduled_for_chronon` values
+  of `CalendarTask::DoGanzNeueFreundschaft` with `scheduled_for_chronon` values
   spread (jittered) across epoch E+1's chronon range.
 - The worker pulls each task when its `scheduled_for_chronon` is reached
   (or shortly after).
@@ -845,7 +933,7 @@ than a burst at epoch start.
 
 ### 7.2 Candidate Selection
 
-When a `DoGanzNeuFreund` task is dequeued, the worker selects a
+When a `DoGanzNeueFreundschaft` task is dequeued, the worker selects a
 candidate TBID:
 
 1. Gather candidates: peers from `Communerd::known_peers()` and
@@ -979,10 +1067,10 @@ return the appropriate `WitnessOutcomeWire` and emit
 **Step 3 — Both sides update their stores:**
 
 - Initiator A: append to its outbound attestations log
-  (`OutboundAttestation { kind: GanzNeuFreund, ... }`).
+  (`OutboundAttestation { kind: GanzNeueFreundschaft, ... }`).
 - Responder B (Witness API): append to its
   `ChrononRecord.external_attestations` for the chronon A stamped
-  (`ExternalAttestation { kind: GanzNeuFreund, ... }`).
+  (`ExternalAttestation { kind: GanzNeueFreundschaft, ... }`).
 
 ### 7.4 GNF Asymmetry
 
@@ -1018,7 +1106,7 @@ that SHOULD be observable via metrics (§10).
 | **Chronomatter** | Local chrononchain advance; `most_recent_chronon_record` source-of-truth. | Local crypto for signing. | Calendar (via TickObserver). |
 | **Calendar** | FB set; `epoch_length_chronons` config; outbound attestation log; `is_fast_buddy` API; FB recompute; FB and GNF task enqueue. | Chronomatter (via lookup); `MirrorState` (Group 4b); peer change callback. | Task queue; `ChrononRecord.external_attestations` (inbound, via TimeFamily Witness API); `OutboundAttestation` log. |
 | **Communerd** | Caches Chronomatter's "what time" answer (TTL = `wtdyh_cache_ttl_chronons`); serves `wtdyh` RPC; routes FB exchanges through CommunerdetteLine. | Chronomatter (on cache miss); Calendar (for `is_fast_buddy` policy when a remote node calls). | Cache; Communerdette per-TBID state. |
-| **TimeFamily server** | Hosts Witness API (`witness_attestation`); routes FB RPCs (`bruderschaft_init`, `fb_epoch_attestation`, `is_fast_buddy`) to handlers; enforces dormancy policy on inbound. | Calendar (via `is_fast_buddy`, `Dormancy::strict`); Chronomatter (to validate referenced chronon exists). | Calendar (via Witness API → `ChrononRecord.external_attestations`). |
+| **TimeFamily server** | Hosts Witness API (`witness_attestation`); routes FB RPCs (`bruderschaft_init`, `fb_stamp_demand`, `is_fast_buddy`) to handlers; enforces dormancy policy on inbound. | Calendar (via `is_fast_buddy`, `Dormancy::strict`); Chronomatter (to validate referenced chronon exists). | Calendar (via Witness API → `ChrononRecord.external_attestations`). |
 
 The trust boundary discipline (Group 1 Take 3) applies to every inbound
 record: `Unprocessed<R>` → `verify()` → `CleanAuthenticated<R>` before
@@ -1176,7 +1264,7 @@ former counterparty.
    enqueued and completed `DoFastBuddyMAE` for the just-completed
    epoch; verify both Calendars accreted the new attestations.
 3. **FB abandonment test.** Two FB nodes; simulate one full epoch where
-   B refuses every fb_epoch_attestation call from A AND refuses every
+   B refuses every fb_stamp_demand call from A AND refuses every
    mirror chunk; at end of epoch A's `is_fast_buddy(B)` flips to false;
    `fb_abandoned` probity report emitted.
 4. **FB quiet-epoch test.** Two FB nodes; one full epoch with NO
@@ -1186,15 +1274,15 @@ former counterparty.
 5. **GNF outbound + Witness inbound test.** Three in-process nodes A,
    B, C; A initiates a GNF attestation that lands on C (selected
    randomly under fixed test seed); C's Calendar accretes an
-   `ExternalAttestation { kind: GanzNeuFreund, attester: A }`; A's
+   `ExternalAttestation { kind: GanzNeueFreundschaft, attester: A }`; A's
    outbound store has the corresponding `OutboundAttestation { kind:
-   GanzNeuFreund, peer: C }`.
+   GanzNeueFreundschaft, peer: C }`.
 6. **GNF dedupe-per-epoch test.** Within one epoch, two GNF cadence
    ticks against a candidate pool of size 2 select DIFFERENT peers
    (Invariant 6).
 7. **Self-attestation refusal test.** Enqueueing any task with
    `peer_tbid == local TBID` is refused at the worker entry.
-   `bruderschaft_init` and `fb_epoch_attestation` handlers refuse when
+   `bruderschaft_init` and `fb_stamp_demand` handlers refuse when
    `initiator_tbid == local TBID`.
 8. **Dormancy Strict test.** Local node is dormant under
    `DormantInbound::Strict`. wtdyh returns `accepting_attestations:
@@ -1208,7 +1296,7 @@ former counterparty.
     cap of OutboundAttestations through the store; FIFO eviction
     keeps the most recent N.
 11. **API-distinct test.** Wire-level assertion (mock transport) that
-    FB tasks invoke only `bruderschaft_init` / `fb_epoch_attestation`
+    FB tasks invoke only `bruderschaft_init` / `fb_stamp_demand`
     / `is_fast_buddy`, and GNF tasks invoke only `wtdyh` /
     `witness_attestation`. The two namespaces are non-overlapping.
 12. `cargo test --workspace` passes.
