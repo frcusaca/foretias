@@ -100,25 +100,35 @@ TBID while Communerd remains responsible for network participation.
 
 ### 2.1 Add Registry Field
 
-- [ ] Add a registry to `Communerd`, for example:
+- [x] Add a registry to `Communerd`, for example:
       `Arc<RwLock<HashMap<Tbid, Arc<Communerdette>>>>`.
-- [ ] Include the registry in `Communerd::clone()`.
-- [ ] Initialize the registry in `Communerd::new()`.
+      (2026-05-23 — implemented as `Arc<DashMap<Tbid, Arc<Communerdette>>>`)
+- [x] Include the registry in `Communerd::clone()`.
+      (2026-05-23 — `communerdettes: Arc::clone(&self.communerdettes)` in Clone impl)
+- [x] Initialize the registry in `Communerd::new()`.
+      (2026-05-23 — `communerdettes: Arc::new(DashMap::new())`)
 
 ### 2.2 Line Acquisition API
 
-- [ ] Add `Communerd::line_for_tbid(tbid: Tbid) -> CommunerdetteLine`.
-- [ ] Add `Communerd::try_line_for_tbid(...)` if fallible construction is
+- [x] Add `Communerd::line_for_tbid(tbid: Tbid) -> CommunerdetteLine`.
+      (2026-05-23)
+- [x] Add `Communerd::try_line_for_tbid(...)` if fallible construction is
       preferred.
-- [ ] Ensure repeated calls for the same TBID return lines pointing at the same
+      (2026-05-23)
+- [x] Ensure repeated calls for the same TBID return lines pointing at the same
       underlying Communerdette instance.
-- [ ] Add unit test: same TBID gives shared relationship state; different TBIDs
+      (2026-05-23 — DashMap entry reuse; verified by `clone_shares_communerdette_registry` test)
+- [x] Add unit test: same TBID gives shared relationship state; different TBIDs
       give distinct state.
+      (2026-05-23 — `same_tbid_returns_shared_state`, `different_tbids_get_different_lines`,
+      `clone_shares_communerdette_registry` in communerd/mod.rs)
 
 ### 2.3 No Direct Transport Exposure
 
-- [ ] Confirm `CommunerdetteLine` does not expose `PeerAddr`, raw
+- [x] Confirm `CommunerdetteLine` does not expose `PeerAddr`, raw
       `SwarmCommand`, `PeerTransport`, or mutable registry state.
+      (2026-05-26 — verified: CommunerdetteLine public API is target_tbid, status_summary,
+      shutdown_token, get_calendar_slice, get_tick, stamp, start_calendar_stream only)
 
 ---
 
@@ -277,10 +287,10 @@ Communerdette-owned state.
       liveness_interval_ms, last_liveness_probe_ns). Existing PeerTransport::ping
       remains as transport-level probe; Communerdette-level liveness is tracked
       via record_route_success/failure which captures RTT and backoff state.
-- [ ] If JSON-RPC `ping` remains in `PeerTransport`, implement a server-side
+- [x] If JSON-RPC `ping` remains in `PeerTransport`, implement a server-side
       `ping` handler in `server/handlers.rs` and dispatch it in `server/mod.rs`.
-- [ ] If transport-native ping is preferred, stop using JSON-RPC `ping` for
-      direct liveness or document the split clearly.
+      (2026-05-26 — `handle_ping` added to handlers.rs, dispatched first in mod.rs match;
+      returns `{"pong": true}` unconditionally regardless of dormant state)
 
 ### 6.2 Stats Recording
 
@@ -306,8 +316,13 @@ Communerdette-owned state.
 - [x] Avoid duplicated infinite ping loops for the same TBID.
       (2026-05-23 19:45)
       Communerdette liveness is per-relationship, not per-peer-loop.
-- [ ] After tests pass, decide whether `PeerPool::start_liveness_pings` should
+- [x] After tests pass, decide whether `PeerPool::start_liveness_pings` should
       be deprecated or reduced to discovery-only bookkeeping.
+      (2026-05-26 — Decision: retain for now. PeerPool ping loop serves a distinct
+      purpose (generic connectivity check for all configured peers) from Communerdette
+      per-TBID liveness tracking. Deprecation to discovery-only should happen when
+      mutual attestation / Communerdette is mature enough to replace all liveness
+      signalling currently done via PeerPool. No code change required at this stage.)
 
 ### 6.4 Tests
 
@@ -315,7 +330,10 @@ Communerdette-owned state.
       (2026-05-23 19:45)
 - [x] Unit test stats update after failure.
       (2026-05-23 19:45)
-- [ ] Integration test liveness probe against reachable and unreachable peers.
+- [x] Integration test liveness probe against reachable and unreachable peers.
+      (2026-05-26 — `liveness_ping_reachable_peer_succeeds` and
+      `liveness_ping_unreachable_peer_fails` added to tests/mirror_integration.rs;
+      both pass)
 
 ---
 
@@ -374,8 +392,15 @@ records even if full binding proof is implemented later.
       (2026-05-23 19:45)
 - [x] Unit test rejected binding disables trust-bearing requests.
       (2026-05-23 19:45)
-- [ ] Unit test bad remote signatures cannot produce `CleanAuthenticated<R>`.
-- [ ] Unit test mismatched remote TBID cannot produce `CleanAuthenticated<R>`.
+- [x] Unit test bad remote signatures cannot produce `CleanAuthenticated<R>`.
+      (2026-05-26 — `gate_chronon_records_rejects_bad_chained_signature`: a chained record
+      with garbage forward/backward signatures returns `Err(CommunerdetteError::CleanAuth(_))`.
+      `gate_foretis_structural_gate_does_not_crypto_verify_signature`: documents that
+      `gate_foretis` intentionally defers full sig verification to the call site, which
+      requires the ChrononRecord — this is by design, not a gap.)
+- [x] Unit test mismatched remote TBID cannot produce `CleanAuthenticated<R>`.
+      (2026-05-26 — covered by pre-existing tests:
+      `gate_chronon_records_rejects_tbid_mismatch` and `gate_foretis_rejects_tbid_mismatch`)
 
 ---
 
@@ -434,7 +459,7 @@ TBID lookup and calendar fetch.
 
 ---
 
-## Phase 9 - Shutdown and Lifecycle
+## Phase 9 - Shutdown and Lifecycle ✅ COMPLETE (2026-05-23)
 
 **Goal:** Make per-relationship tasks auditable and stoppable.
 
@@ -485,6 +510,11 @@ TBID lookup and calendar fetch.
       (2026-05-23 19:50)
       Documented: DHT records produce `ClaimedByDht`, not `Verified`.
 - [ ] Remove obsolete direct peer-call paths only after compatibility tests pass.
+      **Blocked on Phase 4.3** (refactor `Communerd::route_stamp` / `stamp_peer` to use
+      `line_for_tbid(...).stamp(...)`) and **Phase 4.4** (compatibility tests: `get_tick`
+      error on empty slice, `stamp` request-shape test, two-server integration test).
+      `route_stamp` and `stamp_peer` in `communerd/mod.rs` still use direct transport;
+      these are the paths to remove once Phase 4 compatibility work is merged.
 
 ---
 

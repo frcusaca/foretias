@@ -461,6 +461,7 @@ pub(crate) fn process_request_from_value(server: &TimeFamilyServer, req: serde_j
     let params = req.get("params").cloned().unwrap_or(serde_json::Value::Null);
 
     match method {
+        "ping" => Ok(handlers::handle_ping(server, params)),
         "stamp" => Ok(handlers::handle_stamp(server, params)),
         "route_stamp" => Ok(handlers::handle_route_stamp(server, params)),
         "verify" => Ok(handlers::handle_verify(server, params)),

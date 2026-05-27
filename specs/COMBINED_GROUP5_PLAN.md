@@ -3,7 +3,7 @@
 
 **Date:** 2026-05-22 (updated 2026-05-23)
 **Paired Spec:** `COMBINED_GROUP5_SPEC.md`
-**Status:** g5-b merged 2026-05-22. g5-d merged 2026-05-22. g5-a in progress (worktree g5-a-clock-inject-1779518843). g5-c blocked on human decision.
+**Status:** g5-b merged 2026-05-22. g5-d merged 2026-05-22. g5-a merged 2026-05-23 (commit b7927f0). g5-c blocked on human decision (Option B — mTLS, dedicated spec required).
 **Pre-flight:** `COMBINED_GROUP2_PLAN.md` Phase A
 
 ---
@@ -92,51 +92,51 @@
 
 ### Steps
 
-- [ ] **Pre-flight** — Phase A passes
-- [ ] **Snapshot the current state:**
+- [x] **Pre-flight** — Phase A passes
+- [x] **Snapshot the current state:**
       ```bash
       grep -rn "SystemTime::now()" p2p/{core-engine,foretias-client,foretias-server}/src \
         > /tmp/clock-sites-before.txt
       wc -l /tmp/clock-sites-before.txt   # should be 17 (or 18 incl. clock.rs:32)
       ```
-- [ ] **Plumbing pass — add `Clock` field where missing:**
+- [x] **Plumbing pass — add `Clock` field where missing:**
       - `Communerd::new(...)` add `clock: Arc<dyn Clock>` parameter
       - `Communerd` struct add `clock: Arc<dyn Clock>` field
       - `TbidHandshake::new` add `clock` parameter
       - `EncryptedJsonlCalendarStore::new` add `clock` parameter
       - Other constructors as required by compile errors
-- [ ] **Conversion pass — replace each `SystemTime::now()` call** with
+- [x] **Conversion pass — replace each `SystemTime::now()` call** with
       `self.clock.now_ns()?` (or `.expect("invariant: ...")` where appropriate;
       see spec §2.2)
-- [ ] **Top-level injection:** in `p2p/foretias-server/src/main.rs` and any
+- [x] **Top-level injection:** in `p2p/foretias-server/src/main.rs` and any
       other binary entry, construct `Arc::new(crate::clock::SystemClock) as Arc<dyn Clock>`
       and pass through
-- [ ] **DI fix in `Chronomatter::new`**: per spec §2.4, accept `crypto:
+- [x] **DI fix in `Chronomatter::new`**: per spec §2.4, accept `crypto:
       Arc<dyn CryptoServer>` explicitly. Remove the internal `crypto_server::new_software(...)`
       call. Update `TimeFamilyServer::new` at `server/mod.rs:69` to construct
       both `crypto` and `clock` and pass them.
-- [ ] **Test seam:** Rewrite at least one existing chronomatter test to use
+- [x] **Test seam:** Rewrite at least one existing chronomatter test to use
       `FixedClock` to prove the seam is functional:
       ```rust
       let clock = Arc::new(crate::clock::FixedClock::new(1_700_000_000_000_000_000));
       ```
-- [ ] **Build and test repeatedly during the work:**
+- [x] **Build and test repeatedly during the work:**
       ```bash
       cd p2p && cargo build --workspace && cargo test --workspace
       ```
-- [ ] **Final verification:**
+- [x] **Final verification:**
       ```bash
       grep -rn "SystemTime::now()" p2p/{core-engine,foretias-client,foretias-server}/src \
         | grep -v "core-engine/src/clock.rs"
       # expect: empty output
       ```
-- [ ] **Determinism check:** run `cargo test --workspace` twice in a row;
+- [x] **Determinism check:** run `cargo test --workspace` twice in a row;
       results identical
-- [ ] **Commit:**
+- [x] **Commit:**
       ```
       Major: Architectural Foundations (Group 5), Section A — clock injection + Chronomatter::new DI fix
       ```
-- [ ] **Merge to alpha; remove worktree.**
+- [x] **Merge to alpha; remove worktree.** (2026-05-23, commit b7927f0)
 
 ---
 
@@ -200,7 +200,7 @@
 
 - [x] `g5-b-crash-recovery` merged 2026-05-22: corrupt `.tmp` is removed
 - [x] `g5-d-agents-rules` merged 2026-05-22: AGENTS.md gap-fill complete (4 rules added)
-- [ ] `g5-a-clock-inject` merged: zero `SystemTime::now()` calls outside `clock.rs`
+- [x] `g5-a-clock-inject` merged 2026-05-23 (b7927f0): zero `SystemTime::now()` calls outside `clock.rs`
 - [x] `g5-c-rpc-auth` decision made: Option B (mTLS) — dedicated mTLS spec required; g5-c deferred to separate plan
-- [ ] `cargo test --workspace` passes deterministically (two runs identical)
-- [ ] `cargo build --workspace` zero warnings
+- [x] `cargo test --workspace` passes deterministically (511 tests, 2 ignored, 0 failed — verified 2026-05-26)
+- [x] `cargo build --workspace` zero warnings

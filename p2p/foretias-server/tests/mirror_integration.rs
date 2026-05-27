@@ -341,3 +341,47 @@ async fn find_new_mirror_enrolls_peer_in_mirror_state() {
     server_a.stop_daemon_arc();
     server_b.stop_daemon_arc();
 }
+
+// ── Group 7 Phase 6 — Liveness probe integration tests ───────────────────────
+
+/// Verify the JSON-RPC `ping` handler is wired and responds against a reachable server.
+#[tokio::test]
+async fn liveness_ping_reachable_peer_succeeds() {
+    use foretias_server::communerd::json_rpc_transport::JsonRpcTransport;
+    use foretias_server::communerd::transport::{PeerAddr, PeerTransport};
+
+    let port = find_available_port();
+    let addr = format!("127.0.0.1:{port}");
+    let server = Arc::new(
+        TimeFamilyServer::new(&addr, 1_000_000_000).expect("create server"),
+    );
+    let _handle = Arc::clone(&server).start().expect("start server");
+
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        if tokio::net::TcpStream::connect(&addr).await.is_ok() { break; }
+        assert!(std::time::Instant::now() < deadline, "server did not start in time");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+
+    let transport = JsonRpcTransport::new(5);
+    let peer = PeerAddr { json_rpc: addr, peer_id: None, last_seen_ns: 0 };
+    transport.ping(&peer).await.expect("ping reachable peer must succeed");
+}
+
+/// Verify `ping` returns an error against a port with no listener.
+#[tokio::test]
+async fn liveness_ping_unreachable_peer_fails() {
+    use foretias_server::communerd::json_rpc_transport::JsonRpcTransport;
+    use foretias_server::communerd::transport::{PeerAddr, PeerTransport};
+
+    let port = find_available_port();
+    let addr = format!("127.0.0.1:{port}");
+
+    let transport = JsonRpcTransport::new(2);
+    let peer = PeerAddr { json_rpc: addr, peer_id: None, last_seen_ns: 0 };
+    assert!(
+        transport.ping(&peer).await.is_err(),
+        "ping unreachable peer must return an error",
+    );
+}

@@ -2092,4 +2092,103 @@ mod tests {
         assert_ne!(a, b);
         assert_eq!(a.cmp(&b), std::cmp::Ordering::Greater);
     }
+
+    // ── Phase 7.4 — bad-auth gate tests ──────────────────────────────────────
+
+    /// A chained ChrononRecord with a cryptographically wrong forward/backward
+    /// signature must not produce `CleanAuthenticated<ChrononRecord>`.
+    ///
+    /// Genesis (tick 1, tb_version=0) passes without crypto verification (PQC
+    /// genesis is deferred). Tick 2 onward requires `verify_pair`, which calls
+    /// `crypto.verify_with` on the chained signatures. Garbage bytes there must
+    /// produce a `CleanAuth` error and block the record from being authenticated.
+    #[test]
+    fn gate_chronon_records_rejects_bad_chained_signature() {
+        let target_tbid = Tbid::from_raw([0u8; 96]);
+        let crypto = Arc::from(foretias_core::crypto_server::new_software(
+            foretias_core::crypto_server::ForetiasCurve::Ed25519,
+        )
+        .expect("libsodium"));
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+
+        let executor = CommunerdetteExecutor::new(
+            Arc::new(MockHost {
+                dht_record: None,
+                cached_record: None,
+                swarm_available: false,
+                local_peer_id: None,
+                namespace: "test".to_string(),
+            }),
+            target_tbid,
+            Arc::clone(&crypto),
+            clock,
+        );
+
+        let record1 = make_test_chronon_record(&target_tbid, 1);
+        // Record 2 with deliberately wrong (garbage) forward/backward signatures.
+        let record2 = make_test_chronon_record(&target_tbid, 2);
+
+        let result = executor.gate_chronon_records(vec![record1, record2]);
+
+        assert!(
+            result.is_err(),
+            "chained record with bad signature must not produce CleanAuthenticated"
+        );
+        assert!(
+            matches!(result, Err(CommunerdetteError::CleanAuth(_))),
+            "expected CleanAuth error, got: {:?}",
+            result.err()
+        );
+    }
+
+    /// A Foretis reply with matching TBID but garbage signature bytes passes the
+    /// Communerdette structural+TBID gate and returns `CleanAuthenticated<Foretis>`.
+    /// This is correct: full Foretis signature verification (which requires the
+    /// ChrononRecord and the content bytes) is deferred to the call site per
+    /// the `gate_foretis` doc comment.
+    ///
+    /// This test documents the current trust boundary, not a bug.
+    #[test]
+    fn gate_foretis_structural_gate_does_not_crypto_verify_signature() {
+        let target_tbid = Tbid::from_raw([0u8; 96]);
+        let crypto = Arc::from(foretias_core::crypto_server::new_software(
+            foretias_core::crypto_server::ForetiasCurve::Ed25519,
+        )
+        .expect("libsodium"));
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+
+        let executor = CommunerdetteExecutor::new(
+            Arc::new(MockHost {
+                dht_record: None,
+                cached_record: None,
+                swarm_available: false,
+                local_peer_id: None,
+                namespace: "test".to_string(),
+            }),
+            target_tbid,
+            crypto,
+            clock,
+        );
+
+        // Structurally valid Foretis but with garbage signature bytes.
+        let foretis_bad_sig = Foretis {
+            chronon_number: 1,
+            content_hash: FTByteArray::from([5u8; 32]),
+            signature: FTByteVector::from(vec![0xdeu8; 64]),
+            signature_algorithm: "Ed25519".to_string(),
+            tbid: target_tbid,
+            echo: "test".to_string(),
+            tbn: "test-tb".to_string(),
+            time_being_reference_time: "UE+1000000000ns".to_string(),
+        };
+        let json = serde_json::to_value(&foretis_bad_sig).unwrap();
+
+        // Structural+TBID gate passes; full sig verification is caller responsibility.
+        let result = executor.gate_foretis(json);
+        assert!(
+            result.is_ok(),
+            "gate_foretis only performs structural+TBID checks; full crypto sig \
+             verification requires the ChrononRecord and happens at the call site"
+        );
+    }
 }

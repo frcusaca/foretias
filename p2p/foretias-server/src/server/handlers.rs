@@ -306,6 +306,11 @@ pub fn handle_integrity_check(server: &TimeFamilyServer, params: Value) -> JsonR
     }
 }
 
+pub fn handle_ping(_server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    let id = params.get("id").cloned();
+    jsonrpc::JsonRpcResponse::success(id, serde_json::json!({"pong": true}))
+}
+
 pub fn handle_status(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
     let id = params.get("id").cloned();
     let peer_count = server.communerd()
