@@ -22,16 +22,16 @@ checkbox tasks here following `AGENTS.md`.
 
 ## Prerequisites
 
-- [ ] Re-read `COMMUNERDETTE_SPEC.md` end to end.
-- [ ] Verify no broken tests on alpha before starting implementation.
-- [ ] Confirm `COMBINED_GROUP1_TYPE_BASED_SAFETY_ENFORCEMENT_TAKE_3` is code
+- [x] Re-read `COMMUNERDETTE_SPEC.md` end to end. (2026-05-27)
+- [x] Verify no broken tests on alpha before starting implementation. (2026-05-27)
+- [x] Confirm `COMBINED_GROUP1_TYPE_BASED_SAFETY_ENFORCEMENT_TAKE_3` is code (2026-05-27)
       complete on alpha (all checkboxes in its PLAN.md are checked). Communerdette
       depends on `Unprocessed<T>`, `CleanAuthenticated<T>`, and `Externalized<T>`
       being available from `core-engine/src/foretias/clean_auth.rs`.
-- [ ] Confirm whether TBID binding proof is in scope for this implementation
+- [x] Confirm whether TBID binding proof is in scope for this implementation (2026-05-27)
       or whether phase 1 will only represent `ClaimedByDht` distinctly from
       `Verified`.
-- [ ] Identify the current Rust object that owns each local TBID used by
+- [x] Identify the current Rust object that owns each local TBID used by (2026-05-27)
       Calendar, Chronomatter, and Communerd-level network statements.
 
 ---
@@ -42,38 +42,38 @@ checkbox tasks here following `AGENTS.md`.
 
 ### 1.1 Module Creation
 
-- [ ] Create `p2p/foretias-node/src/communerd/communerdette.rs`.
-- [ ] Add `pub mod communerdette;` or private `mod communerdette;` in
+- [x] Create `p2p/foretias-node/src/communerd/communerdette.rs`. (2026-05-27)
+- [x] Add `pub mod communerdette;` or private `mod communerdette;` in (2026-05-27)
       `p2p/foretias-node/src/communerd/mod.rs`.
-- [ ] Define public `CommunerdetteLine` with private fields.
-- [ ] Define private `Communerdette` with private/admin-only methods.
-- [ ] Define `CommunerdetteStatusSummary` as a read-only diagnostics surface.
+- [x] Define public `CommunerdetteLine` with private fields. (2026-05-27)
+- [x] Define private `Communerdette` with private/admin-only methods. (2026-05-27)
+- [x] Define `CommunerdetteStatusSummary` as a read-only diagnostics surface. (2026-05-27)
 
 ### 1.2 State Types
 
-- [ ] Define `TbidBindingStatus` with at least:
+- [x] Define `TbidBindingStatus` with at least: (2026-05-27)
       `Unknown`, `ClaimedByDht`, `Verified`, `Rejected`.
-- [ ] Define `ActiveRoute` with at least:
+- [x] Define `ActiveRoute` with at least: (2026-05-27)
       `Libp2pDirect`, `NoiseJsonRpc`, `Unavailable`.
-- [ ] Define `CommunerdetteStats`.
-- [ ] Define private `CommunerdetteState`.
-- [ ] Keep state fields private except for deliberate read-only summaries.
+- [x] Define `CommunerdetteStats`. (2026-05-27)
+- [x] Define private `CommunerdetteState`. (2026-05-27)
+- [x] Keep state fields private except for deliberate read-only summaries. (2026-05-27)
 
 ### 1.3 Compile-Only Safety
 
-- [ ] Add unit tests or compile checks proving `CommunerdetteLine` can be
+- [x] Add unit tests or compile checks proving `CommunerdetteLine` can be (2026-05-27)
       cloned and used without exposing mutable internal state.
-- [ ] Verify code compiles with no behavior changes.
+- [x] Verify code compiles with no behavior changes. (2026-05-27)
 
 ### 1.4 TBID Signing Authority Boundary
 
-- [ ] Confirm `Communerdette` and `CommunerdetteLine` do not store private key
+- [x] Confirm `Communerdette` and `CommunerdetteLine` do not store private key (2026-05-27)
       material for Calendar, Chronomatter, or other local TBID owners.
-- [ ] Avoid APIs on `CommunerdetteLine` that accept `tbid_to_sign_as` plus raw
+- [x] Avoid APIs on `CommunerdetteLine` that accept `tbid_to_sign_as` plus raw (2026-05-27)
       bytes and then sign internally.
-- [ ] Define or reuse an already-signed envelope type for outbound messages
+- [x] Define or reuse an already-signed envelope type for outbound messages (2026-05-27)
       that claim a local TBID.
-- [ ] Add compile-time or unit-test coverage showing Communerdette can send an
+- [x] Add compile-time or unit-test coverage showing Communerdette can send an (2026-05-27)
       already-signed payload but cannot sign for Chronomatter or Calendar.
 
 ### 1.5 Clean Authenticated Remote Records (Take 3 Integration)
@@ -84,21 +84,21 @@ checkbox tasks here following `AGENTS.md`.
 wrapper types; it orchestrates the conversion from `Unprocessed<R>` to
 `CleanAuthenticated<R>` using the existing Take 3 pipeline.
 
-- [ ] Import `Unprocessed<T>`, `CleanAuthenticated<T>`, and `Externalized<T>`
+- [x] Import `Unprocessed<T>`, `CleanAuthenticated<T>`, and `Externalized<T>` (2026-05-27)
       from `foretias_core` (core-engine) in the `communerd` module.
-- [ ] Implement the inbound gate orchestration in Communerdette:
+- [x] Implement the inbound gate orchestration in Communerdette: (2026-05-27)
       parse transport bytes → `Unprocessed<R>` → gather verification context
       → call `Unprocessed<R>::verify(...)` → `CleanAuthenticated<R>`.
-- [ ] For `CleanAuthenticated<ChrononRecord>`: supply crypto server and optional
+- [x] For `CleanAuthenticated<ChrononRecord>`: supply crypto server and optional (2026-05-27)
       previous record to `Unprocessed<ChrononRecord>::verify(crypto, prev)`.
-- [ ] For `CleanAuthenticated<Foretis>`: supply crypto server, authenticated
+- [x] For `CleanAuthenticated<Foretis>`: supply crypto server, authenticated (2026-05-27)
       ChrononRecord, and content bytes to
       `Unprocessed<Foretis>::verify(crypto, record, content)`.
 - [ ] For `CleanAuthenticated<ProbityReport>`: supply crypto server to
       `Unprocessed<ProbityReport>::verify(crypto)`.
-- [ ] After `verify` succeeds, confirm the inner record's TBID matches the
+- [x] After `verify` succeeds, confirm the inner record's TBID matches the (2026-05-27)
       Communerdette's target TBID before returning to callers.
-- [ ] Ensure raw transport replies cannot be stored as trust-bearing evidence
+- [x] Ensure raw transport replies cannot be stored as trust-bearing evidence (2026-05-27)
       without first passing through the full `Unprocessed<R>::verify(...)` call.
 
 ---
@@ -154,32 +154,32 @@ finds peers and speaks on the P2P network.
 
 ### 3.1 Initial Binding Refresh
 
-- [ ] Implement private `Communerdette::refresh_dht_binding()`.
-- [ ] Reuse existing `Communerd::lookup_tbid` behavior initially.
-- [ ] Store DHT results as `TbidBindingStatus::ClaimedByDht`, not `Verified`.
-- [ ] Preserve existing `tbid_index` behavior during migration.
+- [x] Implement private `Communerdette::refresh_dht_binding()`. (2026-05-27)
+- [x] Reuse existing `Communerd::lookup_tbid` behavior initially. (2026-05-27)
+- [x] Store DHT results as `TbidBindingStatus::ClaimedByDht`, not `Verified`. (2026-05-27)
+- [x] Preserve existing `tbid_index` behavior during migration. (2026-05-27)
 
 ### 3.2 Relationship Route State
 
-- [ ] Store route candidates from `PeerRegistrationRecord`:
+- [x] Store route candidates from `PeerRegistrationRecord`: (2026-05-27)
       libp2p `PeerId`, JSON-RPC address, chronon interval, capabilities.
-- [ ] Add private `choose_route()` using current route health.
-- [ ] Preserve existing libp2p-first, Noise_XX fallback policy.
+- [x] Add private `choose_route()` using current route health. (2026-05-27)
+- [x] Preserve existing libp2p-first, Noise_XX fallback policy. (2026-05-27)
 
 ### 3.3 Communerd Host Helper Surface
 
-- [ ] Add a private helper interface or private methods that allow
+- [x] Add a private helper interface or private methods that allow (2026-05-27)
       Communerdette to ask Communerd for:
       DHT/TBID lookup, namespace, swarm availability, and transport execution.
-- [ ] Ensure Communerdette does not own the DHT, peer pool, libp2p swarm, or
+- [x] Ensure Communerdette does not own the DHT, peer pool, libp2p swarm, or (2026-05-27)
       transport pools.
-- [ ] Ensure this helper surface is not exposed through CommunerdetteLine.
+- [x] Ensure this helper surface is not exposed through CommunerdetteLine. (2026-05-27)
 
 ### 3.4 Tests
 
-- [ ] Unit test DHT claim updates binding state.
-- [ ] Unit test missing DHT record leaves route unavailable.
-- [ ] Unit test route selection prefers libp2p when PeerId and swarm are
+- [x] Unit test DHT claim updates binding state. (2026-05-27)
+- [x] Unit test missing DHT record leaves route unavailable. (2026-05-27)
+- [x] Unit test route selection prefers libp2p when PeerId and swarm are (2026-05-27)
       available.
 
 ---
@@ -203,7 +203,7 @@ finds peers and speaks on the P2P network.
 - [x] Return `CleanAuthenticated<Vec<ChrononRecord>>` and
       `CleanAuthenticated<ChrononRecord>` from these methods.
       (2026-05-23 20:09)
-- [ ] Enforce the existing `MAX_CALENDAR_SLICE_COUNT` behavior on the server
+- [x] Enforce the existing `MAX_CALENDAR_SLICE_COUNT` behavior on the server (2026-05-27)
       side; do not duplicate trust in the caller.
 - [x] Add timeout behavior and explicit timeout errors.
       (2026-05-23 20:09)
@@ -265,7 +265,7 @@ not starve verification evidence.
       (2026-05-23 20:09)
 - [x] Ensure worker exits on Communerdette shutdown.
       (2026-05-23 20:09)
-- [ ] Ensure queue depth is visible only through `status_summary()`.
+- [x] Ensure queue depth is visible only through `status_summary()`. (2026-05-27)
 
 ### 5.3 Priority Policy
 
@@ -277,9 +277,9 @@ not starve verification evidence.
 
 ### 5.4 Tests
 
-- [ ] Unit test priority ordering.
-- [ ] Unit test timed-out requests complete with timeout errors.
-- [ ] Unit test shutdown drains or fails pending requests predictably.
+- [x] Unit test priority ordering. (2026-05-27)
+- [x] Unit test timed-out requests complete with timeout errors. (2026-05-27)
+- [x] Unit test shutdown drains or fails pending requests predictably. (2026-05-27)
 
 ---
 
@@ -543,10 +543,10 @@ These additions to `core-engine/src/foretias/clean_auth.rs` are prerequisites
 for Phase 12.0 channel-binding and for any code that needs to distinguish fast-
 only vs dual-key authentication.
 
-- [ ] Add `is_authenticated_quickly() -> bool { true }` as an inherent method on
+- [x] Add `is_authenticated_quickly() -> bool { true }` as an inherent method on (2026-05-27)
       `CleanAuthenticated<T>`. This is a runtime-checkable guarantee that fast-
       key verification has been performed.
-- [ ] Add `CleanFullyAuthenticated<T>` struct in `clean_auth.rs`:
+- [x] Add `CleanFullyAuthenticated<T>` struct in `clean_auth.rs`: (2026-05-27)
   ```rust
   /// A record authenticated against both the fast key and the slow key.
   #[derive(Debug, Clone)]
@@ -570,46 +570,46 @@ only vs dual-key authentication.
       }
   }
   ```
-- [ ] Unit test: `CleanFullyAuthenticated` converts to `CleanAuthenticated` via `From`.
-- [ ] Unit test: `is_authenticated_quickly()` returns true on both types.
-- [ ] Unit test: `is_authenticated_fully()` returns true only on `CleanFullyAuthenticated`.
+- [x] Unit test: `CleanFullyAuthenticated` converts to `CleanAuthenticated` via `From`. (2026-05-27)
+- [x] Unit test: `is_authenticated_quickly()` returns true on both types. (2026-05-27)
+- [x] Unit test: `is_authenticated_fully()` returns true only on `CleanFullyAuthenticated`. (2026-05-27)
 
 ### 11.1 Fix gate_foretis
 
 The current implementation calls `CleanAuthenticated::from_trusted(...)` on
 remote Foretis data — a correctness bug (spec §11.5).
 
-- [ ] Change `gate_foretis` signature to accept an authenticated
+- [x] Change `gate_foretis` signature to accept an authenticated (2026-05-27)
       `CleanAuthenticated<ChrononRecord>` as an additional parameter, or to
       accept the raw content bytes and fetch the tick internally via
       `CommunerdetteExecutor`.
-- [ ] Replace `CleanAuthenticated::from_trusted(unprocessed.into_inner())`
+- [x] Replace `CleanAuthenticated::from_trusted(unprocessed.into_inner())` (2026-05-27)
       with `Unprocessed<Foretis>::verify(crypto, chronon_record, content)`.
-- [ ] All callers of `gate_foretis` must supply the `ChrononRecord`. For
+- [x] All callers of `gate_foretis` must supply the `ChrononRecord`. For (2026-05-27)
       `execute_stamp`, chain a `get_tick(foretis.chronon_number)` call to
       obtain the record before calling `gate_foretis`.
-- [ ] Update tests: the existing `gate_foretis_returns_clean_authenticated_on_valid`
+- [x] Update tests: the existing `gate_foretis_returns_clean_authenticated_on_valid` (2026-05-27)
       test must supply a real authenticated `ChrononRecord`; if that requires
       a real crypto key-pair in the test fixture, update `make_test_foretis` or
       add a new fixture accordingly.
-- [ ] Add test: `gate_foretis_rejects_foretis_with_wrong_signature` — a Foretis
+- [x] Add test: `gate_foretis_rejects_foretis_with_wrong_signature` — a Foretis (2026-05-27)
       whose signature does not verify against the provided ChrononRecord's
       public key must return `Err(CommunerdetteError::CleanAuth(...))`.
 
 ### 11.2 Audit from_trusted Usage
 
-- [ ] Search the entire `communerd/` module for `from_trusted` calls.
+- [x] Search the entire `communerd/` module for `from_trusted` calls. (2026-05-27)
       Any call on data that did not originate locally is a bug.
       ```bash
       grep -rn "from_trusted" p2p/foretias-server/src/communerd/
       ```
-- [ ] For each hit, document whether the data is local (acceptable) or remote
+- [x] For each hit, document whether the data is local (acceptable) or remote (2026-05-27)
       (must be replaced with `Unprocessed<R>::verify(...)`).
-- [ ] Fix any non-local uses found.
+- [x] Fix any non-local uses found. (2026-05-27)
 
 ### 11.3 Slow-Key Gate Stubs
 
-- [ ] In each gate function (`gate_chronon_records`, the fixed `gate_foretis`,
+- [x] In each gate function (`gate_chronon_records`, the fixed `gate_foretis`, (2026-05-27)
       and any future gate functions), add a clearly marked stub comment
       after fast-key verification passes:
       ```rust
@@ -618,12 +618,12 @@ remote Foretis data — a correctness bug (spec §11.5).
       // but invalid. Absence is acceptable. Slow-key verification is currently
       // only required at channel-binding establishment; see Phase 12.0.
       ```
-- [ ] Do not implement slow-key verification in general gate functions yet — only
+- [x] Do not implement slow-key verification in general gate functions yet — only (2026-05-27)
       the stub comment. The full slow-key implementation belongs in Phase 12.0.
 
 ### 11.4 Externalized Outbound Stubs
 
-- [ ] For each outbound message Communerdette dispatches via
+- [x] For each outbound message Communerdette dispatches via (2026-05-27)
       `CommunerdetteHost::call_peer`, document in a comment that the payload
       should eventually be wrapped as `Externalized<R>` once the outbound
       type wrapper is wired.
@@ -631,14 +631,14 @@ remote Foretis data — a correctness bug (spec §11.5).
       // TODO(externalized): wrap params as Externalized<R> before dispatch
       // once outbound type enforcement is implemented.
       ```
-- [ ] Do not implement `Externalized<R>` wrapping yet — only the stub comment.
+- [x] Do not implement `Externalized<R>` wrapping yet — only the stub comment. (2026-05-27)
 
 ### 11.5 Crypto Call-Site Snapshot Test
 
 **Goal:** establish `p2p/tests/snapshots/crypto_call_sites.txt` as a committed
 golden file for all signing and verification call sites (Spec §11.6, §15 criterion 13).
 
-- [ ] Create `p2p/tests/crypto_callsite_snapshot.rs` (or equivalent):
+- [x] Create `p2p/tests/crypto_callsite_snapshot.rs` (or equivalent): (2026-05-27)
   - Runs `grep -rn` (or an AST-walk script) over `p2p/` source for:
     1. Calls to `CryptoServer` methods that dispatch to C++ primitives
        (sign, verify, hash, key-gen variants).
@@ -647,7 +647,7 @@ golden file for all signing and verification call sites (Spec §11.6, §15 crite
   - Produces a sorted list: `<crate>/<file>:<line>  <fn>  <call_type>`.
   - Compares against `p2p/tests/snapshots/crypto_call_sites.txt`.
   - Test fails on any diff (new or removed call site).
-- [ ] Generate the initial snapshot with all current call sites:
+- [x] Generate the initial snapshot with all current call sites: (2026-05-27)
   ```bash
   scripts/gen_crypto_snapshot.sh > p2p/tests/snapshots/crypto_call_sites.txt
   git add p2p/tests/snapshots/crypto_call_sites.txt
@@ -655,21 +655,21 @@ golden file for all signing and verification call sites (Spec §11.6, §15 crite
   (@human: `scripts/gen_crypto_snapshot.sh` is a new shell script wrapping the
   grep pass; create it as part of this step. The snapshot is regenerated — not
   edited by hand — whenever a new crypto call site lands.)
-- [ ] Add `// SIGN(...)` or `// VERIFY(...)` annotation comment at each call
+- [x] Add `// SIGN(...)` or `// VERIFY(...)` annotation comment at each call (2026-05-27)
       site found, naming the signing authority and authentication level.
       Example: `// SIGN(local-tbid, fast-key)` at the `channel_bind_response`
       signing site; `// VERIFY(remote-tbid, fast-key)` at each gate function.
-- [ ] Confirm snapshot test passes on a clean workspace.
-- [ ] Document: any PR that adds a new crypto call site must update the snapshot
+- [x] Confirm snapshot test passes on a clean workspace. (2026-05-27)
+- [x] Document: any PR that adds a new crypto call site must update the snapshot (2026-05-27)
       and add the annotation. Reviewers use the snapshot diff to gate crypto
       surface area.
 
 ### 11.6 Tests
 
-- [ ] Confirm all existing gate tests still pass after 11.1 fix.
-- [ ] `gate_foretis_rejects_foretis_with_wrong_signature` (see 11.1).
-- [ ] Crypto call-site snapshot test passes (see 11.5).
-- [ ] Confirm workspace tests pass: `cargo test --workspace`.
+- [x] Confirm all existing gate tests still pass after 11.1 fix. (2026-05-27)
+- [x] `gate_foretis_rejects_foretis_with_wrong_signature` (see 11.1). (2026-05-27)
+- [x] Crypto call-site snapshot test passes (see 11.5). (2026-05-27)
+- [x] Confirm workspace tests pass: `cargo test --workspace`. (2026-05-27)
 
 ---
 
@@ -688,7 +688,7 @@ Deprecate `PeerPool::start_liveness_pings`.
 **Goal:** Implement the one-time dual-key binding protocol (Spec §12.0, §11.4.1).
 A channel becomes usable for application messages only after it is `FullyBound`.
 
-- [ ] Add `ChannelBinding` struct in `communerdette.rs` (or a new
+- [x] Add `ChannelBinding` struct in `communerdette.rs` (or a new (2026-05-27)
       `channel_binding.rs`):
       ```rust
       struct ChannelBinding {
@@ -699,16 +699,16 @@ A channel becomes usable for application messages only after it is `FullyBound`.
           slow_sig: Vec<u8>,
       }
       ```
-- [ ] Add `UnprocessedChannelBinding` following the Take 3 pattern. Add
+- [x] Add `UnprocessedChannelBinding` following the Take 3 pattern. Add (2026-05-27)
       `verify_dual_key(crypto, nonce, channel_id, target_tbid) ->
       Result<CleanFullyAuthenticated<ChannelBinding>, CommunerdetteError>`
       that checks: (a) TBID match, (b) nonce echo match, (c) channel_id match,
       (d) fast-key signature, (e) slow-key signature. Both (d) and (e) must pass.
-- [ ] Add `handle_channel_bind_challenge` in `server/handlers.rs`. The handler
+- [x] Add `handle_channel_bind_challenge` in `server/handlers.rs`. The handler (2026-05-27)
       must sign the response using the local TBID owner (not the handler directly).
       Signs `(nonce || channel_id || responder_tbid_hex)` with both fast and slow keys.
-- [ ] Wire `"channel_bind_challenge"` into the dispatch table in `server/mod.rs`.
-- [ ] Add per-channel `BindingState` to `CommunerdetteState`:
+- [x] Wire `"channel_bind_challenge"` into the dispatch table in `server/mod.rs`. (2026-05-27)
+- [x] Add per-channel `BindingState` to `CommunerdetteState`: (2026-05-27)
       ```rust
       enum ChannelBindingState {
           Unbound,
@@ -716,7 +716,7 @@ A channel becomes usable for application messages only after it is `FullyBound`.
           Rejected { reason: String },
       }
       ```
-- [ ] Add `spawn_channel_bind_task(channel_id, transport_addr)` to `Communerdette`.
+- [x] Add `spawn_channel_bind_task(channel_id, transport_addr)` to `Communerdette`. (2026-05-27)
       On invocation:
       1. Generate 32-byte random nonce.
       2. Call `channel_bind_challenge` via the transport.
@@ -726,11 +726,11 @@ A channel becomes usable for application messages only after it is `FullyBound`.
       6. On failure: channel state → `Rejected`. Log binding violation.
 - [ ] Communerd triggers `spawn_channel_bind_task` when it notifies Communerdette
       of a new channel (PeerId or direct address).
-- [ ] Unit test: `verify_dual_key` accepts a correctly dual-signed response.
-- [ ] Unit test: `verify_dual_key` rejects wrong fast-key signature.
-- [ ] Unit test: `verify_dual_key` rejects wrong slow-key signature.
-- [ ] Unit test: `verify_dual_key` rejects nonce mismatch.
-- [ ] Unit test: `verify_dual_key` rejects TBID mismatch.
+- [x] Unit test: `verify_dual_key` accepts a correctly dual-signed response. (2026-05-27)
+- [x] Unit test: `verify_dual_key` rejects wrong fast-key signature. (2026-05-27)
+- [x] Unit test: `verify_dual_key` rejects wrong slow-key signature. (2026-05-27)
+- [x] Unit test: `verify_dual_key` rejects nonce mismatch. (2026-05-27)
+- [x] Unit test: `verify_dual_key` rejects TBID mismatch. (2026-05-27)
 - [ ] Integration test: two real servers, source initiates channel bind → mirror
       responds → source reaches `FullyBound`.
 - [ ] Integration test: second independent channel can be bound simultaneously.
@@ -741,11 +741,11 @@ L1 uses the existing `ping` / `{ "pong": true }` RPC already wired in Phase 6.
 The remaining work is moving the liveness loop from `PeerPool` into
 Communerdette.
 
-- [ ] Add `spawn_l1_liveness_task` to `Communerdette`. This task loops on a
+- [x] Add `spawn_l1_liveness_task` to `Communerdette`. This task loops on a (2026-05-27)
       configurable interval, calls `ping` via `CommunerdetteHost::call_peer`,
       and records success/failure in `CommunerdetteRouteStats`.
-- [ ] The task exits when the Communerdette's `CancellationToken` is cancelled.
-- [ ] Verify the response is `{ "pong": true }`. Record transport success/failure
+- [x] The task exits when the Communerdette's `CancellationToken` is cancelled. (2026-05-27)
+- [x] Verify the response is `{ "pong": true }`. Record transport success/failure (2026-05-27)
       only — no `CleanAuthenticated<R>` gate needed for L1 (transport-only
       evidence; see Spec §12.1).
 - [ ] Unit test: L1 task records success when ping returns pong.
@@ -755,13 +755,13 @@ Communerdette.
 
 - [ ] Remove the `communerd.start_liveness_pings()` call from
       `server/mod.rs` (currently line 216).
-- [ ] Mark `PeerPool::start_liveness_pings` as `#[deprecated]` with message:
+- [x] Mark `PeerPool::start_liveness_pings` as `#[deprecated]` with message: (2026-05-27)
       "Use Communerdette L1 liveness loop instead."
 - [ ] Verify no other callers exist:
       ```bash
       grep -rn "start_liveness_pings" p2p/
       ```
-- [ ] All tests still pass after removal.
+- [x] All tests still pass after removal. (2026-05-27)
 
 ### 12.3 Level 2 — TBID Identity Confirmed (Ongoing Health)
 
@@ -769,7 +769,7 @@ Communerdette.
 health checks begin. L2 only needs fast-key verification — the dual-key proof
 was already established at binding time.
 
-- [ ] Define `AuthenticatedPong` struct in `communerdette.rs`:
+- [x] Define `AuthenticatedPong` struct in `communerdette.rs`: (2026-05-27)
       ```rust
       struct AuthenticatedPong {
           responder_tbid: Tbid,
@@ -778,16 +778,16 @@ was already established at binding time.
           signature_algorithm: String,
       }
       ```
-- [ ] Add `UnprocessedAuthenticatedPong` wrapper following the Take 3 pattern
+- [x] Add `UnprocessedAuthenticatedPong` wrapper following the Take 3 pattern (2026-05-27)
       (`from_json_value`, inner accessor). Add `verify(crypto, challenge,
       target_tbid)` method that checks: (a) TBID match, (b) challenge echo
       match, (c) fast-key signature over `(challenge || responder_tbid_hex_bytes)`.
-- [ ] Add `handle_authenticated_ping` in `server/handlers.rs`. The handler
+- [x] Add `handle_authenticated_ping` in `server/handlers.rs`. The handler (2026-05-27)
       must ask the local TBID owner (Chronomatter or the server's signing
       surface) to sign the response — it must NOT sign directly with a key
       stored inside the handler.
-- [ ] Wire `"authenticated_ping"` into the dispatch table in `server/mod.rs`.
-- [ ] Add `spawn_l2_liveness_task` to `Communerdette`. On each interval:
+- [x] Wire `"authenticated_ping"` into the dispatch table in `server/mod.rs`. (2026-05-27)
+- [x] Add `spawn_l2_liveness_task` to `Communerdette`. On each interval: (2026-05-27)
       1. Generate a 32-byte random challenge.
       2. Call `authenticated_ping` via `CommunerdetteHost::call_peer`.
       3. Parse response as `UnprocessedAuthenticatedPong`.
@@ -809,7 +809,7 @@ fix) — L3 is meaningless without a real fast-key gate on the Foretis response.
 
 **This phase is blocked on Phase 11 completion.**
 
-- [ ] Add `spawn_l3_liveness_task` to `Communerdette`. On each interval:
+- [x] Add `spawn_l3_liveness_task` to `Communerdette`. On each interval: (2026-05-27)
       1. Generate a short test payload (e.g. `b"liveness-probe"`).
       2. Call `stamp(payload, "liveness")` via `CommunerdetteLine` (or directly
          via the executor).
@@ -828,7 +828,7 @@ fix) — L3 is meaningless without a real fast-key gate on the Foretis response.
 
 ### 12.5 Liveness Loop Policy
 
-- [ ] Add `liveness_policy: LivenessPolicy` to `CommunerdetteState`:
+- [x] Add `liveness_policy: LivenessPolicy` to `CommunerdetteState`: (2026-05-27)
       ```rust
       struct LivenessPolicy {
           l1_interval_ms: u64,
@@ -838,7 +838,7 @@ fix) — L3 is meaningless without a real fast-key gate on the Foretis response.
           run_l3: bool,
       }
       ```
-- [ ] Default policy: L1 enabled, L2 enabled, L3 enabled, intervals configurable.
+- [x] Default policy: L1 enabled, L2 enabled, L3 enabled, intervals configurable. (2026-05-27)
 - [ ] Run order enforced: L2 skipped if L1 failed in current cycle. L3 skipped
       if L2 failed or `TbidBindingStatus` is `Rejected`.
 - [ ] Expose current policy in `CommunerdetteStatusSummary`.
