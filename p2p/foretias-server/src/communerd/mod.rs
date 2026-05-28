@@ -27,7 +27,7 @@ use foretias_core::core::bindings::ForetiasPubKey32;
 use foretias_core::crypto_server::{CryptoServer, new_software, ForetiasCurve};
 use foretias_core::error::NodeError;
 use foretias_core::foretias::callbacks::{CommunityQuery, CommunityResponse, PeerAddr as CorePeerAddr, PeerChangeCallback, PeerMessenger, TransportError as CoreTransportError};
-use foretias_core::foretias::clean_auth::{UnprocessedForetis, CleanAuthenticatedForetis};
+use foretias_core::foretias::clean_auth::{Unprocessed, CleanAuthenticated};
 use foretias_core::foretias::tick::{Foretis, ChrononRecord};
 use foretias_core::foretias::types::Tbid;
 
@@ -323,14 +323,14 @@ impl Communerd {
         } else {
             self.transport.stamp(peer, content_hex, echo).await?
         };
-        let unprocessed = UnprocessedForetis::from_json_value(result)
+        let unprocessed = Unprocessed::<Foretis>::from_json_value(result)
             .map_err(|e| TransportError::Decode(e.to_string()))?;
         let f = unprocessed.inner();
         if f.chronon_number == 0 || f.signature.is_empty() || f.signature_algorithm.is_empty() {
             return Err(TransportError::Decode("structurally invalid Foretis".into()));
         }
         #[allow(deprecated)]
-        Ok(CleanAuthenticatedForetis::from_trusted(unprocessed.into_inner()).into_inner())
+        Ok(CleanAuthenticated::<Foretis>::from_trusted(unprocessed.into_inner()).into_inner())
     }
 
     /// Route a stamp request through Communerdette for the target TBID.

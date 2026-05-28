@@ -242,21 +242,6 @@ impl std::fmt::Display for ParseError {
 impl std::error::Error for ParseError {}
 
 // ---------------------------------------------------------------------------
-// Type alias macro — generates aliases only, no logic
-// ---------------------------------------------------------------------------
-
-#[macro_export]
-macro_rules! create_type_gated_classes {
-    ($t:ident, $up:ident, $ca:ident) => {
-        pub type $up = $crate::foretias::clean_auth::Unprocessed<$t>;
-        pub type $ca = $crate::foretias::clean_auth::CleanAuthenticated<$t>;
-    };
-}
-
-create_type_gated_classes!(ChrononRecord, UnprocessedChrononRecord, CleanAuthenticatedChrononRecord);
-create_type_gated_classes!(Foretis, UnprocessedForetis, CleanAuthenticatedForetis);
-
-// ---------------------------------------------------------------------------
 // ChrononRecord — field accessors + verify + externalize
 // ---------------------------------------------------------------------------
 
@@ -586,8 +571,6 @@ impl ExternalizedForetis {
 
 use crate::epoch::snapshot::EpochSnapshot;
 
-create_type_gated_classes!(EpochSnapshot, UnprocessedEpochSnapshot, CleanAuthenticatedEpochSnapshot);
-
 impl Unprocessed<EpochSnapshot> {
     pub fn epoch_number(&self) -> &u64 { &self.inner.epoch_number }
     pub fn epoch_start_ns(&self) -> &u64 { &self.inner.epoch_start_ns }
@@ -717,13 +700,13 @@ mod tests {
             tbid: Tbid::default(),
         };
         let json = serde_json::to_vec(&record).unwrap();
-        let up = UnprocessedChrononRecord::from_bytes(&json).unwrap();
+        let up = Unprocessed::<ChrononRecord>::from_bytes(&json).unwrap();
         assert_eq!(up.inner().chronon_number, 1);
     }
 
     #[test]
     fn test_unprocessed_chronon_record_from_invalid_json() {
-        let result = UnprocessedChrononRecord::from_bytes(b"not json");
+        let result = Unprocessed::<ChrononRecord>::from_bytes(b"not json");
         assert!(result.is_err());
     }
 
@@ -740,13 +723,13 @@ mod tests {
             time_being_reference_time: "UE+12345ns".to_string(),
         };
         let json = serde_json::to_vec(&foretis).unwrap();
-        let up = UnprocessedForetis::from_bytes(&json).unwrap();
+        let up = Unprocessed::<Foretis>::from_bytes(&json).unwrap();
         assert_eq!(up.inner().chronon_number, 42);
     }
 
     #[test]
     fn test_unprocessed_foretis_from_invalid_json() {
-        let result = UnprocessedForetis::from_bytes(b"{invalid");
+        let result = Unprocessed::<Foretis>::from_bytes(b"{invalid");
         assert!(result.is_err());
     }
 
@@ -764,7 +747,7 @@ mod tests {
             tb_version: 0,
             tbid: Tbid::default(),
         };
-        let ca = CleanAuthenticatedChrononRecord::from_trusted(record);
+        let ca = CleanAuthenticated::<ChrononRecord>::from_trusted(record);
         let ext = ca.externalize();
         assert_eq!(ext.chronon_number, 7);
         assert_eq!(ext.stamps_per_tick, 3);
@@ -787,7 +770,7 @@ mod tests {
             tbn: "tbn".to_string(),
             time_being_reference_time: "UE+999ns".to_string(),
         };
-        let ca = CleanAuthenticatedForetis::from_trusted(foretis);
+        let ca = CleanAuthenticated::<Foretis>::from_trusted(foretis);
         let ext = ca.externalize();
         assert_eq!(ext.chronon_number, 10);
         assert_eq!(ext.content_hash, [0x55u8; 32]);
@@ -799,10 +782,10 @@ mod tests {
     #[test]
     fn test_parse_error_variants() {
         // Empty JSON object -- missing required fields
-        let result = UnprocessedChrononRecord::from_bytes(b"{}");
+        let result = Unprocessed::<ChrononRecord>::from_bytes(b"{}");
         assert!(result.is_err());
 
-        let result = UnprocessedForetis::from_bytes(b"[]");
+        let result = Unprocessed::<Foretis>::from_bytes(b"[]");
         assert!(matches!(result, Err(ParseError::InvalidJson(_))));
     }
 
@@ -837,7 +820,7 @@ mod tests {
             tb_version: 0,
             tbid: Tbid::default(),
         };
-        let ca = CleanAuthenticatedChrononRecord::from_trusted(record);
+        let ca = CleanAuthenticated::<ChrononRecord>::from_trusted(record);
         let ext = ca.externalize();
         let json_bytes = serde_json::to_vec(&ext).unwrap();
         let obj: serde_json::Value = serde_json::from_slice(&json_bytes).unwrap();
@@ -859,7 +842,7 @@ mod tests {
             tbn: "tbn".to_string(),
             time_being_reference_time: "UE+999ns".to_string(),
         };
-        let ca = CleanAuthenticatedForetis::from_trusted(foretis);
+        let ca = CleanAuthenticated::<Foretis>::from_trusted(foretis);
         let ext = ca.externalize();
         let json_bytes = serde_json::to_vec(&ext).unwrap();
         let obj: serde_json::Value = serde_json::from_slice(&json_bytes).unwrap();
@@ -886,7 +869,7 @@ mod tests {
             frost_signature: vec![0xAAu8; 64].into(),
             committee_pubkey: vec![0xBBu8; 32].into(),
         };
-        let ca = CleanAuthenticatedEpochSnapshot::from_trusted(snapshot);
+        let ca = CleanAuthenticated::<EpochSnapshot>::from_trusted(snapshot);
         let ext = ca.externalize();
         let json_bytes = serde_json::to_vec(&ext).unwrap();
         let obj: serde_json::Value = serde_json::from_slice(&json_bytes).unwrap();
@@ -902,7 +885,7 @@ mod tests {
         // An Unprocessed<ChrononRecord> CANNOT be directly assigned to
         // CleanAuthenticated<ChrononRecord> -- the compiler rejects it.
         // If this compiles, the type discipline has failed.
-        let _up: UnprocessedChrononRecord = Unprocessed::from_parsed(ChrononRecord {
+        let _up: Unprocessed<ChrononRecord> = Unprocessed::from_parsed(ChrononRecord {
             chronon_number: 1,
             public_key: vec![0u8; 32].into(),
             signature_algorithm: "Ed25519".to_string(),
@@ -915,7 +898,7 @@ mod tests {
             tbid: Tbid::default(),
         });
         // The following line would NOT compile:
-        // let _: CleanAuthenticatedChrononRecord = _up;
+        // let _: CleanAuthenticated<ChrononRecord> = _up;
         // This is the desired behavior -- the compiler enforces the gate.
     }
 

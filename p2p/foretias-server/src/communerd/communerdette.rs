@@ -25,7 +25,7 @@ use foretias_core::crypto_server::CryptoServer;
 use foretias_core::error::NodeError;
 use foretias_core::foretias::clean_auth::{
     CleanAuthenticated,
-    UnprocessedChrononRecord, UnprocessedForetis, CleanAuthError,
+    Unprocessed, CleanAuthError,
 };
 use foretias_core::foretias::tick::{ChrononRecord, Foretis};
 use foretias_core::foretias::types::Tbid;
@@ -1031,7 +1031,7 @@ impl CommunerdetteExecutor {
         let mut authenticated = Vec::new();
 
         for (idx, record) in records.into_iter().enumerate() {
-            let unprocessed = UnprocessedChrononRecord::from_parsed(record);
+            let unprocessed = Unprocessed::<ChrononRecord>::from_parsed(record);
 
             // Structural validation
             if unprocessed.chronon_number() == &0 || unprocessed.public_key().is_empty() {
@@ -1083,7 +1083,7 @@ impl CommunerdetteExecutor {
         chronon_record: &CleanAuthenticated<ChrononRecord>,
         content: &[u8],
     ) -> Result<CleanAuthenticated<Foretis>, CommunerdetteError> {
-        let unprocessed = UnprocessedForetis::from_json_value(raw)
+        let unprocessed = Unprocessed::<Foretis>::from_json_value(raw)
             .map_err(|e| TransportError::Decode(e.to_string()))?;
 
         // Structural validation
@@ -1177,7 +1177,7 @@ impl Communerdette {
 
         // Parse just enough to get chronon_number before consuming raw
         let chronon_number = {
-            let tmp = UnprocessedForetis::from_json_value(raw.clone())
+            let tmp = Unprocessed::<Foretis>::from_json_value(raw.clone())
                 .map_err(|e| TransportError::Decode(e.to_string()))?;
             *tmp.chronon_number()
         };

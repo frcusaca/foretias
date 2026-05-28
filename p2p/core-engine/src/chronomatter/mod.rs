@@ -383,16 +383,16 @@ impl Chronomatter {
 
     /// Verify an unprocessed Foretis against the local calendar.
     ///
-    /// Accepts `UnprocessedForetis` (parsed, not trusted) and returns
-    /// `CleanAuthenticatedForetis` (authenticated + cleansed) on success.
+    /// Accepts `Unprocessed<Foretis>` (parsed, not trusted) and returns
+    /// `CleanAuthenticated<Foretis>` (authenticated + cleansed) on success.
     /// The calendar record for the matching chronon must exist and be trusted
     /// by construction (locally produced or previously verified).
     pub fn verify_unprocessed(
         &self,
-        unprocessed: crate::foretias::clean_auth::UnprocessedForetis,
+        unprocessed: crate::foretias::clean_auth::Unprocessed<crate::foretias::tick::Foretis>,
         content: &[u8],
         calendar: &dyn CalendarLookup,
-    ) -> Result<crate::foretias::clean_auth::CleanAuthenticatedForetis, NodeError> {
+    ) -> Result<crate::foretias::clean_auth::CleanAuthenticated<crate::foretias::tick::Foretis>, NodeError> {
         // Look up the calendar record for this chronon
         let records = calendar.get(unprocessed.inner().chronon_number, 1)
             .map_err(|e| NodeError::Internal(format!("calendar lookup failed: {e}")))?;
@@ -404,7 +404,7 @@ impl Chronomatter {
         })?;
 
         // Wrap the calendar record as CleanAuthenticated (trusted by construction)
-        let clean_rec = crate::foretias::clean_auth::CleanAuthenticatedChrononRecord::from_trusted(rec.clone());
+        let clean_rec = crate::foretias::clean_auth::CleanAuthenticated::<ChrononRecord>::from_trusted(rec.clone());
 
         // Verify and authenticate
         unprocessed.into_clean_authenticated(self.crypto.as_ref(), content, &clean_rec)

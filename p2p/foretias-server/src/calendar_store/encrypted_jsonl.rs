@@ -16,7 +16,7 @@ use base64::Engine;
 use foretias_core::clock::{Clock, SystemClock};
 use foretias_core::crypto_server::{CryptoServer, SealedBlob};
 use foretias_core::foretias::ChrononRecord;
-use foretias_core::foretias::clean_auth::{ExternalizedChrononRecord, CleanAuthenticatedChrononRecord};
+use foretias_core::foretias::clean_auth::{ExternalizedChrononRecord, CleanAuthenticated};
 use foretias_core::error::NodeError;
 use serde::{Deserialize, Serialize};
 
@@ -205,7 +205,7 @@ pub fn migrate_plaintext(
     if !cal.ticks.is_empty() {
         let externalized: Vec<ExternalizedChrononRecord> = cal.ticks
             .into_iter()
-            .map(|r| CleanAuthenticatedChrononRecord::from_trusted(r).externalize())
+            .map(|r| CleanAuthenticated::<ChrononRecord>::from_trusted(r).externalize())
             .collect();
         store.append_block(externalized)?;
     }
@@ -238,7 +238,7 @@ mod tests {
             tb_version: 0,
             tbid: Tbid::default(),
         };
-        CleanAuthenticatedChrononRecord::from_trusted(record).externalize()
+        CleanAuthenticated::<ChrononRecord>::from_trusted(record).externalize()
     }
 
     #[test]

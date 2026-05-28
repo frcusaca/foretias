@@ -86,13 +86,7 @@ pub fn pub_key_from_tbid_hex(pub_key_hex: &str) -> Result<Vec<u8>, CleanAuthErro
 }
 
 // ---------------------------------------------------------------------------
-// Type aliases
-// ---------------------------------------------------------------------------
-
-crate::create_type_gated_classes!(ProbityReport, UnprocessedProbityReport, CleanAuthenticatedProbityReport);
-
-// ---------------------------------------------------------------------------
-// Unprocessed<ProbityReport> — field accessors + verify + ergonomic alias
+// Unprocessed<ProbityReport> — field accessors + verify
 // ---------------------------------------------------------------------------
 
 impl Unprocessed<ProbityReport> {
@@ -286,13 +280,13 @@ mod tests {
         let crypto = make_crypto();
         let report = make_signed_report(crypto.as_ref());
         let json = serde_json::to_vec(&report).unwrap();
-        let up = UnprocessedProbityReport::from_bytes(&json).unwrap();
+        let up = Unprocessed::<ProbityReport>::from_bytes(&json).unwrap();
         assert_eq!(up.inner().subject, "peer-A");
     }
 
     #[test]
     fn test_unprocessed_from_invalid_json() {
-        let result = UnprocessedProbityReport::from_bytes(b"not json");
+        let result = Unprocessed::<ProbityReport>::from_bytes(b"not json");
         assert!(result.is_err());
     }
 
@@ -300,7 +294,7 @@ mod tests {
     fn test_clean_authenticated_from_trusted() {
         let crypto = make_crypto();
         let report = make_signed_report(crypto.as_ref());
-        let ca = CleanAuthenticatedProbityReport::from_trusted(report.clone());
+        let ca = CleanAuthenticated::<ProbityReport>::from_trusted(report.clone());
         assert_eq!(ca.inner().subject, report.subject);
         assert_eq!(ca.into_inner().subject, report.subject);
     }
@@ -340,7 +334,7 @@ mod tests {
     fn test_externalize_roundtrip() {
         let crypto = make_crypto();
         let report = make_signed_report(crypto.as_ref());
-        let ca = CleanAuthenticatedProbityReport::from_trusted(report.clone());
+        let ca = CleanAuthenticated::<ProbityReport>::from_trusted(report.clone());
         let ext = ca.externalize();
         assert_eq!(ext.subject, report.subject);
         assert_eq!(ext.value, report.value);
@@ -374,7 +368,7 @@ mod tests {
             signature: vec![0xABu8; 64],
             curve: 1,
         };
-        let ca = CleanAuthenticatedProbityReport::from_trusted(report);
+        let ca = CleanAuthenticated::<ProbityReport>::from_trusted(report);
         let ext = ca.externalize();
         let json_bytes = serde_json::to_vec(&ext).unwrap();
         let v: serde_json::Value = serde_json::from_slice(&json_bytes).unwrap();

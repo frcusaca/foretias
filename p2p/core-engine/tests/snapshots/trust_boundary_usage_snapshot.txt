@@ -2,6 +2,7 @@
 
 file | inner | context | Unprocessed | CleanAuthenticated | Externalized
 ========================================================================================================================
+core-engine/src/foretias/clean_auth.rs | ChrononRecord | fn::test_unprocessed_cannot_be_used_as_clean_authenticated | Y | - | -
 core-engine/src/foretias/clean_auth.rs | ChrononRecord | impl::CleanAuthenticated | - | Y | -
 core-engine/src/foretias/clean_auth.rs | ChrononRecord | impl::ExternalizedChrononRecord::fn::into_unprocessed | Y | - | -
 core-engine/src/foretias/clean_auth.rs | ChrononRecord | impl::ExternalizedChrononRecord::fn::reconstruct | Y | - | -
@@ -49,6 +50,9 @@ foretias-server/src/communerd/communerdette.rs | Foretis | other | - | Y | -
 foretias-server/src/communerd/communerdette.rs | u8 | fn::clean_auth_types_are_importable | Y | Y | Y
 foretias-server/src/communerd/tiers.rs | Foretis | impl::CommunerdP2P::fn::route_stamp | - | Y | -
 foretias-server/src/communerd/tiers.rs | Foretis | impl::CommunerdServer::fn::route_stamp | - | Y | -
+foretias-server/src/server/handlers.rs | ChrononRecord | fn::handle_history_dump_chunk | Y | Y | -
+foretias-server/src/server/handlers.rs | ChrononRecord | fn::handle_ship_ack | Y | Y | -
+foretias-server/src/server/handlers.rs | Foretis | fn::cross_node_verify | Y | - | -
 
 
 === Cross-Tabulation ===
@@ -62,14 +66,16 @@ core-engine | CleanAuthenticated | ProbityReport | 3
 core-engine | CleanAuthenticated | T | 4
 core-engine | CleanAuthenticated | u32 | 2
 core-engine | Externalized | T | 1
-core-engine | Unprocessed | ChrononRecord | 3
+core-engine | Unprocessed | ChrononRecord | 4
 core-engine | Unprocessed | EpochSnapshot | 3
 core-engine | Unprocessed | Foretis | 3
 core-engine | Unprocessed | ProbityReport | 3
 core-engine | Unprocessed | T | 3
 foretias-server | CleanAuthenticated | AuthenticatedPong | 1
-foretias-server | CleanAuthenticated | ChrononRecord | 8
+foretias-server | CleanAuthenticated | ChrononRecord | 10
 foretias-server | CleanAuthenticated | Foretis | 6
 foretias-server | CleanAuthenticated | u8 | 1
 foretias-server | Externalized | u8 | 1
+foretias-server | Unprocessed | ChrononRecord | 2
+foretias-server | Unprocessed | Foretis | 1
 foretias-server | Unprocessed | u8 | 1

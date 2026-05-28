@@ -6,6 +6,7 @@
 
 use foretias_core::foretias::calendar::Calendar;
 use foretias_core::foretias::clean_auth::Unprocessed;
+use foretias_core::foretias::tick::ChrononRecord;
 use foretias_core::foretias::types::Tbid;
 use foretias_core::crypto_server;
 
@@ -64,12 +65,10 @@ async fn test_e2e_gossip_unsigned_rejected() {
 
 #[tokio::test]
 async fn test_e2e_type_discipline_enforced() {
-    use foretias_core::foretias::clean_auth::UnprocessedChrononRecord;
-
-    // The compile-time gate: UnprocessedChrononRecord CANNOT be directly
-    // assigned to CleanAuthenticatedChrononRecord. The compiler enforces this.
+    // The compile-time gate: Unprocessed<ChrononRecord> CANNOT be directly
+    // assigned to CleanAuthenticated<ChrononRecord>. The compiler enforces this.
     // If this test compiles with a direct assignment, the discipline has failed.
-    let record = foretias_core::foretias::tick::ChrononRecord {
+    let record = ChrononRecord {
         chronon_number: 1,
         public_key: vec![0u8; 32].into(),
         signature_algorithm: "Ed25519".to_string(),
@@ -81,8 +80,8 @@ async fn test_e2e_type_discipline_enforced() {
         tb_version: 0,
         tbid: Tbid::default(),
     };
-    let _up: UnprocessedChrononRecord = Unprocessed::<foretias_core::foretias::tick::ChrononRecord>::from_parsed(record);
+    let _up: Unprocessed<ChrononRecord> = Unprocessed::<ChrononRecord>::from_parsed(record);
     // The following would NOT compile:
-    // let _: CleanAuthenticatedChrononRecord = _up;
+    // let _: CleanAuthenticated<ChrononRecord> = _up;
     // This is the desired behavior — the compiler enforces the gate.
 }

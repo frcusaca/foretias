@@ -10,4 +10,4 @@ pub use report::ProbityReport;
 pub use aggregator::{UShapeConfig, u_shape_weight, aggregate};
 pub use store::ProbityStore;
 pub use gossip_handler::{handle_gossip_message, DefaultReporterKeyResolver, ReporterKeyResolver};
-pub use clean_auth::{CleanAuthError, UnprocessedProbityReport, CleanAuthenticatedProbityReport, ExternalizedProbityReport, pub_key_from_tbid_hex};
+pub use clean_auth::{CleanAuthError, ExternalizedProbityReport, pub_key_from_tbid_hex};

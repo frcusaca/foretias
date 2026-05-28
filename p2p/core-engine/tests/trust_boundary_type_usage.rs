@@ -298,12 +298,15 @@ fn verify_trust_boundary_invariants(locations: &[LocationEntry]) -> Vec<String> 
         }
     }
 
-    // Rule 3: Unprocessed should ONLY appear in communerd, gate files, or test files
+    // Rule 3: Unprocessed should ONLY appear in communerd, gate files, server handlers
+    // (handlers.rs is a parse boundary: it creates Unprocessed<T> from wire JSON
+    // and hands it to communerd or crypto for authentication), or test files
     for loc in locations {
         if loc.is_unprocessed && loc.inner != "bare" && loc.inner != "T" {
             let allowed = loc.file.contains("communerd")
                 || loc.file.contains("clean_auth")
                 || loc.file.contains("probity/report")
+                || loc.file.contains("server/handlers")
                 || loc.file.contains("test");
             if !allowed {
                 violations.push(format!(
