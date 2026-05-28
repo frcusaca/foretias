@@ -916,6 +916,123 @@ python -m pytest tests/ -v
 
 ---
 
+## Phase 13 — Fully-Bound Gossip
+
+**Spec reference:** §17.  
+**Date added:** 2026-05-28.
+
+### 13.1 CommunerdetteHost API additions
+
+- [ ] Add to `CommunerdetteHost` trait:
+      ```rust
+      async fn host_sign_probity_report(
+          &self,
+          report: ProbityReport,
+      ) -> Result<ProbityReport, NodeError>;
+
+      async fn host_publish_probity_report(
+          &self,
+          report: ProbityReport,
+      ) -> Result<(), NodeError>;
+      ```
+- [ ] Implement `host_sign_probity_report` on `CommunerdetteHost` impl in
+      `communerd/mod.rs`: build canonical bytes, call Calendar's
+      `sign_tbid_message()`, set `signature` and `curve=1` on report, return.
+- [ ] Implement `host_publish_probity_report` on `CommunerdetteHost` impl:
+      forward to `publish_probity_report(swarm, &report, namespace)` via the
+      existing gossip helper.
+- [ ] Update `MockHost` in tests to stub both methods
+      (sign: return report unchanged; publish: return Ok(())).
+
+### 13.2 Emission — FullyBound established
+
+- [ ] In `spawn_channel_bind_task`, when state transitions to `FullyBound`:
+      ```rust
+      let report = ProbityReport {
+          reporter: local_calendar_tbid.to_hex(),
+          subject:  executor.target_tbid.to_hex(),
+          attribute: "fb".to_string(),
+          value:    1.0,
+          timestamp_ns: now_ns(),
+          signature: vec![],
+          curve:    1,
+      };
+      let _ = executor.host.host_sign_probity_report(report)
+          .and_then(|signed| executor.host.host_publish_probity_report(signed))
+          .await;
+      ```
+      Failure to sign or publish is logged at WARN and does not abort binding.
+- [ ] `CommunerdetteExecutor` must carry `local_calendar_tbid: Tbid` for this
+      call. Add the field and thread it through `CommunerdetteExecutor::new`.
+
+### 13.3 Emission — FullyBound lost
+
+- [ ] Add helper `Communerdette::emit_fb_lost(executor, reason: &str)`:
+      same report shape but `value = -1.0`. Call from:
+      - channel disconnect handler inside `spawn_channel_bind_task`
+      - Communerdette shutdown path when binding was `FullyBound`
+      - any path that sets `TbidBindingStatus::Rejected` while previous state
+        was `FullyBound`
+
+### 13.4 Reception
+
+- [ ] In Communerd's gossip event handler (`communerd/p2p/event_loop.rs` or
+      equivalent), when a `ProbityReport` arrives on the probity topic:
+      1. Parse as `Unprocessed<ProbityReport>::from_bytes`.
+      2. Call `.verify(crypto)` → `CleanAuthenticated<ProbityReport>`.
+      3. If `attribute == "fb"`: log at DEBUG; ingest into `ProbityStore`.
+      4. Any error: log at TRACE, drop silently.
+- [ ] Ensure the gossip event handler path does not panic on malformed input.
+
+### 13.5 Tests
+
+- [ ] Unit test: `emit_fb_established` builds a report with `attribute="fb"`,
+      `value=1.0`, correct reporter and subject TBIDs.
+- [ ] Unit test: `emit_fb_lost` builds a report with `value=-1.0`.
+- [ ] Unit test: a signed FB report passes `Unprocessed<ProbityReport>::verify`.
+- [ ] Integration test (two servers, Phase 14 harness): server A reaches
+      `FullyBound` with B; B's `ProbityStore` eventually contains a record
+      from A with `attribute="fb"` and `value=1.0`.
+
+---
+
+## Phase 14 — Two-Server Integration Test Harness
+
+**Spec reference:** §18.  
+**Date added:** 2026-05-28.  
+**Note:** Two-server startup already works — see `mirror_integration.rs`. This
+phase extracts the pattern into a shared harness and adds the first feature tests
+that use it.
+
+### 14.1 Harness module
+
+- [ ] Create `p2p/foretias-server/tests/two_server_harness.rs`.
+- [ ] Move `find_available_port()` from `mirror_integration.rs` to harness; keep
+      re-export in mirror_integration.rs for backward compat.
+- [ ] Implement `start_test_server(chronon_ns: u64) -> (Arc<TimeFamilyServer>, JoinHandle<()>, String)`:
+      pick ephemeral port, construct server, call `start_daemon_arc()`,
+      call `start()`, return triple.
+- [ ] Implement `graceful_stop(server, handle, timeout_ms)`:
+      call `server.request_shutdown()`, wait `timeout_ms` for handle,
+      then `handle.abort()`.
+- [ ] Add `request_shutdown()` to `TimeFamilyServer` if not already present.
+      It signals the internal `CancellationToken` that was threaded through in
+      the server startup path.
+
+### 14.2 First harness tests
+
+- [ ] Test: `two_servers_start_and_stop` — start two servers, wait 50 ms,
+      graceful stop both. Asserts no panic and both handles complete within
+      timeout.
+- [ ] Test: `l1_ping_round_trip` — server A pings server B's JSON-RPC endpoint
+      via `TimeFamilyServer::json_rpc_ping(addr_b)` (or the existing ping RPC).
+      Assert `Ok(())` within 2 s.
+- [ ] Test (Phase 13): two servers, A wired to gossip with B, A establishes
+      a Communerdette line to B, wait for `FullyBound`, assert B received FB
+      gossip report (via `ProbityStore::reports_for_subject`).
+
+---
+
 ## Open Questions
 
 - [ ] Should `CommunerdetteLine` expose `stamp` directly, or should mutual

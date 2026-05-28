@@ -996,3 +996,172 @@ a dependency from `core-engine` back to `foretias-node`.
   functions with a clear TODO marking where slow-key verification will be
   inserted.
 - Do not use `from_trusted` on any data arriving from a remote peer.
+
+---
+
+## 17. Fully-Bound Gossip (Phase 13)
+
+### 17.1 Purpose
+
+When a Communerdette reaches `FullyBound` state (§12.0), or when a `FullyBound`
+relationship is lost, the event is broadcast as a signed `ProbityReport` on the
+gossipsub probity topic. This gives the broader network observable evidence of
+who is mirroring whom without requiring a central registry.
+
+Because channel-binding is bilateral but independent, two gossip messages are
+emitted per FB establishment: one from each party when it locally reaches
+`FullyBound`. Loss may be unilateral.
+
+### 17.2 Report Shape
+
+The `ProbityReport` fields for an FB event:
+
+| Field | Established | Lost |
+|-------|-------------|------|
+| `reporter` | Local Calendar's TBID hex | same |
+| `subject` | Remote Chronomatter's TBID hex | same |
+| `attribute` | `"fb"` | `"fb"` |
+| `value` | `1.0` | `-1.0` |
+| `timestamp_ns` | current time (ns since epoch) | same |
+| `curve` | `1` (Ed25519) | same |
+| `signature` | full TbidSecret dual-key signature | same |
+
+The `attribute = "fb"` value is the type discriminator. Sign is the state
+discriminator (`positive = established`, `negative = lost`).
+
+**Why full TbidSecret signing:** FB establishment is a meaningful network-level
+commitment (Calendar is declaring it is mirroring a specific Chronomatter). The
+signature must be verifiable by anyone who has the reporter's TBID, not just by
+peers who already know the generic Ed25519 key. Full TbidSecret signing makes
+this verifiable without prior key exchange. FB events do not happen frequently,
+so the cost of a slow-key (SPHINCS+) signature is acceptable.
+
+### 17.3 Signing Authority
+
+The signing authority is the **local Calendar's TbidSecret**. Communerdette does
+not hold signing keys. The emission path is:
+
+```
+Communerdette state → FullyBound
+  → call CommunerdetteHost::host_emit_fb_gossip(reporter_tbid, subject_tbid, value)
+  → Communerd asks Calendar/Chronomatter to sign via internal signing API
+  → signed ProbityReport returned
+  → published to gossipsub probity topic via publish_probity_report()
+```
+
+Two new methods on `CommunerdetteHost`:
+
+```rust
+/// Sign a ProbityReport with the local Calendar's TbidSecret and return it.
+async fn host_sign_probity_report(
+    &self,
+    report: ProbityReport,
+) -> Result<ProbityReport, NodeError>;
+
+/// Publish a signed ProbityReport to the gossipsub probity topic.
+async fn host_publish_probity_report(
+    &self,
+    report: ProbityReport,
+) -> Result<(), NodeError>;
+```
+
+### 17.4 Reception and Processing
+
+When a `ProbityReport` arrives on the probity gossipsub topic:
+
+1. Attempt `Unprocessed<ProbityReport>::verify(crypto)` — authenticates the
+   reporter's Ed25519 signature using `pub_key_from_tbid_hex(&report.reporter)`.
+2. If `attribute == "fb"`:
+   - Log at `DEBUG`: `"[probity] fb report: reporter={} subject={} value={}"`.
+   - Ingest into `ProbityStore` for local aggregation.
+3. Unauthenticated or malformed reports are silently dropped (no panic, no error
+   propagation to caller). Log at `TRACE` only.
+
+(@human: only fast-key verification is done on reception — the full TbidSecret
+slow-key signature is what makes the report authoritative for external auditors,
+but the receiving Communerd only has the Ed25519 public key from the TBID. Full
+slow-key verification is deferred until `tbid_verify` C function is wired, same
+as channel-binding.)
+
+### 17.5 State Transition Wiring
+
+In `spawn_channel_bind_task` (Phase 12.0):
+- When state transitions to `FullyBound`: call `host_emit_fb_gossip` with
+  `value = 1.0`.
+
+In Communerdette state update paths (shutdown, rejection, disconnect):
+- When state transitions out of `FullyBound`: call `host_emit_fb_gossip` with
+  `value = -1.0`.
+
+---
+
+## 18. Two-Server Integration Test Harness (Phase 14)
+
+### 18.1 Motivation
+
+The two-server test pattern already appears in `mirror_integration.rs`. This
+section specifies a shared harness so that liveness (Phase 12), FB gossip
+(Phase 13), and future integration tests do not re-implement startup/teardown
+boilerplate.
+
+Starting two servers in one test binary is feasible today. The only blocked test
+(`source_dumps_history_to_mirror`) is blocked on PQC genesis verification for
+`tb_version >= 1` calendar chains — not on server startup itself. Liveness and
+gossip tests do not touch the calendar chain and can be written now.
+
+### 18.2 Harness API
+
+File: `p2p/foretias-server/tests/two_server_harness.rs`
+
+```rust
+/// Start a TimeFamilyServer on an ephemeral port.
+/// Returns (server, tcp_handle, assigned_addr).
+pub async fn start_test_server(
+    chronon_ns: u64,
+) -> (Arc<TimeFamilyServer>, JoinHandle<()>, String);
+
+/// Signal graceful shutdown, wait up to timeout_ms, then abort.
+pub async fn graceful_stop(
+    server: Arc<TimeFamilyServer>,
+    handle: JoinHandle<()>,
+    timeout_ms: u64,
+);
+
+/// Convenience: bind ephemeral port, get the address string.
+pub fn find_available_port() -> u16;
+```
+
+### 18.3 Shutdown Protocol
+
+1. Call `server.request_shutdown()` (signal via `CancellationToken`).
+2. Wait up to `timeout_ms` for the `JoinHandle` to complete.
+3. If the handle has not completed, call `handle.abort()`.
+4. Drop the `Arc<TimeFamilyServer>`.
+
+`TimeFamilyServer` must expose a `request_shutdown()` method that signals its
+internal `CancellationToken`. The existing `start()` method returns a
+`JoinHandle<()>`; the harness wraps it.
+
+### 18.4 Test Structure
+
+Each integration test using the harness follows this template:
+
+```rust
+#[tokio::test]
+async fn test_name() {
+    let (server_a, handle_a, addr_a) = start_test_server(100_000_000).await;
+    let (server_b, handle_b, addr_b) = start_test_server(100_000_000).await;
+
+    // Give listeners a moment to bind.
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    // ... exercise the feature ...
+
+    graceful_stop(server_a, handle_a, 500).await;
+    graceful_stop(server_b, handle_b, 500).await;
+}
+```
+
+Tests must not rely on wall-clock timing for correctness. Use `tokio::time::sleep`
+only for port-binding settling (≤ 100 ms). Feature-specific readiness should be
+checked via polling a server status method with a bounded retry loop.
