@@ -1274,3 +1274,297 @@ formation should use toppoli.
 Tests must not rely on wall-clock timing for correctness. Use `tokio::time::sleep`
 only for port-binding settling (≤ 100 ms). Feature-specific readiness should be
 checked via polling a server status method with a bounded retry loop.
+
+---
+
+## 19. Time Family Model (Phase 15)
+
+### 19.1 Concept
+
+A **Time Family** is the unit Communerdette tracks. A family consists of one
+Communerd and its associated time beings (one or more Calendars, one or more
+Chronomatter instances). The Communerd's TBID is the **family identifier** —
+its role is analogous to a shared surname.
+
+```
+TimeFamily "Smith":
+  Communerd-Smith    TBID = 0xABCD…  (family identifier, transport authenticator)
+  Calendar-Smith     TBID = 0x1234…  (responsible for Chronomatter's chrononchain)
+  Chronomatter-Smith TBID = 0x5678…  (time authority; produces ticks)
+```
+
+**Calendar's official role within the family.** Calendar is responsible for
+**storing and replicating Chronomatter's chrononchain**. This is not incidental
+— it is Calendar's declared purpose within the family. The `TimeFamily`
+declaration *establishes* this responsibility: by signing the family manifest,
+Calendar commits to owning and replicating the chrononchain of the named
+Chronomatter instances.
+
+**Calendar is authoritative for chrononchain blocks it replicates.** When
+Calendar sends a ChrononRecord (or a slice of the chrononchain) to another
+peer, it signs the block with its own TBID. The receiver trusts this block
+because the `TimeFamily` record establishes Calendar as the replication
+authority for that Chronomatter. The trust chain is:
+
+```
+TimeFamily (k-way signed):
+  "Calendar-Smith is responsible for Chronomatter-Smith's chrononchain"
+       ↓
+Calendar-Smith sends ChrononRecord(n) signed with Calendar-Smith TBID
+       ↓
+Receiver verifies Calendar-Smith TBID signature
+  → authoritative because TimeFamily declares Calendar-Smith responsible
+       ↓
+Receiver can further verify the block's internal chain signature
+  (Chronomatter's per-tick Ed25519 key) for depth-of-trust escalation
+```
+
+Practically, Calendar adds an `ExternalAttestation` (signed with Calendar's
+TbidSecret) to each ChrononRecord it replicates. This is the authoritative
+proof. The underlying Chronomatter per-tick key signature remains for chain
+integrity, but the Calendar TBID signature is what Communerdette (and other
+peers) verify for application-layer trust.
+
+This explains why Calendar signs FB and GNF messages: Calendar is the entity
+that holds the replication commitment, so Calendar's signature on an FB report
+means "I, Calendar, have established a verified replication relationship with
+the remote family's Chronomatter." The Chronomatter need not co-sign FB/GNF
+because the relationship is Calendar-to-Calendar/Calendar-to-Family, not
+Chronomatter-to-Chronomatter.
+
+**Implication for `get_tick`.** When Communerdette requests a tick from a remote
+family via `CommunerdetteLine::get_tick(n)`, the returned `ChrononRecord` must
+carry a Calendar TBID attestation (from a Calendar listed in the remote family's
+`TimeFamily` record). Communerdette verifies this attestation. The current
+`from_trusted` shortcut used for locally-held calendar data is only valid for
+the local family's own Calendar and must never be applied to remote calendar
+data.
+
+**Registry key change.** `Communerdette` is keyed on the remote **Communerd
+TBID** (family identifier), not on a Calendar or Chronomatter TBID. One
+Communerdette per remote family, regardless of how many time beings that family
+has.
+
+**Authentication model:**
+
+| Layer | Key | Applies to |
+|-------|-----|-----------|
+| Transport | Communerd fast key (Ed25519) | Every message on a bound channel |
+| Application: stamp/tick | Calendar/Chronomatter TBID (in the payload) | Foretis, ChrononRecord content |
+| Application: FB/GNF | Calendar TBID signature + Communerd transport auth | FB gossip reports, GNF reports |
+
+Transport auth is verified once per channel during binding (Phase 12.0) and
+fast-checked on subsequent messages. The Foretis payload carries the signer's
+TBID inline and is verified at the application layer — same as today. FB/GNF
+carry a Calendar TBID signature in addition to the transport auth.
+
+### 19.2 Family Discovery via DHT
+
+Family structure is discovered through the DHT as part of peer discovery —
+**not** through a separate handshake message. A `TimeFamily` record is
+published to the DHT keyed on the Communerd TBID. Any peer that discovers a
+Communerd via DHT can resolve its family members in the same lookup round.
+
+Discovery flow:
+
+```
+1. Node A discovers Node B's PeerRegistrationRecord (existing DHT lookup).
+2. A also requests the TimeFamily record for B's Communerd TBID.
+3. A verifies the TimeFamily record signature against B's Communerd fast key.
+4. A creates CommunerdetteLine(communerd_tbid = B.communerd_tbid), now knowing
+   B's Calendar TBID(s) and Chronomatter TBID(s).
+5. Operations route:
+   - get_tick(n)  → B's Calendar TBID(s) (any member that has it)
+   - stamp(...)   → B's Chronomatter TBID(s)
+   - FB/GNF       → verified against B's Calendar TBID in the payload
+```
+
+Auth cost: one Communerd fast-key verification at DHT record retrieval, then
+cached. Zero additional per-operation overhead for family membership knowledge.
+This is the same cost as the existing `PeerRegistrationRecord` signature check.
+
+### 19.3 TimeFamily Record
+
+A `TimeFamily` record is produced by Communerd but **encumbered with k-way
+signing** — every family member signs the canonical manifest — plus a **Foretis**
+that temporally anchors the declaration to a specific chronon.
+
+**Why k-way signing:** if only Communerd signed the record, a compromised
+Communerd could claim arbitrary members. With k-way signing, a valid `TimeFamily`
+record proves every named member participated in its creation. A Calendar or
+Chronomatter that did not consent cannot appear as a legitimate family member.
+
+**Why a Foretis:** the Foretis is a Chronomatter stamp of the canonical manifest
+bytes, tied to a specific chronon. It prevents backdating (the family did not
+exist before that chronon) and provides a public timestamp that anyone with
+the family's ChrononRecord can verify independently.
+
+```rust
+/// One member's attestation of the family manifest.
+pub struct FamilyMemberAttestation {
+    /// Attesting member's TBID hex.
+    pub member_tbid: String,
+    /// Full TbidSecret dual-key signature (Ed25519 ‖ SLH-DSA = 49,920 bytes)
+    /// over canonical(TimeFamily) bytes — all fields except `attestations`
+    /// and `foretis`.
+    pub signature:   Vec<u8>,
+}
+
+/// DHT record declaring a Time Family's structure.
+///
+/// Key in DHT: communerd_tbid hex.
+///
+/// Security properties:
+///   - k-way signed: all listed members have attested the manifest.
+///   - temporally anchored: Foretis ties the declaration to a chronon.
+///   - fast-verifiable: Communerd Ed25519 sig is checked first; slow-key
+///     verification of all attestations is deferred to policy.
+pub struct TimeFamily {
+    /// Family identifier — the Communerd's TBID hex.
+    pub communerd_tbid:       String,
+    /// JSON-RPC address of the Communerd (for transport).
+    pub json_rpc:             String,
+    /// libp2p peer ID of the Communerd.
+    pub peer_id:              String,
+    /// TBIDs (hex) of Calendar time beings in this family.
+    pub calendar_tbids:       Vec<String>,
+    /// TBIDs (hex) of Chronomatter time beings in this family.
+    pub chronomatter_tbids:   Vec<String>,
+    /// Monotonic record version. Increment on any membership change.
+    pub version:              u64,
+    /// Wall-clock publication time, ns since epoch.
+    pub registered_at_ns:     u64,
+    /// K-way attestations: one per family member (Communerd + each Calendar
+    /// + each Chronomatter). Order is not significant.
+    pub attestations:         Vec<FamilyMemberAttestation>,
+    /// Foretis produced by one of the family's Chronomatter instances,
+    /// stamping the canonical manifest bytes as content.
+    /// Ties the declaration to a specific chronon and time chain.
+    pub foretis:              Foretis,
+}
+```
+
+**Canonical encoding** covers: `communerd_tbid`, `json_rpc`, `peer_id`,
+`calendar_tbids` (sorted), `chronomatter_tbids` (sorted), `version`,
+`registered_at_ns` — in that fixed order, length-prefixed strings, no
+`attestations` or `foretis`. Any change is a wire-breaking change.
+
+**Verification levels:**
+
+| Level | What is checked | When |
+|-------|-----------------|------|
+| Fast | Communerd Ed25519 sig (first attestation) | On every DHT record receipt |
+| Full | All member attestations (Ed25519 fast keys) | On first family bind |
+| Slow | All member SLH-DSA slow-key sigs | Policy-gated (e.g. before trust elevation) |
+| Temporal | Foretis verified against Chronomatter ChrononRecord | When anchoring is required |
+
+Fast verification is sufficient for routing decisions. Full verification is
+required before a `CommunerdetteLine` may reach `FullyBound`. Slow verification
+is deferred until the same policy gate as channel-binding slow-key proof.
+
+### 19.4 Reverse Lookup: TBID → TimeFamily
+
+A `TimeFamily` record is indexed in the DHT by the Communerd TBID (forward
+lookup). But peers frequently encounter a Calendar or Chronomatter TBID first
+— in a received Foretis, an FB report, or a legacy peer discovery — and need
+to resolve which family it belongs to (reverse lookup).
+
+Two DHT records support reverse lookup:
+
+**Option A — via PeerRegistrationRecord (preferred):**
+Each family member includes `family_communerd_tbid: Option<String>` in its
+`PeerRegistrationRecord`. A receiver holding a Calendar TBID can:
+1. Look up the Calendar's `PeerRegistrationRecord` (DHT key = Calendar TBID).
+2. Read `family_communerd_tbid`.
+3. Look up the `TimeFamily` record (DHT key = Communerd TBID).
+4. Verify Calendar appears in `family.calendar_tbids`.
+
+Cost: two DHT lookups (often the first is already cached from peer discovery).
+
+**Option B — FamilyMemberPointer (lighter-weight secondary record):**
+A `FamilyMemberPointer` record indexed by member TBID provides a direct pointer
+to the Communerd TBID, without the full `PeerRegistrationRecord` overhead:
+
+```rust
+pub struct FamilyMemberPointer {
+    /// This member's TBID hex (the DHT key).
+    pub member_tbid:    String,
+    /// The Communerd TBID of the family this member belongs to.
+    pub communerd_tbid: String,
+    /// Signed by the member's own TbidSecret fast key.
+    pub signature:      Vec<u8>,
+}
+```
+
+Option A is preferred because `PeerRegistrationRecord` is already published
+and cached. Option B exists as a fallback for peers that do not publish full
+registration records (e.g. lightweight Chronomatter-only nodes).
+
+**Resolution policy:** Communerd SHOULD cache resolved family membership.
+On receipt of any TBID that is not yet resolved to a family, schedule a reverse
+lookup. While the lookup is pending, treat the TBID as belonging to a
+single-member pseudo-family (backward compat) and log a warning.
+
+### 19.5 Relationship to PeerRegistrationRecord
+
+`PeerRegistrationRecord` continues to exist and is published by each time being
+for its own direct address (used for backward compatibility and for peers that do
+not participate in families). `TimeFamily` is an overlay record published
+additionally by any Communerd that governs a family.
+
+A time being that belongs to a family adds `family_communerd_tbid: Option<String>`
+to its `PeerRegistrationRecord` so that peers discovering it via the time being's
+TBID can follow the pointer to the family record.
+
+### 19.5 Communerdette Line Semantics Under the Family Model
+
+`CommunerdetteLine` is identified by Communerd TBID. Its internal state tracks:
+
+```rust
+struct CommunerdetteState {
+    // ... existing fields ...
+    /// Family structure resolved from DHT (None until discovered).
+    family: Option<ResolvedFamily>,
+}
+
+struct ResolvedFamily {
+    calendar_tbids:     Vec<Tbid>,
+    chronomatter_tbids: Vec<Tbid>,
+    record_version:     u64,
+}
+```
+
+Operations use the family to route:
+- `get_tick` / `get_calendar_slice` → any Calendar TBID in `family.calendar_tbids`
+- `stamp` → any Chronomatter TBID in `family.chronomatter_tbids`
+- FB/GNF reception → verify payload Calendar TBID is in `family.calendar_tbids`
+
+If `family` is `None` (not yet resolved), operations degrade gracefully: treat
+the Communerd TBID as if it were a solo Calendar (backward compat) and schedule
+a DHT family lookup.
+
+### 19.6 Signing for FB/GNF Under the Family Model
+
+The `CommunerdetteHost::host_sign_probity_report` method (Phase 13, §17.3)
+signs with the **local Calendar's TbidSecret** — unchanged. The `reporter` field
+in the emitted `ProbityReport` carries the local Calendar's TBID hex. The
+receiver looks up the reporter in the sender's `TimeFamily` record to confirm
+the reporter is a legitimate member of that family before ingesting. This is the
+only additional auth step over the existing ProbityReport verification.
+
+---
+
+## 20. TimeFamily in Toppoli Tests
+
+Each toppoli peer is a `TimeFamilyServer` — name originally chosen for a
+different reason, but now correctly describes the concept. When toppoli tests
+spin up peers with `with_communerd = true`, each server publishes its
+`TimeFamily` DHT record automatically. Toppoli tests can inspect family
+membership directly:
+
+```rust
+let family = harness.peer(0).server()
+    .communerd().unwrap()
+    .resolved_family_for(&remote_communerd_tbid);
+assert!(family.calendar_tbids.contains(&expected_calendar_tbid));
+```
