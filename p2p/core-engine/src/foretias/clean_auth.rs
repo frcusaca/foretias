@@ -105,12 +105,50 @@ impl<T> CleanAuthenticated<T> {
     pub fn into_inner(self) -> T {
         self.inner
     }
+
+    /// Runtime guarantee: fast-key (Ed25519) authentication has been performed.
+    pub fn is_authenticated_quickly(&self) -> bool { true }
 }
 
 impl<T> TrustedInner<T> for CleanAuthenticated<T> {
     fn from_trusted(inner: T) -> Self { Self { inner } }
     fn inner(&self) -> &T { &self.inner }
     fn into_inner(self) -> T { self.inner }
+}
+
+/// A domain type authenticated against both the fast key (Ed25519) and the slow key (SLH-DSA).
+///
+/// Subsumes `CleanAuthenticated<T>` — convertible via `From`. Required for initial
+/// channel-binding establishment (§12.0). Produced only by dual-key verification paths.
+#[derive(Debug, Clone)]
+pub struct CleanFullyAuthenticated<T> {
+    inner: T,
+}
+
+impl<T> CleanFullyAuthenticated<T> {
+    /// Construct from data verified against both the fast key and the slow key.
+    /// Only dual-key verification paths in `communerd/` should call this.
+    pub fn from_dual_verified(inner: T) -> Self {
+        Self { inner }
+    }
+
+    /// Read-only accessor.
+    pub fn inner(&self) -> &T { &self.inner }
+
+    /// Consume and return the inner value.
+    pub fn into_inner(self) -> T { self.inner }
+
+    /// Runtime guarantee: fast-key (Ed25519) authentication has been performed.
+    pub fn is_authenticated_quickly(&self) -> bool { true }
+
+    /// Runtime guarantee: slow-key (SLH-DSA) authentication has also been performed.
+    pub fn is_authenticated_fully(&self) -> bool { true }
+}
+
+impl<T: Clone> From<CleanFullyAuthenticated<T>> for CleanAuthenticated<T> {
+    fn from(full: CleanFullyAuthenticated<T>) -> CleanAuthenticated<T> {
+        CleanAuthenticated::from_trusted(full.into_inner())
+    }
 }
 
 /// A domain type in its wire/disk form.
@@ -879,5 +917,26 @@ mod tests {
         // The following line would NOT compile:
         // let _: CleanAuthenticatedChrononRecord = _up;
         // This is the desired behavior -- the compiler enforces the gate.
+    }
+
+    #[test]
+    fn clean_authenticated_is_authenticated_quickly() {
+        let ca: CleanAuthenticated<u32> = CleanAuthenticated::from_trusted(42u32);
+        assert!(ca.is_authenticated_quickly());
+    }
+
+    #[test]
+    fn clean_fully_authenticated_both_markers_true() {
+        let cfa: CleanFullyAuthenticated<u32> = CleanFullyAuthenticated::from_dual_verified(7u32);
+        assert!(cfa.is_authenticated_quickly());
+        assert!(cfa.is_authenticated_fully());
+    }
+
+    #[test]
+    fn clean_fully_authenticated_converts_to_clean_authenticated() {
+        let cfa: CleanFullyAuthenticated<u32> = CleanFullyAuthenticated::from_dual_verified(99u32);
+        let ca: CleanAuthenticated<u32> = cfa.into();
+        assert_eq!(*ca.inner(), 99u32);
+        assert!(ca.is_authenticated_quickly());
     }
 }

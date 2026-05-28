@@ -22,17 +22,22 @@ core-engine/src/foretias/clean_auth.rs | Foretis | impl::Unprocessed | Y | - | -
 core-engine/src/foretias/clean_auth.rs | Foretis | impl::Unprocessed::fn::into_clean_authenticated | - | Y | -
 core-engine/src/foretias/clean_auth.rs | Foretis | impl::Unprocessed::fn::verify | - | Y | -
 core-engine/src/foretias/clean_auth.rs | T | impl::CleanAuthenticated | - | Y | -
+core-engine/src/foretias/clean_auth.rs | T | impl::CleanAuthenticated::fn::from | - | Y | -
 core-engine/src/foretias/clean_auth.rs | T | impl::Externalized | - | - | Y
 core-engine/src/foretias/clean_auth.rs | T | impl::Unprocessed | Y | - | -
+core-engine/src/foretias/clean_auth.rs | u32 | fn::clean_authenticated_is_authenticated_quickly | - | Y | -
+core-engine/src/foretias/clean_auth.rs | u32 | fn::clean_fully_authenticated_converts_to_clean_authenticated | - | Y | -
 core-engine/src/probity/report.rs | ProbityReport | impl::CleanAuthenticated | - | Y | -
 core-engine/src/probity/report.rs | ProbityReport | impl::ExternalizedProbityReport::fn::into_unprocessed | Y | - | -
 core-engine/src/probity/report.rs | ProbityReport | impl::ExternalizedProbityReport::fn::reconstruct | Y | - | -
 core-engine/src/probity/report.rs | ProbityReport | impl::Unprocessed | Y | - | -
 core-engine/src/probity/report.rs | ProbityReport | impl::Unprocessed::fn::into_clean_authenticated | - | Y | -
 core-engine/src/probity/report.rs | ProbityReport | impl::Unprocessed::fn::verify | - | Y | -
+foretias-server/src/communerd/communerdette.rs | ChrononRecord | fn::dummy_chronon_record | - | Y | -
 foretias-server/src/communerd/communerdette.rs | ChrononRecord | impl::Communerdette::fn::execute_calendar_slice | - | Y | -
 foretias-server/src/communerd/communerdette.rs | ChrononRecord | impl::Communerdette::fn::execute_tick | - | Y | -
 foretias-server/src/communerd/communerdette.rs | ChrononRecord | impl::CommunerdetteExecutor::fn::gate_chronon_records | - | Y | -
+foretias-server/src/communerd/communerdette.rs | ChrononRecord | impl::CommunerdetteExecutor::fn::gate_foretis | - | Y | -
 foretias-server/src/communerd/communerdette.rs | ChrononRecord | impl::CommunerdetteLine::fn::get_calendar_slice | - | Y | -
 foretias-server/src/communerd/communerdette.rs | ChrononRecord | impl::CommunerdetteLine::fn::get_tick | - | Y | -
 foretias-server/src/communerd/communerdette.rs | ChrononRecord | other | - | Y | -
@@ -51,14 +56,15 @@ core-engine | CleanAuthenticated | ChrononRecord | 8
 core-engine | CleanAuthenticated | EpochSnapshot | 3
 core-engine | CleanAuthenticated | Foretis | 3
 core-engine | CleanAuthenticated | ProbityReport | 3
-core-engine | CleanAuthenticated | T | 2
+core-engine | CleanAuthenticated | T | 4
+core-engine | CleanAuthenticated | u32 | 2
 core-engine | Externalized | T | 1
 core-engine | Unprocessed | ChrononRecord | 3
 core-engine | Unprocessed | EpochSnapshot | 3
 core-engine | Unprocessed | Foretis | 3
 core-engine | Unprocessed | ProbityReport | 3
 core-engine | Unprocessed | T | 3
-foretias-server | CleanAuthenticated | ChrononRecord | 6
+foretias-server | CleanAuthenticated | ChrononRecord | 8
 foretias-server | CleanAuthenticated | Foretis | 4
 foretias-server | CleanAuthenticated | u8 | 1
 foretias-server | Externalized | u8 | 1

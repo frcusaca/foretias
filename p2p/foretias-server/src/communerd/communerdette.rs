@@ -857,13 +857,16 @@ impl CommunerdetteExecutor {
 
     /// Run Take 3 inbound gate for a Foretis reply.
     ///
-    /// Parse as Unprocessed<Foretis>, verify structural integrity, TBID match.
-    /// Full signature verification (Foretis::verify) requires the ChrononRecord,
-    /// which we don't have at this layer — structural + TBID gate is the
-    /// Communerdette responsibility.
+    /// Parse as Unprocessed<Foretis>, run full Take 3 inbound gate.
+    ///
+    /// Requires the authenticated ChrononRecord for the Foretis's chronon and the
+    /// original content bytes.  Callers must fetch the record via execute_tick first
+    /// (Phase 11.1 — spec §11.5).
     fn gate_foretis(
         &self,
         raw: serde_json::Value,
+        chronon_record: &CleanAuthenticated<ChrononRecord>,
+        content: &[u8],
     ) -> Result<CleanAuthenticated<Foretis>, CommunerdetteError> {
         let unprocessed = UnprocessedForetis::from_json_value(raw)
             .map_err(|e| TransportError::Decode(e.to_string()))?;
@@ -886,8 +889,15 @@ impl CommunerdetteExecutor {
             });
         }
 
-        // Structural + TBID gate passed → wrap as CleanAuthenticated
-        Ok(CleanAuthenticated::from_trusted(unprocessed.into_inner()))
+        // TODO(slow-key): if Foretis carries a slow-key signature, verify it here
+        // against target_tbid's slow public key. Reject if signature is present
+        // but invalid. Absence is acceptable. Slow-key verification is currently
+        // only required at channel-binding establishment; see Phase 12.0.
+
+        // Full fast-key signature verification via Take 3 pipeline
+        unprocessed
+            .verify(&*self.crypto, chronon_record, content)
+            .map_err(CommunerdetteError::CleanAuth)
     }
 }
 
@@ -928,7 +938,10 @@ impl Communerdette {
         }
     }
 
-    /// Execute stamp with Take 3 inbound gate.
+    /// Execute stamp with full Take 3 inbound gate (Phase 11.1 — spec §11.5).
+    ///
+    /// After receiving the Foretis, we fetch the corresponding ChrononRecord so
+    /// gate_foretis can run the real fast-key signature check rather than from_trusted.
     async fn execute_stamp(
         executor: &CommunerdetteExecutor,
         content: Vec<u8>,
@@ -942,8 +955,18 @@ impl Communerdette {
             .await
             .map_err(|_| CommunerdetteError::Transport(TransportError::Timeout))??;
 
-        // Run Take 3 inbound gate
-        executor.gate_foretis(raw)
+        // Parse just enough to get chronon_number before consuming raw
+        let chronon_number = {
+            let tmp = UnprocessedForetis::from_json_value(raw.clone())
+                .map_err(|e| TransportError::Decode(e.to_string()))?;
+            *tmp.chronon_number()
+        };
+
+        // Fetch the authenticated ChrononRecord for this tick (needed by gate_foretis)
+        let chronon_record = Self::execute_tick(executor, chronon_number, timeout).await?;
+
+        // Run full Take 3 inbound gate — fast-key verified
+        executor.gate_foretis(raw, &chronon_record, &content)
     }
 
     /// Spawn queue worker (Phase 5.2).
@@ -1206,10 +1229,10 @@ mod tests {
         let host: Arc<dyn CommunerdetteHost> = Arc::new(MockHost {
             dht_record: None, cached_record: None, swarm_available: false, local_peer_id: None, namespace: "test".to_string(),
         });
-        let crypto = Arc::from(foretias_core::crypto_server::new_software(foretias_core::crypto_server::ForetiasCurve::Ed25519).expect("libsodium"));
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(foretias_core::crypto_server::ForetiasCurve::Ed25519).expect("libsodium"));
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
-        let line1 = CommunerdetteLine::new(tbid, Arc::clone(&inner), Arc::clone(&host), Arc::clone(&crypto), Arc::clone(&clock));
-        let line2 = CommunerdetteLine::new(tbid, Arc::clone(&inner), Arc::clone(&host), Arc::clone(&crypto), Arc::clone(&clock));
+        let line1 = CommunerdetteLine::new(tbid, Arc::clone(&inner), Arc::clone(&host), crypto.clone(), Arc::clone(&clock));
+        let line2 = CommunerdetteLine::new(tbid, Arc::clone(&inner), Arc::clone(&host), crypto.clone(), Arc::clone(&clock));
 
         assert_eq!(line1.target_tbid(), line2.target_tbid());
         assert!(Arc::ptr_eq(&inner, &line1.inner));
@@ -1492,7 +1515,7 @@ mod tests {
     #[test]
     fn gate_chronon_records_rejects_chronon_number_zero() {
         let tbid = Tbid::from_raw([0u8; 96]);
-        let crypto = Arc::from(foretias_core::crypto_server::new_software(
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(
             foretias_core::crypto_server::ForetiasCurve::Ed25519,
         )
         .expect("libsodium"));
@@ -1531,7 +1554,7 @@ mod tests {
     #[test]
     fn gate_chronon_records_rejects_empty_public_key() {
         let tbid = Tbid::from_raw([0u8; 96]);
-        let crypto = Arc::from(foretias_core::crypto_server::new_software(
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(
             foretias_core::crypto_server::ForetiasCurve::Ed25519,
         )
         .expect("libsodium"));
@@ -1571,7 +1594,7 @@ mod tests {
     fn gate_chronon_records_rejects_tbid_mismatch() {
         let target_tbid = Tbid::from_raw([0u8; 96]);
         let other_tbid = Tbid::from_raw([1u8; 96]);
-        let crypto = Arc::from(foretias_core::crypto_server::new_software(
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(
             foretias_core::crypto_server::ForetiasCurve::Ed25519,
         )
         .expect("libsodium"));
@@ -1603,7 +1626,7 @@ mod tests {
     #[test]
     fn gate_chronon_records_returns_clean_authenticated_on_valid_genesis() {
         let target_tbid = Tbid::from_raw([0u8; 96]);
-        let crypto = Arc::from(foretias_core::crypto_server::new_software(
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(
             foretias_core::crypto_server::ForetiasCurve::Ed25519,
         )
         .expect("libsodium"));
@@ -1631,10 +1654,16 @@ mod tests {
         assert_eq!(*records[0].chronon_number(), 1);
     }
 
+    /// Dummy CleanAuthenticated<ChrononRecord> for structural-rejection tests.
+    /// The record is never reached in those tests so content doesn't need to match.
+    fn dummy_chronon_record(tbid: &Tbid) -> CleanAuthenticated<ChrononRecord> {
+        CleanAuthenticated::from_trusted(make_test_chronon_record(tbid, 1))
+    }
+
     #[test]
     fn gate_foretis_rejects_chronon_number_zero() {
         let tbid = Tbid::from_raw([0u8; 96]);
-        let crypto = Arc::from(foretias_core::crypto_server::new_software(
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(
             foretias_core::crypto_server::ForetiasCurve::Ed25519,
         )
         .expect("libsodium"));
@@ -1648,7 +1677,7 @@ mod tests {
                 local_peer_id: None,
                 namespace: "test".to_string(),
             }),
-            tbid,
+            tbid.clone(),
             crypto,
             clock,
         );
@@ -1658,21 +1687,22 @@ mod tests {
             content_hash: FTByteArray::from([0u8; 32]),
             signature: FTByteVector::from(vec![1u8; 64]),
             signature_algorithm: "Ed25519".to_string(),
-            tbid: Tbid::from_raw([0u8; 96]),
+            tbid: tbid.clone(),
             echo: "test".to_string(),
             tbn: "test".to_string(),
             time_being_reference_time: "UE+0ns".to_string(),
         };
         let json = serde_json::to_value(&bad_foretis).unwrap();
+        let rec = dummy_chronon_record(&tbid);
 
-        let result = executor.gate_foretis(json);
+        let result = executor.gate_foretis(json, &rec, b"");
         assert!(matches!(result, Err(CommunerdetteError::Structural(_))));
     }
 
     #[test]
     fn gate_foretis_rejects_empty_signature() {
         let tbid = Tbid::from_raw([0u8; 96]);
-        let crypto = Arc::from(foretias_core::crypto_server::new_software(
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(
             foretias_core::crypto_server::ForetiasCurve::Ed25519,
         )
         .expect("libsodium"));
@@ -1686,7 +1716,7 @@ mod tests {
                 local_peer_id: None,
                 namespace: "test".to_string(),
             }),
-            tbid,
+            tbid.clone(),
             crypto,
             clock,
         );
@@ -1696,21 +1726,22 @@ mod tests {
             content_hash: FTByteArray::from([0u8; 32]),
             signature: FTByteVector::from(vec![]),
             signature_algorithm: "Ed25519".to_string(),
-            tbid: Tbid::from_raw([0u8; 96]),
+            tbid: tbid.clone(),
             echo: "test".to_string(),
             tbn: "test".to_string(),
             time_being_reference_time: "UE+0ns".to_string(),
         };
         let json = serde_json::to_value(&bad_foretis).unwrap();
+        let rec = dummy_chronon_record(&tbid);
 
-        let result = executor.gate_foretis(json);
+        let result = executor.gate_foretis(json, &rec, b"");
         assert!(matches!(result, Err(CommunerdetteError::Structural(_))));
     }
 
     #[test]
     fn gate_foretis_rejects_empty_signature_algorithm() {
         let tbid = Tbid::from_raw([0u8; 96]);
-        let crypto = Arc::from(foretias_core::crypto_server::new_software(
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(
             foretias_core::crypto_server::ForetiasCurve::Ed25519,
         )
         .expect("libsodium"));
@@ -1724,7 +1755,7 @@ mod tests {
                 local_peer_id: None,
                 namespace: "test".to_string(),
             }),
-            tbid,
+            tbid.clone(),
             crypto,
             clock,
         );
@@ -1734,14 +1765,15 @@ mod tests {
             content_hash: FTByteArray::from([0u8; 32]),
             signature: FTByteVector::from(vec![1u8; 64]),
             signature_algorithm: "".to_string(),
-            tbid: Tbid::from_raw([0u8; 96]),
+            tbid: tbid.clone(),
             echo: "test".to_string(),
             tbn: "test".to_string(),
             time_being_reference_time: "UE+0ns".to_string(),
         };
         let json = serde_json::to_value(&bad_foretis).unwrap();
+        let rec = dummy_chronon_record(&tbid);
 
-        let result = executor.gate_foretis(json);
+        let result = executor.gate_foretis(json, &rec, b"");
         assert!(matches!(result, Err(CommunerdetteError::Structural(_))));
     }
 
@@ -1749,7 +1781,7 @@ mod tests {
     fn gate_foretis_rejects_tbid_mismatch() {
         let target_tbid = Tbid::from_raw([0u8; 96]);
         let other_tbid = Tbid::from_raw([2u8; 96]);
-        let crypto = Arc::from(foretias_core::crypto_server::new_software(
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(
             foretias_core::crypto_server::ForetiasCurve::Ed25519,
         )
         .expect("libsodium"));
@@ -1763,15 +1795,16 @@ mod tests {
                 local_peer_id: None,
                 namespace: "test".to_string(),
             }),
-            target_tbid,
+            target_tbid.clone(),
             crypto,
             clock,
         );
 
         let foretis = make_test_foretis(&other_tbid);
         let json = serde_json::to_value(&foretis).unwrap();
+        let rec = dummy_chronon_record(&target_tbid);
 
-        let result = executor.gate_foretis(json);
+        let result = executor.gate_foretis(json, &rec, b"");
 
         assert!(matches!(result, Err(CommunerdetteError::TbidMismatch { .. })));
         if let Err(CommunerdetteError::TbidMismatch { expected, actual }) = result {
@@ -1782,12 +1815,52 @@ mod tests {
 
     #[test]
     fn gate_foretis_returns_clean_authenticated_on_valid() {
+        use foretias_core::foretias::types::SignatureAlgorithm;
+
         let target_tbid = Tbid::from_raw([0u8; 96]);
-        let crypto = Arc::from(foretias_core::crypto_server::new_software(
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(
             foretias_core::crypto_server::ForetiasCurve::Ed25519,
         )
         .expect("libsodium"));
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+
+        let content = b"valid foretis content" as &[u8];
+        let chronon_number: u64 = 1;
+
+        // Build exactly the sig_input that Unprocessed<Foretis>::verify uses
+        let content_hash = crypto.sha256(content).expect("sha256");
+        let mut sig_input = Vec::new();
+        sig_input.extend_from_slice(&target_tbid.raw_bytes());
+        sig_input.extend_from_slice(&chronon_number.to_be_bytes());
+        sig_input.extend_from_slice(content);
+
+        let sig = crypto.sign_with(&sig_input, SignatureAlgorithm::Ed25519).expect("sign");
+        let pub_key = crypto.public_key();
+
+        // ChrononRecord with the CryptoServer's real public key (from_trusted: test-local data)
+        let chronon_record = CleanAuthenticated::from_trusted(ChrononRecord {
+            chronon_number,
+            public_key: FTByteVector::from(match pub_key { foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(), _ => panic!("expected Ed25519") }),
+            signature_algorithm: "Ed25519".to_string(),
+            forward_foretis: FTByteVector::from(vec![]),
+            backward_foretis: FTByteVector::from(vec![]),
+            aa_nonce: FTByteArray::from([0u8; 16]),
+            chronon_stamp_count: 0,
+            external_attestations: vec![],
+            tb_version: 0,
+            tbid: target_tbid.clone(),
+        });
+
+        let foretis = Foretis {
+            chronon_number,
+            content_hash: FTByteArray::from(content_hash.bytes),
+            signature: FTByteVector::from(sig.as_bytes().to_vec()),
+            signature_algorithm: "Ed25519".to_string(),
+            tbid: target_tbid.clone(),
+            echo: "test".to_string(),
+            tbn: "test-tb".to_string(),
+            time_being_reference_time: "UE+1000000000ns".to_string(),
+        };
 
         let executor = CommunerdetteExecutor::new(
             Arc::new(MockHost {
@@ -1798,24 +1871,85 @@ mod tests {
                 namespace: "test".to_string(),
             }),
             target_tbid,
-            crypto,
+            crypto.clone(),
             clock,
         );
 
-        let foretis = make_test_foretis(&target_tbid);
         let json = serde_json::to_value(&foretis).unwrap();
-
-        let result = executor.gate_foretis(json);
-        assert!(result.is_ok());
+        let result = executor.gate_foretis(json, &chronon_record, content);
+        assert!(result.is_ok(), "gate_foretis must accept valid signed Foretis: {:?}", result);
         let ca = result.unwrap();
         assert_eq!(*ca.chronon_number(), 1);
         assert_eq!(ca.signature_algorithm(), "Ed25519");
+        assert!(ca.is_authenticated_quickly());
+    }
+
+    #[test]
+    fn gate_foretis_rejects_foretis_with_wrong_signature() {
+        use foretias_core::foretias::types::SignatureAlgorithm;
+
+        let target_tbid = Tbid::from_raw([0u8; 96]);
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(
+            foretias_core::crypto_server::ForetiasCurve::Ed25519,
+        )
+        .expect("libsodium"));
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+
+        let content = b"some content" as &[u8];
+        let chronon_number: u64 = 1;
+        let content_hash = crypto.sha256(content).expect("sha256");
+        let pub_key = crypto.public_key();
+
+        let chronon_record = CleanAuthenticated::from_trusted(ChrononRecord {
+            chronon_number,
+            public_key: FTByteVector::from(match pub_key { foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(), _ => panic!("expected Ed25519") }),
+            signature_algorithm: "Ed25519".to_string(),
+            forward_foretis: FTByteVector::from(vec![]),
+            backward_foretis: FTByteVector::from(vec![]),
+            aa_nonce: FTByteArray::from([0u8; 16]),
+            chronon_stamp_count: 0,
+            external_attestations: vec![],
+            tb_version: 0,
+            tbid: target_tbid.clone(),
+        });
+
+        // Wrong signature — 64 bytes of garbage, not a real Ed25519 signature
+        let foretis = Foretis {
+            chronon_number,
+            content_hash: FTByteArray::from(content_hash.bytes),
+            signature: FTByteVector::from(vec![0xBAu8; 64]),
+            signature_algorithm: "Ed25519".to_string(),
+            tbid: target_tbid.clone(),
+            echo: "test".to_string(),
+            tbn: "test-tb".to_string(),
+            time_being_reference_time: "UE+1000000000ns".to_string(),
+        };
+
+        let executor = CommunerdetteExecutor::new(
+            Arc::new(MockHost {
+                dht_record: None,
+                cached_record: None,
+                swarm_available: false,
+                local_peer_id: None,
+                namespace: "test".to_string(),
+            }),
+            target_tbid,
+            crypto.clone(),
+            clock,
+        );
+
+        let json = serde_json::to_value(&foretis).unwrap();
+        let result = executor.gate_foretis(json, &chronon_record, content);
+        assert!(
+            matches!(result, Err(CommunerdetteError::CleanAuth(_))),
+            "gate_foretis must reject Foretis with wrong signature: {:?}", result
+        );
     }
 
     #[test]
     fn gate_foretis_rejects_invalid_json() {
         let tbid = Tbid::from_raw([0u8; 96]);
-        let crypto = Arc::from(foretias_core::crypto_server::new_software(
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(
             foretias_core::crypto_server::ForetiasCurve::Ed25519,
         )
         .expect("libsodium"));
@@ -1834,7 +1968,9 @@ mod tests {
             clock,
         );
 
-        let result = executor.gate_foretis(serde_json::Value::String("not an object".into()));
+        let tbid_for_dummy = Tbid::from_raw([0u8; 96]);
+        let rec = dummy_chronon_record(&tbid_for_dummy);
+        let result = executor.gate_foretis(serde_json::Value::String("not an object".into()), &rec, b"");
         assert!(matches!(result, Err(CommunerdetteError::Transport(_))));
     }
 
@@ -1848,7 +1984,7 @@ mod tests {
             local_peer_id: None,
             namespace: "test".to_string(),
         });
-        let crypto = Arc::from(foretias_core::crypto_server::new_software(
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(
             foretias_core::crypto_server::ForetiasCurve::Ed25519,
         )
         .expect("libsodium"));
@@ -1872,7 +2008,7 @@ mod tests {
             local_peer_id: None,
             namespace: "test".to_string(),
         });
-        let crypto = Arc::from(foretias_core::crypto_server::new_software(
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(
             foretias_core::crypto_server::ForetiasCurve::Ed25519,
         )
         .expect("libsodium"));
@@ -2105,7 +2241,7 @@ mod tests {
     #[test]
     fn gate_chronon_records_rejects_bad_chained_signature() {
         let target_tbid = Tbid::from_raw([0u8; 96]);
-        let crypto = Arc::from(foretias_core::crypto_server::new_software(
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(
             foretias_core::crypto_server::ForetiasCurve::Ed25519,
         )
         .expect("libsodium"));
@@ -2120,7 +2256,7 @@ mod tests {
                 namespace: "test".to_string(),
             }),
             target_tbid,
-            Arc::clone(&crypto),
+            crypto.clone(),
             clock,
         );
 
@@ -2141,21 +2277,47 @@ mod tests {
         );
     }
 
-    /// A Foretis reply with matching TBID but garbage signature bytes passes the
-    /// Communerdette structural+TBID gate and returns `CleanAuthenticated<Foretis>`.
-    /// This is correct: full Foretis signature verification (which requires the
-    /// ChrononRecord and the content bytes) is deferred to the call site per
-    /// the `gate_foretis` doc comment.
-    ///
-    /// This test documents the current trust boundary, not a bug.
+    /// Phase 11.1 — gate_foretis now performs full fast-key signature verification.
+    /// A Foretis reply with matching TBID but garbage signature bytes must be
+    /// rejected with CleanAuth error. (Previously gate_foretis used from_trusted
+    /// and silently accepted bad signatures — that was the known correctness bug.)
     #[test]
-    fn gate_foretis_structural_gate_does_not_crypto_verify_signature() {
+    fn gate_foretis_phase11_rejects_bad_signature_after_fix() {
         let target_tbid = Tbid::from_raw([0u8; 96]);
-        let crypto = Arc::from(foretias_core::crypto_server::new_software(
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(
             foretias_core::crypto_server::ForetiasCurve::Ed25519,
         )
         .expect("libsodium"));
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+
+        let content = b"content bytes" as &[u8];
+        let content_hash = crypto.sha256(content).expect("sha256");
+        let pub_key = crypto.public_key();
+
+        let chronon_record = CleanAuthenticated::from_trusted(ChrononRecord {
+            chronon_number: 1,
+            public_key: FTByteVector::from(match pub_key { foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(), _ => panic!("expected Ed25519") }),
+            signature_algorithm: "Ed25519".to_string(),
+            forward_foretis: FTByteVector::from(vec![]),
+            backward_foretis: FTByteVector::from(vec![]),
+            aa_nonce: FTByteArray::from([0u8; 16]),
+            chronon_stamp_count: 0,
+            external_attestations: vec![],
+            tb_version: 0,
+            tbid: target_tbid.clone(),
+        });
+
+        let foretis_bad_sig = Foretis {
+            chronon_number: 1,
+            content_hash: FTByteArray::from(content_hash.bytes),
+            signature: FTByteVector::from(vec![0xdeu8; 64]),
+            signature_algorithm: "Ed25519".to_string(),
+            tbid: target_tbid.clone(),
+            echo: "test".to_string(),
+            tbn: "test-tb".to_string(),
+            time_being_reference_time: "UE+1000000000ns".to_string(),
+        };
+        let json = serde_json::to_value(&foretis_bad_sig).unwrap();
 
         let executor = CommunerdetteExecutor::new(
             Arc::new(MockHost {
@@ -2166,29 +2328,14 @@ mod tests {
                 namespace: "test".to_string(),
             }),
             target_tbid,
-            crypto,
+            crypto.clone(),
             clock,
         );
 
-        // Structurally valid Foretis but with garbage signature bytes.
-        let foretis_bad_sig = Foretis {
-            chronon_number: 1,
-            content_hash: FTByteArray::from([5u8; 32]),
-            signature: FTByteVector::from(vec![0xdeu8; 64]),
-            signature_algorithm: "Ed25519".to_string(),
-            tbid: target_tbid,
-            echo: "test".to_string(),
-            tbn: "test-tb".to_string(),
-            time_being_reference_time: "UE+1000000000ns".to_string(),
-        };
-        let json = serde_json::to_value(&foretis_bad_sig).unwrap();
-
-        // Structural+TBID gate passes; full sig verification is caller responsibility.
-        let result = executor.gate_foretis(json);
+        let result = executor.gate_foretis(json, &chronon_record, content);
         assert!(
-            result.is_ok(),
-            "gate_foretis only performs structural+TBID checks; full crypto sig \
-             verification requires the ChrononRecord and happens at the call site"
+            matches!(result, Err(CommunerdetteError::CleanAuth(_))),
+            "gate_foretis must reject Foretis with garbage signature: {:?}", result
         );
     }
 }
