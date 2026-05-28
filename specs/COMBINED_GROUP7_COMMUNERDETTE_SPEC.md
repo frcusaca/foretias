@@ -1095,72 +1095,181 @@ In Communerdette state update paths (shutdown, rejection, disconnect):
 
 ---
 
-## 18. Two-Server Integration Test Harness (Phase 14)
+## 18. Toppoli — Test Of P2P and PTP On Local Integration (Phase 14)
 
-### 18.1 Motivation
+### 18.1 Purpose and Scope
 
-The two-server test pattern already appears in `mirror_integration.rs`. This
-section specifies a shared harness so that liveness (Phase 12), FB gossip
-(Phase 13), and future integration tests do not re-implement startup/teardown
-boilerplate.
+Toppoli is the multi-peer local integration test harness for foretias. It manages
+up to ~24 `TimeFamilyServer` instances within a single test binary, supporting
+peer lifecycle (start, stop, restart), flexible network topology (full mesh,
+ring, custom), uniform or per-peer configuration, and direct Rust struct
+introspection.
 
-Starting two servers in one test binary is feasible today. The only blocked test
-(`source_dumps_history_to_mirror`) is blocked on PQC genesis verification for
-`tb_version >= 1` calendar chains — not on server startup itself. Liveness and
-gossip tests do not touch the calendar chain and can be written now.
+`TimeFamilyServer` runs in-process. There is no forking. All servers share the
+same tokio runtime. Tests can directly inspect any `pub` method on any server —
+including `communerd()`, `line_for_tbid()`, `status_summary()`, and
+`ProbityStore` — without any external probing mechanism.
 
-### 18.2 Harness API
+Intended test classes:
+- **Liveness (Phase 12)**: L1/L2/L3 round-trips across real TCP sockets.
+- **FB gossip (Phase 13)**: peer A reaches `FullyBound`, gossip arrives at B.
+- **GNF** (Gossip and Node Failure): gossip propagation under churn; DHT
+  formation and recovery when peers leave and rejoin.
+- **General P2P/PTP**: any test requiring realistic multi-hop message flow.
 
-File: `p2p/foretias-server/tests/two_server_harness.rs`
+### 18.2 Key Design Decisions
+
+**Port pre-allocation.** All ports are reserved with `bind-then-release` before
+any server is constructed, so full-mesh `CommunerdConfig` (which needs every
+peer's address) can be built before startup. There is a small TOCTOU window; for
+local tests on a controlled machine this is acceptable.
+
+**No `request_shutdown()` plumbing required.** `start_tcp` returns a
+`JoinHandle<()>` that loops forever with no cancellation path. Shutdown is:
+`stop_daemon_arc()` + `handle.abort()`. A brief configurable drain sleep
+(default 20 ms) gives in-flight requests time to complete. No CancellationToken
+changes to `TimeFamilyServer` are needed.
+
+**Direct introspection.** Peers are stored as `Arc<TimeFamilyServer>`. Tests
+call public methods directly. No mock adapters or external probing.
+
+### 18.3 ToppliHarness API
+
+File: `p2p/foretias-server/tests/toppoli.rs`
 
 ```rust
-/// Start a TimeFamilyServer on an ephemeral port.
-/// Returns (server, tcp_handle, assigned_addr).
-pub async fn start_test_server(
-    chronon_ns: u64,
-) -> (Arc<TimeFamilyServer>, JoinHandle<()>, String);
+/// Configuration for one peer in the toppoli network.
+pub struct ToppliPeerConfig {
+    pub chronon_ns: u64,
+    /// Additional peer addresses to include in CommunerdConfig.
+    /// Full-mesh addresses are added automatically by topology helpers.
+    pub extra_peers: Vec<String>,
+    pub namespace:   String,
+}
 
-/// Signal graceful shutdown, wait up to timeout_ms, then abort.
-pub async fn graceful_stop(
-    server: Arc<TimeFamilyServer>,
-    handle: JoinHandle<()>,
-    timeout_ms: u64,
-);
+impl Default for ToppliPeerConfig { ... }  // 100ms chronon, empty peers, "toppoli"
 
-/// Convenience: bind ephemeral port, get the address string.
-pub fn find_available_port() -> u16;
+/// A live peer managed by ToppliHarness.
+pub struct ToppliPeer {
+    pub idx:    usize,
+    pub addr:   String,         // "127.0.0.1:<port>"
+    pub server: Arc<TimeFamilyServer>,
+    handle:     JoinHandle<()>,
+}
+
+impl ToppliPeer {
+    /// Introspect: direct access to the running server.
+    pub fn server(&self) -> &Arc<TimeFamilyServer> { &self.server }
+}
+
+/// Multi-peer local integration harness.
+pub struct ToppliHarness {
+    /// Configs indexed by slot. A slot may be unstarted (no server yet).
+    slots:    Vec<ToppliSlot>,
+    /// Pre-allocated addresses (addr = "127.0.0.1:<port>").
+    addrs:    Vec<String>,
+}
+
+enum ToppliSlot {
+    Reserved { config: ToppliPeerConfig },
+    Running  { peer: ToppliPeer },
+    Stopped  { config: ToppliPeerConfig, addr: String },
+}
+
+impl ToppliHarness {
+    /// Reserve N slots with the same config. Does not start servers.
+    pub fn with_peers(count: usize, config: ToppliPeerConfig) -> Self;
+
+    /// Reserve one more slot with a custom config. Returns its index.
+    pub fn add_peer(&mut self, config: ToppliPeerConfig) -> usize;
+
+    /// Wire all reserved/stopped peers as a full mesh in their configs.
+    /// Call before starting peers.
+    pub fn topology_full_mesh(&mut self);
+
+    /// Wire peers as a unidirectional ring: 0→1→2→…→N-1→0.
+    pub fn topology_ring(&mut self);
+
+    /// Start a specific peer (build server, bind TCP, start daemon).
+    pub async fn start_peer(&mut self, idx: usize);
+
+    /// Stop a specific peer: stop_daemon_arc + brief drain + handle.abort.
+    pub async fn stop_peer(&mut self, idx: usize, drain_ms: u64);
+
+    /// Restart a stopped peer at the same address with the same config.
+    pub async fn restart_peer(&mut self, idx: usize);
+
+    /// Start all reserved peers concurrently.
+    pub async fn start_all(&mut self);
+
+    /// Stop all running peers concurrently with the given drain time.
+    pub async fn stop_all(&mut self, drain_ms: u64);
+
+    /// Number of currently running peers.
+    pub fn running_count(&self) -> usize;
+
+    /// Iterate over all running peers.
+    pub fn running_peers(&self) -> impl Iterator<Item = &ToppliPeer>;
+
+    /// Get a running peer by index (panics if not running).
+    pub fn peer(&self, idx: usize) -> &ToppliPeer;
+
+    /// Poll predicate until it returns true or timeout_ms elapses.
+    /// Polls every 20 ms. Returns true if predicate satisfied, false on timeout.
+    pub async fn wait_until(
+        &self,
+        predicate: impl Fn(&ToppliHarness) -> bool,
+        timeout_ms: u64,
+    ) -> bool;
+}
 ```
 
-### 18.3 Shutdown Protocol
+### 18.4 Introspection Examples
 
-1. Call `server.request_shutdown()` (signal via `CancellationToken`).
-2. Wait up to `timeout_ms` for the `JoinHandle` to complete.
-3. If the handle has not completed, call `handle.abort()`.
-4. Drop the `Arc<TimeFamilyServer>`.
+Since all servers are in-process `Arc<TimeFamilyServer>`:
 
-`TimeFamilyServer` must expose a `request_shutdown()` method that signals its
-internal `CancellationToken`. The existing `start()` method returns a
-`JoinHandle<()>`; the harness wraps it.
+```rust
+// Check binding state for a specific TBID:
+let communerd = harness.peer(0).server().communerd().unwrap();
+let tbid = harness.peer(1).server().get_tbid();
+let line = communerd.line_for_tbid(tbid);
+let summary = line.status_summary();
+assert!(summary.binding.is_verified());
 
-### 18.4 Test Structure
+// Check probity store:
+let store = harness.peer(1).server().probity_store();
+let reports = store.reports_for_subject(&tbid.to_hex());
+assert!(reports.iter().any(|r| r.attribute == "fb" && r.value > 0.0));
 
-Each integration test using the harness follows this template:
+// Check liveness stats directly:
+assert_eq!(summary.stats.l1_successes, 3);
+```
+
+### 18.5 Test Template
 
 ```rust
 #[tokio::test]
 async fn test_name() {
-    let (server_a, handle_a, addr_a) = start_test_server(100_000_000).await;
-    let (server_b, handle_b, addr_b) = start_test_server(100_000_000).await;
-
-    // Give listeners a moment to bind.
-    tokio::time::sleep(Duration::from_millis(50)).await;
+    let mut h = ToppliHarness::with_peers(4, ToppliPeerConfig::default());
+    h.topology_full_mesh();
+    h.start_all().await;
+    tokio::time::sleep(Duration::from_millis(100)).await;  // settle
 
     // ... exercise the feature ...
+    let reached = h.wait_until(|h| /* condition */, 5_000).await;
+    assert!(reached, "condition not met within 5s");
 
-    graceful_stop(server_a, handle_a, 500).await;
-    graceful_stop(server_b, handle_b, 500).await;
+    h.stop_all(50).await;
 }
 ```
+
+### 18.6 Scalability Note
+
+24 peers is the target upper bound for toppoli tests. Each peer requires one TCP
+socket, one tokio task for the listener, and one chronomatter daemon task. At
+100 ms chronon intervals and no external I/O, 24 peers impose negligible CPU.
+DHT and gossipsub tests that need realistic peer counts (≥12) for protocol
+formation should use toppoli.
 
 Tests must not rely on wall-clock timing for correctness. Use `tokio::time::sleep`
 only for port-binding settling (≤ 100 ms). Feature-specific readiness should be
