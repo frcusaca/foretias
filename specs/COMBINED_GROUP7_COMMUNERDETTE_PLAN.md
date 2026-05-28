@@ -224,20 +224,37 @@ finds peers and speaks on the P2P network.
       it does not sign local Calendar or Chronomatter messages.
       (2026-05-23 20:09)
 
-### 4.3 Compatibility Wrappers
+### 4.3 Route stamp through CommunerdetteLine
 
-- [ ] Refactor `Communerd::route_stamp` to use `line_for_tbid(...).stamp(...)`
-      where practical.
-- [x] Add `Communerd::get_calendar_slice_by_tbid(tbid, start, count)` as a
-      convenience wrapper over `CommunerdetteLine`.
-      (2026-05-23 20:09)
+All outbound stamp calls must flow through Communerdette so they receive the
+full Take 3 inbound gate and return `CleanAuthenticated<Foretis>` (not the
+bare `Foretis` type or a `from_trusted` bypass).
+
+- [ ] Replace the body of `Communerd::route_stamp` with:
+      ```rust
+      let content = hex::decode(content_hex)?;
+      let tbid = Tbid::from_hex(target_tbid)?;
+      self.line_for_tbid(tbid).stamp(content, echo.to_string()).await
+      ```
+      Return type changes from `Result<Foretis, TransportError>` to
+      `Result<CleanAuthenticated<Foretis>, CommunerdetteError>`.
+- [ ] Mark `Communerd::stamp_peer` `#[deprecated(note = "use CommunerdetteLine::stamp")]`.
+- [ ] Update `tiers.rs` wrappers to forward the new return type.
+- [ ] Update `handle_route_stamp` in `handlers.rs` to call `.into_inner()` for
+      the JSON response (the `CleanAuthenticated<Foretis>` wrapper is internal).
+
+**Prerequisite for Phase 8.1.**
 
 ### 4.4 Tests
 
 - [ ] Unit test `get_tick` returns an error on empty slice.
-- [ ] Unit test `stamp` builds the same request shape as existing
-      `stamp_peer`.
-- [ ] Integration test: two local servers, line for peer TBID fetches a tick.
+- [ ] Unit test `route_stamp` returns `CleanAuthenticated<Foretis>` with the
+      correct TBID and a non-empty signature.
+- [ ] Confirm `handle_route_stamp` response shape is unchanged (`{ "tbid": ...,
+      "chronon_number": ..., ... }`) after the refactor.
+- [x] Add `Communerd::get_calendar_slice_by_tbid(tbid, start, count)` as a
+      convenience wrapper over `CommunerdetteLine`.
+      (2026-05-23 20:09)
 
 ---
 
@@ -421,13 +438,25 @@ TBID lookup and calendar fetch.
 
 ### 8.1 Cross-Node Verify
 
-- [ ] Refactor `cross_node_verify` in `p2p/foretias-node/src/server/handlers.rs`
-      to use `CommunerdetteLine::get_tick`.
-- [ ] Preserve local verification of hash/signature after fetching the remote
-      tick.
-- [ ] Require the fetched remote tick to arrive as
-      `CleanAuthenticated<ChrononRecord>` before local content verification uses
-      it as evidence.
+**Prerequisite: Phase 4.3 complete** (establishes the pattern).
+
+Current `cross_node_verify` in `handlers.rs`:
+- Does its own DHT lookup via `com.lookup_tbid(...)` — bypasses Communerdette
+- Calls `com.get_calendar_slice(&owner_peer, ...)` directly on the transport
+- Uses `CleanAuthenticatedChrononRecord::from_trusted(rec.clone())` — the same
+  `from_trusted` bypass; no real signature verification
+
+Fix:
+- [ ] Replace the DHT lookup + direct transport call with:
+      ```rust
+      let tbid = Tbid::from_hex(foretis_tbid_hex)?;
+      let tick: CleanAuthenticated<ChrononRecord> =
+          com.line_for_tbid(tbid).get_tick(foretis_ref.chronon_number).await?;
+      ```
+- [ ] Remove the manual `from_trusted` construction of `CleanAuthenticatedChrononRecord`.
+      `line.get_tick(...)` already returns `CleanAuthenticated<ChrononRecord>` from the
+      Take 3 gate — use it directly.
+- [ ] Pass the gated `tick` to `unproc_foretis.into_clean_authenticated(crypto, content, &tick)`.
 - [ ] Keep response shape unchanged: `{ "valid": bool, "method": "cross_node" }`.
 
 ### 8.2 Mutual Attestation Preparation

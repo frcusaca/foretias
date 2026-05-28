@@ -116,12 +116,13 @@ pub fn handle_route_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcRe
     match tokio::runtime::Handle::current().block_on(async {
         cm.route_stamp(&target_tbid, &content_hex, &echo).await
     }) {
-        Ok(foretis) => {
+        Ok(ca_foretis) => {
             server.metrics().inc(MetricField::StampsTotal);
             if let Err(e) = server.save() {
                 tracing::warn!("failed to persist calendar after routed stamp: {}", e);
             }
-            resp_success(server, id, serde_json::to_value(&foretis).unwrap_or(Value::Null))
+            // Unwrap the wrapper for the wire response — CleanAuthenticated<Foretis> is internal
+            resp_success(server, id, serde_json::to_value(ca_foretis.into_inner()).unwrap_or(Value::Null))
         }
         Err(e) => resp_error(server, id, jsonrpc::INTERNAL_ERROR,
             format!("route stamp failed: {}", e)),
@@ -216,40 +217,22 @@ async fn cross_node_verify(
     let Some(com) = server.communerd() else {
         return Err(NodeError::Internal("P2P not enabled".into()));
     };
-    let ns = com.namespace();
 
-    let owner = com.lookup_tbid(foretis_tbid_hex, &ns).await
-        .ok_or_else(|| NodeError::Internal(format!("TBID {} not found in DHT", foretis_tbid_hex)))?;
-
-    let owner_peer = crate::communerd::transport::PeerAddr {
-        json_rpc: owner.json_rpc.clone(),
-        peer_id: owner.peer_id.parse().ok(),
-        last_seen_ns: 0,
-    };
-    let records = com.get_calendar_slice(&owner_peer, foretis_ref.chronon_number, 1).await
-        .map_err(|e| NodeError::Internal(format!("calendar fetch failed: {}", e)))?;
-
-    let rec = records.first().ok_or_else(|| NodeError::Internal(format!("tick {} not found on owner", foretis_ref.chronon_number)))?;
-
-    if rec.chronon_number != foretis_ref.chronon_number {
-        return Err(NodeError::AlgorithmMismatch(
-            format!("tick chronon_number {} doesn't match Foretis {}",
-                rec.chronon_number, foretis_ref.chronon_number)
-        ));
-    }
-    if rec.signature_algorithm != foretis_ref.signature_algorithm {
-        return Err(NodeError::AlgorithmMismatch(
-            format!("tick uses '{}' but Foretis claims '{}'",
-                rec.signature_algorithm, foretis_ref.signature_algorithm)
-        ));
-    }
-
-    let calendar_record = CleanAuthenticatedChrononRecord::from_trusted(rec.clone());
+    // Phase 8.1: use CommunerdetteLine::get_tick — goes through the full Take 3
+    // inbound gate (gate_chronon_records) and returns CleanAuthenticated<ChrononRecord>.
+    // No manual DHT lookup, no PeerAddr construction, no from_trusted bypass.
+    let tbid = foretias_core::foretias::types::Tbid::from_hex(foretis_tbid_hex)
+        .map_err(|e| NodeError::Internal(format!("bad TBID hex: {e}")))?;
+    let tick: foretias_core::foretias::clean_auth::CleanAuthenticated<foretias_core::foretias::tick::ChrononRecord> =
+        com.line_for_tbid(tbid)
+            .get_tick(foretis_ref.chronon_number)
+            .await
+            .map_err(|e| NodeError::Internal(format!("get_tick failed: {e:?}")))?;
 
     let crypto = server.chronomatter().crypto_server();
     let valid = unproc_foretis
         .clone()
-        .into_clean_authenticated(crypto.as_ref(), content, &calendar_record)
+        .into_clean_authenticated(crypto.as_ref(), content, &tick)
         .map_err(|e| NodeError::Internal(e.to_string()))
         .map(|_| true)?;
 

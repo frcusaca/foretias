@@ -156,20 +156,20 @@ foretias-server/src/communerd/communerdette.rs                  2826  gate    le
 foretias-server/src/communerd/communerdette.rs                  2864  gate    let result = executor.gate_foretis(json, &chronon_record, content);
 foretias-server/src/communerd/communerdette.rs                  2887  sign    let combined = tbid_secret.sign(&msg).expect("sign");
 foretias-server/src/communerd/mod.rs                             165  verify  .verify_with(&pubkey[..32], "Ed25519", &canonical, &record.signature)
-foretias-server/src/communerd/mod.rs                             575  sign    if let Ok(sig) = crypto.sign(&hb.canonical()) {
-foretias-server/src/communerd/mod.rs                             734  sign    if let Ok(sig) = crypto.sign(&report.canonical()) {
-foretias-server/src/communerd/mod.rs                             819  sign    .sign(&canonical)
-foretias-server/src/communerd/mod.rs                             899  sign    match crypto.sign(&canonical) {
+foretias-server/src/communerd/mod.rs                             553  sign    if let Ok(sig) = crypto.sign(&hb.canonical()) {
+foretias-server/src/communerd/mod.rs                             712  sign    if let Ok(sig) = crypto.sign(&report.canonical()) {
+foretias-server/src/communerd/mod.rs                             797  sign    .sign(&canonical)
+foretias-server/src/communerd/mod.rs                             877  sign    match crypto.sign(&canonical) {
 foretias-server/src/communerd/p2p/tbid_handshake.rs               81  sign    let sig = self.crypto.sign(&signed_payload)
 foretias-server/src/communerd/p2p/tbid_handshake.rs              105  verify  let valid = self.crypto.verify_ed25519(
 foretias-server/src/communerd/p2p/tbid_handshake.rs              226  sign    let sig = crypto2.sign(&short_payload).expect("sign short payload");
 foretias-server/src/main.rs                                      495  verify  .verify(&content, &foretis)
 foretias-server/src/probity/gossip_handler.rs                     91  verify  let valid = crypto.verify_with(
 foretias-server/src/probity/gossip_handler.rs                    150  sign    let sig = crypto.sign(&canonical).unwrap();
-foretias-server/src/server/handlers.rs                           319  sign    /// // SIGN(local-tbid, fast-key+slow-key)
-foretias-server/src/server/handlers.rs                           345  sign    let combined_sig = match server.sign_tbid_message(&msg) {
-foretias-server/src/server/handlers.rs                           370  sign    /// // SIGN(local-tbid, fast-key)
-foretias-server/src/server/handlers.rs                           387  sign    let combined_sig = match server.sign_tbid_message(&msg) {
+foretias-server/src/server/handlers.rs                           302  sign    /// // SIGN(local-tbid, fast-key+slow-key)
+foretias-server/src/server/handlers.rs                           328  sign    let combined_sig = match server.sign_tbid_message(&msg) {
+foretias-server/src/server/handlers.rs                           353  sign    /// // SIGN(local-tbid, fast-key)
+foretias-server/src/server/handlers.rs                           370  sign    let combined_sig = match server.sign_tbid_message(&msg) {
 foretias-server/src/server/mod.rs                                162  sign    /// // SIGN(local-tbid, fast-key+slow-key)
 foretias-server/src/server/mod.rs                                163  sign    pub fn sign_tbid_message(&self, msg: &[u8]) -> Result<foretias_core::foretias::t
 foretias-server/src/server/mod.rs                                164  sign    self.chronomatter.sign_tbid_message(msg)
@@ -205,5 +205,5 @@ crypto_callsite_snapshot — update with UPDATE_SNAPSHOT=1 when adding new crypt
 SIGNATURES:
 Public key: 4193efbf702cde19fbae087ea53189f67e7768ebe888e0816e24a27282a5b030
 Input signature: XjHNYkZ6L7a87pFmkmHyBj39ofhWg0Gh2EmeGLitRFPtupEN6ZFsd0Nl+Sx3sbFTcEuWuPCDF+duRzvKVNFzAQ==
-Result signature: JuIgD/CEXIIFrUeHh9ZxqI9Qwhe04WZgTaCAk6cLbcudVh8scig9IUoCHN8mf9S+72o9kyaV5xUTcG3+0DaqAA==
-Comments signature: 8d4DZo91oCuxyWywku4CB4WJMDJyJJgm/J1URI2SgYqMydhnAbTSP3sqsqTD68RpMM8iBb3xkD14GmznEV17Bw==
+Result signature: yI13MYoyv+y3OHBAsswSZpIN1vLmr2KFM+MkGbuM+P4qNSozOtuvJDFbFm9O1HaGLMPj7TJlGkF2gbfd7XlUDg==
+Comments signature: 2kHZCPXh0Weech8F4GTlk2WVpAHS1PiLB1JeL5khPjv4tVOadNeR4fmpd6P8QyukItE2pAvHTP/BEVGNpFtxDQ==

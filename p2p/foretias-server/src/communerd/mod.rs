@@ -305,6 +305,7 @@ impl Communerd {
         }
     }
 
+    #[deprecated(note = "Use CommunerdetteLine::stamp via line_for_tbid. stamp_peer bypasses the Take 3 inbound gate.")]
     pub async fn stamp_peer(
         &self,
         peer: &PeerAddr,
@@ -313,12 +314,9 @@ impl Communerd {
     ) -> Result<Foretis, TransportError> {
         let result = if peer.peer_id.is_some() && self.p2p_cmd_tx.get().is_some() {
             match self.libp2p_transport.stamp(peer, content_hex, echo).await {
-                Ok(r) => {
-                    tracing::debug!(peer = %peer, transport = "libp2p-direct", "communerd: stamp succeeded");
-                    r
-                }
+                Ok(r) => r,
                 Err(e) => {
-                    tracing::debug!(peer = %peer, ?e, transport = "libp2p-direct", "communerd: stamp via libp2p failed, falling back");
+                    tracing::debug!(peer = %peer, ?e, "communerd: stamp via libp2p failed, falling back");
                     self.transport.stamp(peer, content_hex, echo).await?
                 }
             }
@@ -329,47 +327,27 @@ impl Communerd {
             .map_err(|e| TransportError::Decode(e.to_string()))?;
         let f = unprocessed.inner();
         if f.chronon_number == 0 || f.signature.is_empty() || f.signature_algorithm.is_empty() {
-            return Err(TransportError::Decode("structurally invalid Foretis: chronon_number == 0, empty signature, or empty signature_algorithm".into()));
+            return Err(TransportError::Decode("structurally invalid Foretis".into()));
         }
-        let foretis = CleanAuthenticatedForetis::from_trusted(unprocessed.into_inner()).into_inner();
-        Ok(foretis)
+        #[allow(deprecated)]
+        Ok(CleanAuthenticatedForetis::from_trusted(unprocessed.into_inner()).into_inner())
     }
 
+    /// Route a stamp request through Communerdette for the target TBID.
+    ///
+    /// Returns `CleanAuthenticated<Foretis>` — fully gated through the Take 3
+    /// inbound pipeline. Old direct-transport path was removed in Phase 4.3.
     pub async fn route_stamp(
         &self,
         target_tbid: &str,
         content_hex: &str,
         echo: &str,
-    ) -> Result<Foretis, TransportError> {
-        let owner = self.lookup_tbid(target_tbid, &self.namespace()).await
-            .ok_or_else(|| TransportError::Decode(format!("TBID {} not found in DHT", target_tbid)))?;
-        let peer = PeerAddr {
-            json_rpc: owner.json_rpc,
-            peer_id: owner.peer_id.parse().ok(),
-            last_seen_ns: 0,
-        };
-        let result = if peer.peer_id.is_some() && self.p2p_cmd_tx.get().is_some() {
-            match self.libp2p_transport.route_stamp(&peer, target_tbid, content_hex, echo).await {
-                Ok(r) => {
-                    tracing::debug!(peer = %peer, transport = "libp2p-direct", "communerd: route_stamp succeeded");
-                    r
-                }
-                Err(e) => {
-                    tracing::debug!(peer = %peer, ?e, transport = "libp2p-direct", "communerd: route_stamp via libp2p failed, falling back");
-                    self.transport.route_stamp(&peer, target_tbid, content_hex, echo).await?
-                }
-            }
-        } else {
-            self.transport.route_stamp(&peer, target_tbid, content_hex, echo).await?
-        };
-        let unprocessed = UnprocessedForetis::from_json_value(result)
-            .map_err(|e| TransportError::Decode(e.to_string()))?;
-        let f = unprocessed.inner();
-        if f.chronon_number == 0 || f.signature.is_empty() || f.signature_algorithm.is_empty() {
-            return Err(TransportError::Decode("structurally invalid Foretis: chronon_number == 0, empty signature, or empty signature_algorithm".into()));
-        }
-        let foretis = CleanAuthenticatedForetis::from_trusted(unprocessed.into_inner()).into_inner();
-        Ok(foretis)
+    ) -> Result<foretias_core::foretias::clean_auth::CleanAuthenticated<Foretis>, communerdette::CommunerdetteError> {
+        let content = hex::decode(content_hex)
+            .map_err(|e| communerdette::CommunerdetteError::Structural(format!("content not hex: {e}")))?;
+        let tbid = Tbid::from_hex(target_tbid)
+            .map_err(|e| communerdette::CommunerdetteError::Structural(format!("bad tbid hex: {e}")))?;
+        self.line_for_tbid(tbid).stamp(content, echo.to_string()).await
     }
 
     pub async fn get_calendar_slice(

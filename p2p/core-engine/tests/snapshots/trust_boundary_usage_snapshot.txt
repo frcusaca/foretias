@@ -47,6 +47,8 @@ foretias-server/src/communerd/communerdette.rs | Foretis | impl::CommunerdetteEx
 foretias-server/src/communerd/communerdette.rs | Foretis | impl::CommunerdetteLine::fn::stamp | - | Y | -
 foretias-server/src/communerd/communerdette.rs | Foretis | other | - | Y | -
 foretias-server/src/communerd/communerdette.rs | u8 | fn::clean_auth_types_are_importable | Y | Y | Y
+foretias-server/src/communerd/tiers.rs | Foretis | impl::CommunerdP2P::fn::route_stamp | - | Y | -
+foretias-server/src/communerd/tiers.rs | Foretis | impl::CommunerdServer::fn::route_stamp | - | Y | -
 
 
 === Cross-Tabulation ===
@@ -67,7 +69,7 @@ core-engine | Unprocessed | ProbityReport | 3
 core-engine | Unprocessed | T | 3
 foretias-server | CleanAuthenticated | AuthenticatedPong | 1
 foretias-server | CleanAuthenticated | ChrononRecord | 8
-foretias-server | CleanAuthenticated | Foretis | 4
+foretias-server | CleanAuthenticated | Foretis | 6
 foretias-server | CleanAuthenticated | u8 | 1
 foretias-server | Externalized | u8 | 1
 foretias-server | Unprocessed | u8 | 1
