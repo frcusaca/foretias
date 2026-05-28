@@ -132,6 +132,16 @@ mod tests {
         ) -> Result<serde_json::Value, crate::communerd::transport::TransportError> {
             Ok(serde_json::json!({}))
         }
+
+        async fn channel_bind_challenge(
+            &self,
+            _peer: &PeerAddr,
+            _nonce_hex: &str,
+            _channel_id: &str,
+            _requester_tbid_hex: &str,
+        ) -> Result<serde_json::Value, crate::communerd::transport::TransportError> {
+            Ok(serde_json::json!({}))
+        }
     }
 
     #[test]

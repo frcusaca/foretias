@@ -81,4 +81,13 @@ pub trait PeerTransport: Send + Sync {
     ) -> Result<Vec<ChrononRecord>, TransportError>;
 
     async fn ping(&self, peer: &PeerAddr) -> Result<(), TransportError>;
+
+    /// Send a channel_bind_challenge request (Phase 12.0).
+    async fn channel_bind_challenge(
+        &self,
+        peer: &PeerAddr,
+        nonce_hex: &str,
+        channel_id: &str,
+        requester_tbid_hex: &str,
+    ) -> Result<serde_json::Value, TransportError>;
 }

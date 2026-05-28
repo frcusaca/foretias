@@ -38,7 +38,7 @@ impl CommunerdServer {
 
     /// Start liveness pings to configured peers.
     pub fn start_liveness_pings(&self) {
-        self.inner.start_liveness_pings();
+        #[allow(deprecated)] self.inner.start_liveness_pings();
     }
 
     /// Stamp on a remote peer.

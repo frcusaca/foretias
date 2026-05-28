@@ -311,6 +311,97 @@ pub fn handle_ping(_server: &TimeFamilyServer, params: Value) -> JsonRpcResponse
     jsonrpc::JsonRpcResponse::success(id, serde_json::json!({"pong": true}))
 }
 
+/// Handle `channel_bind_challenge` — Phase 12.0 channel-binding establishment.
+///
+/// The remote Communerdette sends a nonce + channel_id + requester_tbid.
+/// We sign (nonce ‖ channel_id ‖ responder_tbid_hex) with both the fast key
+/// (Ed25519) and the slow key (SLH-DSA) and return the dual-signed response.
+/// // SIGN(local-tbid, fast-key+slow-key)
+pub fn handle_channel_bind_challenge(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    let id = params.get("id").cloned();
+
+    let nonce_hex = match params.get("nonce").and_then(|v| v.as_str()) {
+        Some(s) => s.to_string(),
+        None => return jsonrpc::JsonRpcResponse::error(id, -32602, "missing nonce".to_string()),
+    };
+    let channel_id = match params.get("channel_id").and_then(|v| v.as_str()) {
+        Some(s) => s.to_string(),
+        None => return jsonrpc::JsonRpcResponse::error(id, -32602, "missing channel_id".to_string()),
+    };
+
+    let responder_tbid_hex = server.get_tbid().to_hex();
+
+    // Build the canonical message: nonce_bytes ‖ channel_id_bytes ‖ responder_tbid_hex_bytes
+    let nonce_bytes = match hex::decode(&nonce_hex) {
+        Ok(b) => b,
+        Err(_) => return jsonrpc::JsonRpcResponse::error(id, -32602, "nonce not hex".to_string()),
+    };
+    let mut msg = Vec::new();
+    msg.extend_from_slice(&nonce_bytes);
+    msg.extend_from_slice(channel_id.as_bytes());
+    msg.extend_from_slice(responder_tbid_hex.as_bytes());
+
+    // Dual-sign with the TBID secret key (Ed25519 || SLH-DSA, 49920 bytes total)
+    let combined_sig = match server.sign_tbid_message(&msg) {
+        Ok(s) => s,
+        Err(e) => return jsonrpc::JsonRpcResponse::error(id, -32000, format!("signing failed: {e}")),
+    };
+    let sig_bytes = combined_sig.as_bytes();
+    if sig_bytes.len() < 64 {
+        return jsonrpc::JsonRpcResponse::error(id, -32000, "signature too short".to_string());
+    }
+    // Split: first 64 bytes = Ed25519 fast sig; remaining = SLH-DSA slow sig
+    let fast_sig = hex::encode(&sig_bytes[..64]);
+    let slow_sig = hex::encode(&sig_bytes[64..]);
+
+    jsonrpc::JsonRpcResponse::success(id, serde_json::json!({
+        "responder_tbid": responder_tbid_hex,
+        "nonce_echo": nonce_hex,
+        "channel_id": channel_id,
+        "fast_sig": fast_sig,
+        "slow_sig": slow_sig,
+    }))
+}
+
+/// Handle `authenticated_ping` — Phase 12.3 L2 liveness.
+///
+/// Remote Communerdette sends a challenge hex. We sign (challenge ‖ responder_tbid_hex)
+/// with the local TBID's Ed25519 fast key (first 64 bytes of sign_tbid_message output).
+/// // SIGN(local-tbid, fast-key)
+pub fn handle_authenticated_ping(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    let id = params.get("id").cloned();
+    let challenge_hex = match params.get("challenge").and_then(|v| v.as_str()) {
+        Some(s) => s.to_string(),
+        None => return jsonrpc::JsonRpcResponse::error(id, -32602, "missing challenge".to_string()),
+    };
+    let challenge = match hex::decode(&challenge_hex) {
+        Ok(b) => b,
+        Err(_) => return jsonrpc::JsonRpcResponse::error(id, -32602, "challenge not hex".to_string()),
+    };
+    let responder_tbid_hex = server.get_tbid().to_hex();
+    let mut msg = Vec::new();
+    msg.extend_from_slice(&challenge);
+    msg.extend_from_slice(responder_tbid_hex.as_bytes());
+
+    // Sign with both keys; extract Ed25519 (fast-key) portion (first 64 bytes)
+    let combined_sig = match server.sign_tbid_message(&msg) {
+        Ok(s) => s,
+        Err(e) => return jsonrpc::JsonRpcResponse::error(id, -32000, format!("signing failed: {e}")),
+    };
+    let sig_bytes = combined_sig.as_bytes();
+    if sig_bytes.len() < 64 {
+        return jsonrpc::JsonRpcResponse::error(id, -32000, "signature too short".to_string());
+    }
+    let fast_sig_hex = hex::encode(&sig_bytes[..64]);
+
+    jsonrpc::JsonRpcResponse::success(id, serde_json::json!({
+        "responder_tbid": responder_tbid_hex,
+        "challenge_echo": challenge_hex,
+        "signature": fast_sig_hex,
+        "signature_algorithm": "Ed25519",
+    }))
+}
+
 pub fn handle_status(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
     let id = params.get("id").cloned();
     let peer_count = server.communerd()

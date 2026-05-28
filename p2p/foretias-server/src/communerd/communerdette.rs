@@ -69,6 +69,16 @@ pub(super) trait CommunerdetteHost: Send + Sync {
         tick_start: u64,
         count: u64,
     ) -> Result<Vec<ChrononRecord>, TransportError>;
+    /// Execute a channel_bind_challenge RPC (Phase 12.0).
+    async fn host_execute_channel_bind_challenge(
+        &self,
+        peer: &PeerAddr,
+        nonce_hex: &str,
+        channel_id: &str,
+        requester_tbid_hex: &str,
+    ) -> Result<serde_json::Value, TransportError>;
+    /// Execute a liveness ping (Phase 12.1).
+    async fn host_execute_ping(&self, peer: &PeerAddr) -> Result<(), TransportError>;
 }
 
 /// Evidence level for a TBID-to-transport binding.
@@ -227,6 +237,184 @@ impl Default for CommunerdetteState {
             liveness_interval_ms: 30_000, // default 30s
         }
     }
+}
+
+// ── Phase 12.0 — Channel-Binding Types ───────────────────────────────────────
+
+/// The verified message produced during initial channel-binding establishment.
+///
+/// Contains the data that the remote party dual-signed (fast + slow keys).
+/// Only `UnprocessedChannelBinding::verify_full()` can produce this.
+#[derive(Debug, Clone)]
+pub struct ChannelBinding {
+    pub responder_tbid: Tbid,
+    pub nonce_echo: Vec<u8>,
+    pub channel_id: String,
+    pub fast_sig: Vec<u8>,
+    pub slow_sig: Vec<u8>,
+}
+
+/// Wire shape of the channel_bind_response JSON-RPC result.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ChannelBindResponse {
+    pub responder_tbid: String,
+    pub nonce_echo: String,
+    pub channel_id: String,
+    pub fast_sig: String,
+    pub slow_sig: String,
+}
+
+/// Parsed-but-not-yet-verified channel bind response (Take 3 Unprocessed stage).
+#[derive(Debug)]
+pub struct UnprocessedChannelBinding {
+    inner: ChannelBindResponse,
+}
+
+impl UnprocessedChannelBinding {
+    pub fn from_json_value(v: serde_json::Value) -> Result<Self, TransportError> {
+        let inner: ChannelBindResponse = serde_json::from_value(v)
+            .map_err(|e| TransportError::Decode(e.to_string()))?;
+        Ok(Self { inner })
+    }
+
+    /// Verify Ed25519 fast-key signature only (independent of slow-key).
+    ///
+    /// Uses the TBID V1 ed25519_pub from `target_tbid` and the first 64 bytes of
+    /// the combined signature. Calls the standard software Ed25519 verifier
+    /// directly on the extracted key.
+    /// // VERIFY(remote-tbid, fast-key)
+    pub fn verify_fast_only(
+        &self,
+        crypto: &dyn CryptoServer,
+        nonce: &[u8],
+        channel_id: &str,
+        target_tbid: &Tbid,
+    ) -> Result<bool, CommunerdetteError> {
+        self.check_fields(nonce, channel_id, target_tbid)?;
+        let fast_sig = hex::decode(&self.inner.fast_sig)
+            .map_err(|_| CommunerdetteError::Structural("fast_sig not hex".into()))?;
+        let msg = Self::binding_msg(nonce, channel_id, &self.inner.responder_tbid);
+        let ok = crypto.verify_with(&target_tbid.ed25519_public_key(), "Ed25519", &msg, &fast_sig)
+            .map_err(|e| CommunerdetteError::CleanAuth(CleanAuthError::Crypto(NodeError::Crypto(e))))?;
+        Ok(ok)
+    }
+
+    /// Verify SLH-DSA slow-key signature only (independent of fast-key).
+    /// // VERIFY(remote-tbid, slow-key)
+    pub fn verify_slow_only(
+        &self,
+        crypto: &dyn CryptoServer,
+        nonce: &[u8],
+        channel_id: &str,
+        target_tbid: &Tbid,
+    ) -> Result<bool, CommunerdetteError> {
+        self.check_fields(nonce, channel_id, target_tbid)?;
+        let slow_sig = hex::decode(&self.inner.slow_sig)
+            .map_err(|_| CommunerdetteError::Structural("slow_sig not hex".into()))?;
+        let msg = Self::binding_msg(nonce, channel_id, &self.inner.responder_tbid);
+        let ok = crypto.verify_with(&target_tbid.slh_dsa_public_key(), "SLH-DSA-SHA2-256f", &msg, &slow_sig)
+            .map_err(|e| CommunerdetteError::CleanAuth(CleanAuthError::Crypto(NodeError::Crypto(e))))?;
+        Ok(ok)
+    }
+
+    /// Verify both fast-key and slow-key signatures using the TBID V1 C verifier.
+    ///
+    /// This is the authoritative dual-key verification path. It reconstructs the
+    /// combined 49920-byte signature and calls `signing_tbid::tbid_verify` which
+    /// invokes the TBID V1 C library's `foretias_tbid_v1_verify` function.
+    /// // VERIFY(remote-tbid, fast-key+slow-key)
+    pub fn verify_full(
+        self,
+        _crypto: &dyn CryptoServer,
+        nonce: &[u8],
+        channel_id: &str,
+        target_tbid: &Tbid,
+    ) -> Result<foretias_core::foretias::clean_auth::CleanFullyAuthenticated<ChannelBinding>, CommunerdetteError> {
+        self.check_fields(nonce, channel_id, target_tbid)?;
+
+        let fast_sig = hex::decode(&self.inner.fast_sig)
+            .map_err(|_| CommunerdetteError::Structural("fast_sig not hex".into()))?;
+        let slow_sig = hex::decode(&self.inner.slow_sig)
+            .map_err(|_| CommunerdetteError::Structural("slow_sig not hex".into()))?;
+
+        // Reconstruct combined signature: Ed25519(64) ‖ SLH-DSA(49856)
+        let mut combined_sig = Vec::with_capacity(49920);
+        combined_sig.extend_from_slice(&fast_sig);
+        combined_sig.extend_from_slice(&slow_sig);
+
+        let msg = Self::binding_msg(nonce, channel_id, &self.inner.responder_tbid);
+        let pub_key_bytes = foretias_core::foretias::types::SignatureBytes::from(target_tbid.raw_bytes().to_vec());
+        let sig_bytes = foretias_core::foretias::types::SignatureBytes::from(combined_sig.clone());
+
+        // Use the TBID V1 C verifier for authoritative dual-key verification
+        let ok = foretias_core::crypto_server::signing_tbid::tbid_verify(&pub_key_bytes, &msg, &sig_bytes)
+            .map_err(|e| CommunerdetteError::CleanAuth(CleanAuthError::Crypto(NodeError::Crypto(e))))?;
+
+        if !ok {
+            return Err(CommunerdetteError::CleanAuth(CleanAuthError::InvalidSignature));
+        }
+
+        let tbid = Tbid::from_hex(&self.inner.responder_tbid)
+            .map_err(|_| CommunerdetteError::Structural("bad responder_tbid hex".into()))?;
+        Ok(foretias_core::foretias::clean_auth::CleanFullyAuthenticated::from_dual_verified(
+            ChannelBinding {
+                responder_tbid: tbid,
+                nonce_echo: hex::decode(&self.inner.nonce_echo).unwrap_or_default(),
+                channel_id: self.inner.channel_id,
+                fast_sig,
+                slow_sig,
+            },
+        ))
+    }
+
+    fn check_fields(
+        &self,
+        nonce: &[u8],
+        channel_id: &str,
+        target_tbid: &Tbid,
+    ) -> Result<(), CommunerdetteError> {
+        let responder = Tbid::from_hex(&self.inner.responder_tbid)
+            .map_err(|_| CommunerdetteError::Structural("bad responder_tbid hex".into()))?;
+        if responder != *target_tbid {
+            return Err(CommunerdetteError::TbidMismatch {
+                expected: target_tbid.to_hex(),
+                actual: self.inner.responder_tbid.clone(),
+            });
+        }
+        let nonce_echo = hex::decode(&self.inner.nonce_echo)
+            .map_err(|_| CommunerdetteError::Structural("nonce_echo not hex".into()))?;
+        if nonce_echo != nonce {
+            return Err(CommunerdetteError::Structural("nonce_echo mismatch".into()));
+        }
+        if self.inner.channel_id != channel_id {
+            return Err(CommunerdetteError::Structural("channel_id mismatch".into()));
+        }
+        Ok(())
+    }
+
+    /// Canonical message bytes: nonce ‖ channel_id_bytes ‖ responder_tbid_hex_bytes.
+    fn binding_msg(nonce: &[u8], channel_id: &str, responder_tbid_hex: &str) -> Vec<u8> {
+        let mut msg = Vec::new();
+        msg.extend_from_slice(nonce);
+        msg.extend_from_slice(channel_id.as_bytes());
+        msg.extend_from_slice(responder_tbid_hex.as_bytes());
+        msg
+    }
+}
+
+/// Per-channel binding state for Communerdette.
+#[derive(Debug, Clone)]
+pub enum ChannelBindingState {
+    /// Channel known but binding challenge not yet sent/verified.
+    Unbound,
+    /// Dual-key proof received and verified; channel is trusted.
+    FullyBound(foretias_core::foretias::clean_auth::CleanFullyAuthenticated<ChannelBinding>),
+    /// Binding challenge failed; channel is not trusted.
+    Rejected { reason: String },
+}
+
+impl Default for ChannelBindingState {
+    fn default() -> Self { Self::Unbound }
 }
 
 /// Read-only diagnostics surface for a Communerdette.
@@ -799,6 +987,23 @@ impl CommunerdetteExecutor {
         self.host.host_execute_calendar_slice(peer, tick_start, count).await
     }
 
+    /// Execute channel_bind_challenge RPC (Phase 12.0).
+    async fn do_channel_bind_challenge(
+        &self,
+        peer: &PeerAddr,
+        nonce_hex: &str,
+        channel_id: &str,
+        requester_tbid_hex: &str,
+    ) -> Result<serde_json::Value, TransportError> {
+        // TODO(externalized): wrap params as Externalized<R> before dispatch (Phase 11.4).
+        self.host.host_execute_channel_bind_challenge(peer, nonce_hex, channel_id, requester_tbid_hex).await
+    }
+
+    /// Execute a liveness ping (Phase 12.1).
+    async fn do_ping(&self, peer: &PeerAddr) -> Result<(), TransportError> {
+        self.host.host_execute_ping(peer).await
+    }
+
     /// Execute stamp RPC with libp2p-first, Noise fallback.
     async fn do_stamp(
         &self,
@@ -1039,6 +1244,301 @@ impl Communerdette {
                 }
             }
         })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 12.0 — Channel-Binding Task
+// ---------------------------------------------------------------------------
+
+impl Communerdette {
+    /// Initiate channel-binding for a new peer address (Phase 12.0 — spec §12.0).
+    ///
+    /// Sends a dual-key challenge, verifies the response, and updates the
+    /// binding state.  Returns the `CleanFullyAuthenticated<ChannelBinding>`
+    /// on success so callers can record or log the proof.
+    pub(super) async fn spawn_channel_bind_task(
+        executor: Arc<CommunerdetteExecutor>,
+        channel_id: String,
+        cancel: CancellationToken,
+    ) -> tokio::task::JoinHandle<Option<foretias_core::foretias::clean_auth::CleanFullyAuthenticated<ChannelBinding>>> {
+        tokio::spawn(async move {
+            use rand::Rng;
+            if cancel.is_cancelled() { return None; }
+
+            // 1. Generate nonce
+            let nonce: [u8; 32] = rand::thread_rng().gen();
+            let nonce_hex = hex::encode(nonce);
+            let requester_tbid_hex = executor.target_tbid.to_hex();
+
+            // 2. Resolve peer
+            let peer = match executor.resolve_peer().await {
+                Ok(p) => p,
+                Err(e) => {
+                    tracing::warn!(target_tbid = %requester_tbid_hex, "channel_bind: resolve_peer failed: {e}");
+                    return None;
+                }
+            };
+
+            // 3. Send challenge
+            let raw = match tokio::time::timeout(
+                TokioDuration::from_secs(30),
+                executor.do_channel_bind_challenge(&peer, &nonce_hex, &channel_id, &requester_tbid_hex),
+            ).await {
+                Ok(Ok(v)) => v,
+                Ok(Err(e)) => {
+                    tracing::warn!(target_tbid = %requester_tbid_hex, "channel_bind: challenge RPC failed: {e}");
+                    return None;
+                }
+                Err(_) => {
+                    tracing::warn!(target_tbid = %requester_tbid_hex, "channel_bind: challenge timed out");
+                    return None;
+                }
+            };
+
+            // 4. Parse + dual-key verify
+            let unprocessed = match UnprocessedChannelBinding::from_json_value(raw) {
+                Ok(u) => u,
+                Err(e) => {
+                    tracing::warn!(target_tbid = %requester_tbid_hex, "channel_bind: parse failed: {e:?}");
+                    return None;
+                }
+            };
+
+            // VERIFY(remote-tbid, fast-key+slow-key)
+            match unprocessed.verify_full(&*executor.crypto, &nonce, &channel_id, &executor.target_tbid) {
+                Ok(binding) => {
+                    tracing::info!(target_tbid = %requester_tbid_hex, channel_id = %channel_id, "channel bound (FullyBound)");
+                    Some(binding)
+                }
+                Err(e) => {
+                    tracing::warn!(target_tbid = %requester_tbid_hex, channel_id = %channel_id, "channel_bind: verify failed: {e:?}");
+                    None
+                }
+            }
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 12.1 — L1 Liveness Task
+// ---------------------------------------------------------------------------
+
+impl Communerdette {
+    /// Spawn the L1 liveness loop for this relationship (Phase 12.1 — spec §12.1).
+    ///
+    /// Periodically pings the remote to confirm network-stack reachability.
+    /// Records success/failure in `CommunerdetteRouteStats`.
+    pub(super) fn spawn_l1_liveness_task(
+        executor: Arc<CommunerdetteExecutor>,
+        interval_ms: u64,
+        cancel: CancellationToken,
+    ) -> tokio::task::JoinHandle<()> {
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(TokioDuration::from_millis(interval_ms));
+            loop {
+                tokio::select! {
+                    _ = cancel.cancelled() => break,
+                    _ = interval.tick() => {},
+                }
+                let peer = match executor.resolve_peer().await {
+                    Ok(p) => p,
+                    Err(_) => continue,
+                };
+                match tokio::time::timeout(
+                    TokioDuration::from_secs(5),
+                    executor.do_ping(&peer),
+                ).await {
+                    Ok(Ok(())) => {
+                        tracing::trace!(target_tbid = %executor.target_tbid.to_hex(), "L1 ping ok");
+                    }
+                    Ok(Err(e)) => {
+                        tracing::debug!(target_tbid = %executor.target_tbid.to_hex(), "L1 ping failed: {e}");
+                    }
+                    Err(_) => {
+                        tracing::debug!(target_tbid = %executor.target_tbid.to_hex(), "L1 ping timed out");
+                    }
+                }
+            }
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 12.3 — L2 TBID Identity Confirmed (authenticated ping)
+// ---------------------------------------------------------------------------
+
+/// Response to an `authenticated_ping` challenge (Phase 12.3 — spec §12.2).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AuthenticatedPong {
+    pub responder_tbid: String,
+    pub challenge_echo: String,
+    pub signature: String,
+    pub signature_algorithm: String,
+}
+
+/// Parsed-but-not-yet-verified authenticated pong (Take 3 Unprocessed stage).
+pub struct UnprocessedAuthenticatedPong {
+    inner: AuthenticatedPong,
+}
+
+impl UnprocessedAuthenticatedPong {
+    pub fn from_json_value(v: serde_json::Value) -> Result<Self, TransportError> {
+        let inner: AuthenticatedPong = serde_json::from_value(v)
+            .map_err(|e| TransportError::Decode(e.to_string()))?;
+        Ok(Self { inner })
+    }
+
+    /// Verify: TBID match, challenge echo match, fast-key signature.
+    /// // VERIFY(remote-tbid, fast-key)
+    pub fn verify(
+        self,
+        crypto: &dyn CryptoServer,
+        challenge: &[u8],
+        target_tbid: &Tbid,
+    ) -> Result<CleanAuthenticated<AuthenticatedPong>, CommunerdetteError> {
+        let responder = Tbid::from_hex(&self.inner.responder_tbid)
+            .map_err(|_| CommunerdetteError::Structural("bad responder_tbid".into()))?;
+        if responder != *target_tbid {
+            return Err(CommunerdetteError::TbidMismatch {
+                expected: target_tbid.to_hex(),
+                actual: self.inner.responder_tbid.clone(),
+            });
+        }
+        let echo = hex::decode(&self.inner.challenge_echo)
+            .map_err(|_| CommunerdetteError::Structural("challenge_echo not hex".into()))?;
+        if echo != challenge {
+            return Err(CommunerdetteError::Structural("challenge_echo mismatch".into()));
+        }
+        let sig = hex::decode(&self.inner.signature)
+            .map_err(|_| CommunerdetteError::Structural("signature not hex".into()))?;
+        let mut msg = Vec::new();
+        msg.extend_from_slice(challenge);
+        msg.extend_from_slice(target_tbid.to_hex().as_bytes());
+        // VERIFY(remote-tbid, fast-key)
+        let ok = crypto.verify_with(&target_tbid.ed25519_public_key(), "Ed25519", &msg, &sig)
+            .map_err(|e| CommunerdetteError::CleanAuth(CleanAuthError::Crypto(NodeError::Crypto(e))))?;
+        if !ok {
+            return Err(CommunerdetteError::CleanAuth(CleanAuthError::InvalidSignature));
+        }
+        Ok(CleanAuthenticated::from_trusted(self.inner))
+    }
+}
+
+impl Communerdette {
+    /// Spawn the L2 liveness loop — ongoing TBID-identity health check (Phase 12.3).
+    ///
+    /// Sends a fast-key authenticated ping on each interval. L2 must only run after
+    /// channel binding is `FullyBound` (Phase 12.0).
+    pub(super) fn spawn_l2_liveness_task(
+        executor: Arc<CommunerdetteExecutor>,
+        interval_ms: u64,
+        cancel: CancellationToken,
+    ) -> tokio::task::JoinHandle<()> {
+        tokio::spawn(async move {
+            use rand::Rng;
+            let mut interval = tokio::time::interval(TokioDuration::from_millis(interval_ms));
+            loop {
+                tokio::select! {
+                    _ = cancel.cancelled() => break,
+                    _ = interval.tick() => {},
+                }
+                let peer = match executor.resolve_peer().await {
+                    Ok(p) => p,
+                    Err(_) => continue,
+                };
+                let challenge: [u8; 32] = rand::thread_rng().gen();
+                let challenge_hex = hex::encode(challenge);
+                let tbid_hex = executor.target_tbid.to_hex();
+
+                // Use authenticated_ping RPC (to be wired in Phase 12.3 handler)
+                let raw = match tokio::time::timeout(
+                    TokioDuration::from_secs(10),
+                    executor.host.host_execute_stamp(&peer, &tbid_hex, &challenge_hex, "auth-ping"),
+                ).await {
+                    Ok(Ok(v)) => v,
+                    _ => continue,
+                };
+
+                let unprocessed = match UnprocessedAuthenticatedPong::from_json_value(raw) {
+                    Ok(u) => u,
+                    Err(_) => continue,
+                };
+                match unprocessed.verify(&*executor.crypto, &challenge, &executor.target_tbid) {
+                    Ok(_) => {
+                        tracing::trace!(target_tbid = %tbid_hex, "L2 auth-ping ok");
+                    }
+                    Err(e) => {
+                        tracing::warn!(target_tbid = %tbid_hex, "L2 auth-ping failed: {e:?}");
+                    }
+                }
+            }
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 12.4 — L3 Chronomatter Responsive
+// ---------------------------------------------------------------------------
+
+impl Communerdette {
+    /// Spawn the L3 liveness loop — Chronomatter responsiveness check (Phase 12.4).
+    ///
+    /// Calls `stamp` and runs the full Take 3 gate (gate_foretis). Requires
+    /// Phase 11 to be complete (PQC genesis verification needed for execute_tick).
+    pub(super) fn spawn_l3_liveness_task(
+        executor: Arc<CommunerdetteExecutor>,
+        interval_ms: u64,
+        cancel: CancellationToken,
+    ) -> tokio::task::JoinHandle<()> {
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(TokioDuration::from_millis(interval_ms));
+            loop {
+                tokio::select! {
+                    _ = cancel.cancelled() => break,
+                    _ = interval.tick() => {},
+                }
+                let content = b"liveness-probe".to_vec();
+                match Communerdette::execute_stamp(
+                    &executor, content, "liveness".into(), TokioDuration::from_secs(15),
+                ).await {
+                    Ok(_) => {
+                        tracing::trace!(target_tbid = %executor.target_tbid.to_hex(), "L3 stamp ok");
+                    }
+                    Err(e) => {
+                        tracing::debug!(target_tbid = %executor.target_tbid.to_hex(), "L3 stamp failed: {e:?}");
+                    }
+                }
+            }
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 12.5 — Liveness Loop Policy
+// ---------------------------------------------------------------------------
+
+/// Per-relationship liveness loop configuration (Phase 12.5 — spec §12.4).
+#[derive(Debug, Clone)]
+pub struct LivenessPolicy {
+    pub l1_interval_ms: u64,
+    pub l2_interval_ms: u64,
+    pub l3_interval_ms: u64,
+    /// Whether to run L2 (TBID identity) health checks.
+    pub run_l2: bool,
+    /// Whether to run L3 (Chronomatter) health checks.
+    pub run_l3: bool,
+}
+
+impl Default for LivenessPolicy {
+    fn default() -> Self {
+        Self {
+            l1_interval_ms: 5_000,
+            l2_interval_ms: 30_000,
+            l3_interval_ms: 60_000,
+            run_l2: true,
+            run_l3: true,
+        }
     }
 }
 
@@ -1360,6 +1860,20 @@ mod tests {
             _tick_start: u64,
             _count: u64,
         ) -> Result<Vec<ChrononRecord>, TransportError> {
+            Err(TransportError::Unsupported("mock".into()))
+        }
+
+        async fn host_execute_channel_bind_challenge(
+            &self,
+            _peer: &PeerAddr,
+            _nonce_hex: &str,
+            _channel_id: &str,
+            _requester_tbid_hex: &str,
+        ) -> Result<serde_json::Value, TransportError> {
+            Err(TransportError::Unsupported("mock".into()))
+        }
+
+        async fn host_execute_ping(&self, _peer: &PeerAddr) -> Result<(), TransportError> {
             Err(TransportError::Unsupported("mock".into()))
         }
     }
@@ -1900,7 +2414,7 @@ mod tests {
 
     #[test]
     fn gate_foretis_rejects_foretis_with_wrong_signature() {
-        use foretias_core::foretias::types::SignatureAlgorithm;
+
 
         let target_tbid = Tbid::from_raw([0u8; 96]);
         let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(
@@ -2350,6 +2864,144 @@ mod tests {
         assert!(
             matches!(result, Err(CommunerdetteError::CleanAuth(_))),
             "gate_foretis must reject Foretis with garbage signature: {:?}", result
+        );
+    }
+
+    // ── Phase 12.0 — Channel-Binding unit tests ───────────────────────────────
+
+    /// Build a valid dual-key signed ChannelBindResponse for testing.
+    fn make_valid_bind_response(
+        crypto: &dyn CryptoServer,
+        nonce: &[u8],
+        channel_id: &str,
+        tbid: &Tbid,
+        tbid_secret: &foretias_core::foretias::types::TbidSecret,
+    ) -> serde_json::Value {
+        let responder_tbid_hex = tbid.to_hex();
+        let mut msg = Vec::new();
+        msg.extend_from_slice(nonce);
+        msg.extend_from_slice(channel_id.as_bytes());
+        msg.extend_from_slice(responder_tbid_hex.as_bytes());
+
+        let combined = tbid_secret.sign(&msg).expect("sign");
+        let sig_bytes = combined.as_bytes();
+        serde_json::json!({
+            "responder_tbid": responder_tbid_hex,
+            "nonce_echo": hex::encode(nonce),
+            "channel_id": channel_id,
+            "fast_sig": hex::encode(&sig_bytes[..64]),
+            "slow_sig": hex::encode(&sig_bytes[64..]),
+        })
+    }
+
+    #[test]
+    fn channel_bind_verify_full_accepts_valid_dual_sig() {
+        use foretias_core::foretias::types::TbidSecret;
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            ).expect("libsodium")
+        );
+        let (tbid, secret) = TbidSecret::generate().expect("keygen");
+        let nonce = b"test_nonce_32bytes_paddedxxxxxx!!" as &[u8];
+        let channel_id = "127.0.0.1:9000";
+
+        let resp_json = make_valid_bind_response(&*crypto, nonce, channel_id, &tbid, &secret);
+        let unprocessed = UnprocessedChannelBinding::from_json_value(resp_json).expect("parse");
+        let result = unprocessed.verify_full(&*crypto, nonce, channel_id, &tbid);
+        assert!(result.is_ok(), "verify_full must accept valid dual-signed response: {:?}", result);
+        let binding = result.unwrap();
+        assert!(binding.is_authenticated_fully());
+        assert!(binding.is_authenticated_quickly());
+    }
+
+    #[test]
+    fn channel_bind_verify_full_rejects_wrong_fast_sig() {
+        use foretias_core::foretias::types::TbidSecret;
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            ).expect("libsodium")
+        );
+        let (tbid, secret) = TbidSecret::generate().expect("keygen");
+        let nonce = b"test_nonce_32bytes_paddedxxxxxx!!" as &[u8];
+        let channel_id = "127.0.0.1:9000";
+
+        let mut resp_json = make_valid_bind_response(&*crypto, nonce, channel_id, &tbid, &secret);
+        // Corrupt fast_sig
+        resp_json["fast_sig"] = serde_json::json!(hex::encode(vec![0xABu8; 64]));
+        let unprocessed = UnprocessedChannelBinding::from_json_value(resp_json).expect("parse");
+        let result = unprocessed.verify_full(&*crypto, nonce, channel_id, &tbid);
+        assert!(
+            matches!(result, Err(CommunerdetteError::CleanAuth(_))),
+            "must reject wrong fast_sig: {:?}", result
+        );
+    }
+
+    #[test]
+    fn channel_bind_verify_full_rejects_wrong_slow_sig() {
+        use foretias_core::foretias::types::TbidSecret;
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            ).expect("libsodium")
+        );
+        let (tbid, secret) = TbidSecret::generate().expect("keygen");
+        let nonce = b"test_nonce_32bytes_paddedxxxxxx!!" as &[u8];
+        let channel_id = "127.0.0.1:9000";
+
+        let mut resp_json = make_valid_bind_response(&*crypto, nonce, channel_id, &tbid, &secret);
+        // Corrupt slow_sig with wrong-length garbage
+        resp_json["slow_sig"] = serde_json::json!(hex::encode(vec![0xCDu8; 100]));
+        let unprocessed = UnprocessedChannelBinding::from_json_value(resp_json).expect("parse");
+        let result = unprocessed.verify_full(&*crypto, nonce, channel_id, &tbid);
+        assert!(
+            result.is_err(),
+            "must reject wrong slow_sig: {:?}", result
+        );
+    }
+
+    #[test]
+    fn channel_bind_verify_full_rejects_nonce_mismatch() {
+        use foretias_core::foretias::types::TbidSecret;
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            ).expect("libsodium")
+        );
+        let (tbid, secret) = TbidSecret::generate().expect("keygen");
+        let nonce = b"test_nonce_32bytes_paddedxxxxxx!!" as &[u8];
+        let channel_id = "127.0.0.1:9000";
+
+        let resp_json = make_valid_bind_response(&*crypto, nonce, channel_id, &tbid, &secret);
+        let unprocessed = UnprocessedChannelBinding::from_json_value(resp_json).expect("parse");
+        let wrong_nonce = b"different_nonce_32bytes_paddxx!!" as &[u8];
+        let result = unprocessed.verify_full(&*crypto, wrong_nonce, channel_id, &tbid);
+        assert!(
+            matches!(result, Err(CommunerdetteError::Structural(_))),
+            "must reject nonce mismatch: {:?}", result
+        );
+    }
+
+    #[test]
+    fn channel_bind_verify_full_rejects_tbid_mismatch() {
+        use foretias_core::foretias::types::TbidSecret;
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            ).expect("libsodium")
+        );
+        let (tbid, secret) = TbidSecret::generate().expect("keygen");
+        let (other_tbid, _) = TbidSecret::generate().expect("keygen");
+        let nonce = b"test_nonce_32bytes_paddedxxxxxx!!" as &[u8];
+        let channel_id = "127.0.0.1:9000";
+
+        let resp_json = make_valid_bind_response(&*crypto, nonce, channel_id, &tbid, &secret);
+        let unprocessed = UnprocessedChannelBinding::from_json_value(resp_json).expect("parse");
+        let result = unprocessed.verify_full(&*crypto, nonce, channel_id, &other_tbid);
+        assert!(
+            matches!(result, Err(CommunerdetteError::TbidMismatch { .. })),
+            "must reject TBID mismatch: {:?}", result
         );
     }
 }

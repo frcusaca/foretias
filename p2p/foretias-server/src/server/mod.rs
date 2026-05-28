@@ -221,7 +221,8 @@ impl TimeFamilyServer {
     pub fn start_daemon_arc(self: &Arc<Self>) {
         self.chronomatter.start_daemon();
         if let Some(ref communerd) = self.communerd {
-            communerd.start_liveness_pings();
+            #[allow(deprecated)]
+            communerd.start_liveness_pings(); // TODO(phase-12.2): replace with Communerdette L1 liveness
             // Group 4b: wire the Calendar's task queue to use Communerd as
             // its MirrorDispatcher. Idempotent — starting twice replaces
             // the existing pool but keeps the channel open.
@@ -470,6 +471,8 @@ pub(crate) fn process_request_from_value(server: &TimeFamilyServer, req: serde_j
 
     match method {
         "ping" => Ok(handlers::handle_ping(server, params)),
+        "channel_bind_challenge" => Ok(handlers::handle_channel_bind_challenge(server, params)),
+        "authenticated_ping" => Ok(handlers::handle_authenticated_ping(server, params)),
         "stamp" => Ok(handlers::handle_stamp(server, params)),
         "route_stamp" => Ok(handlers::handle_route_stamp(server, params)),
         "verify" => Ok(handlers::handle_verify(server, params)),

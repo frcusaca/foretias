@@ -296,6 +296,8 @@ impl Communerd {
         })
     }
 
+    #[deprecated(note = "Use Communerdette L1 liveness loop (Phase 12.1) instead. \
+        PeerPool liveness is superseded by per-TBID Communerdette-driven liveness.")]
     pub fn start_liveness_pings(&self) {
         if !self.config.mutual_attest.peers.is_empty() {
             let pool = self.peer_pool.clone();
@@ -1207,6 +1209,21 @@ impl communerdette::CommunerdetteHost for Communerd {
         } else {
             self.transport.get_calendar_slice(peer, tick_start, count).await
         }
+    }
+
+    async fn host_execute_channel_bind_challenge(
+        &self,
+        peer: &PeerAddr,
+        nonce_hex: &str,
+        channel_id: &str,
+        requester_tbid_hex: &str,
+    ) -> Result<serde_json::Value, TransportError> {
+        // TODO(externalized): wrap params as Externalized<R> before dispatch (Phase 11.4).
+        self.transport.channel_bind_challenge(peer, nonce_hex, channel_id, requester_tbid_hex).await
+    }
+
+    async fn host_execute_ping(&self, peer: &PeerAddr) -> Result<(), TransportError> {
+        self.transport.ping(peer).await
     }
 }
 

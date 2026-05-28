@@ -73,6 +73,20 @@ impl PeerTransport for JsonRpcTransport {
         let _ = self.json_rpc_call(peer, "ping", serde_json::json!({})).await?;
         Ok(())
     }
+
+    async fn channel_bind_challenge(
+        &self,
+        peer: &PeerAddr,
+        nonce_hex: &str,
+        channel_id: &str,
+        requester_tbid_hex: &str,
+    ) -> Result<serde_json::Value, TransportError> {
+        self.json_rpc_call(peer, "channel_bind_challenge", serde_json::json!({
+            "nonce": nonce_hex,
+            "channel_id": channel_id,
+            "requester_tbid": requester_tbid_hex,
+        })).await
+    }
 }
 
 impl JsonRpcTransport {

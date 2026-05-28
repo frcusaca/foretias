@@ -33,6 +33,7 @@ core-engine/src/probity/report.rs | ProbityReport | impl::ExternalizedProbityRep
 core-engine/src/probity/report.rs | ProbityReport | impl::Unprocessed | Y | - | -
 core-engine/src/probity/report.rs | ProbityReport | impl::Unprocessed::fn::into_clean_authenticated | - | Y | -
 core-engine/src/probity/report.rs | ProbityReport | impl::Unprocessed::fn::verify | - | Y | -
+foretias-server/src/communerd/communerdette.rs | AuthenticatedPong | impl::UnprocessedAuthenticatedPong::fn::verify | - | Y | -
 foretias-server/src/communerd/communerdette.rs | ChrononRecord | fn::dummy_chronon_record | - | Y | -
 foretias-server/src/communerd/communerdette.rs | ChrononRecord | impl::Communerdette::fn::execute_calendar_slice | - | Y | -
 foretias-server/src/communerd/communerdette.rs | ChrononRecord | impl::Communerdette::fn::execute_tick | - | Y | -
@@ -64,6 +65,7 @@ core-engine | Unprocessed | EpochSnapshot | 3
 core-engine | Unprocessed | Foretis | 3
 core-engine | Unprocessed | ProbityReport | 3
 core-engine | Unprocessed | T | 3
+foretias-server | CleanAuthenticated | AuthenticatedPong | 1
 foretias-server | CleanAuthenticated | ChrononRecord | 8
 foretias-server | CleanAuthenticated | Foretis | 4
 foretias-server | CleanAuthenticated | u8 | 1
