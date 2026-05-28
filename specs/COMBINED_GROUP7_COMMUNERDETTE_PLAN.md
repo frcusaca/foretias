@@ -230,7 +230,7 @@ All outbound stamp calls must flow through Communerdette so they receive the
 full Take 3 inbound gate and return `CleanAuthenticated<Foretis>` (not the
 bare `Foretis` type or a `from_trusted` bypass).
 
-- [ ] Replace the body of `Communerd::route_stamp` with:
+- [x] Replace the body of `Communerd::route_stamp` with:
       ```rust
       let content = hex::decode(content_hex)?;
       let tbid = Tbid::from_hex(target_tbid)?;
@@ -238,20 +238,27 @@ bare `Foretis` type or a `from_trusted` bypass).
       ```
       Return type changes from `Result<Foretis, TransportError>` to
       `Result<CleanAuthenticated<Foretis>, CommunerdetteError>`.
-- [ ] Mark `Communerd::stamp_peer` `#[deprecated(note = "use CommunerdetteLine::stamp")]`.
-- [ ] Update `tiers.rs` wrappers to forward the new return type.
-- [ ] Update `handle_route_stamp` in `handlers.rs` to call `.into_inner()` for
+      (2026-05-28)
+- [x] Mark `Communerd::stamp_peer` `#[deprecated(note = "use CommunerdetteLine::stamp")]`.
+      (2026-05-28)
+- [x] Update `tiers.rs` wrappers to forward the new return type.
+      (2026-05-28)
+- [x] Update `handle_route_stamp` in `handlers.rs` to call `.into_inner()` for
       the JSON response (the `CleanAuthenticated<Foretis>` wrapper is internal).
+      (2026-05-28)
 
 **Prerequisite for Phase 8.1.**
 
 ### 4.4 Tests
 
-- [ ] Unit test `get_tick` returns an error on empty slice.
-- [ ] Unit test `route_stamp` returns `CleanAuthenticated<Foretis>` with the
+- [x] Unit test `get_tick` returns an error on empty slice.
+      (2026-05-28) `execute_tick_returns_error_on_empty_slice`
+- [x] Unit test `route_stamp` returns `CleanAuthenticated<Foretis>` with the
       correct TBID and a non-empty signature.
+      (2026-05-28) `execute_stamp_produces_clean_authenticated_foretis`
 - [ ] Confirm `handle_route_stamp` response shape is unchanged (`{ "tbid": ...,
       "chronon_number": ..., ... }`) after the refactor.
+      (deferred — requires full handler test infrastructure)
 - [x] Add `Communerd::get_calendar_slice_by_tbid(tbid, start, count)` as a
       convenience wrapper over `CommunerdetteLine`.
       (2026-05-23 20:09)
@@ -447,17 +454,21 @@ Current `cross_node_verify` in `handlers.rs`:
   `from_trusted` bypass; no real signature verification
 
 Fix:
-- [ ] Replace the DHT lookup + direct transport call with:
+- [x] Replace the DHT lookup + direct transport call with:
       ```rust
       let tbid = Tbid::from_hex(foretis_tbid_hex)?;
       let tick: CleanAuthenticated<ChrononRecord> =
           com.line_for_tbid(tbid).get_tick(foretis_ref.chronon_number).await?;
       ```
-- [ ] Remove the manual `from_trusted` construction of `CleanAuthenticatedChrononRecord`.
+      (2026-05-28)
+- [x] Remove the manual `from_trusted` construction of `CleanAuthenticated<ChrononRecord>`.
       `line.get_tick(...)` already returns `CleanAuthenticated<ChrononRecord>` from the
       Take 3 gate — use it directly.
-- [ ] Pass the gated `tick` to `unproc_foretis.into_clean_authenticated(crypto, content, &tick)`.
-- [ ] Keep response shape unchanged: `{ "valid": bool, "method": "cross_node" }`.
+      (2026-05-28)
+- [x] Pass the gated `tick` to `unproc_foretis.into_clean_authenticated(crypto, content, &tick)`.
+      (2026-05-28)
+- [x] Keep response shape unchanged: `{ "valid": bool, "method": "cross_node" }`.
+      (2026-05-28)
 
 ### 8.2 Mutual Attestation Preparation
 
@@ -782,15 +793,17 @@ Communerdette.
 
 ### 12.2 Deprecate PeerPool::start_liveness_pings
 
-- [ ] Remove the `communerd.start_liveness_pings()` call from
+- [x] Remove the `communerd.start_liveness_pings()` call from
       `server/mod.rs` (currently line 216).
+      (2026-05-28)
 - [x] Mark `PeerPool::start_liveness_pings` as `#[deprecated]` with message: (2026-05-27)
       "Use Communerdette L1 liveness loop instead."
-- [ ] Verify no other callers exist:
+- [x] Verify no other callers exist:
       ```bash
       grep -rn "start_liveness_pings" p2p/
       ```
-- [x] All tests still pass after removal. (2026-05-27)
+      (2026-05-28) confirmed only in PeerPool definition + one deprecated test.
+- [x] All tests still pass after removal. (2026-05-28)
 
 ### 12.3 Level 2 — TBID Identity Confirmed (Ongoing Health)
 
@@ -868,9 +881,11 @@ fix) — L3 is meaningless without a real fast-key gate on the Foretis response.
       }
       ```
 - [x] Default policy: L1 enabled, L2 enabled, L3 enabled, intervals configurable. (2026-05-27)
-- [ ] Run order enforced: L2 skipped if L1 failed in current cycle. L3 skipped
+- [x] Run order enforced: L2 skipped if L1 failed in current cycle. L3 skipped
       if L2 failed or `TbidBindingStatus` is `Rejected`.
-- [ ] Expose current policy in `CommunerdetteStatusSummary`.
+      (2026-05-28) via `LivenessCycleFlags` Arc<AtomicBool> shared between spawn functions.
+- [x] Expose current policy in `CommunerdetteStatusSummary`.
+      (2026-05-28) `liveness_policy: LivenessPolicy` added to state and summary.
 
 ---
 

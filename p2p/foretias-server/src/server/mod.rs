@@ -221,8 +221,8 @@ impl TimeFamilyServer {
     pub fn start_daemon_arc(self: &Arc<Self>) {
         self.chronomatter.start_daemon();
         if let Some(ref communerd) = self.communerd {
-            #[allow(deprecated)]
-            communerd.start_liveness_pings(); // TODO(phase-12.2): replace with Communerdette L1 liveness
+            // Phase 12.2: liveness now handled by Communerdette L1/L2/L3 tasks
+            // spawned per-TBID when channels are established. start_liveness_pings removed.
             // Group 4b: wire the Calendar's task queue to use Communerd as
             // its MirrorDispatcher. Idempotent — starting twice replaces
             // the existing pool but keeps the channel open.

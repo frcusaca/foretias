@@ -220,6 +220,8 @@ struct CommunerdetteState {
     last_liveness_probe_ns: Option<u64>,
     /// Liveness probe interval in milliseconds (Phase 6).
     liveness_interval_ms: u64,
+    /// Liveness loop policy (Phase 12.5).
+    liveness_policy: LivenessPolicy,
 }
 
 impl Default for CommunerdetteState {
@@ -234,7 +236,8 @@ impl Default for CommunerdetteState {
             binding_proof_requested: false,
             binding_proof_verified: false,
             last_liveness_probe_ns: None,
-            liveness_interval_ms: 30_000, // default 30s
+            liveness_interval_ms: 30_000,
+            liveness_policy: LivenessPolicy::default(),
         }
     }
 }
@@ -425,6 +428,7 @@ pub struct CommunerdetteStatusSummary {
     pub binding: TbidBindingStatus,
     pub active_route: ActiveRoute,
     pub stats: CommunerdetteStats,
+    pub liveness_policy: LivenessPolicy,
 }
 
 /// Private per-TBID relationship manager.
@@ -453,6 +457,7 @@ impl Communerdette {
             binding: state.binding.clone(),
             active_route: state.active_route,
             stats: state.stats.clone(),
+            liveness_policy: state.liveness_policy.clone(),
         }
     }
 
@@ -1334,8 +1339,10 @@ impl Communerdette {
         executor: Arc<CommunerdetteExecutor>,
         interval_ms: u64,
         cancel: CancellationToken,
+        flags: Arc<LivenessCycleFlags>,
     ) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
+            use std::sync::atomic::Ordering;
             let mut interval = tokio::time::interval(TokioDuration::from_millis(interval_ms));
             loop {
                 tokio::select! {
@@ -1344,22 +1351,29 @@ impl Communerdette {
                 }
                 let peer = match executor.resolve_peer().await {
                     Ok(p) => p,
-                    Err(_) => continue,
+                    Err(_) => {
+                        flags.l1_last_ok.store(false, Ordering::Relaxed);
+                        continue;
+                    }
                 };
-                match tokio::time::timeout(
+                let ok = match tokio::time::timeout(
                     TokioDuration::from_secs(5),
                     executor.do_ping(&peer),
                 ).await {
                     Ok(Ok(())) => {
                         tracing::trace!(target_tbid = %executor.target_tbid.to_hex(), "L1 ping ok");
+                        true
                     }
                     Ok(Err(e)) => {
                         tracing::debug!(target_tbid = %executor.target_tbid.to_hex(), "L1 ping failed: {e}");
+                        false
                     }
                     Err(_) => {
                         tracing::debug!(target_tbid = %executor.target_tbid.to_hex(), "L1 ping timed out");
+                        false
                     }
-                }
+                };
+                flags.l1_last_ok.store(ok, Ordering::Relaxed);
             }
         })
     }
@@ -1435,44 +1449,63 @@ impl Communerdette {
         executor: Arc<CommunerdetteExecutor>,
         interval_ms: u64,
         cancel: CancellationToken,
+        flags: Arc<LivenessCycleFlags>,
     ) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
             use rand::Rng;
+            use std::sync::atomic::Ordering;
             let mut interval = tokio::time::interval(TokioDuration::from_millis(interval_ms));
             loop {
                 tokio::select! {
                     _ = cancel.cancelled() => break,
                     _ = interval.tick() => {},
                 }
+                // Run-order: skip if L1 failed this cycle.
+                if !flags.l1_last_ok.load(Ordering::Relaxed) {
+                    tracing::trace!(target_tbid = %executor.target_tbid.to_hex(), "L2 skipped: L1 failed");
+                    flags.l2_last_ok.store(false, Ordering::Relaxed);
+                    continue;
+                }
                 let peer = match executor.resolve_peer().await {
                     Ok(p) => p,
-                    Err(_) => continue,
+                    Err(_) => {
+                        flags.l2_last_ok.store(false, Ordering::Relaxed);
+                        continue;
+                    }
                 };
                 let challenge: [u8; 32] = rand::thread_rng().gen();
                 let challenge_hex = hex::encode(challenge);
                 let tbid_hex = executor.target_tbid.to_hex();
 
-                // Use authenticated_ping RPC (to be wired in Phase 12.3 handler)
                 let raw = match tokio::time::timeout(
                     TokioDuration::from_secs(10),
                     executor.host.host_execute_stamp(&peer, &tbid_hex, &challenge_hex, "auth-ping"),
                 ).await {
                     Ok(Ok(v)) => v,
-                    _ => continue,
+                    _ => {
+                        flags.l2_last_ok.store(false, Ordering::Relaxed);
+                        continue;
+                    }
                 };
 
                 let unprocessed = match UnprocessedAuthenticatedPong::from_json_value(raw) {
                     Ok(u) => u,
-                    Err(_) => continue,
+                    Err(_) => {
+                        flags.l2_last_ok.store(false, Ordering::Relaxed);
+                        continue;
+                    }
                 };
-                match unprocessed.verify(&*executor.crypto, &challenge, &executor.target_tbid) {
+                let ok = match unprocessed.verify(&*executor.crypto, &challenge, &executor.target_tbid) {
                     Ok(_) => {
                         tracing::trace!(target_tbid = %tbid_hex, "L2 auth-ping ok");
+                        true
                     }
                     Err(e) => {
                         tracing::warn!(target_tbid = %tbid_hex, "L2 auth-ping failed: {e:?}");
+                        false
                     }
-                }
+                };
+                flags.l2_last_ok.store(ok, Ordering::Relaxed);
             }
         })
     }
@@ -1491,13 +1524,24 @@ impl Communerdette {
         executor: Arc<CommunerdetteExecutor>,
         interval_ms: u64,
         cancel: CancellationToken,
+        flags: Arc<LivenessCycleFlags>,
     ) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
+            use std::sync::atomic::Ordering;
             let mut interval = tokio::time::interval(TokioDuration::from_millis(interval_ms));
             loop {
                 tokio::select! {
                     _ = cancel.cancelled() => break,
                     _ = interval.tick() => {},
+                }
+                // Run-order: skip if L2 failed or binding is Rejected.
+                if !flags.l2_last_ok.load(Ordering::Relaxed) {
+                    tracing::trace!(target_tbid = %executor.target_tbid.to_hex(), "L3 skipped: L2 failed");
+                    continue;
+                }
+                if flags.binding_rejected.load(Ordering::Relaxed) {
+                    tracing::trace!(target_tbid = %executor.target_tbid.to_hex(), "L3 skipped: binding rejected");
+                    continue;
                 }
                 let content = b"liveness-probe".to_vec();
                 match Communerdette::execute_stamp(
@@ -1516,8 +1560,29 @@ impl Communerdette {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 12.5 — Liveness Loop Policy
+// Phase 12.5 — Liveness Loop Policy and Run-Order Enforcement
 // ---------------------------------------------------------------------------
+
+/// Shared atomic flags for cross-task run-order enforcement (Phase 12.5).
+///
+/// L1 writes `l1_last_ok`; L2 reads it before running and writes `l2_last_ok`;
+/// L3 reads both. `binding_rejected` is set by Communerdette state transitions.
+pub(super) struct LivenessCycleFlags {
+    pub l1_last_ok: std::sync::atomic::AtomicBool,
+    pub l2_last_ok: std::sync::atomic::AtomicBool,
+    /// Set to true when TbidBindingStatus transitions to Rejected.
+    pub binding_rejected: std::sync::atomic::AtomicBool,
+}
+
+impl LivenessCycleFlags {
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self {
+            l1_last_ok: std::sync::atomic::AtomicBool::new(true),
+            l2_last_ok: std::sync::atomic::AtomicBool::new(true),
+            binding_rejected: std::sync::atomic::AtomicBool::new(false),
+        })
+    }
+}
 
 /// Per-relationship liveness loop configuration (Phase 12.5 — spec §12.4).
 #[derive(Debug, Clone)]
@@ -3004,5 +3069,182 @@ mod tests {
             matches!(result, Err(CommunerdetteError::TbidMismatch { .. })),
             "must reject TBID mismatch: {:?}", result
         );
+    }
+
+    // ── Phase 4.4: execute_tick and execute_stamp integration ────────────
+
+    /// A configurable mock host for Phase 4.4 tests — returns caller-supplied
+    /// calendar slice and stamp responses rather than always erroring.
+    struct ConfigurableMockHost {
+        dht_record: Option<PeerRegistrationRecord>,
+        calendar_response: std::sync::Mutex<Option<Vec<ChrononRecord>>>,
+        stamp_response: std::sync::Mutex<Option<serde_json::Value>>,
+    }
+
+    impl ConfigurableMockHost {
+        fn new(dht_record: Option<PeerRegistrationRecord>) -> Self {
+            Self {
+                dht_record,
+                calendar_response: std::sync::Mutex::new(None),
+                stamp_response: std::sync::Mutex::new(None),
+            }
+        }
+
+        fn set_calendar_response(&self, records: Vec<ChrononRecord>) {
+            *self.calendar_response.lock().unwrap() = Some(records);
+        }
+
+        fn set_stamp_response(&self, v: serde_json::Value) {
+            *self.stamp_response.lock().unwrap() = Some(v);
+        }
+    }
+
+    #[async_trait]
+    impl CommunerdetteHost for ConfigurableMockHost {
+        async fn host_lookup_tbid(&self, _tbid_hex: &str, _namespace: &str) -> Option<PeerRegistrationRecord> {
+            self.dht_record.clone()
+        }
+        fn host_lookup_tbid_cached(&self, _tbid_hex: &str) -> Option<PeerRegistrationRecord> {
+            self.dht_record.clone()
+        }
+        fn host_namespace(&self) -> String { "test".to_string() }
+        fn host_swarm_available(&self) -> bool { false }
+        fn host_local_peer_id(&self) -> Option<libp2p::PeerId> { None }
+
+        async fn host_execute_stamp(
+            &self,
+            _peer: &PeerAddr,
+            _target_tbid: &str,
+            _content_hex: &str,
+            _echo: &str,
+        ) -> Result<serde_json::Value, TransportError> {
+            self.stamp_response.lock().unwrap().clone()
+                .ok_or_else(|| TransportError::Unsupported("no stamp response set".into()))
+        }
+
+        async fn host_execute_calendar_slice(
+            &self,
+            _peer: &PeerAddr,
+            _tick_start: u64,
+            _count: u64,
+        ) -> Result<Vec<ChrononRecord>, TransportError> {
+            self.calendar_response.lock().unwrap().clone()
+                .ok_or_else(|| TransportError::Unsupported("no calendar response set".into()))
+        }
+
+        async fn host_execute_channel_bind_challenge(
+            &self,
+            _peer: &PeerAddr,
+            _nonce_hex: &str,
+            _channel_id: &str,
+            _requester_tbid_hex: &str,
+        ) -> Result<serde_json::Value, TransportError> {
+            Err(TransportError::Unsupported("mock".into()))
+        }
+
+        async fn host_execute_ping(&self, _peer: &PeerAddr) -> Result<(), TransportError> {
+            Err(TransportError::Unsupported("mock".into()))
+        }
+    }
+
+    #[tokio::test]
+    async fn execute_tick_returns_error_on_empty_slice() {
+        let tbid = Tbid::from_raw([0u8; 96]);
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            ).expect("libsodium")
+        );
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+
+        let host = Arc::new(ConfigurableMockHost::new(Some(make_record("peer-1", "127.0.0.1:4002"))));
+        // Return empty slice — execute_tick must error.
+        host.set_calendar_response(vec![]);
+
+        let executor = CommunerdetteExecutor::new(host, tbid, crypto, clock);
+        let result = Communerdette::execute_tick(
+            &executor, 1, TokioDuration::from_secs(5),
+        ).await;
+
+        assert!(
+            result.is_err(),
+            "execute_tick must error when calendar slice is empty"
+        );
+        assert!(
+            matches!(result, Err(CommunerdetteError::Structural(_))),
+            "error must be Structural, got: {:?}", result
+        );
+    }
+
+    #[tokio::test]
+    async fn execute_stamp_produces_clean_authenticated_foretis() {
+        use foretias_core::foretias::types::SignatureAlgorithm;
+
+        let tbid = Tbid::from_raw([0u8; 96]);
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            ).expect("libsodium")
+        );
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+
+        let content = b"stamp-test-content" as &[u8];
+        let chronon_number: u64 = 1;
+
+        // Build a valid Foretis signed by the crypto server.
+        let content_hash = crypto.sha256(content).expect("sha256");
+        let mut sig_input = Vec::new();
+        sig_input.extend_from_slice(&tbid.raw_bytes());
+        sig_input.extend_from_slice(&chronon_number.to_be_bytes());
+        sig_input.extend_from_slice(content);
+        let sig = crypto.sign_with(&sig_input, SignatureAlgorithm::Ed25519).expect("sign");
+        let pub_key_bytes = match crypto.public_key() {
+            foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
+            _ => panic!("expected Ed25519"),
+        };
+
+        // ChrononRecord whose public_key matches the crypto server — genesis, tb_version=0.
+        let chronon_record = ChrononRecord {
+            chronon_number,
+            public_key: FTByteVector::from(pub_key_bytes),
+            signature_algorithm: "Ed25519".to_string(),
+            forward_foretis: FTByteVector::from(vec![2u8; 64]),
+            backward_foretis: FTByteVector::from(vec![3u8; 64]),
+            aa_nonce: FTByteArray::from([4u8; 16]),
+            chronon_stamp_count: 0,
+            external_attestations: vec![],
+            tb_version: 0,
+            tbid: tbid.clone(),
+        };
+
+        let foretis = Foretis {
+            chronon_number,
+            content_hash: FTByteArray::from(content_hash.bytes),
+            signature: FTByteVector::from(sig.as_bytes().to_vec()),
+            signature_algorithm: "Ed25519".to_string(),
+            tbid: tbid.clone(),
+            echo: "test".to_string(),
+            tbn: "test-tb".to_string(),
+            time_being_reference_time: "UE+1000000000ns".to_string(),
+        };
+
+        let host = Arc::new(ConfigurableMockHost::new(Some(make_record("peer-1", "127.0.0.1:4002"))));
+        host.set_calendar_response(vec![chronon_record]);
+        host.set_stamp_response(serde_json::to_value(&foretis).unwrap());
+
+        let executor = CommunerdetteExecutor::new(host, tbid.clone(), crypto, clock);
+        let result = Communerdette::execute_stamp(
+            &executor,
+            content.to_vec(),
+            "test".to_string(),
+            TokioDuration::from_secs(5),
+        ).await;
+
+        assert!(result.is_ok(), "execute_stamp must succeed with valid signed Foretis: {:?}", result);
+        let ca = result.unwrap();
+        assert_eq!(*ca.tbid(), tbid, "returned Foretis must carry the target TBID");
+        assert_eq!(*ca.chronon_number(), chronon_number);
+        assert!(!ca.signature().is_empty(), "returned Foretis must have a non-empty signature");
+        assert!(ca.is_authenticated_quickly());
     }
 }
