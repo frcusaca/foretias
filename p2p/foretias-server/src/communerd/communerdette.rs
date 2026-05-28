@@ -241,165 +241,166 @@ impl Default for CommunerdetteState {
 
 // ── Phase 12.0 — Channel-Binding Types ───────────────────────────────────────
 
-/// The verified message produced during initial channel-binding establishment.
+/// Channel-binding message type — wire-compatible, dual-key signed.
 ///
-/// Contains the data that the remote party dual-signed (fast + slow keys).
-/// Only `UnprocessedChannelBinding::verify_full()` can produce this.
-#[derive(Debug, Clone)]
-pub struct ChannelBinding {
-    pub responder_tbid: Tbid,
-    pub nonce_echo: Vec<u8>,
-    pub channel_id: String,
-    pub fast_sig: Vec<u8>,
-    pub slow_sig: Vec<u8>,
-}
-
-/// Wire shape of the channel_bind_response JSON-RPC result.
+/// This is the data the remote party signs during initial channel-binding.
+/// The sig fields are hex-encoded to be directly JSON-serializable; the
+/// Take 3 pipeline uses `Unprocessed<ChannelBinding>` and produces
+/// `CleanFullyAuthenticated<ChannelBinding>` after dual-key verification.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct ChannelBindResponse {
-    pub responder_tbid: String,
-    pub nonce_echo: String,
-    pub channel_id: String,
-    pub fast_sig: String,
-    pub slow_sig: String,
+pub struct ChannelBinding {
+    pub responder_tbid: String,  // hex-encoded Tbid (96 bytes → 192 hex chars)
+    pub nonce_echo: String,      // hex-encoded echoed challenge nonce
+    pub channel_id: String,      // transport identity string
+    pub fast_sig: String,        // hex-encoded Ed25519 signature (64 bytes)
+    pub slow_sig: String,        // hex-encoded SLH-DSA signature (49856 bytes)
 }
 
-/// Parsed-but-not-yet-verified channel bind response (Take 3 Unprocessed stage).
-#[derive(Debug)]
-pub struct UnprocessedChannelBinding {
-    inner: ChannelBindResponse,
-}
+/// Take 3 Unprocessed stage for channel-binding responses.
+///
+/// `Unprocessed<ChannelBinding>` holds the parsed-but-unverified wire data.
+/// Call methods from `ChannelBindingGate` to verify and produce
+/// `CleanFullyAuthenticated<ChannelBinding>`.
+pub type UnprocessedChannelBinding = foretias_core::foretias::clean_auth::Unprocessed<ChannelBinding>;
 
-impl UnprocessedChannelBinding {
-    pub fn from_json_value(v: serde_json::Value) -> Result<Self, TransportError> {
-        let inner: ChannelBindResponse = serde_json::from_value(v)
-            .map_err(|e| TransportError::Decode(e.to_string()))?;
-        Ok(Self { inner })
-    }
-
-    /// Verify Ed25519 fast-key signature only (independent of slow-key).
-    ///
-    /// Uses the TBID V1 ed25519_pub from `target_tbid` and the first 64 bytes of
-    /// the combined signature. Calls the standard software Ed25519 verifier
-    /// directly on the extracted key.
+/// Extension trait that adds the inbound gate methods to `Unprocessed<ChannelBinding>`.
+///
+/// Extension trait rather than inherent impl because `Unprocessed<T>` is defined
+/// in core-engine and the orphan rule prevents foreign-type inherent impls here.
+/// Import this trait to call `.verify_full()` etc. on `Unprocessed<ChannelBinding>`.
+pub trait ChannelBindingGate: Sized {
+    /// Verify Ed25519 fast-key signature only.
     /// // VERIFY(remote-tbid, fast-key)
-    pub fn verify_fast_only(
+    fn verify_fast_only(
+        &self,
+        crypto: &dyn CryptoServer,
+        nonce: &[u8],
+        channel_id: &str,
+        target_tbid: &Tbid,
+    ) -> Result<bool, CommunerdetteError>;
+
+    /// Verify SLH-DSA slow-key signature only.
+    /// // VERIFY(remote-tbid, slow-key)
+    fn verify_slow_only(
+        &self,
+        crypto: &dyn CryptoServer,
+        nonce: &[u8],
+        channel_id: &str,
+        target_tbid: &Tbid,
+    ) -> Result<bool, CommunerdetteError>;
+
+    /// Verify both keys via TBID V1 C verifier. Returns `CleanFullyAuthenticated<ChannelBinding>`.
+    /// // VERIFY(remote-tbid, fast-key+slow-key)
+    fn verify_full(
+        self,
+        crypto: &dyn CryptoServer,
+        nonce: &[u8],
+        channel_id: &str,
+        target_tbid: &Tbid,
+    ) -> Result<foretias_core::foretias::clean_auth::CleanFullyAuthenticated<ChannelBinding>, CommunerdetteError>;
+}
+
+impl ChannelBindingGate for UnprocessedChannelBinding {
+    fn verify_fast_only(
         &self,
         crypto: &dyn CryptoServer,
         nonce: &[u8],
         channel_id: &str,
         target_tbid: &Tbid,
     ) -> Result<bool, CommunerdetteError> {
-        self.check_fields(nonce, channel_id, target_tbid)?;
-        let fast_sig = hex::decode(&self.inner.fast_sig)
+        check_binding_fields(self.inner(), nonce, channel_id, target_tbid)?;
+        let fast_sig = hex::decode(&self.inner().fast_sig)
             .map_err(|_| CommunerdetteError::Structural("fast_sig not hex".into()))?;
-        let msg = Self::binding_msg(nonce, channel_id, &self.inner.responder_tbid);
+        let msg = binding_msg(nonce, channel_id, &self.inner().responder_tbid);
         let ok = crypto.verify_with(&target_tbid.ed25519_public_key(), "Ed25519", &msg, &fast_sig)
             .map_err(|e| CommunerdetteError::CleanAuth(CleanAuthError::Crypto(NodeError::Crypto(e))))?;
         Ok(ok)
     }
 
-    /// Verify SLH-DSA slow-key signature only (independent of fast-key).
-    /// // VERIFY(remote-tbid, slow-key)
-    pub fn verify_slow_only(
+    fn verify_slow_only(
         &self,
         crypto: &dyn CryptoServer,
         nonce: &[u8],
         channel_id: &str,
         target_tbid: &Tbid,
     ) -> Result<bool, CommunerdetteError> {
-        self.check_fields(nonce, channel_id, target_tbid)?;
-        let slow_sig = hex::decode(&self.inner.slow_sig)
+        check_binding_fields(self.inner(), nonce, channel_id, target_tbid)?;
+        let slow_sig = hex::decode(&self.inner().slow_sig)
             .map_err(|_| CommunerdetteError::Structural("slow_sig not hex".into()))?;
-        let msg = Self::binding_msg(nonce, channel_id, &self.inner.responder_tbid);
+        let msg = binding_msg(nonce, channel_id, &self.inner().responder_tbid);
         let ok = crypto.verify_with(&target_tbid.slh_dsa_public_key(), "SLH-DSA-SHA2-256f", &msg, &slow_sig)
             .map_err(|e| CommunerdetteError::CleanAuth(CleanAuthError::Crypto(NodeError::Crypto(e))))?;
         Ok(ok)
     }
 
-    /// Verify both fast-key and slow-key signatures using the TBID V1 C verifier.
-    ///
-    /// This is the authoritative dual-key verification path. It reconstructs the
-    /// combined 49920-byte signature and calls `signing_tbid::tbid_verify` which
-    /// invokes the TBID V1 C library's `foretias_tbid_v1_verify` function.
-    /// // VERIFY(remote-tbid, fast-key+slow-key)
-    pub fn verify_full(
+    fn verify_full(
         self,
         _crypto: &dyn CryptoServer,
         nonce: &[u8],
         channel_id: &str,
         target_tbid: &Tbid,
     ) -> Result<foretias_core::foretias::clean_auth::CleanFullyAuthenticated<ChannelBinding>, CommunerdetteError> {
-        self.check_fields(nonce, channel_id, target_tbid)?;
+        check_binding_fields(self.inner(), nonce, channel_id, target_tbid)?;
 
-        let fast_sig = hex::decode(&self.inner.fast_sig)
+        let fast_bytes = hex::decode(&self.inner().fast_sig)
             .map_err(|_| CommunerdetteError::Structural("fast_sig not hex".into()))?;
-        let slow_sig = hex::decode(&self.inner.slow_sig)
+        let slow_bytes = hex::decode(&self.inner().slow_sig)
             .map_err(|_| CommunerdetteError::Structural("slow_sig not hex".into()))?;
 
-        // Reconstruct combined signature: Ed25519(64) ‖ SLH-DSA(49856)
-        let mut combined_sig = Vec::with_capacity(49920);
-        combined_sig.extend_from_slice(&fast_sig);
-        combined_sig.extend_from_slice(&slow_sig);
+        // Reconstruct combined: Ed25519(64) ‖ SLH-DSA(49856) = 49920 bytes
+        let mut combined = Vec::with_capacity(49920);
+        combined.extend_from_slice(&fast_bytes);
+        combined.extend_from_slice(&slow_bytes);
 
-        let msg = Self::binding_msg(nonce, channel_id, &self.inner.responder_tbid);
-        let pub_key_bytes = foretias_core::foretias::types::SignatureBytes::from(target_tbid.raw_bytes().to_vec());
-        let sig_bytes = foretias_core::foretias::types::SignatureBytes::from(combined_sig.clone());
+        let msg = binding_msg(nonce, channel_id, &self.inner().responder_tbid);
+        let pub_key = foretias_core::foretias::types::SignatureBytes::from(target_tbid.raw_bytes().to_vec());
+        let sig = foretias_core::foretias::types::SignatureBytes::from(combined);
 
-        // Use the TBID V1 C verifier for authoritative dual-key verification
-        let ok = foretias_core::crypto_server::signing_tbid::tbid_verify(&pub_key_bytes, &msg, &sig_bytes)
+        // TBID V1 C verifier — authoritative dual-key verification
+        let ok = foretias_core::crypto_server::signing_tbid::tbid_verify(&pub_key, &msg, &sig)
             .map_err(|e| CommunerdetteError::CleanAuth(CleanAuthError::Crypto(NodeError::Crypto(e))))?;
-
         if !ok {
             return Err(CommunerdetteError::CleanAuth(CleanAuthError::InvalidSignature));
         }
 
-        let tbid = Tbid::from_hex(&self.inner.responder_tbid)
-            .map_err(|_| CommunerdetteError::Structural("bad responder_tbid hex".into()))?;
         Ok(foretias_core::foretias::clean_auth::CleanFullyAuthenticated::from_dual_verified(
-            ChannelBinding {
-                responder_tbid: tbid,
-                nonce_echo: hex::decode(&self.inner.nonce_echo).unwrap_or_default(),
-                channel_id: self.inner.channel_id,
-                fast_sig,
-                slow_sig,
-            },
+            self.into_inner(),
         ))
     }
+}
 
-    fn check_fields(
-        &self,
-        nonce: &[u8],
-        channel_id: &str,
-        target_tbid: &Tbid,
-    ) -> Result<(), CommunerdetteError> {
-        let responder = Tbid::from_hex(&self.inner.responder_tbid)
-            .map_err(|_| CommunerdetteError::Structural("bad responder_tbid hex".into()))?;
-        if responder != *target_tbid {
-            return Err(CommunerdetteError::TbidMismatch {
-                expected: target_tbid.to_hex(),
-                actual: self.inner.responder_tbid.clone(),
-            });
-        }
-        let nonce_echo = hex::decode(&self.inner.nonce_echo)
-            .map_err(|_| CommunerdetteError::Structural("nonce_echo not hex".into()))?;
-        if nonce_echo != nonce {
-            return Err(CommunerdetteError::Structural("nonce_echo mismatch".into()));
-        }
-        if self.inner.channel_id != channel_id {
-            return Err(CommunerdetteError::Structural("channel_id mismatch".into()));
-        }
-        Ok(())
+fn check_binding_fields(
+    inner: &ChannelBinding,
+    nonce: &[u8],
+    channel_id: &str,
+    target_tbid: &Tbid,
+) -> Result<(), CommunerdetteError> {
+    let responder = Tbid::from_hex(&inner.responder_tbid)
+        .map_err(|_| CommunerdetteError::Structural("bad responder_tbid hex".into()))?;
+    if responder != *target_tbid {
+        return Err(CommunerdetteError::TbidMismatch {
+            expected: target_tbid.to_hex(),
+            actual: inner.responder_tbid.clone(),
+        });
     }
+    let nonce_echo = hex::decode(&inner.nonce_echo)
+        .map_err(|_| CommunerdetteError::Structural("nonce_echo not hex".into()))?;
+    if nonce_echo != nonce {
+        return Err(CommunerdetteError::Structural("nonce_echo mismatch".into()));
+    }
+    if inner.channel_id != channel_id {
+        return Err(CommunerdetteError::Structural("channel_id mismatch".into()));
+    }
+    Ok(())
+}
 
-    /// Canonical message bytes: nonce ‖ channel_id_bytes ‖ responder_tbid_hex_bytes.
-    fn binding_msg(nonce: &[u8], channel_id: &str, responder_tbid_hex: &str) -> Vec<u8> {
-        let mut msg = Vec::new();
-        msg.extend_from_slice(nonce);
-        msg.extend_from_slice(channel_id.as_bytes());
-        msg.extend_from_slice(responder_tbid_hex.as_bytes());
-        msg
-    }
+/// Canonical message: nonce ‖ channel_id_bytes ‖ responder_tbid_hex_bytes.
+fn binding_msg(nonce: &[u8], channel_id: &str, responder_tbid_hex: &str) -> Vec<u8> {
+    let mut msg = Vec::new();
+    msg.extend_from_slice(nonce);
+    msg.extend_from_slice(channel_id.as_bytes());
+    msg.extend_from_slice(responder_tbid_hex.as_bytes());
+    msg
 }
 
 /// Per-channel binding state for Communerdette.
