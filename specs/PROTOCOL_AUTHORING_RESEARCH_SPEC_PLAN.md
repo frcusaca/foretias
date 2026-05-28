@@ -1638,67 +1638,95 @@ Before Phase 1 begins, please confirm or amend:
 - **Q1. Corpus scope.** Is the Part 4 list right-sized? Add / remove
   what? In particular: 3GPP / 5G (4-G) is the most-adopted
   hardware/software-layered spec family on earth but is enormous.
-  Include? Subset?
+  Include? Subset? (@Agent lgtm)
 - **Q2. Hardware-tier depth.** Light (study patterns only) or deep
   (also study electrical / timing / certification-program conventions)?
 - **Q3. Paywalled specs.** Skip them, summarize from open sources, or
-  ask the human reviewer to acquire?
+  ask the human reviewer to acquire? (@Agent summarize from open sources,
+  but note paywall. Most of what we're interested in are not behind paywall)
 - **Q4. Effort budget cap.** A 40–55 entry corpus at 1 hr / entry plus
   synthesis is roughly 60–90 hours of equivalent work. Cap? Or
-  open-ended?
+  open-ended? (@Agent no cap, only cap is amount of work done before a new
+  summary file is produced. We should be producing/updating document at
+  least once every 15 minutes)
 - **Q5. Code-reading depth.** Part 2.B suggests "1 in 5 protocols" gets
-  a reference-implementation read-through. More? Fewer? Specific list?
+  a reference-implementation read-through. (@agent at least read examples,
+  read API declarations. major API endpoints, and core protocols code)
 - **Q6. Sub-agent budget.** Sub-agent offload (Part 6) can dramatically
   parallelize Phases 1–2 but consumes API quota. Cap on concurrent
-  sub-agents? Total spend?
+  sub-agents? Total spend? (@Agent no cap. just has to write to disk
+  summary or progress every 15 minutes or so)
 - **Q7. Audience for the eventual Foretias Protocol.** Implementer-only,
-  or also regulator / integrator / end-user?
+  or also regulator / integrator / end-user?(@Agent, audiance of
+  the protocol document are mainly human or agent coders who will use
+  foretias system. Some scientists who wants to research it, plus curious
+  users who wants to know more)
 - **Q8. Adoption-target shape.** Many independent implementations
   (Ethereum)? Wide end-user install base (Bluetooth)? Both?
+  (@Agents, ideally, we'd like this rust implementation to become useful
+   enough and secure enough to demonstrate that the system is useful.
+   Others may leverage the library or reimplement it with custom security
+   configurations or hardware. Later hardware implementations as well.)
 - **Q9. Style preference.** Lean toward IETF-RFC formal prose,
   Yellow-Paper math, executable-spec, narrative whitepaper, or
   deliberate pluralism across documents?
+  (@Agent, Description, diagrams, flow chart, swimming lane. rust code snippets
+   whatever it takes to clearly explain everything--except for animations or videos)
 - **Q10. Versioning model preference.** Single living spec, versioned
   editions, or numbered improvement proposals?
+  (@Agent, yes versioned)
 - **Q11. Big-guarantee phrasing preference.** Of the three templates
   illustrated in 5-B (positive-condition prose / adversary-bound formula
   / defined-term style), is there an early preference for Foretias, or
-  should research stay agnostic?
+  should research stay agnostic? (@Agent, this is the preference unless
+  we find and understand other protocols doing it differently)
 - **Q12. Scope of "Foretias Protocol" itself.** Does it include the
   custom-plugin crypto layer, or stop at the host-software boundary?
+  (@Agent, this can be a qualitative "secure", but more colorful and
+   specific, clearly meaning "as secure as you make it".)
 - **Q13. Stack-position weighting.** Given Foretias's
   common-denominator / primitive positioning (1.5.J), should the
   corpus over-weight primitive-layer protocols (4.A-bis, 4.B, parts
   of 4.D like I2C / TPM-as-primitive) and under-weight
   application-layer ones (some of 4.A, parts of 4.D)? The current
-  list is balanced; the human reviewer may prefer skew.
+  list is balanced; the human reviewer may prefer skew.(@Agent, foretias
+  currently is a library and a server, its function is distributed
+  p2p-based time stamping, this is a portion of many cryptocurrency systems)
 - **Q14. Tone target for the Foretias Protocol corpus** (per 1.5.K).
   Pick an early reference point so Phase 4 isn't wide-open: closest
   to TLS RFCs (dry / formal), libp2p specs (community-led /
   conversational), Rust RFCs (warm / "we"), Bitcoin Core
   (terse / minimal warmth), gRPC docs (integrator-friendly), or
   pluralism across documents? Or stay agnostic until the corpus
-  survey is in?
+  survey is in? (@agent, closest to Ethereum)
 - **Q15. AI-coding-agent readability as a first-class requirement**
   (per 1.5.K, machine-readability sub-section). Treat as a hard
   requirement (every normative document ships with machine-extractable
   schema and test-vector files), a soft target (best-effort), or
   out of scope?
+  (@Agent, this is a learning experience. let's see if we find any agents.md
+   or other documentation directed towards agents)
 - **Q16. Whitepaper vs. protocol-corpus voice separation.** Confirm
   the assumption that the existing `whitepaper.md` voice serves
   non-developer stakeholders and the protocol corpus is allowed to
   be developer-first without trying to re-please non-developers in
-  every document?
+  every document? (@Agents protocol is for develoeprs and researchers)
 - **Q17. Code of Conduct / community-infrastructure scope.**
   Should this research project also recommend CoC posture,
   contributor onboarding shape, and public-discussion-channel
   choice — or leave those to a separate governance Major?
+  (@Agents code of conduct is more to reinforce alignment of intentions
+   and practices--towards reliable and trustworthy time stampping)
 - **Q18. Fair-and-balanced posture target.** The whitepaper has
   already chosen explicit honesty about failure modes. Should the
   protocol corpus inherit that posture as a style-guide rule, or
   is each document allowed to follow its own genre's convention
   (terse RFCs without "Security Considerations" if the genre
   permits)?
+  (@Agents of course. But we are more focused on solutions and
+    facilities to achieve desired goals. So even if we do talk
+    about failure modes, they are expressing opportunity or outter
+    boundaries for when system will fail)
 
 ---
 
