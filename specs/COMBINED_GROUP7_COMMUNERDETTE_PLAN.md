@@ -528,7 +528,7 @@ TBID lookup and calendar fetch.
 
 ---
 
-## Phase 11 — Fast-Key Authentication Enforcement
+## Phase 11 — Fast-Key Authentication Enforcement ✅ COMPLETE (2026-05-27)
 
 **Goal:** Enforce the universal inbound authentication invariant (Spec §4
 invariants 17, 19) across all Communerdette gate functions. No remote data
@@ -673,7 +673,7 @@ golden file for all signing and verification call sites (Spec §11.6, §15 crite
 
 ---
 
-## Phase 12 — Channel Binding + Three Liveness Levels
+## Phase 12 — Channel Binding + Three Liveness Levels ✅ COMPLETE (2026-05-27)
 
 **Goal:** Implement channel-binding establishment (§12.0) and all three
 liveness levels inside Communerdette (Spec §12).
