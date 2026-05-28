@@ -156,6 +156,14 @@ impl TimeFamilyServer {
         self.chronomatter.get_tbid()
     }
 
+    /// Sign a message with this server's TBID secret key (Ed25519 + SLH-DSA).
+    /// Returns the combined 49920-byte signature for use in channel-binding and
+    /// authenticated-ping handlers.
+    /// // SIGN(local-tbid, fast-key+slow-key)
+    pub fn sign_tbid_message(&self, msg: &[u8]) -> Result<foretias_core::foretias::types::SignatureBytes, foretias_core::error::NodeError> {
+        self.chronomatter.sign_tbid_message(msg)
+    }
+
     pub fn get_tbn(&self) -> &str {
         self.chronomatter.get_tbn()
     }

@@ -132,6 +132,18 @@ impl Chronomatter {
         self.chronon_ns
     }
 
+    /// Sign a message with this TBID's secret key (Ed25519 + SLH-DSA combined).
+    ///
+    /// Returns Ed25519_SIG(64) ‖ SLH-DSA_SIG(49856) = 49920 bytes.
+    /// Used by channel-binding and authenticated-ping handlers to prove TBID ownership.
+    /// // SIGN(local-tbid, fast-key+slow-key)
+    pub fn sign_tbid_message(&self, msg: &[u8]) -> Result<crate::foretias::types::SignatureBytes, crate::error::NodeError> {
+        self.tbid_secret.as_ref()
+            .ok_or_else(|| crate::error::NodeError::Crypto(crate::error::CryptoError::BadInput("no TBID signing key")))?
+            .sign(msg)
+            .map_err(crate::error::NodeError::Crypto)
+    }
+
     /// Return the public key of the most recently generated tick keypair, if any.
     pub fn latest_public_key(&self) -> Option<[u8; 32]> {
         self.keypairs.read().last().map(|kp| kp.pub_key)

@@ -794,6 +794,8 @@ impl CommunerdetteExecutor {
         tick_start: u64,
         count: u64,
     ) -> Result<Vec<ChrononRecord>, TransportError> {
+        // TODO(externalized): wrap outbound request params as Externalized<R> before
+        // dispatch once outbound type enforcement is implemented (Phase 11.4).
         self.host.host_execute_calendar_slice(peer, tick_start, count).await
     }
 
@@ -804,6 +806,8 @@ impl CommunerdetteExecutor {
         content_hex: &str,
         echo: &str,
     ) -> Result<serde_json::Value, TransportError> {
+        // TODO(externalized): wrap outbound request params as Externalized<R> before
+        // dispatch once outbound type enforcement is implemented (Phase 11.4).
         let tbid_hex = self.target_tbid.to_hex();
         self.host.host_execute_stamp(peer, &tbid_hex, content_hex, echo).await
     }
@@ -849,6 +853,11 @@ impl CommunerdetteExecutor {
                     .map_err(CommunerdetteError::CleanAuth)?
             };
 
+            // TODO(slow-key): if record carries a slow-key signature, verify it here
+            // against target_tbid's slow public key. Reject if signature is present
+            // but invalid. Absence is acceptable. Slow-key verification is currently
+            // only required at channel-binding establishment; see Phase 12.0.
+
             authenticated.push(ca);
         }
 
@@ -888,6 +897,11 @@ impl CommunerdetteExecutor {
                 actual: unprocessed.tbid().to_hex(),
             });
         }
+
+        // TODO(slow-key): if Foretis carries a slow-key signature, verify it here
+        // against target_tbid's slow public key. Reject if signature is present
+        // but invalid. Absence is acceptable. Slow-key verification is currently
+        // only required at channel-binding establishment; see Phase 12.0.
 
         // TODO(slow-key): if Foretis carries a slow-key signature, verify it here
         // against target_tbid's slow public key. Reject if signature is present
