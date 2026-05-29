@@ -1410,56 +1410,77 @@ It carries the peer's reachability **and** the cross-signed family manifest. It
 is transmitted over a connection (in response to a family-request RPC), not
 stored in the DHT.
 
-It is **encumbered with k-way signing** — every family member signs the
-canonical manifest — plus a **Foretis** that temporally anchors the declaration.
+Its familial attestation is a **k×k cross-signing matrix**: every member fully
+(dual-key) signs **every member's TBID**, including its own. A **Foretis**
+temporally anchors the declaration.
 
-**Why k-way signing:** if only Communerd signed, a compromised Communerd could
-claim arbitrary members. K-way signing proves every named member consented. A
-Calendar or Chronomatter that did not participate cannot appear as a member.
+**Why a cross-signing matrix (not just each-signs-manifest):** entry `[i][j]` is
+member *i* endorsing member *j*'s identity. The full matrix is a complete
+web-of-trust over the family — every member has personally attested to every
+other member. A compromised Communerd cannot fabricate members (it cannot
+produce other members' signatures), and the diagonal `[i][i]` is each member's
+self-attestation (proof of key possession). "Completing a row" = one member
+signing all member TBIDs.
 
-**Why a Foretis:** the Foretis stamps the canonical manifest bytes at a specific
-chronon. It prevents backdating and gives an independently verifiable timestamp.
+**Why a Foretis:** stamps the manifest at a specific chronon — prevents backdating
+and gives an independently verifiable timestamp.
 
 ```rust
-/// One member's attestation of the family manifest.
-pub struct FamilyMemberAttestation {
-    /// Attesting member's TBID hex.
-    pub member_tbid: String,
-    /// Full TbidSecret dual-key signature (Ed25519 ‖ SLH-DSA = 49,920 bytes)
-    /// over canonical(FamilyRecord) — all fields except `attestations`/`foretis`.
-    pub signature:   Vec<u8>,
-}
-
-/// Renamed from PeerRegistrationRecord. Carries reachability + family manifest.
-/// Transmitted over a connection; NOT a DHT record.
+/// FamilyRecord — the manifest. SIGNATURE-FREE with respect to itself: it carries
+/// no signature *over the FamilyRecord*. The matrix signs individual member TBIDs
+/// (sub-components), not the record, so this is a valid payload `R` — the Communerd
+/// transport envelope signs the record itself (§21).
+///
+/// INVARIANTS (all enforced in the verifying constructor):
+///   - member_tbids non-empty
+///   - member_tbids unique, each well-formed (correct length, parses as Tbid)
+///   - created_at_ns > 0
+///   - matrix is exactly k×k where k == member_tbids.len()
+///   - every matrix[i][j] is a valid dual-key signature by member_tbids[i]
+///     over member_tbids[j]'s TBID bytes
+///   - communerd_tbid ∈ member_tbids; every calendar/chronomatter TBID ∈ member_tbids
 pub struct FamilyRecord {
-    // ── Reachability (formerly PeerRegistrationRecord) ──
-    /// Family identifier — the Communerd's TBID hex.
-    pub communerd_tbid:     String,
-    /// libp2p peer ID of the Communerd.
-    pub peer_id:            String,
-    /// libp2p multiaddr (optional; libp2p can also resolve from peer_id).
-    pub multiaddr:          String,
-    /// Noise TCP JSON-RPC address (libp2p cannot resolve this).
-    pub json_rpc:           String,
+    // ── Reachability ──
+    pub communerd_tbid:     String,   // family identifier
+    pub peer_id:            String,   // libp2p peer id of the Communerd
+    pub multiaddr:          String,   // optional; libp2p may resolve from peer_id
+    pub json_rpc:           String,   // Noise TCP endpoint (libp2p can't resolve)
     pub chronon_ns:         u64,
-    pub registered_at_ns:   u64,
+    pub created_at_ns:      u64,      // family creation time; checked > 0
 
-    // ── Family manifest (k-way signed) ──
-    /// TBIDs (hex) of Calendar time beings in this family.
-    pub calendar_tbids:     Vec<String>,
-    /// TBIDs (hex) of Chronomatter time beings in this family.
-    pub chronomatter_tbids: Vec<String>,
-    /// Monotonic record version. Increment on any membership change.
-    pub version:            u64,
+    // ── Membership ──
+    pub member_tbids:       Vec<String>,  // canonical ordered list; non-empty, unique
+    pub calendar_tbids:     Vec<String>,  // subset of member_tbids
+    pub chronomatter_tbids: Vec<String>,  // subset of member_tbids
+    pub version:            u64,          // bumped on membership change
 
-    // ── Cross-signing + temporal anchor ──
-    /// One attestation per family member (Communerd + Calendars + Chronomatters).
-    pub attestations:       Vec<FamilyMemberAttestation>,
-    /// Foretis stamping the canonical manifest bytes; ties it to a chronon.
+    // ── k×k cross-signing matrix ──
+    /// matrix[i][j] = member_tbids[i] dual-key signs member_tbids[j] (49,920 B each).
+    /// Strictly k×k; verified entry-by-entry at construction.
+    pub matrix:             Vec<Vec<Vec<u8>>>,
+
+    // ── Temporal anchor ──
+    /// Foretis stamping postcard(manifest); itself a fully-signed Foretis record.
     pub foretis:            Foretis,
 }
 ```
+
+**Verify at construction (Rust convention; defensive).** `FamilyRecord` has **no
+public field constructor** — it is built only via a fallible verifying
+constructor that enforces every invariant above and returns
+`Result<FamilyRecord, FamilyError>`. Once a `FamilyRecord` value exists, it is
+structurally sound and its matrix is cryptographically valid; downstream code
+never re-checks. This is "parse, don't validate" — the type *is* the proof. The
+verifying constructor is the gate that yields `CleanFullyAuthenticated<FamilyRecord>`
+(§21) once the Communerd transport envelope is also verified.
+
+The constructor must be **defensively coded**: reject (never panic on) malformed
+input — mismatched matrix dimensions, out-of-range indices, wrong signature
+lengths, duplicate/empty/oversized member lists, non-member TBIDs in the
+calendar/chronomatter subsets — each a distinct `FamilyError` variant. Bound the
+member count (a hostile record could claim a huge `k` to force k² SLH-DSA
+verifications as a DoS); enforce a `MAX_FAMILY_MEMBERS` cap before verifying any
+signature.
 
 **Canonical encoding** covers all fields except `attestations` and `foretis`,
 in fixed declaration order with `calendar_tbids`/`chronomatter_tbids` sorted,
@@ -1467,26 +1488,27 @@ length-prefixed strings. Any change is wire-breaking.
 
 **Verification levels:**
 
-A `FamilyRecord` is **always required to reach full k-way verification before it
+A `FamilyRecord` is **always required to reach full matrix verification before it
 is used or cached** — it is the root of family trust, so there is no
-"act on the envelope alone" shortcut (see §19.10). Each member's k-way
-attestation is a **full dual-key signature** (Ed25519 ‖ SLH-DSA), so full k-way
-verification is genuinely expensive (k SLH-DSA verifications). This cost is
-acceptable because FamilyRecords are **rare** — produced only on family
-formation or membership change — and never on the request hot path.
+"act on the envelope alone" shortcut (see §19.10). Each matrix entry is a **full
+dual-key signature** (Ed25519 ‖ SLH-DSA), and the matrix is **k×k**, so full
+verification costs **k² SLH-DSA verifications**. This cost is acceptable because
+FamilyRecords are **rare** — produced only on family formation or membership
+change — and never on the request hot path. (A member count cap, `MAX_FAMILY_MEMBERS`,
+bounds k² and prevents a hostile oversized record from forcing a verification-DoS.)
 
 **Lifecycle — sign once, cache for the time being's lifetime.** A FamilyRecord is
 signed/stamped once at family formation and then **cached for essentially the
 entire life of the time being**; it is re-signed only when membership changes
-(a member joins or leaves, bumping `version`). The expensive dual-key k-way
-signing therefore amortizes to near-zero over the time being's lifetime — both
-the producing family (signs once) and verifying peers (verify once, then cache
-the resulting `CleanFullyAuthenticated<FamilyRecord>`) pay the slow-key cost a
-single time per record version.
+(a member joins or leaves, bumping `version`). The expensive k² dual-key signing
+therefore amortizes to near-zero over the time being's lifetime — both the
+producing family (signs once) and verifying peers (verify once, then cache the
+resulting `CleanFullyAuthenticated<FamilyRecord>`) pay the slow-key cost a single
+time per record version.
 
 | Level | What is checked | When |
 |-------|-----------------|------|
-| Full k-way (mandatory) | All member **dual-key** signatures (Ed25519 ‖ SLH-DSA) | Before any use, both sender and receiver |
+| Full matrix (mandatory) | All k² entries: `matrix[i][j]` = dual-key sig by member i over member j's TBID | Before any use, both sender and receiver |
 | Temporal | Foretis vs Chronomatter ChrononRecord | When anchoring required |
 
 ### 19.5 Attestation Provider Record: `/attest/{TBID}`
@@ -1753,20 +1775,20 @@ acting on a merely envelope-authenticated FamilyRecord.
 | `CleanFullyAuthenticated<FamilyRecord>` | **required** | Communerd's full dual-key signature over the record **and** all k-way member dual-key attestations (Ed25519 ‖ SLH-DSA) |
 | (policy) temporal | escalation | Foretis vs Chronomatter ChrononRecord |
 
-- **Sender side:** a family produces a `FamilyRecord` only once it is fully
-  k-way signed; it holds and serves it as `CleanFullyAuthenticated<FamilyRecord>`.
-  A half-built (not yet fully attested) record is never emitted.
-- **Receiver side:** an `Unprocessed<FamilyRecord>` must reach
-  `CleanFullyAuthenticated<FamilyRecord>` (all k-way attestations verified)
-  before it is cached or used to start a Communerdette.
+- **Sender side:** a family produces a `FamilyRecord` only once the full k×k
+  matrix is complete; it holds and serves it as `CleanFullyAuthenticated<FamilyRecord>`.
+  A half-built (incomplete matrix) record is never emitted.
+- **Receiver side:** an `UnverifiedSignatureEnvelope<FamilyRecord>` must reach
+  `CleanFullyAuthenticated<FamilyRecord>` (entire matrix verified, via the
+  verifying constructor) before it is cached or used to start a Communerdette.
 
-The k-way attestations are **full dual-key signatures** (Ed25519 ‖ SLH-DSA each),
-so reaching `CleanFullyAuthenticated<FamilyRecord>` is **expensive** (k SLH-DSA
-verifications). This is the deliberate cost of establishing the root of family
-trust, and is acceptable because FamilyRecords are rare (formation / membership
-change) and off the request hot path. This is the same `CleanFullyAuthenticated`
-tier introduced for channel-binding dual-key proof — here it denotes full k-way
-dual-key proof rather than a single peer's dual-key proof.
+The matrix entries are **full dual-key signatures** (Ed25519 ‖ SLH-DSA each), and
+the matrix is k×k, so reaching `CleanFullyAuthenticated<FamilyRecord>` is
+**expensive** (k² SLH-DSA verifications, bounded by `MAX_FAMILY_MEMBERS`). This is
+the deliberate cost of establishing the root of family trust, acceptable because
+FamilyRecords are rare and off the hot path. This is the same
+`CleanFullyAuthenticated` tier introduced for channel-binding dual-key proof —
+here it denotes full matrix proof (plus the Communerd transport envelope).
 
 **Consolidated signing review (all record/operation types):**
 
@@ -1884,13 +1906,6 @@ payload, because signatures live only in the wrapper.
 - each subsequent signer signs the payload **and** all signatures already present.
 - the **last** entry — always the **Communerd envelope** — signs over everything.
 
-**Signing rule.** `signatures[i].sig` is computed over
-`postcard(payload) ‖ postcard(&signatures[0..i])`:
-
-- `signatures[0]` signs `postcard(payload)`.
-- each subsequent signer signs the payload **and** all signatures already present.
-- the **last** entry — always the **Communerd envelope** — signs over everything.
-
 **Verification.** To check entry *i*, recompute
 `postcard(payload) ‖ postcard(&signatures[0..i])` and verify `signatures[i].sig`.
 
@@ -1906,35 +1921,31 @@ payload, because signatures live only in the wrapper.
 - **No silent downgrade.** Stripping the envelope leaves a record with no final
   Communerd entry, which fails the required envelope check.
 - **"Communerd signs twice" is natural** (§19.10): for a FamilyRecord, Communerd
-  appears once as a member entry (mid-list) and once as the final envelope entry
-  — two entries, two roles, two prefixes.
+  signs once **inside the payload** (its row of the k×k matrix — endorsing each
+  member's TBID) and once as the **envelope** entry in this list (transport).
+  Two signatures, different bytes, different purposes.
 
 ### 21.3 Composition Per Record
 
 One container; the difference between records is just the `signatures` list:
 
-| Record | `signatures` list (in order) |
-|--------|------------------------------|
-| Foretis (stamp) | `[Chronomatter(fast), CommunerdEnvelope(fast)]` |
-| `/verify` result | `[Chronomatter(fast), CommunerdEnvelope(fast)]` |
-| ChrononRecord block (`get_tick`) | `[Calendar(fast), CommunerdEnvelope(fast)]` |
-| ProbityReport (FB/GNF) | `[Calendar(fast), CommunerdEnvelope(fast)]` |
-| FamilyRecord | `[member₁(dual), …, memberₖ(dual), CommunerdEnvelope(dual)]` |
+| Record | `signatures` list (in order) | Inner attestation |
+|--------|------------------------------|-------------------|
+| Foretis (stamp) | `[Chronomatter(fast), CommunerdEnvelope(fast)]` | — |
+| `/verify` result | `[Chronomatter(fast), CommunerdEnvelope(fast)]` | — |
+| ChrononRecord block (`get_tick`) | `[Calendar(fast), CommunerdEnvelope(fast)]` | — |
+| ProbityReport (FB/GNF) | `[Calendar(fast), CommunerdEnvelope(fast)]` | — |
+| FamilyRecord | `[CommunerdEnvelope(dual)]` | **k×k matrix in the payload** |
 
-For `FamilyRecord` the payload is the signature-free `FamilyManifest`
-(communerd_tbid, peer_id, json_rpc, calendar_tbids, chronomatter_tbids, version,
-…). The members (Calendars, Chronomatters, and Communerd-as-member) sign **in
-order**, each attesting to the preceding attestations — a **chain of consent**
-rather than parallel independent attestation. Order-dependence is acceptable for
-the rare family-formation event and is arguably stronger. The Foretis temporal
-anchor is a sibling field over `postcard(manifest)` — itself a fully-signed
-Foretis envelope (a payload carrying `[Chronomatter, CommunerdEnvelope]`
-signature entries).
-
-(@human — the ordered-list rule replaces the earlier `MultiSigned<P>` /
-`Signed<Signed<P>>` sketch. k-way is now "several leading entries before the
-envelope," signed in order. If parallel order-independent k-way is ever required,
-it would need a separate flag; not planned.)
+For most records the `signatures` list carries both the inner application
+signature and the Communerd envelope. **FamilyRecord is the exception:** its
+familial attestation is **not** in the envelope `signatures` list — it is the
+**k×k cross-signing matrix inside the payload** (§19.4), verified at construction.
+The wrapper's `signatures` list for a FamilyRecord therefore holds only the
+single Communerd transport envelope entry. The two are deliberately distinct
+(§19.10): the matrix is durable family content (member-to-member endorsement);
+the envelope is per-hop transport. The Foretis anchor is likewise a payload field
+(itself a fully-signed Foretis carrying `[Chronomatter, CommunerdEnvelope]`).
 
 ### 21.4 The Unified Verification State Machine
 
