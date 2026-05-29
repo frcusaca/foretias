@@ -1176,6 +1176,54 @@ No CancellationToken changes to `TimeFamilyServer` are needed.
 - [ ] Migrate `PeerRegistrationRecord`/`ProbityReport`/`Foretis` canonical
       encoders to `postcard`; handle the `Foretis` wire-break with a version bump.
 - [ ] Snapshot/trust-boundary tests updated for the renamed wrapper + signatures.
+- [ ] The CHECK items above are additionally backstopped by the **StrawmanSuite**
+      gate lint (Phase 17, §9 of `TRUST_BOUNDARY_SEMANTIC_ANALYSIS_SPEC.md`):
+      every gate fn body must reference the field, the signatures, and a verify
+      primitive. Run StrawmanSuite green before merging Phase 16.
+
+---
+
+## Phase 17 — Trust-Boundary Check Suites (StrawmanSuite + TinmanSuite)
+
+**Spec reference:** `TRUST_BOUNDARY_SEMANTIC_ANALYSIS_SPEC.md`.
+**As of 2026-05-29 rustdoc JSON is the best available type-resolved mechanism.**
+
+### 17.1 StrawmanSuite (AST / `syn`) — extends the existing snapshot test
+
+- [ ] Rename existing functions per spec §8: `collect_all_type_usages` →
+      `collect_ast_usages`, `verify_trust_boundary_invariants` →
+      `verify_ast_invariants`, `format_usage_table` → `format_ast_table`.
+- [ ] Rename the snapshot section header to `=== StrawmanSuite (AST / syn) ===`.
+- [ ] Implement `check_gate_bodies()` (§9): for every gate fn
+      (`DontUse<_>`/`UnverifiedSignatureEnvelope<_>` param → `Clean*Authenticated<_>`
+      return), require the body to reference **all three**:
+      1. `always_require_full_signature`,
+      2. signature data (`signatures` / `matrix`),
+      3. a verify primitive in `{verify, verify_with, tbid_verify}`.
+- [ ] Maintain `VERIFY_PRIMITIVES` alongside the crypto verify surface; adding a
+      verify entry point requires updating this set (reviewed coupling).
+- [ ] Honor the `// gate-strawman-exempt: <reason>` opt-out marker; an exemption
+      without a reason is itself a violation.
+- [ ] Wire `check_gate_bodies()` into `test_trust_boundary_snapshot`; any
+      violation fails the test.
+
+### 17.2 TinmanSuite (rustdoc JSON) — new, type-resolved layer
+
+- [ ] Add dev-dependency `rustdoc-types` (pinned); assert `format_version`.
+- [ ] `invoke_rustdoc_json()`, `extract_fn_signatures()`, `resolve_type()`,
+      `collect_semantic_usages()` per spec §6.
+- [ ] `verify_semantic_invariants()`: same structural rules over type-resolved
+      usages; **plus** flag any `Resolved` (non-literal, alias/newtype) wrapper
+      occurrence in any non-test file as a violation (rendered `Resolved(ERROR!)`).
+- [ ] Snapshot gains `=== TinmanSuite (rustdoc JSON) ===` and its cross-tab
+      section; `UPDATE_SNAPSHOT=1` regenerates all sections.
+- [ ] Document the as-of-date limitation note (rustdoc JSON schema is versioned;
+      fail loudly on version mismatch).
+
+### 17.3 Organisation
+
+- [ ] StrawmanSuite and TinmanSuite functions do not cross-call; only the
+      top-level `test_trust_boundary_snapshot` invokes both.
 
 ---
 
