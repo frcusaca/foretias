@@ -1467,11 +1467,17 @@ length-prefixed strings. Any change is wire-breaking.
 
 **Verification levels:**
 
+A `FamilyRecord` is **always required to reach full k-way verification before it
+is used or cached** — it is the root of family trust, so there is no
+"act on the envelope alone" shortcut (see §19.10). Each member's k-way
+attestation is a **full dual-key signature** (Ed25519 ‖ SLH-DSA), so full k-way
+verification is genuinely expensive (k SLH-DSA verifications). This cost is
+acceptable because FamilyRecords are **rare** — produced only on family
+formation or membership change — and never on the request hot path.
+
 | Level | What is checked | When |
 |-------|-----------------|------|
-| Fast | Communerd Ed25519 attestation | On FamilyRecord receipt |
-| Full | All member Ed25519 attestations | Before `FullyBound` |
-| Slow | All member SLH-DSA slow-key sigs | Policy-gated |
+| Full k-way (mandatory) | All member **dual-key** signatures (Ed25519 ‖ SLH-DSA) | Before any use, both sender and receiver |
 | Temporal | Foretis vs Chronomatter ChrononRecord | When anchoring required |
 
 ### 19.5 Attestation Provider Record: `/attest/{TBID}`
@@ -1545,7 +1551,8 @@ Two distinct, complementary capabilities:
   fetches the ChrononRecord and checks the signature itself. Useful when the
   verifier wants the underlying evidence in hand.
 - **Request signed `/verify`** (cross-witness): each queried family runs its own
-  verification and returns a result signed with its Calendar TBID. The verifier
+  verification and returns a result signed by its **Chronomatter fast key**
+  (inner) inside its **Communerd envelope** (outer) — see §19.9. The verifier
   collects several such signed results. This produces a bundle of independent
   attestations — each family is on record (signed) as having verified the
   Foretis. Useful when the verifier wants corroboration from multiple parties
@@ -1564,11 +1571,13 @@ itself a durable, forwardable proof.
 **Implementation note — `/verify` response must gain a signature.** The current
 `/verify` (cross_node) response is `{ "valid": bool, "method": "cross_node" }` —
 **unsigned**. To support cross-witness, the response must carry the verifying
-Calendar's TBID and a signature over `(foretis_id ‖ valid ‖ verifier_tbid)`, e.g.:
+**Chronomatter's TBID** and a Chronomatter-fast-key signature over
+`(foretis_id ‖ valid ‖ chronomatter_tbid)`, then be wrapped in the standard
+Communerd envelope (§19.9) on transmit:
 
 ```json
 { "valid": true, "method": "cross_node",
-  "verifier_tbid": "0x…", "signature": "…" }
+  "chronomatter_tbid": "0x…", "signature": "…" }
 ```
 
 This is a wire change to the verify handler, scheduled with the cross-witness
@@ -1624,6 +1633,151 @@ calendar files on disk and verify TBIDs and chrononchain signatures directly,
 with no running time being and no family contact. This is a legitimate audit
 capability and is explicitly *not* part of the in-system reachability model. It
 neither requires nor consults the DHT, the Family Cache, or any Communerdette.
+
+### 19.9 Two-Layer Outbound Signing: Communerd Envelope over Time-Being Content
+
+Every message a family transmits carries **two signature layers**:
+
+**1. Inner — application authority.** The time being that performs the operation
+signs the content with its own fast signing key. The signer depends on which
+time being is the **active agent**:
+
+| Operation | Inner signer | Rationale |
+|-----------|--------------|-----------|
+| `/stamp` (Foretis) | **Chronomatter** fast key | Chronomatter produces the stamp |
+| `/verify` (result) | **Chronomatter** fast key | Chronomatter performs the verification (reads chain from its own Calendar) |
+| `get_tick` / `get_calendar_slice` (ChrononRecord block) | **Calendar** key | A chrononchain block leaving the family; Calendar is its replication authority (§19.1) |
+| chrononchain block replication | **Calendar** key | Calendar owns the replicated chain (§19.1) |
+| FB / GNF | **Calendar** key | Relationship/replication commitment (§17, §19.7) |
+
+**The principle — active agent signs.** Chronomatter is the active agent for
+`/stamp` and `/verify`. To verify a Foretis, Chronomatter retrieves the
+chrononchain data it needs **from its own Calendar**. That intra-family handoff
+is **unsigned**: Calendar does not sign data it gives to its own Chronomatter,
+because the k-way `FamilyRecord` already establishes mutual trust within the
+family. Chronomatter therefore signs the verify result on its own authority.
+
+Calendar signs only when chronon data or a relationship statement **crosses the
+family boundary**: a ChrononRecord block leaving via `get_tick`, replication to
+another family, or FB/GNF. Note the contrast — `get_tick` returns a *block*
+(Calendar-signed, it is the chain authority) while `/verify` returns a signed
+*yes/no result* (Chronomatter-signed, it is the verifying agent). Different
+operations, different signers, no conflict.
+
+This also resolves the mirror case: when a mirror family verifies a Foretis
+stamped by another family's Chronomatter, the mirror's **own** Chronomatter
+performs the check by reading the replica held by the mirror's **own** Calendar
+(intra-family, unsigned), and signs the result. The result is trusted because
+the mirror's `FamilyRecord` establishes that Chronomatter as a legitimate family
+member and the Communerd envelope authenticates the family.
+
+**Why this factoring (concurrency).** Assigning `/stamp` and `/verify` to
+Chronomatter is primarily an anticipation of **high concurrency** on those two
+operations — they are the request hot path and must scale independently.
+Chronomatter is the component built to handle that throughput. Calendar is
+responsible for the other concerns (durable chrononchain storage, replication,
+FB/GNF relationships, serving chronon blocks), which have different concurrency
+and durability profiles. Splitting the signing authority along the same line as
+the concurrency boundary keeps each component's hot path self-contained.
+
+**2. Outer — family transport envelope.** Before transmitting, **Communerd
+signs the whole record** — the entire payload including the inner time-being
+signature — with its own fast TBID key. This is the family envelope: "this
+message left this family over this channel."
+
+```
+/stamp outbound:
+  Foretis content
+    └─ signed by Chronomatter fast key        ← inner (durable application proof)
+  wrapped in Communerd-signed envelope         ← outer (family transport auth)
+```
+
+**Receiver order:** check the Communerd envelope first (fast transport auth, on
+every message), then the inner time-being signature (application authority). The
+inner signature is the durable proof that survives beyond the transport hop; the
+Communerd envelope authenticates the hop and the family origin.
+
+(@human — `/verify` results are signed by Chronomatter, not Calendar: Chronomatter
+is the active agent that performs verification, reading chain data from its own
+Calendar intra-family without a signature. §19.5 reflects this.)
+
+### 19.10 Records Through the Trust Boundary Pipeline
+
+All inbound records flow through the Take 3 wrappers
+(`Unprocessed<R>` → `CleanAuthenticated<R>` → optionally
+`CleanFullyAuthenticated<R>` → `Externalized<R>` outbound). This section maps
+the family-model signatures onto those wrappers and states one invariant.
+
+**Invariant — Communerd signs last, is verified first.** When a family produces
+an `Externalized<R>` for transmission, the **Communerd envelope is the outermost
+and final signature applied** (§19.9). On receipt, the Communerd envelope is the
+**first** signature checked. This ordering is what lets the fast gate
+(`Unprocessed<R>` → `CleanAuthenticated<R>`) be a single Ed25519 check before any
+deeper, more expensive verification.
+
+**The two clean wrappers encode Communerd's signing depth.** The distinction
+between `CleanAuthenticated<R>` and `CleanFullyAuthenticated<R>` is, at the
+Communerd layer, exactly the difference between Communerd's fast and full
+signature over the record:
+
+| Wrapper | Communerd signature over the record | Plus (record-specific) |
+|---------|-------------------------------------|------------------------|
+| `CleanAuthenticated<R>` | **fast** Ed25519 envelope | inner time-being fast sig |
+| `CleanFullyAuthenticated<R>` | **full dual-key** (Ed25519 ‖ SLH-DSA) over the full record | inner full proofs (e.g. k-way for FamilyRecord) |
+
+So `CleanFullyAuthenticated<R>` always implies **Communerd has fully (dual-key)
+signed the complete record** — not merely the fast envelope. For records that
+also carry inner multi-party proofs (FamilyRecord's k-way attestations), those
+full inner proofs are verified as well. "Fully" therefore means *Communerd's
+full signature over the full record*, and (where applicable) full inner proofs.
+
+**FamilyRecord is always `CleanFullyAuthenticated` — both sender and receiver.**
+Unlike stamp/verify/tick (where a single-Ed25519 `CleanAuthenticated` fast gate
+suffices for the hot path), a `FamilyRecord` is the **root of family trust** and
+must reach **full k-way verification before it is used or cached**. There is no
+acting on a merely envelope-authenticated FamilyRecord.
+
+| Wrapper | Applies to FamilyRecord? | What has been verified |
+|---------|--------------------------|------------------------|
+| `Unprocessed<FamilyRecord>` | transient only | nothing — parsed from the connection |
+| `CleanAuthenticated<FamilyRecord>` | **not used** | (skipped — no envelope-only trust for family records) |
+| `CleanFullyAuthenticated<FamilyRecord>` | **required** | Communerd's full dual-key signature over the record **and** all k-way member dual-key attestations (Ed25519 ‖ SLH-DSA) |
+| (policy) temporal | escalation | Foretis vs Chronomatter ChrononRecord |
+
+- **Sender side:** a family produces a `FamilyRecord` only once it is fully
+  k-way signed; it holds and serves it as `CleanFullyAuthenticated<FamilyRecord>`.
+  A half-built (not yet fully attested) record is never emitted.
+- **Receiver side:** an `Unprocessed<FamilyRecord>` must reach
+  `CleanFullyAuthenticated<FamilyRecord>` (all k-way attestations verified)
+  before it is cached or used to start a Communerdette.
+
+The k-way attestations are **full dual-key signatures** (Ed25519 ‖ SLH-DSA each),
+so reaching `CleanFullyAuthenticated<FamilyRecord>` is **expensive** (k SLH-DSA
+verifications). This is the deliberate cost of establishing the root of family
+trust, and is acceptable because FamilyRecords are rare (formation / membership
+change) and off the request hot path. This is the same `CleanFullyAuthenticated`
+tier introduced for channel-binding dual-key proof — here it denotes full k-way
+dual-key proof rather than a single peer's dual-key proof.
+
+**Consolidated signing review (all record/operation types):**
+
+| Record / op | Inner signer(s) | Outer envelope | Fast gate (→ CleanAuthenticated) | Deeper (→ CleanFullyAuthenticated / policy) |
+|-------------|-----------------|----------------|----------------------------------|---------------------------------------------|
+| `FamilyRecord` | k-way: all members | Communerd (last) | Communerd envelope | all member attestations; slow-key; Foretis |
+| `/stamp` Foretis | Chronomatter | Communerd (last) | Communerd envelope | Chronomatter sig vs ChrononRecord |
+| `/verify` result | Chronomatter | Communerd (last) | Communerd envelope | Chronomatter sig |
+| `get_tick` / slice | Calendar | Communerd (last) | Communerd envelope | Calendar attestation in family `calendar_tbids` |
+| FB / GNF (ProbityReport) | Calendar | Communerd (last) | Communerd envelope | reporter ∈ sender family `calendar_tbids` |
+
+> **Open / to confirm.** FamilyRecord carries the Communerd's signature in two
+> places: (a) as a **member attestation** inside `attestations[]` (Communerd
+> consents to the manifest), and (b) as the **transport envelope** wrapping the
+> message that delivers the record. These are distinct signatures over distinct
+> bytes. The fast gate (`→ CleanAuthenticated<FamilyRecord>`) checks the
+> **envelope** (b). Whether (a) and (b) can ever be collapsed, or must always
+> be separate, needs a decision before implementation. Recommendation: keep them
+> separate — (a) is durable family proof that travels with the record; (b) is
+> per-hop transport auth that does not.
 
 ---
 
