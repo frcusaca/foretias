@@ -1958,7 +1958,47 @@ bytes on wire → parse → UnverifiedSignatureEnvelope<R>   (alias DontUse<R>)
 The `DontUse<R>` alias is deliberate: any code holding one is holding unverified
 bytes and must move it through a gate before reading `R` for trust purposes.
 
-### 21.5 Migration Notes
+### 21.5 Externalization and the Signature Builder
+
+Producing an `Externalized<R>` is **not** an unwrap of an inbound wrapper. Inbound
+signatures authenticated the *inbound* hop and the *inbound* signers; an outbound
+record needs **its own** signatures. Externalization therefore:
+
+1. copies the signature-free payload fields of `R` into a fresh outbound payload,
+2. drops the inbound signature list, and
+3. generates a **new** ordered signature list for this transmission (inner agent
+   first, Communerd envelope last).
+
+This is expressed with a **builder**, so the ordered signing rule (§21.2) is
+enforced step by step and the half-built record is never a usable `Externalized`:
+
+```rust
+let out: Externalized<Foretis> =
+    Externalized::<Foretis>::builder_from(clean_auth_foretis) // or from a raw R
+        .add_signature(SignerRole::Chronomatter, &chronomatter_key)? // entry 0
+        .add_signature(SignerRole::CommunerdEnvelope, &communerd_key)? // last
+        .build()?;
+```
+
+Builder rules:
+
+- `builder_from(src)` accepts a raw signature-free `R` **or** a
+  `CleanAuthenticated<R>` / `CleanFullyAuthenticated<R>` (it copies only the
+  payload fields; inbound signatures are not carried into the outbound record).
+- each `add_signature(role, key)` appends an entry signing
+  `postcard(payload) ‖ postcard(&signatures_so_far)` — the ordered rule is
+  enforced by construction (you cannot sign out of order).
+- `build()` validates that the **last** entry is a `CommunerdEnvelope` and
+  returns `Externalized<R>`; it errors otherwise. There is no way to obtain an
+  `Externalized<R>` without a terminal Communerd envelope.
+
+(@human — re-transmission of durable third-party proof, e.g. a mirror serving a
+ChrononRecord, is a *different* path: there the original inner attestation may be
+**retained** as durable evidence while a fresh Communerd envelope is added. If
+that path is needed, the builder gains a `carry_signature(entry)` step. Not in
+scope until mirroring; noted so the builder API leaves room.)
+
+### 21.6 Migration Notes
 
 - **Rename `Unprocessed<R>` → `UnverifiedSignatureEnvelope<R>`** (alias
   `DontUse<R>`) across `clean_auth.rs` and every call site. This is a large but
