@@ -285,6 +285,7 @@ trust_boundary_type_usage.rs
 ├── WrapperTypeVisitor (struct + Visit impl)   [existing]
 ├── collect_ast_usages()                       [existing, renamed from collect_all_type_usages]
 ├── verify_ast_invariants()                    [existing, renamed from verify_trust_boundary_invariants]
+├── check_gate_consults_full_signature()       [new — §9 strawman gate check]
 ├── format_ast_table()                         [existing, renamed from format_usage_table]
 │
 ├── // ── Semantic layer ────────────────────────────────────
@@ -310,7 +311,57 @@ then merges for snapshot output.
 
 ---
 
-## 9. Dependencies to Add (core-engine Cargo.toml, dev-dependencies)
+## 9. Gate Check — Full-Signature Field Must Be Consulted
+
+A focused AST-layer lint (a **strawman** check — syntactic, not a proof, but a
+check nonetheless): any **gate function** must at least *mention* the
+full-signature requirement field.
+
+**Definition of a gate function:** a `fn` whose signature has
+
+- at least one **parameter** whose type is `UnverifiedSignatureEnvelope<_>` or
+  its alias `DontUse<_>`, **and**
+- a **return type** of `CleanAuthenticated<_>` or `CleanFullyAuthenticated<_>`
+  (directly, or wrapped in `Result<…>` / `Option<…>`).
+
+**Rule:** the body of every gate function must contain a call to
+`always_require_full_signature` (the `RecordBase` method, §21.5 of the
+Communerdette spec). If a gate converts an unverified envelope into a clean
+state without ever consulting the field, the lint **fails**.
+
+**Why strawman:** the check confirms the field is *referenced*, not that it is
+*correctly enforced* — a body could call it and ignore the result. It cannot
+catch logical misuse. Its value is catching the common, dangerous omission:
+forgetting the field exists and silently producing `CleanAuthenticated<R>` for a
+record that demanded full verification. Correct enforcement is additionally
+covered by the negative unit tests in Plan Phases 13/15/16.
+
+**Implementation (AST layer, `syn`):**
+
+```
+fn check_gate_consults_full_signature(ast) -> Vec<String>:
+  for each ItemFn / ImplItemFn:
+    let takes_unverified = sig.inputs.any(|p| type_name(p) in
+        {"UnverifiedSignatureEnvelope", "DontUse"})
+    let returns_clean = return_type_mentions(sig.output,
+        {"CleanAuthenticated", "CleanFullyAuthenticated"})  // unwrap Result/Option
+    if takes_unverified && returns_clean:
+        let body_calls_it = any ExprMethodCall / ExprCall in fn body
+            whose method/path ident == "always_require_full_signature"
+        if !body_calls_it:
+            violations.push("gate {fn} converts DontUse→Clean* without consulting
+                             always_require_full_signature()")
+```
+
+- Lives in the **AST layer** alongside `verify_ast_invariants` (it needs the
+  function body, which rustdoc JSON does not expose — only `syn` sees bodies).
+- Add as its own function `check_gate_consults_full_signature(&ast)` and call it
+  from `test_trust_boundary_snapshot`; a violation fails the test.
+- Allow an explicit opt-out attribute/comment marker (e.g.
+  `// gate-no-full-sig-check: <reason>`) for the rare legitimate gate that
+  provably needs no such check, so the escape hatch is visible and auditable.
+
+## 10. Dependencies to Add (core-engine Cargo.toml, dev-dependencies)
 
 ```toml
 rustdoc-types = "0.32"   # mirrors rustdoc JSON schema; pin to a specific version
