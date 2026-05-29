@@ -1980,7 +1980,48 @@ bytes on wire → parse → UnverifiedSignatureEnvelope<R>   (alias DontUse<R>)
 The `DontUse<R>` alias is deliberate: any code holding one is holding unverified
 bytes and must move it through a gate before reading `R` for trust purposes.
 
-### 21.5 Externalization and the Signature Builder
+### 21.5 `RecordBase` — Per-Record Full-Signature Requirement
+
+All signature-free payload types implement a common base trait. Its first method
+declares whether the record must **always** reach `CleanFullyAuthenticated`
+(full dual-key envelope + any required inner full proofs) before use — i.e. the
+fast `CleanAuthenticated` level is never acceptable for it.
+
+```rust
+pub trait RecordBase {
+    /// Must this record reach CleanFullyAuthenticated before it may be used?
+    /// When true, the gate refuses to stop at CleanAuthenticated — both
+    /// production (sign fully) and verification (verify fully) are forced.
+    /// Default: false (fast Ed25519 signatures suffice).
+    fn always_require_full_signature(&self) -> bool { false }
+}
+```
+
+`&self` (not a type-level const) so a record whose requirement depends on its
+*content* can decide per-instance — e.g. a `ProbityReport` that is a Bruderschaft
+(FB) or GNF report returns `true`, while an ordinary probity report returns
+`false`.
+
+| Record | `always_require_full_signature()` |
+|--------|-----------------------------------|
+| `FamilyRecord` | `true` (root of family trust) |
+| Bruderschaft (FB) / GNF report | `true` |
+| Foretis, ChrononRecord, `/verify` result, ordinary ProbityReport | `false` (default) |
+
+**Gate enforcement (defensive).** When advancing `DontUse<R>` toward a clean
+state, the gate calls `record.always_require_full_signature()`:
+
+- if `true`, the gate **must** produce `CleanFullyAuthenticated<R>` — it verifies
+  the full dual-key envelope and all required inner full proofs, and **rejects**
+  the record if those full signatures are absent or fail. It will not return a
+  merely `CleanAuthenticated<R>`.
+- if `false`, `CleanAuthenticated<R>` (all signatures verified at fast level) is
+  acceptable; escalation to full remains available by policy.
+
+A record that *claims* `true` but carries only fast signatures is rejected, never
+downgraded silently.
+
+### 21.6 Externalization and the Signature Builder
 
 Producing an `Externalized<R>` is **not** an unwrap of an inbound wrapper. Inbound
 signatures authenticated the *inbound* hop and the *inbound* signers; an outbound
@@ -2020,7 +2061,7 @@ ChrononRecord, is a *different* path: there the original inner attestation may b
 that path is needed, the builder gains a `carry_signature(entry)` step. Not in
 scope until mirroring; noted so the builder API leaves room.)
 
-### 21.6 Migration Notes
+### 21.7 Migration Notes
 
 - **Rename `Unprocessed<R>` → `UnverifiedSignatureEnvelope<R>`** (alias
   `DontUse<R>`) across `clean_auth.rs` and every call site. This is a large but

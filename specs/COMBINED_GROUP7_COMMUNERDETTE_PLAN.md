@@ -1011,10 +1011,14 @@ cargo test --workspace -- --include-ignored
 
 - [ ] In Communerd's gossip event handler (`communerd/p2p/event_loop.rs` or
       equivalent), when a `ProbityReport` arrives on the probity topic:
-      1. Parse as `Unprocessed<ProbityReport>::from_bytes`.
-      2. Call `.verify(crypto)` → `CleanAuthenticated<ProbityReport>`.
-      3. If `attribute == "fb"`: log at DEBUG; ingest into `ProbityStore`.
+      1. Parse as `UnverifiedSignatureEnvelope<ProbityReport>` (`DontUse`).
+      2. Verify → clean state.
+      3. If `attribute == "fb"` / `"gnf"`: log at DEBUG; ingest into `ProbityStore`.
       4. Any error: log at TRACE, drop silently.
+- [ ] **CHECK: a Bruderschaft (FB) / GNF report returns
+      `always_require_full_signature() == true`, and the reception gate REQUIRES
+      `CleanFullyAuthenticated<ProbityReport>` for it — an FB/GNF report that is
+      not fully signed is rejected, never ingested at the fast level.**
 - [ ] Ensure the gossip event handler path does not panic on malformed input.
 
 ### 13.5 Tests
@@ -1115,6 +1119,63 @@ No CancellationToken changes to `TimeFamilyServer` are needed.
         omitted from the default CI run (`cargo test --workspace`)
 - [ ] Update `README.md` (if present) or the project's top-level
       `foretias/README.md` with the same summary and run commands.
+
+---
+
+## Phase 15 — FamilyRecord and Family Cache
+
+**Spec reference:** §19. **Defensive coding throughout** (reject, never panic).
+
+- [ ] Define `FamilyRecord` payload (signature-free) per §19.4: `member_tbids`,
+      `calendar_tbids`, `chronomatter_tbids`, reachability, `created_at_ns`,
+      k×k `matrix`, `foretis`.
+- [ ] Verifying constructor `FamilyRecord::try_new(...) -> Result<_, FamilyError>`
+      enforcing every §19.4 invariant: non-empty + unique + well-formed members;
+      `created_at_ns > 0`; matrix strictly k×k; subsets ⊆ members.
+- [ ] `MAX_FAMILY_MEMBERS` cap enforced **before** any signature verification
+      (bounds k² SLH-DSA — DoS guard).
+- [ ] Verify every `matrix[i][j]` is member i's dual-key signature over member
+      j's TBID; reject on any failure with a distinct error variant.
+- [ ] **CHECK: `FamilyRecord::always_require_full_signature()` returns `true`,
+      and the gate that produces it asserts full verification — never returns a
+      fast-level `CleanAuthenticated<FamilyRecord>`.** (see Phase 16 gate.)
+- [ ] Family Cache in Communerd: `communerd_tbid → CleanFullyAuthenticated<FamilyRecord>`,
+      `member_tbid → communerd_tbid` reverse pointer, `communerd_tbid → peer_id`.
+- [ ] Connection flow (§19.3): `/tbid` lookup → dial → fetch FamilyRecord →
+      verify (full) → cache → start Communerdette.
+- [ ] Test: malformed FamilyRecords (bad matrix dims, wrong sig lengths, dup/empty
+      members, non-member subset entries, oversized k) are each **rejected**, no panic.
+
+---
+
+## Phase 16 — Canonical Encoding, Signature Wrappers, and Gate Enforcement
+
+**Spec reference:** §21. **Defensive coding throughout.**
+
+- [ ] Add the canonical serializer (`postcard` per §21.1) — confirm crate choice.
+- [ ] Rename `Unprocessed<R>` → `UnverifiedSignatureEnvelope<R>` (alias
+      `DontUse<R>`) across `clean_auth.rs` and all call sites.
+- [ ] `RecordBase` trait with `always_require_full_signature(&self) -> bool`
+      (default `false`).
+- [ ] Implement `RecordBase` for every payload type; FamilyRecord and
+      Bruderschaft/GNF return `true`, all others default `false`.
+- [ ] `Signed`-list model on the wrappers: ordered `signatures`, each entry
+      covers `postcard(payload) ‖ postcard(signatures[0..i])`.
+- [ ] **CHECK: the `DontUse<R>` → clean-state gate verifies ALL signatures**
+      (no verify-last-only shortcut), and **rejects** an unexpected signature
+      count (cardinality is exactly two today).
+- [ ] **CHECK: the gate consults `R::always_require_full_signature()` and, when
+      `true`, REFUSES to produce `CleanAuthenticated<R>` — it must reach
+      `CleanFullyAuthenticated<R>` or reject.** This check must exist at the gate
+      and be covered by a test.
+- [ ] **CHECK: a record claiming `always_require_full_signature() == true` but
+      carrying only fast (Ed25519) signatures is REJECTED, never downgraded.**
+      Dedicated negative test.
+- [ ] `Externalized<R>` builder (§21.6): `builder_from().add_signature()...build()`;
+      `build()` rejects unless the last entry is a `CommunerdEnvelope`.
+- [ ] Migrate `PeerRegistrationRecord`/`ProbityReport`/`Foretis` canonical
+      encoders to `postcard`; handle the `Foretis` wire-break with a version bump.
+- [ ] Snapshot/trust-boundary tests updated for the renamed wrapper + signatures.
 
 ---
 
