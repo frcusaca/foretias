@@ -1533,13 +1533,46 @@ There is one `/attest/` key per **Chronomatter TBID**, not per family. A family
 with three Chronomatters publishes three provider keys (and re-publishes the
 three keys for every remote chain it mirrors).
 
-> **Open (cross-witness policy — not yet decided).** With multiple providers
-> available, verification *could* require agreement from K independent providers
-> (e.g. fetch the same tick from 3 mirrors, require identical ChrononRecords)
-> rather than trusting a single provider. This is a security knob that mirroring
-> makes possible but that has not been specified. Default for now: **one
-> provider is sufficient**. K-of-N cross-witness is deferred to a future phase
-> and should be revisited once mirroring is implemented.
+**Cross-witness verification (deferred; design noted).** With multiple providers
+available, a verifier may ask **several capable time families to each perform
+`/verify`** on the same Foretis and return a **signed verification result**. The
+cross-witness value comes from collecting N independent *signed attestations*
+that the Foretis is valid — not from re-downloading and comparing chronon blocks.
+
+Two distinct, complementary capabilities:
+
+- **Retrieve the chronon block** (`get_tick` / calendar slice): the verifier
+  fetches the ChrononRecord and checks the signature itself. Useful when the
+  verifier wants the underlying evidence in hand.
+- **Request signed `/verify`** (cross-witness): each queried family runs its own
+  verification and returns a result signed with its Calendar TBID. The verifier
+  collects several such signed results. This produces a bundle of independent
+  attestations — each family is on record (signed) as having verified the
+  Foretis. Useful when the verifier wants corroboration from multiple parties
+  without holding the chain itself.
+
+`/verify` returning a **signed** result is what makes cross-witness meaningful:
+a collection of signed "I verified this" statements from distinct families is
+itself a durable, forwardable proof.
+
+> Default for now: **one provider, one `/verify`, is sufficient.** K-of-N
+> cross-witness (how many families to ask, how many must agree, how the signed
+> results are bundled) is deferred to a future phase and revisited once
+> mirroring is implemented. The `/verify` response must be signed regardless, so
+> the cross-witness capability is available without a wire change later.
+
+**Implementation note — `/verify` response must gain a signature.** The current
+`/verify` (cross_node) response is `{ "valid": bool, "method": "cross_node" }` —
+**unsigned**. To support cross-witness, the response must carry the verifying
+Calendar's TBID and a signature over `(foretis_id ‖ valid ‖ verifier_tbid)`, e.g.:
+
+```json
+{ "valid": true, "method": "cross_node",
+  "verifier_tbid": "0x…", "signature": "…" }
+```
+
+This is a wire change to the verify handler, scheduled with the cross-witness
+phase. Until then the unsigned shape remains (single-provider trust only).
 
 ### 19.6 Communerdette Line Semantics Under the Family Model
 
