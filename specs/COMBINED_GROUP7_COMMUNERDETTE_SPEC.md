@@ -1778,15 +1778,12 @@ dual-key proof rather than a single peer's dual-key proof.
 | `get_tick` / slice | Calendar | Communerd (last) | Communerd envelope | Calendar attestation in family `calendar_tbids` |
 | FB / GNF (ProbityReport) | Calendar | Communerd (last) | Communerd envelope | reporter ∈ sender family `calendar_tbids` |
 
-> **Open / to confirm.** FamilyRecord carries the Communerd's signature in two
-> places: (a) as a **member attestation** inside `attestations[]` (Communerd
-> consents to the manifest), and (b) as the **transport envelope** wrapping the
-> message that delivers the record. These are distinct signatures over distinct
-> bytes. The fast gate (`→ CleanAuthenticated<FamilyRecord>`) checks the
-> **envelope** (b). Whether (a) and (b) can ever be collapsed, or must always
-> be separate, needs a decision before implementation. Recommendation: keep them
-> separate — (a) is durable family proof that travels with the record; (b) is
-> per-hop transport auth that does not.
+**Communerd signs FamilyRecord twice — by design (decided).** FamilyRecord
+carries the Communerd's signature in two distinct places over distinct bytes:
+(a) as a **member attestation** inside the k-way set (Communerd consents to the
+manifest, as a family member), and (b) as the **transport envelope** wrapping
+the delivery. These are kept separate permanently: (a) is durable family proof
+that travels with the record; (b) is per-hop transport auth that does not.
 
 ---
 
@@ -1803,3 +1800,104 @@ let family = harness.peer(0).server()
     .family_cache_lookup(&remote_communerd_tbid);
 assert!(family.calendar_tbids.contains(&expected_calendar_tbid));
 ```
+
+---
+
+## 21. Canonical Encoding and Signature Wrappers (Phase 16)
+
+This standardizes **how records become bytes for signing** and **how signatures
+attach to payloads**, replacing the current per-record hand-rolled `canonical()`
+functions (which diverge in endianness and framing — see the divergence between
+`PeerRegistrationRecord`, `ProbityReport`, and `Foretis` `sig_input`).
+
+### 21.1 Canonical Serializer
+
+Signing bytes are produced by a **single deterministic binary serializer**, not
+per-record hand-rolled encoders and **not** `serde_json`.
+
+- **Recommended: `postcard`** — deterministic (fields in declaration order, fixed
+  integer encoding, no map-key ambiguity), maintained, `no_std`, compact. One
+  call — `postcard::to_allocvec(&payload)` — replaces every hand-rolled
+  `canonical()`.
+- `serde_cbor` stays where it is (encrypted storage blobs, `encrypted_jsonl.rs`);
+  it is **not** used for signing (unmaintained; CBOR-canonical needs care).
+- `serde_json` is never used for signing bytes.
+
+(@human — crate choice (`postcard` vs `bincode` v2) is the one open decision in
+this section. Both are deterministic; `postcard` is recommended for stability +
+`no_std`. Confirm before implementation.)
+
+A record is signable iff it derives `Serialize` and contains **no** signature
+field (signatures live in the wrappers, §21.2). This makes "exclude the
+signature when signing" **structural** rather than a runtime blanking step that
+can be forgotten.
+
+### 21.2 Signature Wrappers
+
+Signatures attach via wrappers around a signature-free payload:
+
+```rust
+/// A payload signed by one signer.
+pub struct Signed<P> {
+    pub payload:   P,             // signature-free; no `signature` field
+    pub signer:    String,        // signer TBID hex
+    pub algorithm: SigAlgorithm,  // Ed25519 (fast) | DualKey (Ed25519 ‖ SLH-DSA)
+    pub sig:       Vec<u8>,       // over postcard(payload)
+}
+
+/// A payload attested by several signers over the SAME bytes (k-way).
+pub struct MultiSigned<P> {
+    pub payload:      P,                 // signature-free
+    pub attestations: Vec<Attestation>,  // each over postcard(payload)
+}
+pub struct Attestation { pub signer: String, pub algorithm: SigAlgorithm, pub sig: Vec<u8> }
+```
+
+The signed bytes are always `postcard(payload)` — never the wrapper. Verifying
+re-serializes `payload` and checks each `sig`. Because `payload` has no signature
+field, there is nothing to blank.
+
+### 21.3 Composition Per Record
+
+Layering is expressed by nesting wrappers; the outer signer signs over the
+serialized inner wrapper (so the Communerd envelope signs "the full record
+including inner signatures," §19.10).
+
+| Record | Type | Layers |
+|--------|------|--------|
+| Foretis (stamp) | `Signed<Signed<Foretis>>` | inner = Chronomatter fast; outer = Communerd envelope |
+| `/verify` result | `Signed<Signed<VerifyResult>>` | inner = Chronomatter fast; outer = Communerd envelope |
+| ChrononRecord block (`get_tick`) | `Signed<Signed<ChrononRecord>>` | inner = Calendar; outer = Communerd envelope |
+| ProbityReport (FB/GNF) | `Signed<Signed<ProbityReport>>` | inner = Calendar; outer = Communerd envelope |
+| FamilyRecord | `Signed<MultiSigned<FamilyManifest>>` | inner = k-way member dual-key attestations + Foretis anchor; outer = Communerd **dual-key** envelope |
+
+`FamilyManifest` is the signature-free payload (communerd_tbid, peer_id,
+json_rpc, calendar_tbids, chronomatter_tbids, version, …). The Foretis temporal
+anchor is carried alongside the `MultiSigned` (it stamps `postcard(manifest)`).
+
+### 21.4 Relationship to Trust-Boundary Wrappers
+
+`Signed<P>` / `MultiSigned<P>` are the **wire** shape (how sigs attach).
+`Unprocessed` / `CleanAuthenticated` / `CleanFullyAuthenticated` / `Externalized`
+are the **receive-side verification state**. They compose:
+
+```
+bytes on wire  → parse →  Unprocessed<Signed<…>>
+                          │  verify Communerd fast envelope
+                          ▼
+                       CleanAuthenticated<R>            (fast gate)
+                          │  verify full dual-key / k-way inner proofs
+                          ▼
+                       CleanFullyAuthenticated<R>       (full gate)
+```
+
+### 21.5 Migration Notes
+
+- Replace `PeerRegistrationRecord::canonical_payload()`, `ProbityReport::canonical()`,
+  and the `Foretis` `sig_input` concatenation with `postcard(payload)` over
+  signature-free payload structs.
+- **`Foretis` is wire-breaking**: its current `sig_input` uses big-endian and
+  bare concatenation. Moving to `postcard` changes the signed bytes, so it needs
+  a `signature_algorithm`/version bump and a cutover, not a silent swap.
+- Existing dual-key signing (`TbidSecret::sign` / `Chronomatter::sign_tbid_message`)
+  is reused as the `DualKey` algorithm; no new primitive.
