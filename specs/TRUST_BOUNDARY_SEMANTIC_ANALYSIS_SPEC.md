@@ -70,7 +70,22 @@ stabilized `rustc_interface` subset, or a `cargo` plugin API), this spec should 
 
 ---
 
-## 4. Analysis Layers
+## 4. Analysis Layers — StrawmanSuite and TinmanSuite
+
+The two layers have names:
+
+- **StrawmanSuite** — all **AST-based** (`syn`) checks. Syntactic, weak by
+  construction (it reads source text, not resolved types): wrapper-usage scan,
+  trust-boundary invariants, and the gate body strawman (§9). Cheap, no compiler
+  invocation, sees function *bodies*.
+- **TinmanSuite** — all **rustdoc-JSON-based** checks. Type-resolved (aliases
+  expanded, trait impls enumerated): semantic wrapper-usage and semantic
+  invariants. Stronger, but only sees declared *signatures*, not bodies, and
+  requires a `cargo rustdoc` invocation.
+
+(@human — Wizard-of-Oz naming: the Strawman lacks a brain — purely syntactic; the
+Tinman lacks a heart — colder/deeper type machinery. Neither alone is the full
+Wizard; together they cover more.)
 
 The test file is restructured so each concern is in its own function with no cross-calling
 except at the top-level snapshot test entry points.
@@ -255,24 +270,29 @@ New rule exclusive to the semantic layer:
 
 ## 7. Snapshot Integration
 
-The enhanced snapshot file gains a second section below the existing AST usage table:
+The enhanced snapshot file gains a TinmanSuite section below the StrawmanSuite table:
 
 ```
-=== Semantic Analysis (rustdoc JSON) ===
+=== StrawmanSuite (AST / syn) ===
 
 file | function | position | Unprocessed | CleanAuthenticated | Externalized
 ...rows...
 
-=== Semantic Cross-Tabulation ===
+=== TinmanSuite (rustdoc JSON) ===
+
+file | function | position | Unprocessed | CleanAuthenticated | Externalized
+...rows...
+
+=== TinmanSuite Cross-Tabulation ===
 
 crate | wrapper | inner | literal | resolved
 ...rows...
 ```
 
-`UPDATE_SNAPSHOT=1` regenerates both sections. A mismatch in either section fails the test.
+`UPDATE_SNAPSHOT=1` regenerates all sections. A mismatch in any section fails the test.
 
 The existing AST table section header is renamed from `=== Trust Boundary Usage Snapshot ===`
-to `=== AST Analysis (syn) ===` to make the distinction explicit.
+to `=== StrawmanSuite (AST / syn) ===` to make the distinction explicit.
 
 ---
 
@@ -281,14 +301,14 @@ to `=== AST Analysis (syn) ===` to make the distinction explicit.
 ```
 trust_boundary_type_usage.rs
 │
-├── // ── AST layer ─────────────────────────────────────────
+├── // ── StrawmanSuite (AST / syn) ───────────────────────────
 ├── WrapperTypeVisitor (struct + Visit impl)   [existing]
 ├── collect_ast_usages()                       [existing, renamed from collect_all_type_usages]
 ├── verify_ast_invariants()                    [existing, renamed from verify_trust_boundary_invariants]
 ├── check_gate_bodies()                        [new — §9 strawman: field + signatures + verifier]
 ├── format_ast_table()                         [existing, renamed from format_usage_table]
 │
-├── // ── Semantic layer ────────────────────────────────────
+├── // ── TinmanSuite (rustdoc JSON) ──────────────────────────
 ├── invoke_rustdoc_json()                      [new]
 ├── extract_fn_signatures()                    [new]
 ├── resolve_type()                             [new]
@@ -311,9 +331,9 @@ then merges for snapshot output.
 
 ---
 
-## 9. Gate Check — A Gate Must Touch the Field, the Signatures, and the Verifier
+## 9. StrawmanSuite Gate Check — Field, Signatures, and Verifier
 
-A focused AST-layer lint (a **strawman** — syntactic, not a proof, but a check
+A focused **StrawmanSuite** lint (AST/`syn`; syntactic, not a proof, but a check
 nonetheless): a **gate function** must reference all three things a real gate
 necessarily uses. Each is very weak on its own; their *absence* is a definite bug.
 
