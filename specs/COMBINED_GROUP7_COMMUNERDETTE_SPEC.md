@@ -1832,63 +1832,92 @@ field (signatures live in the wrappers, §21.2). This makes "exclude the
 signature when signing" **structural** rather than a runtime blanking step that
 can be forgotten.
 
-### 21.2 Signature Wrappers
+### 21.2 The `Signed<P>` Wrapper — Ordered Signature List
 
-Signatures attach via wrappers around a signature-free payload:
+A single wrapper carries a signature-free payload and an **ordered list** of
+signatures. Each signature covers the payload **plus every signature that
+precedes it** in the list. This is the flattened equivalent of nested
+`Signed<Signed<…>>`: rather than wrapping, each signer appends an entry that
+attests to the accumulated prefix.
 
 ```rust
-/// A payload signed by one signer.
 pub struct Signed<P> {
-    pub payload:   P,             // signature-free; no `signature` field
-    pub signer:    String,        // signer TBID hex
-    pub algorithm: SigAlgorithm,  // Ed25519 (fast) | DualKey (Ed25519 ‖ SLH-DSA)
-    pub sig:       Vec<u8>,       // over postcard(payload)
+    pub payload:    P,                     // signature-free; no signature field
+    pub signatures: Vec<SignatureEntry>,   // ORDERED; entry i covers payload + entries[0..i]
 }
 
-/// A payload attested by several signers over the SAME bytes (k-way).
-pub struct MultiSigned<P> {
-    pub payload:      P,                 // signature-free
-    pub attestations: Vec<Attestation>,  // each over postcard(payload)
+pub struct SignatureEntry {
+    pub role:      SignerRole,    // Chronomatter | Calendar | Member | CommunerdEnvelope
+    pub tbid:      String,        // signer TBID hex
+    pub algorithm: SigAlgorithm,  // Ed25519 (fast) | DualKey (Ed25519 ‖ SLH-DSA)
+    pub sig:       Vec<u8>,
 }
-pub struct Attestation { pub signer: String, pub algorithm: SigAlgorithm, pub sig: Vec<u8> }
 ```
 
-The signed bytes are always `postcard(payload)` — never the wrapper. Verifying
-re-serializes `payload` and checks each `sig`. Because `payload` has no signature
-field, there is nothing to blank.
+**Signing rule.** `signatures[i].sig` is computed over
+`postcard(payload) ‖ postcard(&signatures[0..i])`:
+
+- `signatures[0]` signs `postcard(payload)`.
+- each subsequent signer signs the payload **and** all signatures already present.
+- the **last** entry — always the **Communerd envelope** — signs over everything.
+
+**Verification.** To check entry *i*, recompute
+`postcard(payload) ‖ postcard(&signatures[0..i])` and verify `signatures[i].sig`.
+
+- **Fast gate (→ `CleanAuthenticated`)** = verify **only the last entry** (the
+  Communerd envelope) over payload + all preceding signature bytes (all present
+  in the record). A single Ed25519 check; sufficient to route.
+- **Full gate (→ `CleanFullyAuthenticated`)** = verify **every** entry, and
+  require the last entry to be a full **dual-key** Communerd envelope (§19.10).
+
+**Properties:**
+- **Order is locked.** Each entry covers all preceding entries, so the final
+  envelope fixes the order and content of the whole chain.
+- **No silent downgrade.** Stripping the envelope leaves a record with no final
+  Communerd entry, which fails the required envelope check.
+- **"Communerd signs twice" is natural** (§19.10): for a FamilyRecord, Communerd
+  appears once as a member entry (mid-list) and once as the final envelope entry
+  — two entries, two roles, two prefixes.
 
 ### 21.3 Composition Per Record
 
-Layering is expressed by nesting wrappers; the outer signer signs over the
-serialized inner wrapper (so the Communerd envelope signs "the full record
-including inner signatures," §19.10).
+One container; the difference between records is just the `signatures` list:
 
-| Record | Type | Layers |
-|--------|------|--------|
-| Foretis (stamp) | `Signed<Signed<Foretis>>` | inner = Chronomatter fast; outer = Communerd envelope |
-| `/verify` result | `Signed<Signed<VerifyResult>>` | inner = Chronomatter fast; outer = Communerd envelope |
-| ChrononRecord block (`get_tick`) | `Signed<Signed<ChrononRecord>>` | inner = Calendar; outer = Communerd envelope |
-| ProbityReport (FB/GNF) | `Signed<Signed<ProbityReport>>` | inner = Calendar; outer = Communerd envelope |
-| FamilyRecord | `Signed<MultiSigned<FamilyManifest>>` | inner = k-way member dual-key attestations + Foretis anchor; outer = Communerd **dual-key** envelope |
+| Record | `signatures` list (in order) |
+|--------|------------------------------|
+| Foretis (stamp) | `[Chronomatter(fast), CommunerdEnvelope(fast)]` |
+| `/verify` result | `[Chronomatter(fast), CommunerdEnvelope(fast)]` |
+| ChrononRecord block (`get_tick`) | `[Calendar(fast), CommunerdEnvelope(fast)]` |
+| ProbityReport (FB/GNF) | `[Calendar(fast), CommunerdEnvelope(fast)]` |
+| FamilyRecord | `[member₁(dual), …, memberₖ(dual), CommunerdEnvelope(dual)]` |
 
-`FamilyManifest` is the signature-free payload (communerd_tbid, peer_id,
-json_rpc, calendar_tbids, chronomatter_tbids, version, …). The Foretis temporal
-anchor is carried alongside the `MultiSigned` (it stamps `postcard(manifest)`).
+For `FamilyRecord` the payload is the signature-free `FamilyManifest`
+(communerd_tbid, peer_id, json_rpc, calendar_tbids, chronomatter_tbids, version,
+…). The members (Calendars, Chronomatters, and Communerd-as-member) sign **in
+order**, each attesting to the preceding attestations — a **chain of consent**
+rather than parallel independent attestation. Order-dependence is acceptable for
+the rare family-formation event and is arguably stronger. The Foretis temporal
+anchor is a sibling field over `postcard(manifest)`, itself a `Signed<Foretis>`.
+
+(@human — the ordered-list rule replaces the earlier `MultiSigned<P>` /
+`Signed<Signed<P>>` sketch. k-way is now "several leading entries before the
+envelope," signed in order. If parallel order-independent k-way is ever required,
+it would need a separate flag; not planned.)
 
 ### 21.4 Relationship to Trust-Boundary Wrappers
 
-`Signed<P>` / `MultiSigned<P>` are the **wire** shape (how sigs attach).
-`Unprocessed` / `CleanAuthenticated` / `CleanFullyAuthenticated` / `Externalized`
-are the **receive-side verification state**. They compose:
+`Signed<P>` is the **wire** shape (how signatures attach). `Unprocessed` /
+`CleanAuthenticated` / `CleanFullyAuthenticated` / `Externalized` are the
+**receive-side verification state**. They compose:
 
 ```
-bytes on wire  → parse →  Unprocessed<Signed<…>>
-                          │  verify Communerd fast envelope
-                          ▼
-                       CleanAuthenticated<R>            (fast gate)
-                          │  verify full dual-key / k-way inner proofs
-                          ▼
-                       CleanFullyAuthenticated<R>       (full gate)
+bytes on wire → parse → Unprocessed<Signed<P>>
+                        │  verify LAST entry (Communerd envelope), fast
+                        ▼
+                     CleanAuthenticated<P>           (fast gate)
+                        │  verify ALL entries; last must be dual-key envelope
+                        ▼
+                     CleanFullyAuthenticated<P>      (full gate)
 ```
 
 ### 21.5 Migration Notes
