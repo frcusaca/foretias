@@ -1832,20 +1832,18 @@ field (signatures live in the wrappers, §21.2). This makes "exclude the
 signature when signing" **structural** rather than a runtime blanking step that
 can be forgotten.
 
-### 21.2 The `Signed<P>` Wrapper — Ordered Signature List
+### 21.2 Signatures Are Part of the Trust-Boundary Type System
 
-A single wrapper carries a signature-free payload and an **ordered list** of
+There is **no standalone `Signed<P>` type**. The ordered signature list is a
+field carried *through* the existing trust-boundary wrappers — signing is rolled
+into the same type-checked authorization system as cleansing/authentication.
+
+Every wrapper holds a **signature-free payload `R`** plus an **ordered list** of
 signatures. Each signature covers the payload **plus every signature that
-precedes it** in the list. This is the flattened equivalent of nested
-`Signed<Signed<…>>`: rather than wrapping, each signer appends an entry that
-attests to the accumulated prefix.
+precedes it** in the list (the flattened equivalent of nested signing: each
+signer appends an entry attesting to the accumulated prefix).
 
 ```rust
-pub struct Signed<P> {
-    pub payload:    P,                     // signature-free; no signature field
-    pub signatures: Vec<SignatureEntry>,   // ORDERED; entry i covers payload + entries[0..i]
-}
-
 pub struct SignatureEntry {
     pub role:      SignerRole,    // Chronomatter | Calendar | Member | CommunerdEnvelope
     pub tbid:      String,        // signer TBID hex
@@ -1853,6 +1851,38 @@ pub struct SignatureEntry {
     pub sig:       Vec<u8>,
 }
 ```
+
+**The wrapper states (renamed and extended):**
+
+```rust
+/// Parsed from the wire; payload + signatures present but NONE verified.
+/// Renamed from `Unprocessed<R>` — everything inbound is a signature envelope,
+/// so the name says what it is. The alias screams its danger.
+pub struct UnverifiedSignatureEnvelope<R> {
+    payload:    R,                     // signature-free
+    signatures: Vec<SignatureEntry>,   // unverified
+}
+pub type DontUse<R> = UnverifiedSignatureEnvelope<R>;
+
+/// Fast gate passed: the last (Communerd envelope) signature is verified.
+pub struct CleanAuthenticated<R> { /* payload R + signatures */ }
+
+/// Full gate passed: every signature verified, last is a dual-key envelope.
+pub struct CleanFullyAuthenticated<R> { /* payload R + signatures */ }
+```
+
+`CleanAuthenticated<R>` and `CleanFullyAuthenticated<R>` keep their prior meaning
+and private-constructor discipline; they now **additionally carry the signature
+list** alongside the delegated fields of `R`. Consequently **`R` must itself be
+signature-free** — a type that already contains signatures cannot be used as the
+payload, because signatures live only in the wrapper.
+
+**Signing rule.** `signatures[i].sig` is computed over
+`postcard(payload) ‖ postcard(&signatures[0..i])`:
+
+- `signatures[0]` signs `postcard(payload)`.
+- each subsequent signer signs the payload **and** all signatures already present.
+- the **last** entry — always the **Communerd envelope** — signs over everything.
 
 **Signing rule.** `signatures[i].sig` is computed over
 `postcard(payload) ‖ postcard(&signatures[0..i])`:
@@ -1897,31 +1927,46 @@ For `FamilyRecord` the payload is the signature-free `FamilyManifest`
 order**, each attesting to the preceding attestations — a **chain of consent**
 rather than parallel independent attestation. Order-dependence is acceptable for
 the rare family-formation event and is arguably stronger. The Foretis temporal
-anchor is a sibling field over `postcard(manifest)`, itself a `Signed<Foretis>`.
+anchor is a sibling field over `postcard(manifest)` — itself a fully-signed
+Foretis envelope (a payload carrying `[Chronomatter, CommunerdEnvelope]`
+signature entries).
 
 (@human — the ordered-list rule replaces the earlier `MultiSigned<P>` /
 `Signed<Signed<P>>` sketch. k-way is now "several leading entries before the
 envelope," signed in order. If parallel order-independent k-way is ever required,
 it would need a separate flag; not planned.)
 
-### 21.4 Relationship to Trust-Boundary Wrappers
+### 21.4 The Unified Verification State Machine
 
-`Signed<P>` is the **wire** shape (how signatures attach). `Unprocessed` /
-`CleanAuthenticated` / `CleanFullyAuthenticated` / `Externalized` are the
-**receive-side verification state**. They compose:
+There is no separate wire wrapper to compose with — the signature list lives in
+the trust-boundary states themselves:
 
 ```
-bytes on wire → parse → Unprocessed<Signed<P>>
+bytes on wire → parse → UnverifiedSignatureEnvelope<R>   (alias DontUse<R>)
+                        │  payload + signatures, NONE verified
                         │  verify LAST entry (Communerd envelope), fast
                         ▼
-                     CleanAuthenticated<P>           (fast gate)
+                     CleanAuthenticated<R>               (fast gate)
                         │  verify ALL entries; last must be dual-key envelope
                         ▼
-                     CleanFullyAuthenticated<P>      (full gate)
+                     CleanFullyAuthenticated<R>          (full gate)
+                        │  outbound
+                        ▼
+                     Externalized<R>
 ```
+
+The `DontUse<R>` alias is deliberate: any code holding one is holding unverified
+bytes and must move it through a gate before reading `R` for trust purposes.
 
 ### 21.5 Migration Notes
 
+- **Rename `Unprocessed<R>` → `UnverifiedSignatureEnvelope<R>`** (alias
+  `DontUse<R>`) across `clean_auth.rs` and every call site. This is a large but
+  mechanical rename of the existing Take 3 type. Elsewhere in this spec, prose
+  that still reads `Unprocessed<R>` denotes the renamed type.
+- `CleanAuthenticated<R>` / `CleanFullyAuthenticated<R>` gain a `signatures`
+  field; enforce that `R` is signature-free (no `signature`/`attestations`
+  fields on payload types — those move into the wrapper).
 - Replace `PeerRegistrationRecord::canonical_payload()`, `ProbityReport::canonical()`,
   and the `Foretis` `sig_input` concatenation with `postcard(payload)` over
   signature-free payload structs.
