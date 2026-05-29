@@ -1475,6 +1475,15 @@ verification is genuinely expensive (k SLH-DSA verifications). This cost is
 acceptable because FamilyRecords are **rare** — produced only on family
 formation or membership change — and never on the request hot path.
 
+**Lifecycle — sign once, cache for the time being's lifetime.** A FamilyRecord is
+signed/stamped once at family formation and then **cached for essentially the
+entire life of the time being**; it is re-signed only when membership changes
+(a member joins or leaves, bumping `version`). The expensive dual-key k-way
+signing therefore amortizes to near-zero over the time being's lifetime — both
+the producing family (signs once) and verifying peers (verify once, then cache
+the resulting `CleanFullyAuthenticated<FamilyRecord>`) pay the slow-key cost a
+single time per record version.
+
 | Level | What is checked | When |
 |-------|-----------------|------|
 | Full k-way (mandatory) | All member **dual-key** signatures (Ed25519 ‖ SLH-DSA) | Before any use, both sender and receiver |
