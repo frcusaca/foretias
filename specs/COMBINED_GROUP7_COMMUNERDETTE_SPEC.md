@@ -1504,6 +1504,43 @@ completes FB with family A and replicates A's chain, B `start_providing`s
 `/attest/{A's Chronomatter TBIDs}`. Loss of FB (GNF) stops the re-announce, so
 B ages out of the provider set.
 
+**Origin vs. mirror.** The `/attest/{stamper_tbid}` provider set does not
+distinguish origin from mirror — both publish there. The distinction lives in
+the `FamilyRecord`:
+
+- The **origin** family's `FamilyRecord` lists `stamper_tbid` in its own
+  `chronomatter_tbids` (the Chronomatter is a member of that family).
+- A **mirror** family's `FamilyRecord` does **not** list `stamper_tbid` as its
+  own Chronomatter; the mirror merely replicates and attests that chain.
+
+A pedantic client that needs the origin (not merely a valid replica) resolves
+each provider's `FamilyRecord` and selects the one whose `chronomatter_tbids`
+contains `stamper_tbid`. For ordinary verification this is unnecessary — any
+provider in the set serves a verified replica.
+
+**Key is the stamper (Chronomatter) TBID.** A `/verify` request carries a
+Foretis, and the Foretis carries the stamper TBID. The verifier lookup is
+therefore keyed directly on that stamper TBID:
+
+```
+verify(foretis):
+  stamper = foretis.tbid                     // the Chronomatter that stamped
+  providers = get_providers(/attest/{stamper})
+  pick a provider → fetch tick(foretis.chronon_number) → check signature
+```
+
+There is one `/attest/` key per **Chronomatter TBID**, not per family. A family
+with three Chronomatters publishes three provider keys (and re-publishes the
+three keys for every remote chain it mirrors).
+
+> **Open (cross-witness policy — not yet decided).** With multiple providers
+> available, verification *could* require agreement from K independent providers
+> (e.g. fetch the same tick from 3 mirrors, require identical ChrononRecords)
+> rather than trusting a single provider. This is a security knob that mirroring
+> makes possible but that has not been specified. Default for now: **one
+> provider is sufficient**. K-of-N cross-witness is deferred to a future phase
+> and should be revisited once mirroring is implemented.
+
 ### 19.6 Communerdette Line Semantics Under the Family Model
 
 `CommunerdetteLine` is keyed on the remote **Communerd TBID**. Its state holds
@@ -1536,6 +1573,24 @@ FamilyRecord fetch.
 local **Calendar's** TbidSecret — unchanged. The `reporter` field carries the
 local Calendar TBID. The receiver confirms the reporter ∈ the sender family's
 `calendar_tbids` (from the cached FamilyRecord) before ingesting.
+
+### 19.8 Family Membership Is Mandatory (In-System)
+
+For the current implementation, **every reachable node belongs to a family**.
+Family-less registration is not supported — there is no implementation for it,
+and a node without a published `FamilyRecord` cannot be contacted through the
+system. Within the running system, time beings are always reached through their
+family's Communerd.
+
+This is deliberate, not a temporary gap to paper over: the family is the unit of
+identity, reachability, and trust. A "solo" time being is simply a family of one
+Communerd + one Calendar + one Chronomatter.
+
+**Offline verification is a separate, out-of-band path.** Offline tools may read
+calendar files on disk and verify TBIDs and chrononchain signatures directly,
+with no running time being and no family contact. This is a legitimate audit
+capability and is explicitly *not* part of the in-system reachability model. It
+neither requires nor consults the DHT, the Family Cache, or any Communerdette.
 
 ---
 
