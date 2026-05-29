@@ -1725,10 +1725,10 @@ signature over the record:
 | `CleanAuthenticated<R>` | **fast** Ed25519 envelope | inner time-being fast sig |
 | `CleanFullyAuthenticated<R>` | **full dual-key** (Ed25519 ‖ SLH-DSA) over the full record | inner full proofs (e.g. k-way for FamilyRecord) |
 
-So `CleanFullyAuthenticated<R>` always implies **Communerd has fully (dual-key)
-signed the complete record** — not merely the fast envelope. For records that
-also carry inner multi-party proofs (FamilyRecord's k-way attestations), those
-full inner proofs are verified as well. "Fully" therefore means *Communerd's
+So `CleanFullyAuthenticated<R>` always **requires** that Communerd has fully
+(dual-key) signed the complete record — not merely the fast envelope. For records
+that also carry inner multi-party proofs (FamilyRecord's k-way attestations),
+those full inner proofs are required as well. "Fully" therefore means *Communerd's
 full signature over the full record*, and (where applicable) full inner proofs.
 
 **FamilyRecord is always `CleanFullyAuthenticated` — both sender and receiver.**
