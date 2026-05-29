@@ -1739,12 +1739,11 @@ All inbound records flow through the Take 3 wrappers
 `CleanFullyAuthenticated<R>` → `Externalized<R>` outbound). This section maps
 the family-model signatures onto those wrappers and states one invariant.
 
-**Invariant — Communerd signs last, is verified first.** When a family produces
-an `Externalized<R>` for transmission, the **Communerd envelope is the outermost
-and final signature applied** (§19.9). On receipt, the Communerd envelope is the
-**first** signature checked. This ordering is what lets the fast gate
-(`Unprocessed<R>` → `CleanAuthenticated<R>`) be a single Ed25519 check before any
-deeper, more expensive verification.
+**Invariant — Communerd signs last.** When a family produces an `Externalized<R>`
+for transmission, the **Communerd envelope is the outermost and final signature
+applied** (§19.9): it covers the payload and the inner application signature.
+Verification checks all signatures (§21.2) — there are at most two — so this is
+an ordering constraint on *signing*, not a verification shortcut.
 
 **The two clean wrappers encode Communerd's signing depth.** The distinction
 between `CleanAuthenticated<R>` and `CleanFullyAuthenticated<R>` is, at the
@@ -1763,16 +1762,16 @@ those full inner proofs are required as well. "Fully" therefore means *Communerd
 full signature over the full record*, and (where applicable) full inner proofs.
 
 **FamilyRecord is always `CleanFullyAuthenticated` — both sender and receiver.**
-Unlike stamp/verify/tick (where a single-Ed25519 `CleanAuthenticated` fast gate
-suffices for the hot path), a `FamilyRecord` is the **root of family trust** and
-must reach **full k-way verification before it is used or cached**. There is no
-acting on a merely envelope-authenticated FamilyRecord.
+Unlike stamp/verify/tick (whose two signatures are fast Ed25519, yielding
+`CleanAuthenticated`), a `FamilyRecord` is the **root of family trust**: its
+envelope is dual-key and its k×k matrix must verify in full before it is used or
+cached. There is no acting on a partially-verified FamilyRecord.
 
 | Wrapper | Applies to FamilyRecord? | What has been verified |
 |---------|--------------------------|------------------------|
-| `Unprocessed<FamilyRecord>` | transient only | nothing — parsed from the connection |
-| `CleanAuthenticated<FamilyRecord>` | **not used** | (skipped — no envelope-only trust for family records) |
-| `CleanFullyAuthenticated<FamilyRecord>` | **required** | Communerd's full dual-key signature over the record **and** all k-way member dual-key attestations (Ed25519 ‖ SLH-DSA) |
+| `UnverifiedSignatureEnvelope<FamilyRecord>` (`DontUse`) | transient only | nothing — parsed from the connection |
+| `CleanAuthenticated<FamilyRecord>` | **not used** | skipped — a FamilyRecord is never trusted at the fast level; it must reach full matrix verification |
+| `CleanFullyAuthenticated<FamilyRecord>` | **required** | Communerd's full dual-key envelope **and** the entire k×k dual-key matrix (Ed25519 ‖ SLH-DSA) |
 | (policy) temporal | escalation | Foretis vs Chronomatter ChrononRecord |
 
 - **Sender side:** a family produces a `FamilyRecord` only once the full k×k
@@ -1906,14 +1905,25 @@ payload, because signatures live only in the wrapper.
 - each subsequent signer signs the payload **and** all signatures already present.
 - the **last** entry — always the **Communerd envelope** — signs over everything.
 
-**Verification.** To check entry *i*, recompute
+**Verification checks ALL signatures.** Moving from `DontUse<R>` to any clean
+state verifies **every** entry in the list: for each `i`, recompute
 `postcard(payload) ‖ postcard(&signatures[0..i])` and verify `signatures[i].sig`.
+There is no "verify the envelope only" shortcut — the list is short (see
+cardinality below), so checking everything is cheap.
 
-- **Fast gate (→ `CleanAuthenticated`)** = verify **only the last entry** (the
-  Communerd envelope) over payload + all preceding signature bytes (all present
-  in the record). A single Ed25519 check; sufficient to route.
-- **Full gate (→ `CleanFullyAuthenticated`)** = verify **every** entry, and
-  require the last entry to be a full **dual-key** Communerd envelope (§19.10).
+- **→ `CleanAuthenticated<R>`** — all signatures verified at fast (Ed25519) level.
+- **→ `CleanFullyAuthenticated<R>`** — all signatures verified **and** the required
+  full **dual-key** signatures are present and valid (the Communerd envelope is
+  dual-key; for FamilyRecord, the k×k matrix as well, §19.10). The distinction is
+  the signature *strength required*, not how many are checked.
+
+**Current cardinality — exactly two.** Today a record carries exactly two
+signatures: one **inner application signature** (Chronomatter for `/stamp` and
+`/verify`; Calendar for ChrononRecord / chronon blocks) and the **Communerd
+transport envelope**. There is no current use case for more than two. The `Vec`
+leaves room for future layering, but a defensive implementation validates the
+signature count against what the record type expects and **rejects** an
+unexpected count rather than ignoring extras.
 
 **Properties:**
 - **Order is locked.** Each entry covers all preceding entries, so the final
@@ -1954,14 +1964,15 @@ the trust-boundary states themselves:
 
 ```
 bytes on wire → parse → UnverifiedSignatureEnvelope<R>   (alias DontUse<R>)
-                        │  payload + signatures, NONE verified
-                        │  verify LAST entry (Communerd envelope), fast
+                        │  payload + signatures (≤2), NONE verified
+                        │  verify ALL signatures (Ed25519 level)
                         ▼
-                     CleanAuthenticated<R>               (fast gate)
-                        │  verify ALL entries; last must be dual-key envelope
+                     CleanAuthenticated<R>
+                        │  all signatures verified AND required dual-key
+                        │  proofs present/valid (envelope dual-key; matrix)
                         ▼
-                     CleanFullyAuthenticated<R>          (full gate)
-                        │  outbound
+                     CleanFullyAuthenticated<R>
+                        │  outbound (rebuild via §21.5 builder)
                         ▼
                      Externalized<R>
 ```
