@@ -61,7 +61,8 @@ async fn test_e2e_gossip_unsigned_rejected() {
     let json = serde_json::to_vec(&unsigned_report).unwrap();
 
     let result = handle_gossip_message(&json, &store, server.as_ref(), 0);
-    assert!(result.is_err(), "unsigned report should be rejected");
+    assert!(result.is_ok(), "unsigned report should be dropped (Ok), not errored");
+    assert_eq!(store.report_count("test-subject"), 0, "unsigned report must not be ingested");
 }
 
 #[tokio::test]

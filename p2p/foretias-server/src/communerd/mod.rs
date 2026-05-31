@@ -172,6 +172,7 @@ pub struct Communerd {
     _local_multiaddr_arc: Arc<std::sync::Mutex<Option<libp2p::Multiaddr>>>,
     tbid_index: Arc<std::sync::RwLock<HashMap<String, PeerRegistrationRecord>>>,
     pending_lookups: Arc<std::sync::Mutex<HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<PeerRegistrationRecord>>>>>,
+    pending_family_lookups: Arc<std::sync::Mutex<HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<Vec<u8>>>>>>,
     calendar: Arc<std::sync::RwLock<Option<Arc<Calendar>>>>,
     communerdettes: Arc<DashMap<Tbid, Arc<communerdette::Communerdette>>>,
     /// Family Cache: TBID → CleanFullyAuthenticated<FamilyRecord>.
@@ -204,6 +205,7 @@ impl Clone for Communerd {
             _local_multiaddr_arc: Arc::clone(&self._local_multiaddr_arc),
             tbid_index: Arc::clone(&self.tbid_index),
             pending_lookups: Arc::clone(&self.pending_lookups),
+            pending_family_lookups: Arc::clone(&self.pending_family_lookups),
             calendar: Arc::clone(&self.calendar),
             communerdettes: Arc::clone(&self.communerdettes),
             family_cache: Arc::clone(&self.family_cache),
@@ -245,6 +247,7 @@ impl Communerd {
             _local_multiaddr_arc: Arc::new(std::sync::Mutex::new(None)),
             tbid_index: Arc::new(std::sync::RwLock::new(HashMap::new())),
             pending_lookups: Arc::new(std::sync::Mutex::new(HashMap::new())),
+            pending_family_lookups: Arc::new(std::sync::Mutex::new(HashMap::new())),
             calendar: Arc::new(std::sync::RwLock::new(None)),
             communerdettes: Arc::new(DashMap::new()),
             family_cache: Arc::new(DashMap::new()),
@@ -480,8 +483,9 @@ impl Communerd {
         let peer_pool = self.peer_pool.clone();
         let tbid_index = Arc::clone(&self.tbid_index);
         let pending_lookups = Arc::clone(&self.pending_lookups);
+        let pending_family_lookups = Arc::clone(&self.pending_family_lookups);
         let task = tokio::spawn(async move {
-            Self::gossip_event_loop(events, cmd_tx, probity_store, crypto, clock_gossip, Some(det), peer_pool, tbid_index, pending_lookups).await;
+            Self::gossip_event_loop(events, cmd_tx, probity_store, crypto, clock_gossip, Some(det), peer_pool, tbid_index, pending_lookups, pending_family_lookups).await;
         });
         let _ = self.gossip_task.set(task);
 
@@ -563,6 +567,7 @@ impl Communerd {
         peer_pool: PeerPool,
         tbid_index: Arc<std::sync::RwLock<HashMap<String, PeerRegistrationRecord>>>,
         pending_lookups: Arc<std::sync::Mutex<HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<PeerRegistrationRecord>>>>>,
+        pending_family_lookups: Arc<std::sync::Mutex<HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<Vec<u8>>>>>>,
     ) {
         while let Some(event) = events.recv().await {
             match event {
@@ -617,6 +622,13 @@ impl Communerd {
                     let key_bytes = key.to_vec();
                     if key_bytes.ends_with(b"/v1") {
                         let key_str = String::from_utf8_lossy(&key_bytes);
+                        // Handle FamilyRecord lookups (raw bytes, no deserialization)
+                        if key_str.contains("/family/") {
+                            if let Some(sender) = pending_family_lookups.lock().unwrap().remove(&key) {
+                                let raw_value: Option<Vec<u8>> = records.first().map(|r| r.value.clone());
+                                let _ = sender.send(raw_value);
+                            }
+                        }
                         if key_str.contains("/tbid/") {
                             for record in &records {
                                 if let Ok(peer_record) = serde_json::from_slice::<PeerRegistrationRecord>(&record.value) {
@@ -968,8 +980,7 @@ impl Communerd {
         let key = kad::RecordKey::new(&format!("/foretias/{}/family/{}/v1", ns, tbid_hex));
         let Some(cmd_tx) = self.p2p_cmd_tx.get() else { return None };
         let (tx, rx) = tokio::sync::oneshot::channel();
-        // Use pending_lookups with a wrapper key to get raw kad::Record back
-        self.pending_lookups.lock().unwrap().insert(key.clone(), tx);
+        self.pending_family_lookups.lock().unwrap().insert(key.clone(), tx);
         let _ = cmd_tx.send(SwarmCommand::GetRecord { key: key.clone() });
         let raw_bytes = match tokio::time::timeout(std::time::Duration::from_secs(10), rx).await {
             Ok(Ok(Some(record))) => serde_json::to_vec(&record).ok()?,
@@ -991,8 +1002,16 @@ impl Communerd {
             }
         };
         let envelope = UnverifiedSignatureEnvelope::from_parsed(family_record);
+        // Derive Ed25519 public key from TBID hex (first 64 hex chars = 32 bytes)
+        let pubkey_bytes: Vec<u8> = match hex::decode(&tbid_hex[..64.min(tbid_hex.len())]) {
+            Ok(bytes) if bytes.len() == 32 => bytes,
+            _ => {
+                tracing::warn!(tbid = %tbid_hex, "FamilyRecord: TBID too short or invalid hex for Ed25519 pubkey");
+                return None;
+            }
+        };
         // Full gate verification
-        let ca = match envelope.verify_family_record(&*self.crypto, &[0u8; 32]) {
+        let ca = match envelope.verify_family_record(&*self.crypto, &pubkey_bytes) {
             Ok(cfa) => cfa,
             Err(e) => {
                 tracing::warn!(tbid = %tbid_hex, "FamilyRecord gate verification failed: {e}");

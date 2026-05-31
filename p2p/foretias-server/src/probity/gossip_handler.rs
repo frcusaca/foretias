@@ -71,19 +71,17 @@ pub fn handle_gossip_message(
                 tracing::trace!(
                     attribute = %attribute,
                     reporter = %reporter,
-                    "FB/GNF report rejected: full signature required"
+                    "FB/GNF report dropped: full signature required"
                 );
-                return Err(NodeError::BadFormat(
-                    "FB/GNF report requires full signature (Ed25519 + SLH-DSA)".to_string()
-                ));
+                return Ok(());
             }
             Err(e) => {
                 tracing::trace!(
                     attribute = %attribute,
                     error = %e,
-                    "FB/GNF report verification failed"
+                    "FB/GNF report dropped: verification failed"
                 );
-                return Err(NodeError::Crypto(foretias_core::error::CryptoError::UnknownAlgorithm(format!("verify_full: {e}"))));
+                return Ok(());
             }
         }
     } else {
@@ -94,9 +92,9 @@ pub fn handle_gossip_message(
                 tracing::trace!(
                     attribute = %attribute,
                     error = %e,
-                    "probity report verification failed"
+                    "probity report dropped: verification failed"
                 );
-                return Err(NodeError::Crypto(foretias_core::error::CryptoError::UnknownAlgorithm(format!("verify: {e}"))));
+                return Ok(());
             }
         }
     };
@@ -315,8 +313,8 @@ mod tests {
         let data = serde_json::to_vec(&report).unwrap();
         let result = handle_gossip_message(&data, &store, crypto.as_ref(), now);
 
-        // Must be rejected — FB requires full signature
-        assert!(result.is_err(), "FB report with fast-only signature must be rejected");
+        // Must be dropped (Ok) — FB requires full signature, fast-only is silently discarded
+        assert!(result.is_ok(), "FB report with fast-only signature must be dropped (Ok), not errored");
         assert_eq!(store.report_count("A"), 0, "report must not be ingested");
     }
 
@@ -353,7 +351,7 @@ mod tests {
         let data = serde_json::to_vec(&report).unwrap();
         let result = handle_gossip_message(&data, &store, crypto.as_ref(), now);
 
-        assert!(result.is_err(), "GNF report with fast-only signature must be rejected");
+        assert!(result.is_ok(), "GNF report with fast-only signature must be dropped (Ok), not errored");
         assert_eq!(store.report_count("A"), 0, "report must not be ingested");
     }
 
