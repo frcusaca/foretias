@@ -411,6 +411,8 @@ pub enum ParseError {
     TruncatedBytes,
     /// Field has invalid length.
     InvalidLength(String),
+    /// Bad format (missing required fields, wrong structure).
+    BadFormat(String),
 }
 
 impl std::fmt::Display for ParseError {
@@ -419,6 +421,7 @@ impl std::fmt::Display for ParseError {
             ParseError::InvalidJson(e) => write!(f, "invalid JSON: {e}"),
             ParseError::TruncatedBytes => write!(f, "truncated bytes"),
             ParseError::InvalidLength(msg) => write!(f, "invalid length: {msg}"),
+            ParseError::BadFormat(msg) => write!(f, "bad format: {msg}"),
         }
     }
 }
@@ -633,50 +636,40 @@ impl UnverifiedSignatureEnvelope<Foretis> {
 
     /// Parse v2 wire format: `{foretis: <Foretis>, signature: <hex>, signature_algorithm: <string>}`.
     ///
-    /// Falls back to bare `Foretis` JSON (v1 compat) if `foretis` key is absent.
-    /// When a signature is present, it is placed in the envelope's signatures list.
+    /// v1 bare Foretis JSON is rejected — clean cutover to v2.
     pub fn from_json_value_v2(v: serde_json::Value) -> Result<Self, ParseError> {
         let obj = match v {
             serde_json::Value::Object(map) => map,
-            _ => {
-                // Not an object — try bare Foretis
-                let val: Foretis = serde_json::from_value(v).map_err(ParseError::InvalidJson)?;
-                return Ok(Self::from_parsed(val));
-            }
+            _ => return Err(ParseError::BadFormat("v2 envelope requires JSON object".into())),
         };
 
-        // Check if this is v2 format (has "foretis" key)
-        if let Some(foretis_val) = obj.get("foretis") {
-            let foretis: Foretis = serde_json::from_value(foretis_val.clone())
-                .map_err(ParseError::InvalidJson)?;
+        // v2 format: must have "foretis" key
+        let foretis_val = obj.get("foretis")
+            .ok_or_else(|| ParseError::BadFormat("v2 envelope requires 'foretis' key".into()))?;
+        let foretis: Foretis = serde_json::from_value(foretis_val.clone())
+            .map_err(ParseError::InvalidJson)?;
 
-            let mut env = Self::from_parsed(foretis);
+        let mut env = Self::from_parsed(foretis);
 
-            // Extract signature (hex-encoded) and algorithm
-            if let Some(sig_hex) = obj.get("signature").and_then(|v| v.as_str()) {
-                if let Ok(sig_bytes) = hex::decode(sig_hex) {
-                    if !sig_bytes.is_empty() {
-                        let algorithm = match obj.get("signature_algorithm").and_then(|v| v.as_str()) {
-                            Some("SLH-DSA") => SigAlgorithm::DualKey,
-                            _ => SigAlgorithm::Ed25519,
-                        };
-                        env.signatures.push(SignatureEntry {
-                            role: SignerRole::Chronomatter,
-                            tbid: String::new(),
-                            algorithm,
-                            sig: sig_bytes,
-                        });
-                    }
+        // Extract signature (hex-encoded) and algorithm
+        if let Some(sig_hex) = obj.get("signature").and_then(|v| v.as_str()) {
+            if let Ok(sig_bytes) = hex::decode(sig_hex) {
+                if !sig_bytes.is_empty() {
+                    let algorithm = match obj.get("signature_algorithm").and_then(|v| v.as_str()) {
+                        Some("SLH-DSA") => SigAlgorithm::DualKey,
+                        _ => SigAlgorithm::Ed25519,
+                    };
+                    env.signatures.push(SignatureEntry {
+                        role: SignerRole::Chronomatter,
+                        tbid: String::new(),
+                        algorithm,
+                        sig: sig_bytes,
+                    });
                 }
             }
-
-            Ok(env)
-        } else {
-            // Bare Foretis JSON (v1 compat)
-            let val: Foretis = serde_json::from_value(serde_json::Value::Object(obj))
-                .map_err(ParseError::InvalidJson)?;
-            Ok(Self::from_parsed(val))
         }
+
+        Ok(env)
     }
 
     /// Inbound gate: verify this Foretis against a calendar record.

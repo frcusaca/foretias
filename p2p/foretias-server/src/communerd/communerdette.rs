@@ -2333,7 +2333,7 @@ mod tests {
             tbn: "test".to_string(),
             time_being_reference_time: "UE+0ns".to_string(),
         };
-        let json = serde_json::to_value(&bad_foretis).unwrap();
+        let json = serde_json::json!({ "foretis": bad_foretis });
         let rec = dummy_chronon_record(&tbid);
 
         let result = executor.gate_foretis(json, &rec, b"");
@@ -2371,7 +2371,7 @@ mod tests {
             tbn: "test".to_string(),
             time_being_reference_time: "UE+0ns".to_string(),
         };
-        let json = serde_json::to_value(&bad_foretis).unwrap();
+        let json = serde_json::json!({ "foretis": bad_foretis });
         let rec = dummy_chronon_record(&tbid);
 
         let result = executor.gate_foretis(json, &rec, b"");
@@ -2409,7 +2409,7 @@ mod tests {
             tbn: "test".to_string(),
             time_being_reference_time: "UE+0ns".to_string(),
         };
-        let json = serde_json::to_value(&bad_foretis).unwrap();
+        let json = serde_json::json!({ "foretis": bad_foretis });
         let rec = dummy_chronon_record(&tbid);
 
         let result = executor.gate_foretis(json, &rec, b"");
@@ -2441,7 +2441,7 @@ mod tests {
         );
 
         let foretis = make_test_foretis(&other_tbid);
-        let json = serde_json::to_value(&foretis).unwrap();
+        let json = serde_json::json!({ "foretis": foretis });
         let rec = dummy_chronon_record(&target_tbid);
 
         let result = executor.gate_foretis(json, &rec, b"");
