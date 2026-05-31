@@ -1,11 +1,11 @@
 //! E2E verification discipline tests.
 //!
-//! These tests verify that the Unprocessed/CleanAuthenticated discipline
+//! These tests verify that the UnverifiedSignatureEnvelope/CleanAuthenticated discipline
 //! is enforced at the protocol level — forged or unsigned data is rejected
 //! before reaching trusted state.
 
 use foretias_core::foretias::calendar::Calendar;
-use foretias_core::foretias::clean_auth::Unprocessed;
+use foretias_core::foretias::clean_auth::UnverifiedSignatureEnvelope;
 use foretias_core::foretias::tick::ChrononRecord;
 use foretias_core::foretias::types::Tbid;
 use foretias_core::crypto_server;
@@ -65,7 +65,7 @@ async fn test_e2e_gossip_unsigned_rejected() {
 
 #[tokio::test]
 async fn test_e2e_type_discipline_enforced() {
-    // The compile-time gate: Unprocessed<ChrononRecord> CANNOT be directly
+    // The compile-time gate: UnverifiedSignatureEnvelope<ChrononRecord> CANNOT be directly
     // assigned to CleanAuthenticated<ChrononRecord>. The compiler enforces this.
     // If this test compiles with a direct assignment, the discipline has failed.
     let record = ChrononRecord {
@@ -80,7 +80,7 @@ async fn test_e2e_type_discipline_enforced() {
         tb_version: 0,
         tbid: Tbid::default(),
     };
-    let _up: Unprocessed<ChrononRecord> = Unprocessed::<ChrononRecord>::from_parsed(record);
+    let _up: UnverifiedSignatureEnvelope<ChrononRecord> = UnverifiedSignatureEnvelope::<ChrononRecord>::from_parsed(record);
     // The following would NOT compile:
     // let _: CleanAuthenticated<ChrononRecord> = _up;
     // This is the desired behavior — the compiler enforces the gate.

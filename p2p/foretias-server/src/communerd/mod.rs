@@ -27,7 +27,7 @@ use foretias_core::core::bindings::ForetiasPubKey32;
 use foretias_core::crypto_server::{CryptoServer, new_software, ForetiasCurve};
 use foretias_core::error::NodeError;
 use foretias_core::foretias::callbacks::{CommunityQuery, CommunityResponse, PeerAddr as CorePeerAddr, PeerChangeCallback, PeerMessenger, TransportError as CoreTransportError};
-use foretias_core::foretias::clean_auth::{Unprocessed, CleanAuthenticated};
+use foretias_core::foretias::clean_auth::{UnverifiedSignatureEnvelope, CleanAuthenticated};
 use foretias_core::foretias::tick::{Foretis, ChrononRecord};
 use foretias_core::foretias::types::Tbid;
 
@@ -323,7 +323,7 @@ impl Communerd {
         } else {
             self.transport.stamp(peer, content_hex, echo).await?
         };
-        let unprocessed = Unprocessed::<Foretis>::from_json_value(result)
+        let unprocessed = UnverifiedSignatureEnvelope::<Foretis>::from_json_value(result)
             .map_err(|e| TransportError::Decode(e.to_string()))?;
         let f = unprocessed.inner();
         if f.chronon_number == 0 || f.signature.is_empty() || f.signature_algorithm.is_empty() {
@@ -357,7 +357,7 @@ impl Communerd {
         count: u64,
     ) -> Result<Vec<ChrononRecord>, TransportError> {
         // TODO(Phase B.4): Add chain verification for returned ChrononRecords using
-        // UnprocessedChrononRecord -> CleanAuthenticatedChrononRecord flow.
+        // UnverifiedSignatureEnvelopeChrononRecord -> CleanAuthenticatedChrononRecord flow.
         if peer.peer_id.is_some() && self.p2p_cmd_tx.get().is_some() {
             match self.libp2p_transport.get_calendar_slice(peer, tick_start, count).await {
                 Ok(r) => {

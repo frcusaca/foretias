@@ -36,7 +36,7 @@ const VERIFY_PATTERNS: &[&str] = &[
 const GATE_PATTERNS: &[&str] = &[
     "CleanAuthenticated::from_trusted(",
     "CleanFullyAuthenticated::from_dual_verified(",
-    "Unprocessed<",
+    "UnverifiedSignatureEnvelope<",
     "gate_foretis(",
     "gate_chronon_records(",
     "from_dual_verified(",

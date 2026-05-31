@@ -25,7 +25,7 @@ use foretias_core::crypto_server::CryptoServer;
 use foretias_core::error::NodeError;
 use foretias_core::foretias::clean_auth::{
     CleanAuthenticated,
-    Unprocessed, CleanAuthError,
+    UnverifiedSignatureEnvelope, CleanAuthError,
 };
 use foretias_core::foretias::tick::{ChrononRecord, Foretis};
 use foretias_core::foretias::types::Tbid;
@@ -248,7 +248,7 @@ impl Default for CommunerdetteState {
 ///
 /// This is the data the remote party signs during initial channel-binding.
 /// The sig fields are hex-encoded to be directly JSON-serializable; the
-/// Take 3 pipeline uses `Unprocessed<ChannelBinding>` and produces
+/// Take 3 pipeline uses `UnverifiedSignatureEnvelope<ChannelBinding>` and produces
 /// `CleanFullyAuthenticated<ChannelBinding>` after dual-key verification.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ChannelBinding {
@@ -259,18 +259,18 @@ pub struct ChannelBinding {
     pub slow_sig: String,        // hex-encoded SLH-DSA signature (49856 bytes)
 }
 
-/// Take 3 Unprocessed stage for channel-binding responses.
+/// Take 3 UnverifiedSignatureEnvelope stage for channel-binding responses.
 ///
-/// `Unprocessed<ChannelBinding>` holds the parsed-but-unverified wire data.
+/// `UnverifiedSignatureEnvelope<ChannelBinding>` holds the parsed-but-unverified wire data.
 /// Call methods from `ChannelBindingGate` to verify and produce
 /// `CleanFullyAuthenticated<ChannelBinding>`.
-pub type UnprocessedChannelBinding = foretias_core::foretias::clean_auth::Unprocessed<ChannelBinding>;
+pub type UnverifiedSignatureEnvelopeChannelBinding = foretias_core::foretias::clean_auth::UnverifiedSignatureEnvelope<ChannelBinding>;
 
-/// Extension trait that adds the inbound gate methods to `Unprocessed<ChannelBinding>`.
+/// Extension trait that adds the inbound gate methods to `UnverifiedSignatureEnvelope<ChannelBinding>`.
 ///
-/// Extension trait rather than inherent impl because `Unprocessed<T>` is defined
+/// Extension trait rather than inherent impl because `UnverifiedSignatureEnvelope<T>` is defined
 /// in core-engine and the orphan rule prevents foreign-type inherent impls here.
-/// Import this trait to call `.verify_full()` etc. on `Unprocessed<ChannelBinding>`.
+/// Import this trait to call `.verify_full()` etc. on `UnverifiedSignatureEnvelope<ChannelBinding>`.
 pub trait ChannelBindingGate: Sized {
     /// Verify Ed25519 fast-key signature only.
     /// // VERIFY(remote-tbid, fast-key)
@@ -303,7 +303,7 @@ pub trait ChannelBindingGate: Sized {
     ) -> Result<foretias_core::foretias::clean_auth::CleanFullyAuthenticated<ChannelBinding>, CommunerdetteError>;
 }
 
-impl ChannelBindingGate for UnprocessedChannelBinding {
+impl ChannelBindingGate for UnverifiedSignatureEnvelopeChannelBinding {
     fn verify_fast_only(
         &self,
         crypto: &dyn CryptoServer,
@@ -1025,7 +1025,7 @@ impl CommunerdetteExecutor {
 
     /// Run Take 3 inbound gate for a vector of ChrononRecords.
     ///
-    /// For each record: parse as Unprocessed<ChrononRecord>, verify TBID matches,
+    /// For each record: parse as UnverifiedSignatureEnvelope<ChrononRecord>, verify TBID matches,
     /// then run verify(crypto, prev) for chain verification.
     fn gate_chronon_records(
         &self,
@@ -1036,7 +1036,7 @@ impl CommunerdetteExecutor {
         let mut authenticated = Vec::new();
 
         for (idx, record) in records.into_iter().enumerate() {
-            let unprocessed = Unprocessed::<ChrononRecord>::from_parsed(record);
+            let unprocessed = UnverifiedSignatureEnvelope::<ChrononRecord>::from_parsed(record);
 
             // Structural validation
             if unprocessed.chronon_number() == &0 || unprocessed.public_key().is_empty() {
@@ -1077,7 +1077,7 @@ impl CommunerdetteExecutor {
 
     /// Run Take 3 inbound gate for a Foretis reply.
     ///
-    /// Parse as Unprocessed<Foretis>, run full Take 3 inbound gate.
+    /// Parse as UnverifiedSignatureEnvelope<Foretis>, run full Take 3 inbound gate.
     ///
     /// Requires the authenticated ChrononRecord for the Foretis's chronon and the
     /// original content bytes.  Callers must fetch the record via execute_tick first
@@ -1088,7 +1088,7 @@ impl CommunerdetteExecutor {
         chronon_record: &CleanAuthenticated<ChrononRecord>,
         content: &[u8],
     ) -> Result<CleanAuthenticated<Foretis>, CommunerdetteError> {
-        let unprocessed = Unprocessed::<Foretis>::from_json_value(raw)
+        let unprocessed = UnverifiedSignatureEnvelope::<Foretis>::from_json_value(raw)
             .map_err(|e| TransportError::Decode(e.to_string()))?;
 
         // Structural validation
@@ -1182,7 +1182,7 @@ impl Communerdette {
 
         // Parse just enough to get chronon_number before consuming raw
         let chronon_number = {
-            let tmp = Unprocessed::<Foretis>::from_json_value(raw.clone())
+            let tmp = UnverifiedSignatureEnvelope::<Foretis>::from_json_value(raw.clone())
                 .map_err(|e| TransportError::Decode(e.to_string()))?;
             *tmp.chronon_number()
         };
@@ -1303,7 +1303,7 @@ impl Communerdette {
             };
 
             // 4. Parse + dual-key verify
-            let unprocessed = match UnprocessedChannelBinding::from_json_value(raw) {
+            let unprocessed = match UnverifiedSignatureEnvelopeChannelBinding::from_json_value(raw) {
                 Ok(u) => u,
                 Err(e) => {
                     tracing::warn!(target_tbid = %requester_tbid_hex, "channel_bind: parse failed: {e:?}");
@@ -1392,12 +1392,12 @@ pub struct AuthenticatedPong {
     pub signature_algorithm: String,
 }
 
-/// Parsed-but-not-yet-verified authenticated pong (Take 3 Unprocessed stage).
-pub struct UnprocessedAuthenticatedPong {
+/// Parsed-but-not-yet-verified authenticated pong (Take 3 UnverifiedSignatureEnvelope stage).
+pub struct UnverifiedSignatureEnvelopeAuthenticatedPong {
     inner: AuthenticatedPong,
 }
 
-impl UnprocessedAuthenticatedPong {
+impl UnverifiedSignatureEnvelopeAuthenticatedPong {
     pub fn from_json_value(v: serde_json::Value) -> Result<Self, TransportError> {
         let inner: AuthenticatedPong = serde_json::from_value(v)
             .map_err(|e| TransportError::Decode(e.to_string()))?;
@@ -1488,7 +1488,7 @@ impl Communerdette {
                     }
                 };
 
-                let unprocessed = match UnprocessedAuthenticatedPong::from_json_value(raw) {
+                let unprocessed = match UnverifiedSignatureEnvelopeAuthenticatedPong::from_json_value(raw) {
                     Ok(u) => u,
                     Err(_) => {
                         flags.l2_last_ok.store(false, Ordering::Relaxed);
@@ -1729,7 +1729,7 @@ impl std::fmt::Debug for CommunerdetteLine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use foretias_core::foretias::clean_auth::{Unprocessed, Externalized};
+    use foretias_core::foretias::clean_auth::{UnverifiedSignatureEnvelope, Externalized};
     use foretias_core::foretias::encoding::{FTByteVector, FTByteArray};
 
     fn make_line() -> CommunerdetteLine {
@@ -1871,7 +1871,7 @@ mod tests {
     #[test]
     fn clean_auth_types_are_importable() {
         let _check: fn() -> bool = || {
-            std::mem::size_of::<Unprocessed<u8>>() > 0
+            std::mem::size_of::<UnverifiedSignatureEnvelope<u8>>() > 0
                 && std::mem::size_of::<CleanAuthenticated<u8>>() > 0
                 && std::mem::size_of::<Externalized<u8>>() > 0
         };
@@ -2421,7 +2421,7 @@ mod tests {
         let content = b"valid foretis content" as &[u8];
         let chronon_number: u64 = 1;
 
-        // Build exactly the sig_input that Unprocessed<Foretis>::verify uses
+        // Build exactly the sig_input that UnverifiedSignatureEnvelope<Foretis>::verify uses
         let content_hash = crypto.sha256(content).expect("sha256");
         let mut sig_input = Vec::new();
         sig_input.extend_from_slice(&target_tbid.raw_bytes());
@@ -2973,7 +2973,7 @@ mod tests {
         let channel_id = "127.0.0.1:9000";
 
         let resp_json = make_valid_bind_response(&*crypto, nonce, channel_id, &tbid, &secret);
-        let unprocessed = UnprocessedChannelBinding::from_json_value(resp_json).expect("parse");
+        let unprocessed = UnverifiedSignatureEnvelopeChannelBinding::from_json_value(resp_json).expect("parse");
         let result = unprocessed.verify_full(&*crypto, nonce, channel_id, &tbid);
         assert!(result.is_ok(), "verify_full must accept valid dual-signed response: {:?}", result);
         let binding = result.unwrap();
@@ -2996,7 +2996,7 @@ mod tests {
         let mut resp_json = make_valid_bind_response(&*crypto, nonce, channel_id, &tbid, &secret);
         // Corrupt fast_sig
         resp_json["fast_sig"] = serde_json::json!(hex::encode(vec![0xABu8; 64]));
-        let unprocessed = UnprocessedChannelBinding::from_json_value(resp_json).expect("parse");
+        let unprocessed = UnverifiedSignatureEnvelopeChannelBinding::from_json_value(resp_json).expect("parse");
         let result = unprocessed.verify_full(&*crypto, nonce, channel_id, &tbid);
         assert!(
             matches!(result, Err(CommunerdetteError::CleanAuth(_))),
@@ -3019,7 +3019,7 @@ mod tests {
         let mut resp_json = make_valid_bind_response(&*crypto, nonce, channel_id, &tbid, &secret);
         // Corrupt slow_sig with wrong-length garbage
         resp_json["slow_sig"] = serde_json::json!(hex::encode(vec![0xCDu8; 100]));
-        let unprocessed = UnprocessedChannelBinding::from_json_value(resp_json).expect("parse");
+        let unprocessed = UnverifiedSignatureEnvelopeChannelBinding::from_json_value(resp_json).expect("parse");
         let result = unprocessed.verify_full(&*crypto, nonce, channel_id, &tbid);
         assert!(
             result.is_err(),
@@ -3040,7 +3040,7 @@ mod tests {
         let channel_id = "127.0.0.1:9000";
 
         let resp_json = make_valid_bind_response(&*crypto, nonce, channel_id, &tbid, &secret);
-        let unprocessed = UnprocessedChannelBinding::from_json_value(resp_json).expect("parse");
+        let unprocessed = UnverifiedSignatureEnvelopeChannelBinding::from_json_value(resp_json).expect("parse");
         let wrong_nonce = b"different_nonce_32bytes_paddxx!!" as &[u8];
         let result = unprocessed.verify_full(&*crypto, wrong_nonce, channel_id, &tbid);
         assert!(
@@ -3063,7 +3063,7 @@ mod tests {
         let channel_id = "127.0.0.1:9000";
 
         let resp_json = make_valid_bind_response(&*crypto, nonce, channel_id, &tbid, &secret);
-        let unprocessed = UnprocessedChannelBinding::from_json_value(resp_json).expect("parse");
+        let unprocessed = UnverifiedSignatureEnvelopeChannelBinding::from_json_value(resp_json).expect("parse");
         let result = unprocessed.verify_full(&*crypto, nonce, channel_id, &other_tbid);
         assert!(
             matches!(result, Err(CommunerdetteError::TbidMismatch { .. })),

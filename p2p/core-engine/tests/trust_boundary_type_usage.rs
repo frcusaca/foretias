@@ -1,7 +1,7 @@
 //! Static analysis: detect trust boundary wrapper type usage across workspace.
 //!
 //! Uses syn + Visit trait to traverse the AST and find all occurrences of
-//! CleanAuthenticated&lt;T&gt;, Unprocessed&lt;T&gt;, Externalized&lt;T&gt;.
+//! CleanAuthenticated&lt;T&gt;, UnverifiedSignatureEnvelope&lt;T&gt;, Externalized&lt;T&gt;.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -22,7 +22,7 @@ struct LocationEntry {
 #[allow(dead_code)]
 struct RawOccurrence {
     file: String,
-    wrapper: String, // "CleanAuthenticated", "Unprocessed", "Externalized"
+    wrapper: String, // "CleanAuthenticated", "UnverifiedSignatureEnvelope", "Externalized"
     inner: String,
     context: String,
 }
@@ -67,7 +67,7 @@ impl WrapperTypeVisitor {
             is_externalized: false,
         });
         match wrapper {
-            "Unprocessed" => entry.is_unprocessed = true,
+            "UnverifiedSignatureEnvelope" => entry.is_unprocessed = true,
             "CleanAuthenticated" => entry.is_clean_authenticated = true,
             "Externalized" => entry.is_externalized = true,
             _ => {}
@@ -89,7 +89,7 @@ impl<'ast> Visit<'ast> for WrapperTypeVisitor {
                 let name = first_seg.ident.to_string();
                 if matches!(
                     name.as_str(),
-                    "CleanAuthenticated" | "Unprocessed" | "Externalized"
+                    "CleanAuthenticated" | "UnverifiedSignatureEnvelope" | "Externalized"
                 ) {
                     // In syn, CleanAuthenticated<ChrononRecord> is ONE segment with
                     // PathArguments::AngleBracketed — NOT two segments.
@@ -227,8 +227,8 @@ fn test_wrapper_type_visitor_detects_wrappers() {
         "CleanAuthenticated not detected"
     );
     assert!(
-        wrappers.contains_key("Unprocessed"),
-        "Unprocessed not detected"
+        wrappers.contains_key("UnverifiedSignatureEnvelope"),
+        "UnverifiedSignatureEnvelope not detected"
     );
     assert!(
         wrappers.contains_key("Externalized"),
@@ -238,7 +238,7 @@ fn test_wrapper_type_visitor_detects_wrappers() {
     println!("\n=== Detailed Usage ===");
     for loc in &locations {
         let wrappers = vec![
-            (loc.is_unprocessed, "Unprocessed"),
+            (loc.is_unprocessed, "UnverifiedSignatureEnvelope"),
             (loc.is_clean_authenticated, "CleanAuthenticated"),
             (loc.is_externalized, "Externalized"),
         ];
@@ -269,7 +269,7 @@ fn build_cross_tabulation(raw: &[RawOccurrence]) -> Vec<(String, String, String,
 fn verify_trust_boundary_invariants(locations: &[LocationEntry]) -> Vec<String> {
     let mut violations = Vec::new();
 
-    // Rule 1: core-engine should NOT contain Unprocessed usage EXCEPT in gate files
+    // Rule 1: core-engine should NOT contain UnverifiedSignatureEnvelope usage EXCEPT in gate files
     // Gate files: clean_auth.rs (primary gate) or probity/report.rs (domain-specific gate)
     for loc in locations {
         if loc.file.starts_with("core-engine/src") && loc.is_unprocessed {
@@ -277,8 +277,8 @@ fn verify_trust_boundary_invariants(locations: &[LocationEntry]) -> Vec<String> 
                 || loc.file.ends_with("probity/report.rs");
             if !is_gate_file {
                 violations.push(format!(
-                    "VIOLATION: Unprocessed found in core-engine outside a gate file: {} [{}] {}",
-                    loc.file, "Unprocessed", loc.inner
+                    "VIOLATION: UnverifiedSignatureEnvelope found in core-engine outside a gate file: {} [{}] {}",
+                    loc.file, "UnverifiedSignatureEnvelope", loc.inner
                 ));
             }
         }
@@ -298,8 +298,8 @@ fn verify_trust_boundary_invariants(locations: &[LocationEntry]) -> Vec<String> 
         }
     }
 
-    // Rule 3: Unprocessed should ONLY appear in communerd, gate files, server handlers
-    // (handlers.rs is a parse boundary: it creates Unprocessed<T> from wire JSON
+    // Rule 3: UnverifiedSignatureEnvelope should ONLY appear in communerd, gate files, server handlers
+    // (handlers.rs is a parse boundary: it creates UnverifiedSignatureEnvelope<T> from wire JSON
     // and hands it to communerd or crypto for authentication), or test files
     for loc in locations {
         if loc.is_unprocessed && loc.inner != "bare" && loc.inner != "T" {
@@ -310,8 +310,8 @@ fn verify_trust_boundary_invariants(locations: &[LocationEntry]) -> Vec<String> 
                 || loc.file.contains("test");
             if !allowed {
                 violations.push(format!(
-                    "VIOLATION: Unprocessed outside allowed locations: {} [{}] {}",
-                    loc.file, "Unprocessed", loc.inner
+                    "VIOLATION: UnverifiedSignatureEnvelope outside allowed locations: {} [{}] {}",
+                    loc.file, "UnverifiedSignatureEnvelope", loc.inner
                 ));
             }
         }
@@ -322,7 +322,7 @@ fn verify_trust_boundary_invariants(locations: &[LocationEntry]) -> Vec<String> 
 
 fn format_usage_table(locations: &[LocationEntry]) -> String {
     let mut table = String::new();
-    table.push_str("file | inner | context | Unprocessed | CleanAuthenticated | Externalized\n");
+    table.push_str("file | inner | context | UnverifiedSignatureEnvelope | CleanAuthenticated | Externalized\n");
     table.push_str(&"=".repeat(120));
     table.push('\n');
     for loc in locations {

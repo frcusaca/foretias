@@ -1,14 +1,14 @@
 //! ProbityReport — signed reputation/timing observations gossiped across the network.
 //!
 //! Three-stage type progression:
-//! `Unprocessed<ProbityReport>` (parsed, not trusted)
+//! `UnverifiedSignatureEnvelope<ProbityReport>` (parsed, not trusted)
 //! → `CleanAuthenticated<ProbityReport>` (authenticated + cleansed)
 //! → `ExternalizedProbityReport` (wire/disk, minimal fields).
 
 use serde::{Deserialize, Serialize};
 use crate::crypto_server::CryptoServer;
 use crate::error::NodeError;
-use crate::foretias::clean_auth::{CleanAuthenticated, CleanAuthError, Unprocessed};
+use crate::foretias::clean_auth::{CleanAuthenticated, CleanAuthError, UnverifiedSignatureEnvelope};
 
 // ---------------------------------------------------------------------------
 // ProbityReport domain type
@@ -86,10 +86,10 @@ pub fn pub_key_from_tbid_hex(pub_key_hex: &str) -> Result<Vec<u8>, CleanAuthErro
 }
 
 // ---------------------------------------------------------------------------
-// Unprocessed<ProbityReport> — field accessors + verify
+// UnverifiedSignatureEnvelope<ProbityReport> — field accessors + verify
 // ---------------------------------------------------------------------------
 
-impl Unprocessed<ProbityReport> {
+impl UnverifiedSignatureEnvelope<ProbityReport> {
     pub fn subject(&self) -> &str { &self.inner().subject }
     pub fn reporter(&self) -> &str { &self.inner().reporter }
     pub fn attribute(&self) -> &str { &self.inner().attribute }
@@ -188,8 +188,8 @@ pub struct ExternalizedProbityReport {
 }
 
 impl ExternalizedProbityReport {
-    /// Reconstruct as Unprocessed for re-verification on load.
-    pub fn reconstruct(self) -> Result<Unprocessed<ProbityReport>, crate::foretias::clean_auth::ParseError> {
+    /// Reconstruct as UnverifiedSignatureEnvelope for re-verification on load.
+    pub fn reconstruct(self) -> Result<UnverifiedSignatureEnvelope<ProbityReport>, crate::foretias::clean_auth::ParseError> {
         let report = ProbityReport {
             subject: self.subject,
             reporter: self.reporter,
@@ -199,11 +199,11 @@ impl ExternalizedProbityReport {
             signature: self.signature,
             curve: self.curve,
         };
-        Ok(Unprocessed::from_parsed(report))
+        Ok(UnverifiedSignatureEnvelope::from_parsed(report))
     }
 
     /// Alias for `reconstruct()` — backward compat.
-    pub fn into_unprocessed(self) -> Result<Unprocessed<ProbityReport>, crate::foretias::clean_auth::ParseError> {
+    pub fn into_unprocessed(self) -> Result<UnverifiedSignatureEnvelope<ProbityReport>, crate::foretias::clean_auth::ParseError> {
         self.reconstruct()
     }
 }
@@ -280,13 +280,13 @@ mod tests {
         let crypto = make_crypto();
         let report = make_signed_report(crypto.as_ref());
         let json = serde_json::to_vec(&report).unwrap();
-        let up = Unprocessed::<ProbityReport>::from_bytes(&json).unwrap();
+        let up = UnverifiedSignatureEnvelope::<ProbityReport>::from_bytes(&json).unwrap();
         assert_eq!(up.inner().subject, "peer-A");
     }
 
     #[test]
     fn test_unprocessed_from_invalid_json() {
-        let result = Unprocessed::<ProbityReport>::from_bytes(b"not json");
+        let result = UnverifiedSignatureEnvelope::<ProbityReport>::from_bytes(b"not json");
         assert!(result.is_err());
     }
 
@@ -303,7 +303,7 @@ mod tests {
     fn test_verify_valid_signature() {
         let crypto = make_crypto();
         let report = make_signed_report(crypto.as_ref());
-        let up = Unprocessed::from_parsed(report);
+        let up = UnverifiedSignatureEnvelope::from_parsed(report);
         let ca = up.into_clean_authenticated(crypto.as_ref()).unwrap();
         assert_eq!(ca.inner().subject, "peer-A");
     }
@@ -313,7 +313,7 @@ mod tests {
         let crypto = make_crypto();
         let mut report = make_signed_report(crypto.as_ref());
         report.signature = vec![0xFF; 64];
-        let up = Unprocessed::from_parsed(report);
+        let up = UnverifiedSignatureEnvelope::from_parsed(report);
         let result = up.into_clean_authenticated(crypto.as_ref());
         assert!(result.is_err());
         assert!(matches!(result, Err(CleanAuthError::InvalidSignature)));
@@ -324,7 +324,7 @@ mod tests {
         let crypto = make_crypto();
         let mut report = make_signed_report(crypto.as_ref());
         report.signature = vec![0xFF; 10];
-        let up = Unprocessed::from_parsed(report);
+        let up = UnverifiedSignatureEnvelope::from_parsed(report);
         let result = up.into_clean_authenticated(crypto.as_ref());
         assert!(result.is_err());
         assert!(matches!(result, Err(CleanAuthError::InvalidLength(_))));

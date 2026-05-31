@@ -33,7 +33,7 @@ fn find_available_port() -> u16 {
 /// → InitiateDump → history_dump_chunk → history_dump_complete. The wire
 /// path works (verified by structural sub-tests below); the gate that
 /// currently prevents an assertion on `mirror.tick_count >= TICKS` is the
-/// Take 3 inbound gate's genesis verifier: `Unprocessed<ChrononRecord>::verify`
+/// Take 3 inbound gate's genesis verifier: `UnverifiedSignatureEnvelope<ChrononRecord>::verify`
 /// returns `CleanAuthError::NotYetImplemented` for `tb_version >= 1`
 /// (PQC genesis verification is deferred until `tbid_verify` is wired —
 /// see `core-engine/src/foretias/clean_auth.rs:267-269`).
