@@ -5,7 +5,10 @@
 //! This record requires full (CleanFullyAuthenticated) gate enforcement.
 
 use serde::Serialize;
+use crate::crypto_server::VerifyOps;
+use crate::error::CryptoError;
 use crate::foretias::clean_auth::RecordBase;
+use crate::foretias::types::Tbid;
 
 /// Maximum family members (DoS guard).
 pub const MAX_FAMILY_MEMBERS: usize = 64;
@@ -76,6 +79,42 @@ impl FamilyRecord {
     pub fn k(&self) -> usize {
         self.members.len()
     }
+
+    /// Verify the k×k cross-signing matrix.
+    ///
+    /// For each cell `matrix[i][j]`, verify the Ed25519 portion (first 64 bytes)
+    /// is member i's Ed25519 signature over member j's TBID raw bytes.
+    /// Returns `Ok(())` if all k² signatures verify, `Err` on first failure.
+    pub fn verify_matrix<C: VerifyOps>(&self, crypto: &C) -> Result<(), CryptoError> {
+        let k = self.k();
+        let tbids: Vec<Tbid> = self
+            .members
+            .iter()
+            .map(|m| Tbid::from_hex(m))
+            .collect::<Result<Vec<_>, CryptoError>>()?;
+
+        for i in 0..k {
+            for j in 0..k {
+                let sig = &self.matrix[i][j];
+                if sig.len() < 64 {
+                    return Err(CryptoError::BadSignature);
+                }
+                let sig_arr: [u8; 64] = sig[..64].try_into()
+                    .map_err(|_| CryptoError::BadSignature)?;
+                let valid = crypto.verify_ed25519(
+                    &crate::core::bindings::ForetiasPubKey32 {
+                        bytes: tbids[i].ed25519_public_key(),
+                    },
+                    &tbids[j].raw_bytes(),
+                    &crate::core::bindings::ForetiasSig64 { bytes: sig_arr },
+                )?;
+                if !valid {
+                    return Err(CryptoError::BadSignature);
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 impl RecordBase for FamilyRecord {
@@ -145,5 +184,37 @@ mod tests {
             .collect();
         let result = FamilyRecord::try_new(members, matrix);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn verify_matrix_rejects_short_signature() {
+        let tbid1 = Tbid::test();
+        let tbid2 = Tbid::from_bytes(&[0xBB; 96]).unwrap();
+        let members = vec![tbid1.to_hex(), tbid2.to_hex()];
+        let matrix = vec![
+            vec![vec![1u8; 64], vec![1u8; 64]],
+            vec![vec![1u8; 32], vec![1u8; 64]],
+        ];
+        let record = FamilyRecord::try_new(members, matrix).unwrap();
+        let crypto = crate::crypto_server::software::SoftwareCryptoServer::generate(crate::crypto_server::ForetiasCurve::Ed25519).unwrap();
+        let result = record.verify_matrix(&crypto);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), CryptoError::BadSignature));
+    }
+
+    #[test]
+    fn verify_matrix_rejects_tampered_signature() {
+        let tbid1 = Tbid::test();
+        let tbid2 = Tbid::from_bytes(&[0xBB; 96]).unwrap();
+        let members = vec![tbid1.to_hex(), tbid2.to_hex()];
+        let matrix = vec![
+            vec![vec![0xFF; 64], vec![0xFF; 64]],
+            vec![vec![0xFF; 64], vec![0xFF; 64]],
+        ];
+        let record = FamilyRecord::try_new(members, matrix).unwrap();
+        let crypto = crate::crypto_server::software::SoftwareCryptoServer::generate(crate::crypto_server::ForetiasCurve::Ed25519).unwrap();
+        let result = record.verify_matrix(&crypto);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), CryptoError::BadSignature));
     }
 }
