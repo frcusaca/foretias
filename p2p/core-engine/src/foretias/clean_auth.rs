@@ -68,14 +68,15 @@ pub trait TrustedInner<T>: Sized {
 /// Raw domain data from the wire/disk. Do NOT trust it.
 #[derive(Debug, Clone)]
 pub struct UnverifiedSignatureEnvelope<T> {
-  inner: T,
+    inner: T,
+    pub(crate) signatures: Vec<SignatureEntry>,
 }
 pub type DontUse<T> = UnverifiedSignatureEnvelope<T>;
 
 impl<T> UnverifiedSignatureEnvelope<T> {
     /// Construct from raw parsed data.
     pub fn from_parsed(inner: T) -> Self {
-        Self { inner }
+        Self { inner, signatures: Vec::new() }
     }
 
     /// Read-only accessor.
@@ -104,7 +105,7 @@ impl<T: serde::de::DeserializeOwned> UnverifiedSignatureEnvelope<T> {
 }
 
 impl<T> TrustedInner<T> for UnverifiedSignatureEnvelope<T> {
-    fn from_trusted(inner: T) -> Self { Self { inner } }
+    fn from_trusted(inner: T) -> Self { Self { inner, signatures: Vec::new() } }
     fn inner(&self) -> &T { &self.inner }
     fn into_inner(self) -> T { self.inner }
 }
@@ -126,6 +127,7 @@ pub trait RecordBase: serde::Serialize {
 #[derive(Debug, Clone)]
 pub struct CleanAuthenticated<T> {
     inner: T,
+    pub(crate) signatures: Vec<SignatureEntry>,
 }
 
 impl<T> CleanAuthenticated<T> {
@@ -134,7 +136,7 @@ impl<T> CleanAuthenticated<T> {
     /// Chronomatter-produced records use this path. The caller asserts
     /// the record was signed with our own key.
     pub fn from_trusted(inner: T) -> Self {
-        Self { inner }
+        Self { inner, signatures: Vec::new() }
     }
 
     /// Read-only accessor.
@@ -152,7 +154,7 @@ impl<T> CleanAuthenticated<T> {
 }
 
 impl<T> TrustedInner<T> for CleanAuthenticated<T> {
-    fn from_trusted(inner: T) -> Self { Self { inner } }
+    fn from_trusted(inner: T) -> Self { Self { inner, signatures: Vec::new() } }
     fn inner(&self) -> &T { &self.inner }
     fn into_inner(self) -> T { self.inner }
 }
@@ -164,13 +166,14 @@ impl<T> TrustedInner<T> for CleanAuthenticated<T> {
 #[derive(Debug, Clone)]
 pub struct CleanFullyAuthenticated<T> {
     inner: T,
+    pub(crate) signatures: Vec<SignatureEntry>,
 }
 
 impl<T> CleanFullyAuthenticated<T> {
     /// Construct from data verified against both the fast key and the slow key.
     /// Only dual-key verification paths in `communerd/` should call this.
     pub fn from_dual_verified(inner: T) -> Self {
-        Self { inner }
+        Self { inner, signatures: Vec::new() }
     }
 
     /// Read-only accessor.
@@ -188,7 +191,7 @@ impl<T> CleanFullyAuthenticated<T> {
 
 impl<T: Clone> From<CleanFullyAuthenticated<T>> for CleanAuthenticated<T> {
     fn from(full: CleanFullyAuthenticated<T>) -> CleanAuthenticated<T> {
-        CleanAuthenticated::from_trusted(full.into_inner())
+        CleanAuthenticated { inner: full.inner, signatures: full.signatures }
     }
 }
 
@@ -318,21 +321,19 @@ impl UnverifiedSignatureEnvelope<ChrononRecord> {
                 if !valid {
                     return Err(CleanAuthError::ChainBreak);
                 }
-                Ok(CleanAuthenticated::from_trusted(self.inner))
+                Ok(CleanAuthenticated { inner: self.inner, signatures: self.signatures })
             }
             None => {
-                // Genesis: must be tick 1 with a non-empty public key.
                 if self.inner.chronon_number != 1 {
                     return Err(CleanAuthError::ChainBreak);
                 }
                 if self.inner.public_key.is_empty() {
                     return Err(CleanAuthError::InvalidLength("public_key empty".into()));
                 }
-                // Full PQC genesis verification deferred until tbid_verify is wired.
                 if self.inner.tb_version >= 1 {
                     return Err(CleanAuthError::NotYetImplemented);
                 }
-                Ok(CleanAuthenticated::from_trusted(self.inner))
+                Ok(CleanAuthenticated { inner: self.inner, signatures: self.signatures })
             }
         }
     }
@@ -533,7 +534,7 @@ impl UnverifiedSignatureEnvelope<Foretis> {
             return Err(CleanAuthError::InvalidSignature);
         }
 
-        Ok(CleanAuthenticated::from_trusted(self.inner))
+        Ok(CleanAuthenticated { inner: self.inner, signatures: self.signatures })
     }
 
     /// Ergonomic alias for `verify(crypto, record, content)`.
