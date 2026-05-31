@@ -14,9 +14,54 @@ to Communerdette's public interface (`MirrorDispatcher`,
 here so the dependent specs can be updated in lockstep before
 implementation resumes downstream.
 
-**Worktree:** No implementation worktree is allocated by this draft. If a
-future implementation uses a worktree branch, add explicit worktree lifecycle
-checkbox tasks here following `AGENTS.md`.
+---
+
+## Execution — Worktree and Build Order (added 2026-05-30)
+
+**Worktree (required for the remaining implementation phases 13/15/16/17).**
+Phases 1–12 and Phase 14's harness are merged on `alpha`. The remaining
+implementation work — especially Phase 16's `Unprocessed → UnverifiedSignatureEnvelope`
+rename + `postcard` migration + the wire-breaking `Foretis` change — is large,
+multi-file, and risky, so it is done on an **isolated worktree branch**, not on
+`alpha`:
+
+- [ ] Create worktree branch `group7-signing` (off `alpha`) for phases 16→15→13→17.
+- [ ] Keep `alpha` green; do not commit intermediate (red) states to `alpha`.
+- [ ] Merge each phase back to `alpha` only when its boxes are checked **and**
+      the full suite (`cargo test --workspace`) plus toppoli
+      (`-- --include-ignored`) are green.
+- [ ] Spec/plan doc edits may continue on `alpha` directly (docs, not code).
+
+**Build order (dependency-respecting):**
+
+1. **Phase 16** — Canonical encoding + signature wrappers + `RecordBase` + gate.
+   The foundation everything else needs. Confirm the two open choices first
+   (postcard vs bincode §21.1; `Foretis` wire-break version-bump mechanics §21.7).
+2. **Phase 17** — StrawmanSuite + TinmanSuite. Land right after 16 so the gate
+   strawman guards phases 15/13 as they are written.
+3. **Phase 15** — FamilyRecord + Family Cache (needs 16's wrappers).
+4. **Phase 13** — FB gossip (needs 15 + 16).
+5. **Parallelizable anytime** (independent of the above): Phase 5 (priority
+   queue), Phase 12 remaining tests (L1/L2/L3 + `spawn_channel_bind_task`
+   trigger), Phase 14 `toppoli_l1_ping_round_trip` + docs (14.7).
+6. **Design-gated, do last / with human:** Phase 8.2/8.4 (mutual attestation,
+   local signing), Phase 10 obsolete-path removal.
+
+**Non-negotiables for every phase (see also `feedback_defensive_coding` memory):**
+
+- Defensive coding throughout: reject (never panic) on malformed input, distinct
+  error variants, bound attacker-controlled work before doing it.
+- The **CHECK** boxes (full-signature gate enforcement) are mandatory and must
+  each have a negative test; StrawmanSuite backstops them once Phase 17 lands.
+- Never start a phase with broken tests (`AGENTS.md` rule).
+- Test categories: unit (`--lib`), snapshot, toppoli (`--test toppoli --
+  --include-ignored`) — run commands under "Verification Commands" below.
+
+**How to read this plan:** each `## Phase N` is a unit of work with checkbox
+tasks; `[x]` = done (dated), `[ ]` = open. Phases 9/11/12 are marked COMPLETE
+(12 has open *tests*). Spec references (`§N`) point into
+`COMBINED_GROUP7_COMMUNERDETTE_SPEC.md`; the trust-boundary suites reference
+`TRUST_BOUNDARY_SEMANTIC_ANALYSIS_SPEC.md`.
 
 ---
 
