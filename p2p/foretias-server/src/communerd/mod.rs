@@ -27,9 +27,10 @@ use foretias_core::core::bindings::ForetiasPubKey32;
 use foretias_core::crypto_server::{CryptoServer, new_software, ForetiasCurve};
 use foretias_core::error::NodeError;
 use foretias_core::foretias::callbacks::{CommunityQuery, CommunityResponse, PeerAddr as CorePeerAddr, PeerChangeCallback, PeerMessenger, TransportError as CoreTransportError};
-use foretias_core::foretias::clean_auth::{UnverifiedSignatureEnvelope, CleanAuthenticated};
+use foretias_core::foretias::clean_auth::{UnverifiedSignatureEnvelope, CleanAuthenticated, CleanFullyAuthenticated};
 use foretias_core::foretias::tick::{Foretis, ChrononRecord};
 use foretias_core::foretias::types::Tbid;
+use foretias_core::foretias::family_record::FamilyRecord;
 
 use self::communerdette::Communerdette;
 
@@ -173,6 +174,9 @@ pub struct Communerd {
     pending_lookups: Arc<std::sync::Mutex<HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<PeerRegistrationRecord>>>>>,
     calendar: Arc<std::sync::RwLock<Option<Arc<Calendar>>>>,
     communerdettes: Arc<DashMap<Tbid, Arc<communerdette::Communerdette>>>,
+    /// Family Cache: TBID → CleanFullyAuthenticated<FamilyRecord>.
+    /// Indexed by every member TBID for fast reverse lookup.
+    family_cache: Arc<DashMap<String, Arc<CleanFullyAuthenticated<FamilyRecord>>>>,
     /// Group 4b: peer-pool change callback (typically the Calendar).
     /// Fires after every peer add/remove with the current peer-pool snapshot.
     peer_change_cb: Arc<std::sync::Mutex<Option<Arc<dyn PeerChangeCallback>>>>,
@@ -202,6 +206,7 @@ impl Clone for Communerd {
             pending_lookups: Arc::clone(&self.pending_lookups),
             calendar: Arc::clone(&self.calendar),
             communerdettes: Arc::clone(&self.communerdettes),
+            family_cache: Arc::clone(&self.family_cache),
             peer_change_cb: Arc::clone(&self.peer_change_cb),
         }
     }
@@ -242,6 +247,7 @@ impl Communerd {
             pending_lookups: Arc::new(std::sync::Mutex::new(HashMap::new())),
             calendar: Arc::new(std::sync::RwLock::new(None)),
             communerdettes: Arc::new(DashMap::new()),
+            family_cache: Arc::new(DashMap::new()),
             peer_change_cb: Arc::new(std::sync::Mutex::new(None)),
         }
     }
@@ -268,6 +274,19 @@ impl Communerd {
         self.communerdettes.get(&tbid).map(|entry| {
             CommunerdetteLine::new(tbid, Arc::clone(entry.value()), Arc::clone(&host), Arc::clone(&crypto), Arc::clone(&clock))
         })
+    }
+
+    /// Insert a verified FamilyRecord into the family cache.
+    /// Indexes by every member TBID for O(1) reverse lookup.
+    pub fn family_cache_insert(&self, record: Arc<CleanFullyAuthenticated<FamilyRecord>>) {
+        for member_tbid_hex in record.inner().members.iter() {
+            self.family_cache.insert(member_tbid_hex.clone(), Arc::clone(&record));
+        }
+    }
+
+    /// Lookup a FamilyRecord by any member TBID.
+    pub fn family_cache_lookup(&self, tbid_hex: &str) -> Option<Arc<CleanFullyAuthenticated<FamilyRecord>>> {
+        self.family_cache.get(tbid_hex).map(|entry| Arc::clone(entry.value()))
     }
 
     #[deprecated(note = "Use Communerdette L1 liveness loop (Phase 12.1) instead. \
