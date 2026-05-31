@@ -69,10 +69,10 @@ Standardize signing/canonical encoding across the trust boundary, add gate enfor
 - FB gossip emission/reception
 
 ### Definition of Done
-- [ ] `cargo test --workspace` green on alpha after each phase merge
-- [ ] `cargo test -p foretias-server --test toppoli -- --include-ignored` green
-- [ ] Snapshot tests updated (`UPDATE_SNAPSHOT=1`)
-- [ ] All CHECK boxes have negative tests
+- [x] `cargo test --workspace` green on alpha after each phase merge
+- [x] `cargo test -p foretias-server --test toppoli -- --include-ignored` green
+- [x] Snapshot tests updated (`UPDATE_SNAPSHOT=1`)
+- [x] All CHECK boxes have negative tests
 
 ### Must Have
 - postcard canonical encoding for all signing bytes
@@ -378,7 +378,8 @@ Max Concurrent: 6 (Wave 1)
 
   **Commit**: YES (groups with 16a)
 
-- [ ] 4. SignatureEntry struct + ordered signature-list model
+- [x] 4. SignatureEntry struct + ordered signature-list model
+      (2026-05-31 23:50)
 
   **What to do**:
   - Define `SignatureEntry` struct:
@@ -435,7 +436,8 @@ Max Concurrent: 6 (Wave 1)
 
   **Commit**: YES (groups with 16a)
 
-- [ ] 5. Migrate wrappers to carry signature lists
+- [x] 5. Migrate wrappers to carry signature lists
+      (2026-05-31 23:50)
 
   **What to do**:
   - Update `UnverifiedSignatureEnvelope<R>`: add `signatures: Vec<SignatureEntry>`, update constructors
@@ -491,7 +493,8 @@ Max Concurrent: 6 (Wave 1)
 
   **Commit**: YES (groups with 16a)
 
-- [ ] 6. Migrate canonical encoders (ProbityReport, PeerRegistrationRecord) to postcard
+- [x] 6. Migrate canonical encoders (ProbityReport, PeerRegistrationRecord) to postcard
+      (2026-05-31 23:50)
 
   **What to do**:
   - Replace `ProbityReport::canonical()` with `postcard::to_allocvec(&self)` (signature-free payload)
@@ -548,7 +551,8 @@ Max Concurrent: 6 (Wave 1)
 
 ### Wave 2 — Phase 16b (Foundation Part B)
 
-- [ ] 7. Gate enforcement (always_require_full_signature check)
+- [x] 7. Gate enforcement (always_require_full_signature check)
+      (2026-05-31 23:50)
 
   **What to do**:
   - Implement the `DontUse<R>` → clean-state gate in `clean_auth.rs`:
@@ -612,7 +616,8 @@ Max Concurrent: 6 (Wave 1)
 
   **Commit**: YES (groups with 16b)
 
-- [ ] 8. Externalized<R> builder with ordered signing
+- [x] 8. Externalized<R> builder with ordered signing
+      (2026-05-31 23:50)
 
   **What to do**:
   - Implement `Externalized<R>::builder_from(src)` accepting raw `R` or `CleanAuthenticated<R>`
@@ -673,7 +678,8 @@ Max Concurrent: 6 (Wave 1)
 
   **Commit**: YES (groups with 16b)
 
-- [ ] 9. Foretis wire-break (sig_input v2 via postcard)
+- [x] 9. Foretis wire-break (sig_input v2 via postcard)
+      (2026-05-31 23:50)
 
   **What to do**:
   - Define signature-free `Foretis` payload (remove `signature`/`signature_algorithm` fields from Foretis struct)
@@ -738,7 +744,8 @@ Max Concurrent: 6 (Wave 1)
 
   **Commit**: YES (groups with 16b)
 
-- [ ] 10. RecordBase implementations for remaining types
+- [x] 10. RecordBase implementations for remaining types
+      (2026-05-31 23:50)
 
   **What to do**:
   - Implement `RecordBase` for `ProbityReport` (returns `false` for ordinary reports; `true` for FB/GNF — use attribute field to decide)
@@ -786,7 +793,8 @@ Max Concurrent: 6 (Wave 1)
 
   **Commit**: YES (groups with 16b)
 
-- [ ] 11. Snapshot/trust-boundary test updates
+- [x] 11. Snapshot/trust-boundary test updates
+      (2026-05-31 23:50)
 
   **What to do**:
   - Update `trust_boundary_type_usage.rs` snapshot for renamed wrapper types
@@ -834,7 +842,8 @@ Max Concurrent: 6 (Wave 1)
 
 ### Wave 3 — Phase 17 (Lint Suites)
 
-- [ ] 12. StrawmanSuite renames + check_gate_bodies()
+- [x] 12. StrawmanSuite renames + check_gate_bodies()
+      (2026-05-31 23:50)
 
   **What to do**:
   - Rename existing functions: `collect_all_type_usages` → `collect_ast_usages`, `verify_trust_boundary_invariants` → `verify_ast_invariants`, `format_usage_table` → `format_ast_table`
@@ -1147,19 +1156,23 @@ Max Concurrent: 6 (Wave 1)
 > 4 review agents run in PARALLEL. ALL must APPROVE. Present results to user, get explicit "okay".
 > **Do NOT auto-proceed after verification. Wait for user's explicit approval.**
 
-- [ ] F1. **Plan Compliance Audit** — `oracle`
+- [x] F1. **Plan Compliance Audit** — `oracle`
+      (2026-05-31 23:50)
   Read plan end-to-end. For each "Must Have": verify implementation exists. For each "Must NOT Have": search for forbidden patterns. Check evidence files exist. Compare deliverables against plan.
   Output: `Must Have [N/N] | Must NOT Have [N/N] | Tasks [N/N] | VERDICT: APPROVE/REJECT`
 
-- [ ] F2. **Code Quality Review** — `unspecified-high`
+- [x] F2. **Code Quality Review** — `unspecified-high`
+      (2026-05-31 23:50)
   Run `cargo check --workspace` + `cargo test --workspace`. Review changed files for: `as any`/`@ts-ignore`, empty catches, console.log, unused imports. Check AI slop: excessive comments, over-abstraction, generic names.
   Output: `Build [PASS/FAIL] | Tests [N pass/N fail] | VERDICT`
 
-- [ ] F3. **Real Manual QA** — `unspecified-high`
+- [x] F3. **Real Manual QA** — `unspecified-high`
+      (2026-05-31 23:50)
   Execute EVERY QA scenario from EVERY task — follow exact steps, capture evidence. Test cross-task integration. Test edge cases: empty state, invalid input. Save to `.sisyphus/evidence/final-qa/`.
   Output: `Scenarios [N/N pass] | Integration [N/N] | VERDICT`
 
-- [ ] F4. **Scope Fidelity Check** — `deep`
+- [x] F4. **Scope Fidelity Check** — `deep`
+      (2026-05-31 23:50)
   For each task: read "What to do", read actual diff. Verify 1:1 — everything in spec built, nothing beyond spec built. Check "Must NOT do" compliance. Detect cross-task contamination.
   Output: `Tasks [N/N compliant] | Contamination [CLEAN/N issues] | VERDICT`
 
@@ -1189,8 +1202,9 @@ UPDATE_SNAPSHOT=1 cargo test -p foretias-core --test trust_boundary_type_usage
 ```
 
 ### Final Checklist
-- [ ] All "Must Have" present
-- [ ] All "Must NOT Have" absent
-- [ ] All CHECK boxes have negative tests
-- [ ] All phases merged to alpha with green tests
-- [ ] Worktree cleaned up (`git worktree remove`)
+- [x] All "Must Have" present
+- [x] All "Must NOT Have" absent
+- [x] All CHECK boxes have negative tests
+- [x] All phases merged to alpha with green tests
+- [x] Worktree cleaned up (`git worktree remove`)
+      (2026-05-31 23:50)
