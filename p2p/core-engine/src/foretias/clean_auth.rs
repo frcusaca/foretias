@@ -79,6 +79,16 @@ impl<T> TrustedInner<T> for UnverifiedSignatureEnvelope<T> {
     fn into_inner(self) -> T { self.inner }
 }
 
+/// Per-record full-signature requirement trait.
+/// All signature-free payload types implement this common base trait.
+pub trait RecordBase: serde::Serialize {
+    /// Must this record reach CleanFullyAuthenticated before it may be used?
+    /// Default: false (fast Ed25519 signatures suffice).
+    fn always_require_full_signature(&self) -> bool {
+        false
+    }
+}
+
 /// A domain type that has been authenticated and cleansed.
 ///
 /// Due diligence complete. Safe for in-process use.
