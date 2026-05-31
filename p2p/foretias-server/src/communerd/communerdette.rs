@@ -963,11 +963,34 @@ struct CommunerdetteExecutor {
     target_tbid: Tbid,
     crypto: Arc<dyn CryptoServer>,
     clock: Arc<dyn Clock>,
+    local_calendar_tbid: Option<String>,
 }
 
 impl CommunerdetteExecutor {
-    fn new(host: Arc<dyn CommunerdetteHost>, target_tbid: Tbid, crypto: Arc<dyn CryptoServer>, clock: Arc<dyn Clock>) -> Self {
-        Self { host, target_tbid, crypto, clock }
+    fn new(host: Arc<dyn CommunerdetteHost>, target_tbid: Tbid, crypto: Arc<dyn CryptoServer>, clock: Arc<dyn Clock>, local_calendar_tbid: Option<String>) -> Self {
+        Self { host, target_tbid, crypto, clock, local_calendar_tbid }
+    }
+
+    /// Emit an FB (Bruderschaft) ProbityReport for the target TBID.
+    /// value=1.0 for established, value=-1.0 for lost.
+    fn emit_fb_report(&self, value: f32) {
+        let Some(reporter_tbid) = &self.local_calendar_tbid else {
+            tracing::debug!(target_tbid = %self.target_tbid.to_hex(), "FB emission skipped: no local_calendar_tbid set");
+            return;
+        };
+        let report = crate::probity::ProbityReport {
+            subject: self.target_tbid.to_hex(),
+            reporter: reporter_tbid.clone(),
+            attribute: "fb".to_string(),
+            value,
+            timestamp_ns: self.clock.now_ns().unwrap_or(0),
+            signature: Vec::new(),
+            curve: 1,
+        };
+        match self.host.host_sign_probity_report(&report) {
+            Ok(signed) => self.host.host_publish_probity_report(signed),
+            Err(e) => tracing::warn!(target_tbid = %self.target_tbid.to_hex(), fb_value = value, "FB emission signing failed: {e}"),
+        }
     }
 
     /// Resolve PeerAddr for the target TBID via DHT lookup.
@@ -1320,6 +1343,7 @@ impl Communerdette {
             match unprocessed.verify_full(&*executor.crypto, &nonce, &channel_id, &executor.target_tbid) {
                 Ok(binding) => {
                     tracing::info!(target_tbid = %requester_tbid_hex, channel_id = %channel_id, "channel bound (FullyBound)");
+                    executor.emit_fb_report(1.0);
                     Some(binding)
                 }
                 Err(e) => {
@@ -1636,6 +1660,7 @@ impl CommunerdetteLine {
             self.target_tbid,
             Arc::clone(&self.crypto),
             Arc::clone(&self.clock),
+            None,
         );
         Communerdette::execute_calendar_slice(&executor, tick_start, count, timeout).await
     }
@@ -1654,6 +1679,7 @@ impl CommunerdetteLine {
             self.target_tbid,
             Arc::clone(&self.crypto),
             Arc::clone(&self.clock),
+            None,
         );
         Communerdette::execute_tick(&executor, tick_number, timeout).await
     }
@@ -1676,6 +1702,7 @@ impl CommunerdetteLine {
             self.target_tbid,
             Arc::clone(&self.crypto),
             Arc::clone(&self.clock),
+            None,
         );
         Communerdette::execute_stamp(&executor, content, echo, timeout).await
     }
@@ -2138,6 +2165,7 @@ mod tests {
             tbid,
             crypto,
             clock,
+            None,
         );
 
         let bad_record = ChrononRecord {
@@ -2177,6 +2205,7 @@ mod tests {
             tbid,
             crypto,
             clock,
+            None,
         );
 
         let bad_record = ChrononRecord {
@@ -2217,6 +2246,7 @@ mod tests {
             target_tbid,
             crypto,
             clock,
+            None,
         );
 
         let record = make_test_chronon_record(&other_tbid, 1);
@@ -2249,6 +2279,7 @@ mod tests {
             target_tbid,
             crypto,
             clock,
+            None,
         );
 
         let record = make_test_chronon_record(&target_tbid, 1);
@@ -2286,6 +2317,7 @@ mod tests {
             tbid.clone(),
             crypto,
             clock,
+            None,
         );
 
         let bad_foretis = Foretis {
@@ -2325,6 +2357,7 @@ mod tests {
             tbid.clone(),
             crypto,
             clock,
+            None,
         );
 
         let bad_foretis = Foretis {
@@ -2364,6 +2397,7 @@ mod tests {
             tbid.clone(),
             crypto,
             clock,
+            None,
         );
 
         let bad_foretis = Foretis {
@@ -2404,6 +2438,7 @@ mod tests {
             target_tbid.clone(),
             crypto,
             clock,
+            None,
         );
 
         let foretis = make_test_foretis(&other_tbid);
@@ -2479,6 +2514,7 @@ mod tests {
             target_tbid,
             crypto.clone(),
             clock,
+            None,
         );
 
         let json = serde_json::to_value(&foretis).unwrap();
@@ -2542,6 +2578,7 @@ mod tests {
             target_tbid,
             crypto.clone(),
             clock,
+            None,
         );
 
         let json = serde_json::to_value(&foretis).unwrap();
@@ -2572,6 +2609,7 @@ mod tests {
             tbid,
             crypto,
             clock,
+            None,
         );
 
         let tbid_for_dummy = Tbid::from_raw([0u8; 96]);
@@ -2596,7 +2634,7 @@ mod tests {
         .expect("libsodium"));
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
 
-        let executor = CommunerdetteExecutor::new(host, tbid, crypto, clock);
+        let executor = CommunerdetteExecutor::new(host, tbid, crypto, clock, None);
 
         let result = Communerdette::execute_calendar_slice(&executor, 1, 10, TokioDuration::from_secs(5))
             .await;
@@ -2620,7 +2658,7 @@ mod tests {
         .expect("libsodium"));
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
 
-        let executor = CommunerdetteExecutor::new(host, tbid, crypto, clock);
+        let executor = CommunerdetteExecutor::new(host, tbid, crypto, clock, None);
 
         let result = Communerdette::execute_stamp(&executor, b"hello".to_vec(), "test".into(), TokioDuration::from_secs(5))
             .await;
@@ -2864,6 +2902,7 @@ mod tests {
             target_tbid,
             crypto.clone(),
             clock,
+            None,
         );
 
         let record1 = make_test_chronon_record(&target_tbid, 1);
@@ -2936,6 +2975,7 @@ mod tests {
             target_tbid,
             crypto.clone(),
             clock,
+            None,
         );
 
         let result = executor.gate_foretis(json, &chronon_record, content);
@@ -3180,7 +3220,7 @@ mod tests {
         // Return empty slice — execute_tick must error.
         host.set_calendar_response(vec![]);
 
-        let executor = CommunerdetteExecutor::new(host, tbid, crypto, clock);
+        let executor = CommunerdetteExecutor::new(host, tbid, crypto, clock, None);
         let result = Communerdette::execute_tick(
             &executor, 1, TokioDuration::from_secs(5),
         ).await;
@@ -3251,7 +3291,7 @@ mod tests {
         host.set_calendar_response(vec![chronon_record]);
         host.set_stamp_response(serde_json::to_value(&foretis).unwrap());
 
-        let executor = CommunerdetteExecutor::new(host, tbid.clone(), crypto, clock);
+        let executor = CommunerdetteExecutor::new(host, tbid.clone(), crypto, clock, None);
         let result = Communerdette::execute_stamp(
             &executor,
             content.to_vec(),
