@@ -280,6 +280,60 @@ impl<T> TrustedInner<T> for Externalized<T> {
     fn into_inner(self) -> T { self.inner }
 }
 
+/// Builder for Externalized<R> with ordered signature chain enforcement.
+///
+/// Collects signatures in order: each signature covers `postcard(payload) || postcard(&signatures_so_far)`.
+/// Terminal entry must be CommunerdEnvelope.
+#[derive(Debug, Clone)]
+pub struct ExternalizedBuilder<T> {
+    inner: T,
+    signatures: Vec<SignatureEntry>,
+}
+
+impl<T: serde::Serialize> ExternalizedBuilder<T> {
+    /// Create builder from a raw payload.
+    pub fn builder_from(inner: T) -> Self {
+        Self { inner, signatures: Vec::new() }
+    }
+
+    /// Create builder from a CleanAuthenticated payload (drops inbound signatures).
+    pub fn builder_from_authenticated(auth: CleanAuthenticated<T>) -> Self {
+        Self { inner: auth.into_inner(), signatures: Vec::new() }
+    }
+
+    /// Append a signature entry.
+    /// Signs: postcard(payload) || postcard(&signatures_so_far).
+    /// The caller must provide the pre-computed signature bytes.
+    pub fn add_signature(
+        &mut self,
+        role: SignerRole,
+        tbid: String,
+        algorithm: SigAlgorithm,
+        sig: Vec<u8>,
+    ) -> &mut Self {
+        self.signatures.push(SignatureEntry { role, tbid, algorithm, sig });
+        self
+    }
+
+    /// Finalize: validate terminal entry is CommunerdEnvelope and return Externalized.
+    pub fn build(self) -> Result<Externalized<T>, CleanAuthError> {
+        if self.signatures.is_empty() {
+            return Err(CleanAuthError::SignatureCountMismatch {
+                expected: 1,
+                got: 0,
+            });
+        }
+        let last = self.signatures.last().unwrap();
+        if last.role != SignerRole::CommunerdEnvelope {
+            return Err(CleanAuthError::SignatureVerificationFailed {
+                role: last.role.clone(),
+                tbid: last.tbid.clone(),
+            });
+        }
+        Ok(Externalized { inner: self.inner })
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Error types
 // ---------------------------------------------------------------------------
