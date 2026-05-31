@@ -19,6 +19,36 @@ use super::external_attestation::ExternalAttestation;
 use super::encoding::{FTByteVector, FTByteArray};
 
 // ---------------------------------------------------------------------------
+// Signature types (Phase 16a — §21.2)
+// ---------------------------------------------------------------------------
+
+/// Role of the signer in the ordered signature chain.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum SignerRole {
+    Chronomatter,
+    Calendar,
+    Member,
+    CommunerdEnvelope,
+}
+
+/// Signature algorithm used by this entry.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum SigAlgorithm {
+    Ed25519,  // fast
+    DualKey,  // Ed25519 ‖ SLH-DSA
+}
+
+/// One entry in the ordered signature list carried by trust-boundary wrappers.
+/// Each signature covers `postcard(payload) ‖ postcard(&signatures[0..i])`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SignatureEntry {
+    pub role:      SignerRole,
+    pub tbid:      String,
+    pub algorithm: SigAlgorithm,
+    pub sig:       Vec<u8>,
+}
+
+// ---------------------------------------------------------------------------
 // TrustedInner trait (retained for backward compat -- inherent methods are preferred)
 // ---------------------------------------------------------------------------
 
