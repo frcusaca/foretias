@@ -79,6 +79,11 @@ pub(super) trait CommunerdetteHost: Send + Sync {
     ) -> Result<serde_json::Value, TransportError>;
     /// Execute a liveness ping (Phase 12.1).
     async fn host_execute_ping(&self, peer: &PeerAddr) -> Result<(), TransportError>;
+    /// Sign a ProbityReport (Phase 13.1).
+    /// Calendar signing stub — returns signed bytes or error.
+    fn host_sign_probity_report(&self, report: &crate::probity::ProbityReport) -> Result<Vec<u8>, String>;
+    /// Publish a signed ProbityReport via gossip (Phase 13.1).
+    fn host_publish_probity_report(&self, signed_bytes: Vec<u8>);
 }
 
 /// Evidence level for a TBID-to-transport binding.
@@ -1942,6 +1947,13 @@ mod tests {
         async fn host_execute_ping(&self, _peer: &PeerAddr) -> Result<(), TransportError> {
             Err(TransportError::Unsupported("mock".into()))
         }
+
+        fn host_sign_probity_report(&self, _report: &crate::probity::ProbityReport) -> Result<Vec<u8>, String> {
+            Ok(vec![0xAA; 64])
+        }
+
+        fn host_publish_probity_report(&self, _signed_bytes: Vec<u8>) {
+        }
     }
 
     fn make_record(peer_id: &str, json_rpc: &str) -> PeerRegistrationRecord {
@@ -3144,6 +3156,13 @@ mod tests {
 
         async fn host_execute_ping(&self, _peer: &PeerAddr) -> Result<(), TransportError> {
             Err(TransportError::Unsupported("mock".into()))
+        }
+
+        fn host_sign_probity_report(&self, _report: &crate::probity::ProbityReport) -> Result<Vec<u8>, String> {
+            Ok(vec![0xBB; 64])
+        }
+
+        fn host_publish_probity_report(&self, _signed_bytes: Vec<u8>) {
         }
     }
 

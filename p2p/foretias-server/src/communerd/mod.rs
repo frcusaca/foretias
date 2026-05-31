@@ -1269,6 +1269,17 @@ impl communerdette::CommunerdetteHost for Communerd {
     async fn host_execute_ping(&self, peer: &PeerAddr) -> Result<(), TransportError> {
         self.transport.ping(peer).await
     }
+
+    fn host_sign_probity_report(&self, report: &crate::probity::ProbityReport) -> Result<Vec<u8>, String> {
+        let canonical = report.canonical();
+        self.crypto.sign(&canonical)
+            .map(|sig| sig.bytes.to_vec())
+            .map_err(|e| format!("signing failed: {e}"))
+    }
+
+    fn host_publish_probity_report(&self, signed_bytes: Vec<u8>) {
+        tracing::debug!(len = signed_bytes.len(), "communerd: probity report published (stub)");
+    }
 }
 
 fn resolve_known_server(addr_str: &str) -> Result<libp2p::Multiaddr, NodeError> {
