@@ -17,7 +17,6 @@ use super::tick::{ChrononRecord, Foretis, verify_pair};
 use super::types::Tbid;
 use super::external_attestation::ExternalAttestation;
 use super::encoding::{FTByteVector, FTByteArray};
-use super::family_record::FamilyRecord;
 
 // ---------------------------------------------------------------------------
 // Signature types (Phase 16a — §21.2)
@@ -88,11 +87,6 @@ impl<T> UnverifiedSignatureEnvelope<T> {
     /// Consume and return the inner value.
     pub fn into_inner(self) -> T {
         self.inner
-    }
-
-    /// Check if the envelope has any signatures.
-    pub fn has_signatures(&self) -> bool {
-        !self.signatures.is_empty()
     }
 }
 
@@ -590,8 +584,6 @@ impl ExternalizedChrononRecord {
                         tbn: String::new(),
                         time_being_reference_time: String::new(),
                     }),
-                    signature: FTByteVector::new(),
-                    signature_algorithm: String::new(),
                     attester_tick_record: serde_json::from_value(ea.attester_tick_record).unwrap_or_else(|_| ChrononRecord {
                         chronon_number: 0,
                         public_key: vec![].into(),
@@ -631,60 +623,8 @@ impl UnverifiedSignatureEnvelope<Foretis> {
     pub fn tbn(&self) -> &str { &self.inner.tbn }
     pub fn time_being_reference_time(&self) -> &str { &self.inner.time_being_reference_time }
 
-    /// Parse v2 wire format: `{foretis: <Foretis>, signature: <hex>, signature_algorithm: <string>}`.
-    ///
-    /// Falls back to bare `Foretis` JSON (v1 compat) if `foretis` key is absent.
-    /// When a signature is present, it is placed in the envelope's signatures list.
-    pub fn from_json_value_v2(v: serde_json::Value) -> Result<Self, ParseError> {
-        let obj = match v {
-            serde_json::Value::Object(map) => map,
-            _ => {
-                // Not an object — try bare Foretis
-                let val: Foretis = serde_json::from_value(v).map_err(ParseError::InvalidJson)?;
-                return Ok(Self::from_parsed(val));
-            }
-        };
-
-        // Check if this is v2 format (has "foretis" key)
-        if let Some(foretis_val) = obj.get("foretis") {
-            let foretis: Foretis = serde_json::from_value(foretis_val.clone())
-                .map_err(ParseError::InvalidJson)?;
-
-            let mut env = Self::from_parsed(foretis);
-
-            // Extract signature (hex-encoded) and algorithm
-            if let Some(sig_hex) = obj.get("signature").and_then(|v| v.as_str()) {
-                if let Ok(sig_bytes) = hex::decode(sig_hex) {
-                    if !sig_bytes.is_empty() {
-                        let algorithm = match obj.get("signature_algorithm").and_then(|v| v.as_str()) {
-                            Some("SLH-DSA") => SigAlgorithm::DualKey,
-                            _ => SigAlgorithm::Ed25519,
-                        };
-                        env.signatures.push(SignatureEntry {
-                            role: SignerRole::Chronomatter,
-                            tbid: String::new(),
-                            algorithm,
-                            sig: sig_bytes,
-                        });
-                    }
-                }
-            }
-
-            Ok(env)
-        } else {
-            // Bare Foretis JSON (v1 compat)
-            let val: Foretis = serde_json::from_value(serde_json::Value::Object(obj))
-                .map_err(ParseError::InvalidJson)?;
-            Ok(Self::from_parsed(val))
-        }
-    }
-
-    /// Inbound gate: verify this Foretis against a calendar record.
-    ///
-    /// v2 wire-break: signature comes from the envelope's signatures list,
-    /// not from the inner Foretis. Uses postcard-encoded payload for sig_input.
-    ///
-    /// The `record` must cover the same chronon number as this Foretis.
+    /// Inbound gate (V2): verify this Foretis against a calendar record.
+    /// Signatures come from the wrapper, not the payload.
     pub fn verify(
         self,
         crypto: &dyn CryptoServer,
@@ -704,27 +644,22 @@ impl UnverifiedSignatureEnvelope<Foretis> {
             return Err(CleanAuthError::InvalidSignature);
         }
 
-        // v2: verify postcard-encoded payload
-        let sig_input = postcard::to_allocvec(foretis)
-            .map_err(|e| CleanAuthError::Crypto(NodeError::Crypto(crate::error::CryptoError::UnknownAlgorithm(e.to_string()))))?;
-
-        // Extract signature from envelope's first signature entry
-        let entry = self.signatures.first().ok_or(CleanAuthError::InvalidSignature)?;
-        let sig_alg = match entry.algorithm {
-            SigAlgorithm::Ed25519 => "Ed25519",
-            SigAlgorithm::DualKey => "SLH-DSA",
-        };
-
-        let valid = crypto.verify_with(
-            &rec.public_key,
-            sig_alg,
-            &sig_input,
-            &entry.sig,
-        ).map_err(|e| CleanAuthError::Crypto(NodeError::Crypto(e)))?;
-
-        if !valid {
-            return Err(CleanAuthError::InvalidSignature);
-        }
+        // V2: use wrapper signatures (ordered chain)
+        super::tick::verify(
+            crypto,
+            foretis,
+            &self.signatures.first()
+                .map(|s| &s.sig[..])
+                .unwrap_or(&[]),
+            self.signatures.first()
+                .map(|s| match s.algorithm {
+                    SigAlgorithm::Ed25519 => "Ed25519",
+                    SigAlgorithm::DualKey => "SLH-DSA",
+                })
+                .unwrap_or("Ed25519"),
+            content,
+            &CalendarLookupFromCleanRecord(record),
+        ).map_err(|e| CleanAuthError::Crypto(e))?;
 
         Ok(CleanAuthenticated { inner: self.inner, signatures: self.signatures })
     }
@@ -740,6 +675,17 @@ impl UnverifiedSignatureEnvelope<Foretis> {
     }
 }
 
+/// Adapter to let a single CleanAuthenticated<ChrononRecord> satisfy CalendarLookup.
+struct CalendarLookupFromCleanRecord<'a>(&'a CleanAuthenticated<ChrononRecord>);
+impl<'a> super::tick::CalendarLookup for CalendarLookupFromCleanRecord<'a> {
+    fn get(&self, _chronon_number: u64, _count: usize) -> Result<Vec<ChrononRecord>, NodeError> {
+        Ok(vec![self.0.inner().clone()])
+    }
+    fn latest(&self) -> Option<u64> { Some(*self.0.chronon_number()) }
+    fn tbid(&self) -> Tbid { *self.0.tbid() }
+    fn tbn(&self) -> &str { "" }
+}
+
 impl CleanAuthenticated<Foretis> {
     pub fn chronon_number(&self) -> &u64 { &self.inner.chronon_number }
     pub fn content_hash(&self) -> &FTByteArray<32> { &self.inner.content_hash }
@@ -748,19 +694,21 @@ impl CleanAuthenticated<Foretis> {
     pub fn tbn(&self) -> &str { &self.inner.tbn }
     pub fn time_being_reference_time(&self) -> &str { &self.inner.time_being_reference_time }
 
-    /// Outbound gate: strip to minimal wire form. No runtime context leaks.
-    /// v2: signature comes from the envelope's signatures list.
+    /// Outbound gate (V2): strip to minimal wire form. Signatures in wrapper.
     pub fn externalize(self) -> ExternalizedForetis {
         let f = self.inner;
-        let entry = self.signatures.first();
+        // V2: signatures come from wrapper's SignatureEntry, not from payload
+        let sig_entry = self.signatures.first();
         ExternalizedForetis {
             chronon_number: f.chronon_number,
             content_hash: (*f.content_hash).into(),
-            signature: entry.map(|e| e.sig.clone()).unwrap_or_default(),
-            signature_algorithm: entry.map(|e| match e.algorithm {
-                SigAlgorithm::Ed25519 => "Ed25519".to_string(),
-                SigAlgorithm::DualKey => "SLH-DSA".to_string(),
-            }).unwrap_or_default(),
+            signature: sig_entry.map(|s| s.sig.clone()).unwrap_or_default(),
+            signature_algorithm: sig_entry
+                .map(|s| match s.algorithm {
+                    SigAlgorithm::Ed25519 => "Ed25519".to_string(),
+                    SigAlgorithm::DualKey => "SLH-DSA".to_string(),
+                })
+                .unwrap_or_else(|| "Ed25519".to_string()),
             tbid: f.tbid.raw_bytes().to_vec(),
             echo: if f.echo.is_empty() { None } else { Some(f.echo) },
             tbn: if f.tbn.is_empty() { 0 } else { f.tbn.len() as u64 },
@@ -781,8 +729,7 @@ pub struct ExternalizedForetis {
 }
 
 impl ExternalizedForetis {
-    /// Reconstruct as UnverifiedSignatureEnvelope for re-verification on the receiving side.
-    /// v2: signature is placed in the envelope's signatures list, not in Foretis.
+    /// Reconstruct as UnverifiedSignatureEnvelope for re-verification on the receiving side (V2).
     pub fn reconstruct(self) -> Result<UnverifiedSignatureEnvelope<Foretis>, ParseError> {
         let foretis = Foretis {
             chronon_number: self.chronon_number,
@@ -793,18 +740,16 @@ impl ExternalizedForetis {
             time_being_reference_time: String::new(),
         };
         let mut env = UnverifiedSignatureEnvelope::from_parsed(foretis);
-        if !self.signature.is_empty() {
-            let algorithm = match self.signature_algorithm.as_str() {
+        // V2: signatures are stored in the wrapper, not the payload
+        env.signatures.push(SignatureEntry {
+            role: SignerRole::Chronomatter,
+            tbid: String::new(),
+            algorithm: match self.signature_algorithm.as_str() {
                 "SLH-DSA" => SigAlgorithm::DualKey,
                 _ => SigAlgorithm::Ed25519,
-            };
-            env.signatures.push(SignatureEntry {
-                role: SignerRole::Chronomatter,
-                tbid: String::new(),
-                algorithm,
-                sig: self.signature,
-            });
-        }
+            },
+            sig: self.signature,
+        });
         Ok(env)
     }
 
@@ -927,29 +872,6 @@ impl ExternalizedEpochSnapshot {
 }
 
 // ---------------------------------------------------------------------------
-// FamilyRecord — gate enforcement (CleanFullyAuthenticated only)
-// ---------------------------------------------------------------------------
-
-impl UnverifiedSignatureEnvelope<FamilyRecord> {
-    /// Verify FamilyRecord: envelope signatures + k×k matrix.
-    ///
-    /// Returns `CleanFullyAuthenticated<FamilyRecord>` on success.
-    /// Rejects with `FullSignatureRequired` if any signature is Ed25519-only (fast).
-    /// Rejects with `Crypto(BadSignature)` if the k×k matrix verification fails.
-    pub fn verify_family_record(
-        self,
-        crypto: &dyn CryptoServer,
-        pub_key: &[u8],
-    ) -> Result<CleanFullyAuthenticated<FamilyRecord>, CleanAuthError> {
-        let ca = self.verify_all_signatures(crypto, pub_key)?;
-        let record = ca.inner();
-        record.verify_matrix(crypto)
-            .map_err(|e| CleanAuthError::Crypto(NodeError::Crypto(e)))?;
-        Ok(CleanFullyAuthenticated::from_dual_verified(ca.into_inner()))
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -1038,17 +960,10 @@ mod tests {
             tbn: "tbn".to_string(),
             time_being_reference_time: "UE+999ns".to_string(),
         };
-        let mut ca = CleanAuthenticated::<Foretis>::from_trusted(foretis);
-        ca.signatures.push(SignatureEntry {
-            role: SignerRole::Chronomatter,
-            tbid: String::new(),
-            algorithm: SigAlgorithm::Ed25519,
-            sig: vec![0x66u8; 64],
-        });
+        let ca = CleanAuthenticated::<Foretis>::from_trusted(foretis);
         let ext = ca.externalize();
         assert_eq!(ext.chronon_number, 10);
         assert_eq!(ext.content_hash, [0x55u8; 32]);
-        assert_eq!(ext.signature_algorithm, "Ed25519");
 
         let up = ext.into_unprocessed().unwrap();
         assert_eq!(up.inner().chronon_number, 10);
@@ -1115,13 +1030,7 @@ mod tests {
             tbn: "tbn".to_string(),
             time_being_reference_time: "UE+999ns".to_string(),
         };
-        let mut ca = CleanAuthenticated::<Foretis>::from_trusted(foretis);
-        ca.signatures.push(SignatureEntry {
-            role: SignerRole::Chronomatter,
-            tbid: String::new(),
-            algorithm: SigAlgorithm::Ed25519,
-            sig: vec![0x66u8; 64],
-        });
+        let ca = CleanAuthenticated::<Foretis>::from_trusted(foretis);
         let ext = ca.externalize();
         let json_bytes = serde_json::to_vec(&ext).unwrap();
         let obj: serde_json::Value = serde_json::from_slice(&json_bytes).unwrap();
@@ -1200,50 +1109,5 @@ mod tests {
         let ca: CleanAuthenticated<u32> = cfa.into();
         assert_eq!(*ca.inner(), 99u32);
         assert!(ca.is_authenticated_quickly());
-    }
-
-    #[test]
-    fn family_record_fast_only_rejected() {
-        let tbid1 = Tbid::test();
-        let tbid2 = Tbid::from_bytes(&[0xBB; 96]).unwrap();
-        let members = vec![tbid1.to_hex(), tbid2.to_hex()];
-        let matrix = vec![
-            vec![vec![0u8; 64], vec![0u8; 64]],
-            vec![vec![0u8; 64], vec![0u8; 64]],
-        ];
-        let record = FamilyRecord::try_new(members, matrix).unwrap();
-        let envelope = UnverifiedSignatureEnvelope::from_parsed(record);
-        let crypto = crate::crypto_server::software::SoftwareCryptoServer::generate(crate::crypto_server::ForetiasCurve::Ed25519).unwrap();
-        let result = envelope.verify_family_record(&crypto, &[0u8; 32]);
-        assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), CleanAuthError::SignatureCountMismatch { .. }));
-    }
-
-    #[test]
-    fn family_record_bad_matrix_rejected() {
-        let tbid1 = Tbid::test();
-        let tbid2 = Tbid::from_bytes(&[0xBB; 96]).unwrap();
-        let members = vec![tbid1.to_hex(), tbid2.to_hex()];
-        let matrix = vec![
-            vec![vec![0u8; 64], vec![0u8; 64]],
-            vec![vec![0u8; 64], vec![0u8; 64]],
-        ];
-        let record = FamilyRecord::try_new(members, matrix).unwrap();
-        let mut envelope = UnverifiedSignatureEnvelope::from_parsed(record);
-        envelope.signatures.push(SignatureEntry {
-            role: SignerRole::Chronomatter,
-            tbid: tbid1.to_hex(),
-            algorithm: SigAlgorithm::DualKey,
-            sig: vec![0u8; 64],
-        });
-        envelope.signatures.push(SignatureEntry {
-            role: SignerRole::CommunerdEnvelope,
-            tbid: tbid2.to_hex(),
-            algorithm: SigAlgorithm::DualKey,
-            sig: vec![0u8; 64],
-        });
-        let crypto = crate::crypto_server::software::SoftwareCryptoServer::generate(crate::crypto_server::ForetiasCurve::Ed25519).unwrap();
-        let result = envelope.verify_family_record(&crypto, &[0u8; 32]);
-        assert!(result.is_err());
     }
 }

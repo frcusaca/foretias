@@ -31,14 +31,14 @@ fn make_test_foretis() -> Foretis {
     for i in 0..32 {
         ch[i] = (i * 3 + 1) as u8;
     }
-    Foretis {
-        chronon_number: 42,
-        content_hash: FTByteArray::from(ch),
-        tbid: make_test_tbid(),
-        echo: "test-echo".to_string(),
-        tbn: "test-tbn".to_string(),
-        time_being_reference_time: "2026-01-01T00:00:00Z".to_string(),
-    }
+    Foretis::new(
+        42,
+        FTByteArray::from(ch),
+        make_test_tbid(),
+        "test-echo".to_string(),
+        "test-tbn".to_string(),
+        "2026-01-01T00:00:00Z".to_string(),
+    ).expect("valid foretis")
 }
 
 fn make_test_tick_record(tick: u64) -> ChrononRecord {
@@ -446,8 +446,6 @@ fn external_attestation_roundtrip() {
     let att = ExternalAttestation {
         attester_tbid: "test-attester".to_string(),
         foretis,
-        signature: FTByteVector::from(vec![0xAB; 64]),
-        signature_algorithm: "Ed25519".to_string(),
         attester_tick_record: tick,
         received_at_ns: 1_000_000_000,
     };
@@ -577,8 +575,6 @@ fn deep_nesting_external_attestation() {
     let att = ExternalAttestation {
         attester_tbid: "deep-attester".to_string(),
         foretis,
-        signature: FTByteVector::from(vec![0xCD; 64]),
-        signature_algorithm: "Ed25519".to_string(),
         attester_tick_record: tick,
         received_at_ns: 9_999_999_999,
     };

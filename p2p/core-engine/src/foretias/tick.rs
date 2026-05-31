@@ -93,12 +93,10 @@ impl ChrononRecord {
     pub fn tbid(&self) -> &Tbid { &self.tbid }
 }
 
-/// A signature-free attestation payload of content at a specific chronon.
+/// A cryptographically signed attestation of content at a specific chronon.
 ///
-/// v2 wire-break: `signature` and `signature_algorithm` fields have been removed
-/// from the payload. Signatures now live in the trust-boundary wrapper
-/// (`UnverifiedSignatureEnvelope<Foretis>` / `CleanAuthenticated<Foretis>`).
-/// The canonical signing bytes are produced by `sig_input_bytes()` via postcard.
+/// V2: signatures are carried by the trust-boundary wrapper (UnverifiedSignatureEnvelope),
+/// not by the payload struct. Signing bytes are `postcard::to_allocvec(&foretis_payload)`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Foretis {
     /// The chronon number at which this attestation was created.
@@ -116,24 +114,37 @@ pub struct Foretis {
 }
 
 impl Foretis {
+    /// Create a validated Foretis.
+    ///
+    /// # Errors
+    /// Returns `NodeError::InvalidInput` if `chronon_number` is 0.
+    pub fn new(
+        chronon_number: u64,
+        content_hash: FTByteArray<32>,
+        tbid: Tbid,
+        echo: String,
+        tbn: String,
+        time_being_reference_time: String,
+    ) -> Result<Self, NodeError> {
+        if chronon_number == 0 {
+            return Err(NodeError::InvalidInput("chronon_number must be > 0".into()));
+        }
+        Ok(Self {
+            chronon_number,
+            content_hash,
+            tbid,
+            echo,
+            tbn,
+            time_being_reference_time,
+        })
+    }
+
     pub fn chronon_number(&self) -> &u64 { &self.chronon_number }
     pub fn content_hash(&self) -> &FTByteArray<32> { &self.content_hash }
     pub fn tbid(&self) -> &Tbid { &self.tbid }
     pub fn echo(&self) -> &str { &self.echo }
     pub fn tbn(&self) -> &str { &self.tbn }
     pub fn time_being_reference_time(&self) -> &str { &self.time_being_reference_time }
-
-    /// Compute v2 canonical signing bytes: postcard-encoded payload.
-    pub fn sig_input_bytes(&self) -> Vec<u8> {
-        postcard::to_allocvec(self)
-            .expect("Foretis postcard serialization must not fail")
-    }
-}
-
-impl super::clean_auth::RecordBase for Foretis {
-    fn always_require_full_signature(&self) -> bool {
-        false
-    }
 }
 
 /// Trait for looking up ChrononRecords from a calendar or calendar-like store.
@@ -151,10 +162,20 @@ pub trait CalendarLookup: Send + Sync {
     fn tbn(&self) -> &str;
 }
 
+/// V2 StampedForetis: payload + signature carried separately by the trust-boundary wrapper.
+///
+/// The `Foretis` payload is signature-free. The `signature_bytes` and `signature_algorithm`
+/// are stored in the `UnverifiedSignatureEnvelope` / `CleanAuthenticated` wrappers.
+pub struct StampedForetis {
+    pub foretis:    Foretis,
+    pub signature_bytes: Vec<u8>,
+    pub signature_algorithm: String,
+}
+
 /// Stamp content under the current tick's key.
 ///
-/// Returns `(Foretis, signature_bytes, signature_algorithm_string)`.
-/// The signature is computed over `postcard::to_allocvec(&foretis_payload)`.
+/// V2: signing bytes are `postcard(&foretis_payload)`.
+/// Returns the signature-free payload plus signature bytes for the wrapper.
 pub fn stamp(
     server: &dyn CryptoServer,
     clock: &dyn Clock,
@@ -163,7 +184,7 @@ pub fn stamp(
     content: &[u8],
     echo: &str,
     tbn: &str,
-) -> Result<(Foretis, Vec<u8>, String), NodeError> {
+) -> Result<StampedForetis, NodeError> {
     let content_hash = server.sha256(content)?;
 
     let now_ns = clock.now_ns()
@@ -179,24 +200,27 @@ pub fn stamp(
         time_being_reference_time,
     };
 
-    // v2: sign postcard-encoded payload
+    // V2: sign postcard canonical bytes of the payload
     let sig_input = postcard::to_allocvec(&foretis)
-        .map_err(|e| NodeError::Internal(format!("postcard serialize: {e}")))?;
+        .map_err(|e| NodeError::Internal(format!("postcard serialize error: {e}")))?;
+
     let signature = server.sign(&sig_input)?;
     let sig_alg = server.signature_algorithm().to_id_string().to_string();
 
-    Ok((foretis, signature.bytes.to_vec(), sig_alg))
+    Ok(StampedForetis {
+        foretis,
+        signature_bytes: signature.bytes.to_vec(),
+        signature_algorithm: sig_alg,
+    })
 }
 
-/// Verify a Foretis against content, signature, and calendar.
-///
-/// `signature` and `signature_algorithm` are passed separately (v2 wire format).
+/// Verify a Foretis against content and calendar (V2: signature comes from wrapper).
 pub fn verify(
     server: &dyn CryptoServer,
     foretis: &Foretis,
-    content: &[u8],
     signature: &[u8],
     signature_algorithm: &str,
+    content: &[u8],
     calendar: &dyn CalendarLookup,
 ) -> Result<bool, NodeError> {
     let recomputed = server.sha256(content)?;
@@ -207,9 +231,9 @@ pub fn verify(
     let records = calendar.get(foretis.chronon_number, 1)?;
     let rec = records.first().ok_or(NodeError::NotFound("tick"))?;
 
-    // v2: verify postcard-encoded payload
+    // V2: verify postcard canonical bytes of the payload
     let sig_input = postcard::to_allocvec(foretis)
-        .map_err(|e| NodeError::Internal(format!("postcard serialize: {e}")))?;
+        .map_err(|e| NodeError::Internal(format!("postcard serialize error: {e}")))?;
 
     Ok(server.verify_with(
         &rec.public_key,
@@ -453,7 +477,7 @@ mod tests {
         let mut cal = Calendar::new(tbid, "test-cal");
         let chronon_number = 1;
         let content = b"init";
-        let (foretis, _sig, _alg) = stamp(server, &SystemClock, &tbid, chronon_number, content, "init", "test-cal")
+        let foretis = stamp(server, &SystemClock, &tbid, chronon_number, content, "init", "test-cal")
             .expect("stamp init tick");
         let public_key = match server.public_key() {
             crate::crypto_server::PublicKeyBytes::Ed25519(pk) => pk.bytes.to_vec(),
@@ -463,7 +487,7 @@ mod tests {
             chronon_number,
             public_key: public_key.into(),
             signature_algorithm: "Ed25519".to_string(),
-            forward_foretis: serde_json::to_vec(&foretis).unwrap().into(),
+            forward_foretis: serde_json::to_vec(&foretis.foretis).unwrap().into(),
             backward_foretis: vec![].into(),
             aa_nonce: [0u8; 16].into(),
             chronon_stamp_count: 0,
@@ -479,33 +503,32 @@ mod tests {
     fn stamp_creates_valid_foretis() {
         let server = make_server();
         let tbid = Tbid::from_raw([1u8; 96]);
-        let (foretis, sig, alg) = stamp(server.as_ref(), &SystemClock, &tbid, 42, b"hello", "echo-42", "tbn")
+        let foretis = stamp(server.as_ref(), &SystemClock, &tbid, 42, b"hello", "echo-42", "tbn")
             .expect("stamp should succeed");
-        assert_eq!(foretis.chronon_number, 42);
-        assert_eq!(foretis.tbid, tbid);
-        assert_eq!(foretis.echo, "echo-42");
-        assert_eq!(foretis.tbn, "tbn");
-        assert!(!sig.is_empty());
-        assert_eq!(alg, "Ed25519");
-        assert!(!foretis.time_being_reference_time.is_empty());
+        assert_eq!(foretis.foretis.chronon_number, 42);
+        assert_eq!(foretis.foretis.tbid, tbid);
+        assert_eq!(foretis.foretis.echo, "echo-42");
+        assert_eq!(foretis.foretis.tbn, "tbn");
+        assert!(!foretis.signature_bytes.is_empty());
+        assert!(!foretis.foretis.time_being_reference_time.is_empty());
     }
 
     #[test]
     fn stamp_different_content_different_hash() {
         let server = make_server();
         let tbid = Tbid::from_raw([2u8; 96]);
-        let (f1, _, _) = stamp(server.as_ref(), &SystemClock, &tbid, 1, b"aaa", "e", "t").unwrap();
-        let (f2, _, _) = stamp(server.as_ref(), &SystemClock, &tbid, 1, b"bbb", "e", "t").unwrap();
-        assert_ne!(f1.content_hash, f2.content_hash);
+        let f1 = stamp(server.as_ref(), &SystemClock, &tbid, 1, b"aaa", "e", "t").unwrap();
+        let f2 = stamp(server.as_ref(), &SystemClock, &tbid, 1, b"bbb", "e", "t").unwrap();
+        assert_ne!(f1.foretis.content_hash, f2.foretis.content_hash);
     }
 
     #[test]
     fn stamp_empty_content_produces_valid_stamp() {
         let server = make_server();
         let tbid = Tbid::from_raw([3u8; 96]);
-        let (foretis, sig, _) = stamp(server.as_ref(), &SystemClock, &tbid, 1, b"", "empty", "t").unwrap();
-        assert_eq!(foretis.chronon_number, 1);
-        assert!(!sig.is_empty());
+        let foretis = stamp(server.as_ref(), &SystemClock, &tbid, 1, b"", "empty", "t").unwrap();
+        assert_eq!(foretis.foretis.chronon_number, 1);
+        assert!(!foretis.signature_bytes.is_empty());
     }
 
     #[test]
@@ -514,9 +537,9 @@ mod tests {
         let cal = make_cal(server.as_ref());
         let tbid = Tbid::from_raw([0xAA; 96]);
         let content = b"init";
-        let (foretis, sig, alg) = stamp(server.as_ref(), &SystemClock, &tbid, 1, content, "init", "test-cal")
+        let foretis = stamp(server.as_ref(), &SystemClock, &tbid, 1, content, "init", "test-cal")
             .expect("stamp");
-        let valid = verify(server.as_ref(), &foretis, content, &sig, &alg, &cal)
+        let valid = verify(server.as_ref(), &foretis.foretis, &foretis.signature_bytes, &foretis.signature_algorithm, content, &cal)
             .expect("verify should not error");
         assert!(valid);
     }
@@ -527,9 +550,9 @@ mod tests {
         let cal = make_cal(server.as_ref());
         let tbid = Tbid::from_raw([0xAA; 96]);
         let content = b"init";
-        let (foretis, sig, alg) = stamp(server.as_ref(), &SystemClock, &tbid, 1, content, "init", "test-cal")
+        let foretis = stamp(server.as_ref(), &SystemClock, &tbid, 1, content, "init", "test-cal")
             .expect("stamp");
-        let valid = verify(server.as_ref(), &foretis, b"wrong", &sig, &alg, &cal)
+        let valid = verify(server.as_ref(), &foretis.foretis, &foretis.signature_bytes, &foretis.signature_algorithm, b"wrong", &cal)
             .expect("verify should not error");
         assert!(!valid);
     }
@@ -553,9 +576,9 @@ mod tests {
             tbid: Tbid::default(),
         }).unwrap();
         let content = b"test";
-        let (foretis, sig, alg) = stamp(server.as_ref(), &SystemClock, &tbid, 1, content, "e", "bad-cal")
+        let foretis = stamp(server.as_ref(), &SystemClock, &tbid, 1, content, "e", "bad-cal")
             .expect("stamp");
-        let result = verify(server.as_ref(), &foretis, content, &sig, &alg, &cal);
+        let result = verify(server.as_ref(), &foretis.foretis, &foretis.signature_bytes, &foretis.signature_algorithm, content, &cal);
         if let Ok(valid) = result {
             assert!(!valid);
         }

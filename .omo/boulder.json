@@ -8,7 +8,7 @@
       "plan_name": "group7-signing",
       "status": "active",
       "started_at": "2026-05-31T14:28:44.335Z",
-      "updated_at": "2026-05-31T15:42:25.738Z",
+      "updated_at": "2026-05-31T19:33:09.807Z",
       "session_ids": [
         "opencode:ses_1843c07c2ffejzUFH8sD2E0Itr"
       ],
@@ -81,6 +81,60 @@
           "status": "completed",
           "ended_at": "2026-05-31T15:42:25.738Z",
           "elapsed_ms": 375708
+        },
+        "todo:9": {
+          "task_key": "todo:9",
+          "task_label": "9",
+          "task_title": "Foretis wire-break (sig_input v2 via postcard)",
+          "session_id": "opencode:ses_180910e45ffe3XI3N2ankEiUt8",
+          "agent": "Sisyphus-Junior",
+          "category": "deep",
+          "started_at": "2026-05-31T16:27:25.536Z",
+          "status": "running",
+          "updated_at": "2026-05-31T19:33:09.808Z"
+        },
+        "final-wave:f3": {
+          "task_key": "final-wave:f3",
+          "task_label": "F3",
+          "task_title": "Real Manual QA for Group 7 (Communerdette) signing work.",
+          "session_id": "opencode:ses_180a92102ffeEew7wiod2tXF6t",
+          "agent": "Sisyphus-Junior",
+          "category": "unspecified-high",
+          "updated_at": "2026-05-31T18:42:10.526Z",
+          "started_at": "2026-05-31T18:42:10.526Z",
+          "status": "running"
+        },
+        "final-wave:f2": {
+          "task_key": "final-wave:f2",
+          "task_label": "F2",
+          "task_title": "Code Quality Review for Group 7 (Communerdette) signing work.",
+          "session_id": "opencode:ses_180aa0202ffeuEv5bIPos3voiW",
+          "agent": "Sisyphus-Junior",
+          "category": "unspecified-high",
+          "updated_at": "2026-05-31T18:44:28.700Z",
+          "started_at": "2026-05-31T18:44:28.700Z",
+          "status": "running"
+        },
+        "final-wave:f1": {
+          "task_key": "final-wave:f1",
+          "task_label": "F1",
+          "task_title": "**Plan Compliance Audit** — Read `.omo/plans/group7-signing.md` end-to-end. For each \"Must Have\": verify implementation exists. For each \"Must NOT Have\": search for forbidden patterns. Check evidence files exist. Compare deliverables against plan.",
+          "session_id": "opencode:ses_180967a5efferb6cLwMDpe3b5P",
+          "agent": "oracle",
+          "started_at": "2026-05-31T18:45:33.488Z",
+          "status": "running",
+          "updated_at": "2026-05-31T19:06:28.678Z"
+        },
+        "final-wave:f4": {
+          "task_key": "final-wave:f4",
+          "task_label": "F4",
+          "task_title": "Scope Fidelity Check for Group 7 (Communerdette) signing work.",
+          "session_id": "opencode:ses_180a8db06ffex4gW4o3qqf1Asm",
+          "agent": "Sisyphus-Junior",
+          "category": "deep",
+          "updated_at": "2026-05-31T18:45:44.301Z",
+          "started_at": "2026-05-31T18:45:44.301Z",
+          "status": "running"
         }
       },
       "worktree_path": "/home/hcbusy/tmp/claude_tmp/foretias-group7-signing"
@@ -89,7 +143,7 @@
   "active_plan": "/home/hcbusy/webhash/foretias/.sisyphus/plans/group7-signing.md",
   "started_at": "2026-05-31T14:28:44.335Z",
   "status": "active",
-  "updated_at": "2026-05-31T15:42:25.738Z",
+  "updated_at": "2026-05-31T19:33:09.807Z",
   "session_ids": [
     "opencode:ses_1843c07c2ffejzUFH8sD2E0Itr"
   ],
@@ -162,6 +216,60 @@
       "status": "completed",
       "ended_at": "2026-05-31T15:42:25.738Z",
       "elapsed_ms": 375708
+    },
+    "todo:9": {
+      "task_key": "todo:9",
+      "task_label": "9",
+      "task_title": "Foretis wire-break (sig_input v2 via postcard)",
+      "session_id": "opencode:ses_180910e45ffe3XI3N2ankEiUt8",
+      "agent": "Sisyphus-Junior",
+      "category": "deep",
+      "started_at": "2026-05-31T16:27:25.536Z",
+      "status": "running",
+      "updated_at": "2026-05-31T19:33:09.808Z"
+    },
+    "final-wave:f3": {
+      "task_key": "final-wave:f3",
+      "task_label": "F3",
+      "task_title": "Real Manual QA for Group 7 (Communerdette) signing work.",
+      "session_id": "opencode:ses_180a92102ffeEew7wiod2tXF6t",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-05-31T18:42:10.526Z",
+      "started_at": "2026-05-31T18:42:10.526Z",
+      "status": "running"
+    },
+    "final-wave:f2": {
+      "task_key": "final-wave:f2",
+      "task_label": "F2",
+      "task_title": "Code Quality Review for Group 7 (Communerdette) signing work.",
+      "session_id": "opencode:ses_180aa0202ffeuEv5bIPos3voiW",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-05-31T18:44:28.700Z",
+      "started_at": "2026-05-31T18:44:28.700Z",
+      "status": "running"
+    },
+    "final-wave:f1": {
+      "task_key": "final-wave:f1",
+      "task_label": "F1",
+      "task_title": "**Plan Compliance Audit** — Read `.omo/plans/group7-signing.md` end-to-end. For each \"Must Have\": verify implementation exists. For each \"Must NOT Have\": search for forbidden patterns. Check evidence files exist. Compare deliverables against plan.",
+      "session_id": "opencode:ses_180967a5efferb6cLwMDpe3b5P",
+      "agent": "oracle",
+      "started_at": "2026-05-31T18:45:33.488Z",
+      "status": "running",
+      "updated_at": "2026-05-31T19:06:28.678Z"
+    },
+    "final-wave:f4": {
+      "task_key": "final-wave:f4",
+      "task_label": "F4",
+      "task_title": "Scope Fidelity Check for Group 7 (Communerdette) signing work.",
+      "session_id": "opencode:ses_180a8db06ffex4gW4o3qqf1Asm",
+      "agent": "Sisyphus-Junior",
+      "category": "deep",
+      "updated_at": "2026-05-31T18:45:44.301Z",
+      "started_at": "2026-05-31T18:45:44.301Z",
+      "status": "running"
     }
   },
   "agent": "atlas",
