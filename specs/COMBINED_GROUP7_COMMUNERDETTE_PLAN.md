@@ -1037,6 +1037,11 @@ cargo test --workspace -- --include-ignored
 
 **Spec reference:** §18 (Toppoli).  
 **Date added:** 2026-05-28.
+**Basic harness merged 2026-05-29 (commit f73e0a8).** 14.1–14.4 + 3 of 4 first
+tests done; structural variance from spec: `Option<ToppliPeer>` slots + parallel
+config vec (not a `ToppliSlot` enum), and `start_all`/`stop_all` are sequential
+(not `join_all`) — adequate at ≤24 peers. Still open: `toppoli_l1_ping_round_trip`,
+the Phase 12/13-dependent tests (14.6), and the docs (14.7).
 
 All servers run in-process. No forking. `TimeFamilyServer` uses in-process
 tokio tasks. Direct Rust introspection of all pub state is available.
@@ -1045,55 +1050,55 @@ No CancellationToken changes to `TimeFamilyServer` are needed.
 
 ### 14.1 Core harness types
 
-- [ ] Create `p2p/foretias-server/tests/toppoli.rs`.
-- [ ] Implement `ToppliPeerConfig { chronon_ns, extra_peers, namespace }` with
+- [x] Create `p2p/foretias-server/tests/toppoli.rs`.
+- [x] Implement `ToppliPeerConfig { chronon_ns, extra_peers, namespace }` with
       `Default` (100ms chronon, empty peers, namespace `"toppoli"`).
-- [ ] Implement `ToppliPeer { idx, addr, server: Arc<TimeFamilyServer>, handle }`.
-- [ ] Implement `ToppliHarness { slots: Vec<ToppliSlot>, addrs: Vec<String> }`
+- [x] Implement `ToppliPeer { idx, addr, server: Arc<TimeFamilyServer>, handle }`.
+- [x] Implement `ToppliHarness { slots: Vec<ToppliSlot>, addrs: Vec<String> }`
       where `ToppliSlot` is `Reserved | Running | Stopped`.
-- [ ] `ToppliHarness::with_peers(count, config)` — pre-allocate N ports with
+- [x] `ToppliHarness::with_peers(count, config)` — pre-allocate N ports with
       `find_available_port()`, store as `Reserved` slots.
-- [ ] `ToppliHarness::add_peer(config)` — allocate one more port, push slot,
+- [x] `ToppliHarness::add_peer(config)` — allocate one more port, push slot,
       return index.
 
 ### 14.2 Topology helpers
 
-- [ ] `topology_full_mesh()` — for each slot, set its `extra_peers` to all
+- [x] `topology_full_mesh()` — for each slot, set its `extra_peers` to all
       other slots' addresses. Call before any `start_peer`.
-- [ ] `topology_ring()` — each slot knows only the next slot's address.
-- [ ] Custom topology: `add_peer` + manually set `extra_peers` before starting.
+- [x] `topology_ring()` — each slot knows only the next slot's address.
+- [x] Custom topology: `add_peer` + manually set `extra_peers` before starting.
 
 ### 14.3 Lifecycle methods
 
-- [ ] `start_peer(idx)` — build `CommunerdConfig` from slot's `extra_peers`,
+- [x] `start_peer(idx)` — build `CommunerdConfig` from slot's `extra_peers`,
       call `TimeFamilyServer::new(addr, chronon_ns)`, optionally
       `.with_communerd(config)`, call `start_daemon_arc()`, call `start()`,
       transition slot to `Running`.
-- [ ] `stop_peer(idx, drain_ms)` — call `peer.server.stop_daemon_arc()`,
+- [x] `stop_peer(idx, drain_ms)` — call `peer.server.stop_daemon_arc()`,
       sleep `drain_ms`, call `peer.handle.abort()`, transition to `Stopped`.
-- [ ] `restart_peer(idx)` — `stop_peer` then `start_peer` at same address.
-- [ ] `start_all()` — call `start_peer` for all `Reserved` slots concurrently
+- [x] `restart_peer(idx)` — `stop_peer` then `start_peer` at same address.
+- [x] `start_all()` — call `start_peer` for all `Reserved` slots concurrently
       (use `futures::future::join_all`).
-- [ ] `stop_all(drain_ms)` — call `stop_peer` for all `Running` slots
+- [x] `stop_all(drain_ms)` — call `stop_peer` for all `Running` slots
       concurrently.
 
 ### 14.4 Introspection and wait helpers
 
-- [ ] `running_count() -> usize`.
-- [ ] `running_peers() -> impl Iterator<Item = &ToppliPeer>`.
-- [ ] `peer(idx) -> &ToppliPeer` — panics if not running (test bug, not prod).
-- [ ] `wait_until(predicate: impl Fn(&ToppliHarness) -> bool, timeout_ms: u64) -> bool` —
+- [x] `running_count() -> usize`.
+- [x] `running_peers() -> impl Iterator<Item = &ToppliPeer>`.
+- [x] `peer(idx) -> &ToppliPeer` — panics if not running (test bug, not prod).
+- [x] `wait_until(predicate: impl Fn(&ToppliHarness) -> bool, timeout_ms: u64) -> bool` —
       polls every 20 ms until predicate true or timeout.
 
 ### 14.5 First toppoli tests
 
-- [ ] `toppoli_peers_start_and_stop` — 4 peers, full mesh, start all, wait
+- [x] `toppoli_peers_start_and_stop` — 4 peers, full mesh, start all, wait
       100 ms, stop all. Assert no panic, `running_count == 0` after stop.
 - [ ] `toppoli_l1_ping_round_trip` — 2 peers, peer 0 sends JSON-RPC `ping`
       to peer 1's addr, assert `Ok(())` within 2 s.
-- [ ] `toppoli_peer_restart` — 3 peers, start all, stop peer 1, restart
+- [x] `toppoli_peer_restart` — 3 peers, start all, stop peer 1, restart
       peer 1, assert all 3 reachable via ping within 3 s.
-- [ ] `toppoli_12_peers_form_and_stabilize` — 12 peers, full mesh, start all,
+- [x] `toppoli_12_peers_form_and_stabilize` — 12 peers, full mesh, start all,
       wait until all running, stop_all. Smoke test for scale.
 
 ### 14.6 Later toppoli tests (require Phase 12/13)
