@@ -593,12 +593,14 @@ impl ExternalizedChrononRecord {
                         aa_nonce: [0u8; 16].into(),
                         chronon_stamp_count: 0,
                         external_attestations: vec![],
-                        tb_version: 0,
-                        tbid: Tbid::default(),
-                    }),
-                    received_at_ns: ea.received_at_ns,
-                })
-                .collect(),
+                         tb_version: 0,
+                         tbid: Tbid::default(),
+                     }),
+                     received_at_ns: ea.received_at_ns,
+                     signature: FTByteVector::new(),
+                     signature_algorithm: String::new(),
+                 })
+                 .collect(),
             tb_version: self.tb_version as u32,
             tbid: Tbid::from_raw(self.tbid.try_into().unwrap_or([0u8; 96])),
         };
