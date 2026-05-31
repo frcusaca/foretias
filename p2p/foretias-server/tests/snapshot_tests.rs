@@ -41,15 +41,15 @@ impl Evaluator for ServerStampEvaluator {
         // Stamp each message
         let mut stamps = Vec::new();
         for msg in &self.messages {
-            let (foretis, sig, alg) = server.chronomatter()
+            let stamped = server.chronomatter()
                 .stamp(msg.as_bytes().to_vec(), msg.clone())
                 .map_err(|e| format!("Stamp failed for '{}': {}", msg, e))?;
             stamps.push((
-                serde_json::to_value(&foretis)
+                serde_json::to_value(&stamped.foretis)
                     .map_err(|e| format!("Failed to serialize Foretis: {}", e))?,
-                serde_json::to_value(&sig)
+                serde_json::to_value(&stamped.signature_bytes)
                     .map_err(|e| format!("Failed to serialize signature: {}", e))?,
-                serde_json::to_value(&alg)
+                serde_json::to_value(&stamped.signature_algorithm)
                     .map_err(|e| format!("Failed to serialize algorithm: {}", e))?,
             ));
         }
@@ -64,7 +64,7 @@ impl Evaluator for ServerStampEvaluator {
             let alg: String = serde_json::from_value(alg_val.clone())
                 .map_err(|e| format!("Failed to deserialize algorithm: {}", e))?;
             let result = server.chronomatter()
-                .verify(&foretis, &msg.as_bytes().to_vec(), &sig, &alg, server.calendar())
+                .verify(&foretis, &sig, &alg, &msg.as_bytes().to_vec(), server.calendar())
                 .map_err(|e| format!("Verify failed for '{}': {}", msg, e))?;
             verifications.push(serde_json::json!({
                 "message": msg,

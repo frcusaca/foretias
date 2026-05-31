@@ -601,7 +601,7 @@ fn cmd_inspect_attestations(calendar_path: String) -> Result<(), Box<dyn std::er
             };
 
             let valid = match foretias_core::foretias::tick::verify(
-                &*crypto, &att.foretis, &content, &att.signature, &att.signature_algorithm, &cal_lookup,
+                &*crypto, &att.foretis, &att.signature, &att.signature_algorithm, &content, &cal_lookup,
             ) {
                 Ok(v) => v,
                 Err(e) => {

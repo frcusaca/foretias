@@ -327,11 +327,11 @@ impl Foretias {
                 "client is dormant — cannot stamp".into(),
             ));
         }
-        let (foretis, sig, alg) = cm.stamp(content.to_vec(), echo.to_string())?;
+        let stamped = cm.stamp(content.to_vec(), echo.to_string())?;
         if let Some(ref path) = self.persist_path {
             let _ = self.save_calendar(path);
         }
-        Ok((foretis, sig, alg))
+        Ok((stamped.foretis, stamped.signature_bytes, stamped.signature_algorithm))
     }
 
     pub async fn verify(&self, content: &[u8], foretis: &Foretis, signature: &[u8], signature_algorithm: &str) -> Result<bool, ForetiasError> {
@@ -339,7 +339,7 @@ impl Foretias {
             ClientLevel::Standalone => {
                 let cm = self.inner.chronomatter();
                 let calendar = self.inner.calendar();
-                let result = cm.verify(foretis, &content.to_vec(), signature, signature_algorithm, calendar.as_ref())?;
+                let result = cm.verify(foretis, signature, signature_algorithm, &content.to_vec(), calendar.as_ref())?;
                 Ok(result)
             }
             ClientLevel::Ptp | ClientLevel::P2p => self.verify_remote(content, foretis, signature, signature_algorithm).await,
@@ -369,7 +369,7 @@ impl Foretias {
             tbn: foretis.tbn.clone(),
         };
         let verified = foretias_core::foretias::tick::verify(
-            &*crypto, foretis, content, signature, signature_algorithm, &fetched_cal,
+            &*crypto, foretis, signature, signature_algorithm, content, &fetched_cal,
         ).map_err(ForetiasError::from)?;
 
         Ok(VerificationReport {

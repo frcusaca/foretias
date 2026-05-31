@@ -59,15 +59,15 @@ pub fn handle_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse
             "node is dormant".into());
     }
     match cm.stamp(content, echo) {
-        Ok((foretis, signature, signature_algorithm)) => {
+        Ok(stamped) => {
             server.metrics().inc(MetricField::StampsTotal);
             if let Err(e) = server.save() {
                 tracing::warn!("failed to persist calendar after stamp: {}", e);
             }
             resp_success(server, id, serde_json::json!({
-                "foretis": foretis,
-                "signature": hex::encode(&signature),
-                "signature_algorithm": signature_algorithm,
+                "foretis": stamped.foretis,
+                "signature": hex::encode(&stamped.signature_bytes),
+                "signature_algorithm": stamped.signature_algorithm,
             }))
         }
         Err(e) => resp_error(server, id, jsonrpc::INTERNAL_ERROR,
@@ -178,7 +178,7 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
     let cal_read = calendar.read();
     let local_valid = if let Ok(recs) = cal_read.get(foretis.chronon_number, 1) {
         !recs.is_empty() && foretias_core::foretias::tick::verify(
-            crypto.as_ref(), &foretis, &content, &signature, &signature_algorithm, &*cal_read,
+            crypto.as_ref(), &foretis, &signature, &signature_algorithm, &content, &*cal_read,
         ).unwrap_or(false)
     } else {
         false

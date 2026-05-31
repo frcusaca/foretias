@@ -16,6 +16,7 @@ use crate::core::identity::PrivKeyHandle;
 use crate::error::NodeError;
 use crate::clock::Clock;
 use crate::foretias::{auto_attestation_blob_with_count, auto_attestation_blob_with_genesis, Foretis, ChrononRecord};
+use crate::foretias::tick::StampedForetis;
 use crate::foretias::tick::CalendarLookup;
 use crate::foretias::callbacks::{TickObserver, MutualAttestObserver};
 use crate::foretias::types::{Tbid, TbidSecret, TickNumber};
@@ -314,7 +315,7 @@ impl Chronomatter {
 
     // ── Stamp ────────────────────────────────────────────────────────────────
 
-    pub fn stamp(&self, content: Vec<u8>, echo: String) -> Result<(Foretis, Vec<u8>, String), NodeError> {
+    pub fn stamp(&self, content: Vec<u8>, echo: String) -> Result<StampedForetis, NodeError> {
         if self.is_dormant.load(SeqCst) {
             return Err(NodeError::Internal(
                 "Cannot stamp: Chronomatter is in verify-only mode".into(),
@@ -329,10 +330,11 @@ impl Chronomatter {
         self.create_foretis(tick, content, echo)
     }
 
-    fn create_foretis(&self, tick: u64, content: Vec<u8>, echo: String) -> Result<(Foretis, Vec<u8>, String), NodeError> {
+    fn create_foretis(&self, tick: u64, content: Vec<u8>, echo: String) -> Result<StampedForetis, NodeError> {
+        use crate::foretias::tick::StampedForetis;
+
         let tbid = self.tbid;
         let tbn = self.tbn.clone();
-        let alg = self.crypto.signature_algorithm().to_id_string().to_string();
 
         self.generate_and_store_keypair()?;
         let new_pub = self.keypair_pub(0)
@@ -344,6 +346,7 @@ impl Chronomatter {
             .map_err(|e| NodeError::Internal(format!("clock error: {e}")))?;
         let time_being_reference_time = format!("UE+{}ns", now_ns);
 
+        // V2: Foretis payload is signature-free
         let foretis = Foretis {
             chronon_number: tick,
             content_hash: content_hash.bytes.into(),
@@ -353,25 +356,32 @@ impl Chronomatter {
             time_being_reference_time,
         };
 
-        // v2: sign postcard-encoded Foretis payload
-        let sig_input = foretis.sig_input_bytes();
-        let sig = self.sign_with_keypair(0, &sig_input)?;
+        // V2: sign postcard canonical bytes with the per-tick keypair
+        let sig_input = postcard::to_allocvec(&foretis)
+            .map_err(|e| NodeError::Internal(format!("postcard serialize error: {e}")))?;
+
+        let signature_bytes = self.sign_with_keypair(0, &sig_input)?;
+        let sig_alg = self.crypto.signature_algorithm().to_id_string().to_string();
 
         let record = self.build_tick_record(tick, new_pub)?;
         self.notify_observer(tick, &new_pub, &record);
 
-        Ok((foretis, sig, alg))
+        Ok(StampedForetis {
+            foretis,
+            signature_bytes,
+            signature_algorithm: sig_alg,
+        })
     }
 
     // ── Verify ───────────────────────────────────────────────────────────────
 
-    pub fn verify(&self, foretis: &Foretis, content: &Vec<u8>, signature: &[u8], signature_algorithm: &str, calendar: &dyn CalendarLookup) -> Result<bool, NodeError> {
+    pub fn verify(&self, foretis: &Foretis, signature: &[u8], signature_algorithm: &str, content: &Vec<u8>, calendar: &dyn CalendarLookup) -> Result<bool, NodeError> {
         crate::foretias::tick::verify(
             self.crypto.as_ref(),
             foretis,
-            content,
             signature,
             signature_algorithm,
+            content,
             calendar,
         )
     }
@@ -544,10 +554,10 @@ mod tests {
     #[test]
     fn stamp_returns_foretis_with_correct_tick() {
         let (cm, _last, calendar) = make_chronomatter();
-        let (foretis, sig, _alg) = cm.stamp(b"hello".to_vec(), "echo".to_string()).unwrap();
-        assert_eq!(foretis.chronon_number, 1);
-        assert_eq!(foretis.echo, "echo");
-        assert!(!sig.is_empty());
+        let foretis = cm.stamp(b"hello".to_vec(), "echo".to_string()).unwrap();
+        assert_eq!(foretis.foretis.chronon_number, 1);
+        assert_eq!(foretis.foretis.echo, "echo");
+        assert!(!foretis.signature_bytes.is_empty());
         // Calendar received the tick record via observer
         assert_eq!(calendar.read().ticks.len(), 1);
     }
@@ -555,10 +565,10 @@ mod tests {
     #[test]
     fn two_stamps_share_same_tick_if_no_daemon_advance() {
         let (cm, _last, calendar) = make_chronomatter();
-        let (f1, _, _) = cm.stamp(b"one".to_vec(), "e1".to_string()).unwrap();
-        let (f2, _, _) = cm.stamp(b"two".to_vec(), "e2".to_string()).unwrap();
-        assert_eq!(f1.chronon_number, 1);
-        assert_eq!(f2.chronon_number, 2);
+        let f1 = cm.stamp(b"one".to_vec(), "e1".to_string()).unwrap();
+        let f2 = cm.stamp(b"two".to_vec(), "e2".to_string()).unwrap();
+        assert_eq!(f1.foretis.chronon_number, 1);
+        assert_eq!(f2.foretis.chronon_number, 2);
         assert_eq!(calendar.read().ticks.len(), 2);
     }
 
@@ -566,25 +576,25 @@ mod tests {
     fn verify_succeeds_for_valid_stamp() {
         let (cm, _last, calendar) = make_chronomatter();
         let content = b"verify-me".to_vec();
-        let (foretis, sig, alg) = cm.stamp(content.clone(), "v".to_string()).unwrap();
-        let valid = cm.verify(&foretis, &content, &sig, &alg, &*calendar.read()).unwrap();
+        let foretis = cm.stamp(content.clone(), "v".to_string()).unwrap();
+        let valid = cm.verify(&foretis.foretis, &foretis.signature_bytes, &foretis.signature_algorithm, &content, &*calendar.read()).unwrap();
         assert!(valid);
     }
 
     #[test]
     fn verify_fails_for_wrong_content() {
         let (cm, _last, calendar) = make_chronomatter();
-        let (foretis, sig, alg) = cm.stamp(b"original".to_vec(), "v".to_string()).unwrap();
-        let valid = cm.verify(&foretis, &b"tampered".to_vec(), &sig, &alg, &*calendar.read()).unwrap();
+        let foretis = cm.stamp(b"original".to_vec(), "v".to_string()).unwrap();
+        let valid = cm.verify(&foretis.foretis, &foretis.signature_bytes, &foretis.signature_algorithm, &b"tampered".to_vec(), &*calendar.read()).unwrap();
         assert!(!valid);
     }
 
     #[test]
     fn stamp_uses_crypto_server_algorithm() {
         let (cm, _last, _calendar) = make_chronomatter();
-        let (_foretis, _sig, alg) = cm.stamp(b"algo-test".to_vec(), "e".to_string()).unwrap();
+        let foretis = cm.stamp(b"algo-test".to_vec(), "e".to_string()).unwrap();
         let expected_alg = cm.crypto_server().signature_algorithm().to_id_string();
-        assert_eq!(alg, expected_alg.to_string());
+        assert_eq!(foretis.signature_algorithm, expected_alg.to_string());
     }
 
     #[test]
@@ -617,7 +627,7 @@ mod tests {
         let tmp = std::env::temp_dir().join(format!("chronomatter_test_{}.json", std::process::id()));
         {
             let (cm_init, _, cal_init) = make_chronomatter();
-            let _ = cm_init.stamp(b"init".to_vec(), "init".to_string()).unwrap();
+            cm_init.stamp(b"init".to_vec(), "init".to_string()).unwrap();
             std::fs::write(&tmp, serde_json::to_string(&*cal_init.read()).unwrap()).unwrap();
         }
         let cm = Chronomatter::from_calendar(

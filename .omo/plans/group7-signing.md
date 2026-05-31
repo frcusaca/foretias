@@ -863,7 +863,8 @@ Max Concurrent: 6 (Wave 1)
 
   **Commit**: YES (groups with 17)
 
-- [ ] 13. TinmanSuite (rustdoc JSON type-resolved checks)
+- [x] 13. TinmanSuite (rustdoc JSON type-resolved checks)
+      (2026-05-31 17:30)
 
   **What to do**:
   - Add dev-dependency `rustdoc-types` (pinned); implement: `invoke_rustdoc_json()`, `extract_fn_signatures()`, `resolve_type()`, `collect_semantic_usages()`
@@ -891,7 +892,8 @@ Max Concurrent: 6 (Wave 1)
 
   **Commit**: YES (groups with 17)
 
-- [ ] 14. TinmanSuite snapshot integration + cross-tabulation
+- [x] 14. TinmanSuite snapshot integration + cross-tabulation
+      (2026-05-31 18:00)
 
   **What to do**: Add `=== TinmanSuite ===` and `=== TinmanSuite Cross-Tabulation ===` sections to snapshot; implement `merge_into_table()` and `format_merged_table()`; wire `UPDATE_SNAPSHOT=1`.
 
@@ -912,7 +914,8 @@ Max Concurrent: 6 (Wave 1)
 
   **Commit**: YES (groups with 17)
 
-- [ ] 15. StrawmanSuite known-bad test case + wire into snapshot test
+- [x] 15. StrawmanSuite known-bad test case + wire into snapshot test
+      (2026-05-31 18:00)
 
   **What to do**: Create known-bad gate fn, wire check_gate_bodies() into test_trust_boundary_snapshot, verify caught, add exemption.
 
@@ -932,7 +935,8 @@ Max Concurrent: 6 (Wave 1)
 
 ### Wave 4 — Phase 15 (FamilyRecord + Family Cache)
 
-- [ ] 16. FamilyRecord payload + verifying constructor
+- [x] 16. FamilyRecord payload + verifying constructor
+      (2026-05-31 19:00)
 
   **What to do**: Define `FamilyRecord` (signature-free) per §19.4; `try_new()` enforcing invariants; `MAX_FAMILY_MEMBERS` cap (DoS guard); `RecordBase` returning `true`.
 
@@ -957,7 +961,8 @@ Max Concurrent: 6 (Wave 1)
 
   **Commit**: YES (groups with 15)
 
-- [ ] 17. FamilyRecord k×k matrix verification
+- [x] 17. FamilyRecord k×k matrix verification
+      (2026-05-31 20:30)
 
   **What to do**: Verify every `matrix[i][j]` is member i's dual-key (Ed25519 ‖ SLH-DSA) signature over member j's TBID. Reject on any failure.
 
@@ -977,7 +982,8 @@ Max Concurrent: 6 (Wave 1)
 
   **Commit**: YES (groups with 15)
 
-- [ ] 18. FamilyRecord gate enforcement (CleanFullyAuthenticated only)
+- [x] 18. FamilyRecord gate enforcement (CleanFullyAuthenticated only)
+      (2026-05-31 20:55)
 
   **What to do**: Gate for `UnverifiedSignatureEnvelope<FamilyRecord>` → `CleanFullyAuthenticated<FamilyRecord>`. Verify full dual-key envelope AND k×k matrix. Never produce CleanAuthenticated.
 
@@ -999,7 +1005,8 @@ Max Concurrent: 6 (Wave 1)
 
   **Commit**: YES (groups with 15)
 
-- [ ] 19. Family Cache in Communerd
+- [x] 19. Family Cache in Communerd
+      (2026-05-31 21:15)
 
   **What to do**: Implement Family Cache: `communerd_tbid → CleanFullyAuthenticated<FamilyRecord>`, reverse pointers, `family_cache_lookup(tbid)`.
 
@@ -1019,7 +1026,8 @@ Max Concurrent: 6 (Wave 1)
 
   **Commit**: YES (groups with 15)
 
-- [ ] 20. FamilyRecord DHT publication + cache lookup flow
+- [x] 20. FamilyRecord DHT publication + cache lookup flow
+      (2026-05-31 21:45)
 
   **What to do**: Connection flow: `/tbid` lookup → dial → fetch FamilyRecord → verify (full) → cache → start Communerdette. DHT publication.
 
@@ -1041,7 +1049,8 @@ Max Concurrent: 6 (Wave 1)
 
 ### Wave 5 — Phase 13 (FB Gossip)
 
-- [ ] 21. CommunerdetteHost API additions (sign + publish probity)
+- [x] 21. CommunerdetteHost API additions (sign + publish probity)
+      (2026-05-31 22:00)
 
   **What to do**: Add `host_sign_probity_report()` and `host_publish_probity_report()` to CommunerdetteHost. Implement sign (canonical + Calendar signing stub) + publish (gossip). Update MockHost.
 
@@ -1063,7 +1072,8 @@ Max Concurrent: 6 (Wave 1)
 
   **Commit**: YES (groups with 13)
 
-- [ ] 22. FB emission (FullyBound established/lost)
+- [x] 22. FB emission (FullyBound established/lost)
+      (2026-05-31 23:00)
 
   **What to do**: On FullyBound: emit ProbityReport attribute="fb", value=1.0. On lost: value=-1.0. Add `local_calendar_tbid` to executor. Failure → WARN log, no abort.
 
@@ -1083,7 +1093,8 @@ Max Concurrent: 6 (Wave 1)
 
   **Commit**: YES (groups with 13)
 
-- [ ] 23. FB reception (verify+ingest, full-signature gate)
+- [x] 23. FB reception (verify+ingest, full-signature gate)
+      (2026-05-31 14:30)
 
   **What to do**: Gossip handler: parse → UnverifiedSignatureEnvelope → verify → CleanFullyAuthenticated → ingest (fb/gnf). Error → TRACE, drop. **CHECK: FB/GNF requires full → CleanFullyAuthenticated**.
 
@@ -1108,7 +1119,8 @@ Max Concurrent: 6 (Wave 1)
 
   **Commit**: YES (groups with 13)
 
-- [ ] 24. Phase 8.4 trait stub + FB gossip integration tests
+- [x] 24. Phase 8.4 trait stub + FB gossip integration tests
+      (2026-05-31 14:35)
 
   **What to do**: Trait stub for Calendar signing. Integration test (toppoli): 2 servers, A FullyBound with B, B's ProbityStore contains FB from A. Unit tests: emit_fb_established, emit_fb_lost, verify.
 
