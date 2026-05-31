@@ -1,0 +1,169 @@
+{
+  "schema_version": 2,
+  "active_work_id": "group7-signing-97ec72af",
+  "works": {
+    "group7-signing-97ec72af": {
+      "work_id": "group7-signing-97ec72af",
+      "active_plan": "/home/hcbusy/webhash/foretias/.sisyphus/plans/group7-signing.md",
+      "plan_name": "group7-signing",
+      "status": "active",
+      "started_at": "2026-05-31T14:28:44.335Z",
+      "updated_at": "2026-05-31T15:42:25.738Z",
+      "session_ids": [
+        "opencode:ses_1843c07c2ffejzUFH8sD2E0Itr"
+      ],
+      "session_origins": {
+        "opencode:ses_1843c07c2ffejzUFH8sD2E0Itr": "direct"
+      },
+      "agent": "atlas",
+      "task_sessions": {
+        "todo:1": {
+          "task_key": "todo:1",
+          "task_label": "1",
+          "task_title": "Add postcard dependency + basic round-trip test",
+          "session_id": "ses_181844bbcffeWWTxHIbMj5pcSZ",
+          "agent": "Sisyphus-Junior",
+          "category": "quick",
+          "started_at": "2026-05-31T14:31:36.758Z",
+          "status": "completed",
+          "updated_at": "2026-05-31T14:48:56.085Z",
+          "ended_at": "2026-05-31T14:48:56.085Z",
+          "elapsed_ms": 1039327
+        },
+        "todo:3": {
+          "task_key": "todo:3",
+          "task_label": "3",
+          "task_title": "RecordBase trait + implement for ChrononRecord",
+          "session_id": "ses_181686683ffezgZ4McvhB9f1X5",
+          "agent": "Sisyphus-Junior",
+          "category": "quick",
+          "started_at": "2026-05-31T14:49:40.927Z",
+          "status": "completed",
+          "updated_at": "2026-05-31T15:15:03.229Z",
+          "ended_at": "2026-05-31T15:15:03.229Z",
+          "elapsed_ms": 1522302
+        },
+        "todo:4": {
+          "task_key": "todo:4",
+          "task_label": "4",
+          "task_title": "SignatureEntry struct + ordered signature-list model",
+          "session_id": "ses_18161ce56ffeZbqnAlar1cN5Es",
+          "agent": "Sisyphus-Junior",
+          "category": "quick",
+          "updated_at": "2026-05-31T15:26:48.350Z",
+          "started_at": "2026-05-31T15:19:18.617Z",
+          "status": "completed",
+          "ended_at": "2026-05-31T15:26:48.350Z",
+          "elapsed_ms": 449733
+        },
+        "todo:5": {
+          "task_key": "todo:5",
+          "task_label": "5",
+          "task_title": "Migrate wrappers to carry signature lists",
+          "session_id": "opencode:ses_1815a5512ffe2380z3iaqDK2L7",
+          "agent": "Sisyphus-Junior",
+          "category": "unspecified-high",
+          "updated_at": "2026-05-31T15:31:42.994Z",
+          "started_at": "2026-05-31T15:27:28.443Z",
+          "status": "completed",
+          "ended_at": "2026-05-31T15:31:42.994Z",
+          "elapsed_ms": 254551
+        },
+        "todo:7": {
+          "task_key": "todo:7",
+          "task_label": "7",
+          "task_title": "Gate enforcement (always_require_full_signature check)",
+          "session_id": "opencode:ses_181525fe1ffeD2VLET01n353Eo",
+          "agent": "Sisyphus-Junior",
+          "category": "quick",
+          "updated_at": "2026-05-31T15:42:25.738Z",
+          "started_at": "2026-05-31T15:36:10.030Z",
+          "status": "completed",
+          "ended_at": "2026-05-31T15:42:25.738Z",
+          "elapsed_ms": 375708
+        }
+      },
+      "worktree_path": "/home/hcbusy/tmp/claude_tmp/foretias-group7-signing"
+    }
+  },
+  "active_plan": "/home/hcbusy/webhash/foretias/.sisyphus/plans/group7-signing.md",
+  "started_at": "2026-05-31T14:28:44.335Z",
+  "status": "active",
+  "updated_at": "2026-05-31T15:42:25.738Z",
+  "session_ids": [
+    "opencode:ses_1843c07c2ffejzUFH8sD2E0Itr"
+  ],
+  "session_origins": {
+    "opencode:ses_1843c07c2ffejzUFH8sD2E0Itr": "direct"
+  },
+  "plan_name": "group7-signing",
+  "task_sessions": {
+    "todo:1": {
+      "task_key": "todo:1",
+      "task_label": "1",
+      "task_title": "Add postcard dependency + basic round-trip test",
+      "session_id": "ses_181844bbcffeWWTxHIbMj5pcSZ",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "started_at": "2026-05-31T14:31:36.758Z",
+      "status": "completed",
+      "updated_at": "2026-05-31T14:48:56.085Z",
+      "ended_at": "2026-05-31T14:48:56.085Z",
+      "elapsed_ms": 1039327
+    },
+    "todo:3": {
+      "task_key": "todo:3",
+      "task_label": "3",
+      "task_title": "RecordBase trait + implement for ChrononRecord",
+      "session_id": "ses_181686683ffezgZ4McvhB9f1X5",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "started_at": "2026-05-31T14:49:40.927Z",
+      "status": "completed",
+      "updated_at": "2026-05-31T15:15:03.229Z",
+      "ended_at": "2026-05-31T15:15:03.229Z",
+      "elapsed_ms": 1522302
+    },
+    "todo:4": {
+      "task_key": "todo:4",
+      "task_label": "4",
+      "task_title": "SignatureEntry struct + ordered signature-list model",
+      "session_id": "ses_18161ce56ffeZbqnAlar1cN5Es",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-05-31T15:26:48.350Z",
+      "started_at": "2026-05-31T15:19:18.617Z",
+      "status": "completed",
+      "ended_at": "2026-05-31T15:26:48.350Z",
+      "elapsed_ms": 449733
+    },
+    "todo:5": {
+      "task_key": "todo:5",
+      "task_label": "5",
+      "task_title": "Migrate wrappers to carry signature lists",
+      "session_id": "opencode:ses_1815a5512ffe2380z3iaqDK2L7",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-05-31T15:31:42.994Z",
+      "started_at": "2026-05-31T15:27:28.443Z",
+      "status": "completed",
+      "ended_at": "2026-05-31T15:31:42.994Z",
+      "elapsed_ms": 254551
+    },
+    "todo:7": {
+      "task_key": "todo:7",
+      "task_label": "7",
+      "task_title": "Gate enforcement (always_require_full_signature check)",
+      "session_id": "opencode:ses_181525fe1ffeD2VLET01n353Eo",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-05-31T15:42:25.738Z",
+      "started_at": "2026-05-31T15:36:10.030Z",
+      "status": "completed",
+      "ended_at": "2026-05-31T15:42:25.738Z",
+      "elapsed_ms": 375708
+    }
+  },
+  "agent": "atlas",
+  "worktree_path": "/home/hcbusy/tmp/claude_tmp/foretias-group7-signing"
+}
