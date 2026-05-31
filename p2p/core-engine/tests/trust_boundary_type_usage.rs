@@ -157,7 +157,7 @@ impl<'ast> Visit<'ast> for WrapperTypeVisitor {
     }
 }
 
-fn collect_all_type_usages(workspace_root: &Path) -> (Vec<LocationEntry>, Vec<RawOccurrence>) {
+fn collect_ast_usages(workspace_root: &Path) -> (Vec<LocationEntry>, Vec<RawOccurrence>) {
     let mut all_locations = HashMap::new();
     let mut all_raw = Vec::new();
     let src_dirs = vec![
@@ -206,15 +206,12 @@ fn test_wrapper_type_visitor_detects_wrappers() {
         .parent()
         .unwrap();
 
-    let (locations, raw) = collect_all_type_usages(workspace);
+    let (locations, raw) = collect_ast_usages(workspace);
 
-    let wrappers: HashMap<String, usize> =
-        raw
-            .iter()
-            .fold(HashMap::new(), |mut acc, u| {
-                *acc.entry(u.wrapper.clone()).or_insert(0) += 1;
-                acc
-            });
+    let mut wrappers: HashMap<String, usize> = HashMap::new();
+    for u in &raw {
+        *wrappers.entry(u.wrapper.clone()).or_insert(0) += 1;
+    }
 
     println!("\n=== Trust Boundary Wrapper Usage Summary ===");
     for (wrapper, count) in &wrappers {
@@ -266,7 +263,7 @@ fn build_cross_tabulation(raw: &[RawOccurrence]) -> Vec<(String, String, String,
 }
 
 /// Verify trust boundary invariants from AGENTS.md type-enforced trust boundaries.
-fn verify_trust_boundary_invariants(locations: &[LocationEntry]) -> Vec<String> {
+fn verify_ast_invariants(locations: &[LocationEntry]) -> Vec<String> {
     let mut violations = Vec::new();
 
     // Rule 1: core-engine should NOT contain UnverifiedSignatureEnvelope usage EXCEPT in gate files
@@ -320,7 +317,7 @@ fn verify_trust_boundary_invariants(locations: &[LocationEntry]) -> Vec<String> 
     violations
 }
 
-fn format_usage_table(locations: &[LocationEntry]) -> String {
+fn format_ast_table(locations: &[LocationEntry]) -> String {
     let mut table = String::new();
     table.push_str("file | inner | context | UnverifiedSignatureEnvelope | CleanAuthenticated | Externalized\n");
     table.push_str(&"=".repeat(120));
@@ -353,21 +350,79 @@ fn format_cross_tab(cross_tab: &[(String, String, String, usize)]) -> String {
     tab
 }
 
+/// Verify primitives recognized by check_gate_bodies.
+const VERIFY_PRIMITIVES: &[&str] = &["verify", "verify_with", "tbid_verify"];
+
+/// Check that every gate function body references all required elements.
+/// A gate function has a DontUse/UnverifiedSignatureEnvelope parameter and returns Clean*.
+/// Must reference: always_require_full_signature, signature data, verify primitive.
+/// Opt-out: // gate-strawman-exempt: <reason>
+fn check_gate_bodies(source: &str) -> Vec<String> {
+    let mut violations = Vec::new();
+    let lines: Vec<&str> = source.lines().collect();
+    let mut in_gate_fn = false;
+    let mut fn_name = String::new();
+    let mut fn_start = 0usize;
+    let mut brace_depth = 0usize;
+
+    for (i, line) in lines.iter().enumerate() {
+        let trimmed = line.trim();
+
+        if !in_gate_fn && (trimmed.contains("fn ") && trimmed.contains("UnverifiedSignatureEnvelope")) {
+            in_gate_fn = true;
+            fn_name = trimmed.split("fn ").nth(1).unwrap_or("").split('(').next().unwrap_or("").to_string();
+            fn_start = i;
+            brace_depth = 0;
+        }
+
+        if in_gate_fn {
+            brace_depth += line.chars().filter(|&c| c == '{').count();
+            brace_depth -= line.chars().filter(|&c| c == '}').count();
+
+            if trimmed.starts_with("// gate-strawman-exempt:") {
+                in_gate_fn = false;
+                continue;
+            }
+
+            if brace_depth == 0 && i > fn_start {
+                let body = lines[fn_start..=i].join("\n");
+                let has_always = body.contains("always_require_full_signature");
+                let has_sig_data = body.contains("signatures") || body.contains("matrix");
+                let has_verify = VERIFY_PRIMITIVES.iter().any(|p| body.contains(*p));
+
+                if !has_always {
+                    violations.push(format!("{}: missing always_require_full_signature", fn_name));
+                }
+                if !has_sig_data {
+                    violations.push(format!("{}: missing signature data reference", fn_name));
+                }
+                if !has_verify {
+                    violations.push(format!("{}: missing verify primitive", fn_name));
+                }
+
+                in_gate_fn = false;
+            }
+        }
+    }
+
+    violations
+}
+
 #[test]
 fn test_trust_boundary_snapshot() {
     let workspace = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap();
 
-    let (locations, raw) = collect_all_type_usages(workspace);
+    let (locations, raw) = collect_ast_usages(workspace);
     let cross_tab = build_cross_tabulation(&raw);
-    let violations = verify_trust_boundary_invariants(&locations);
+    let violations = verify_ast_invariants(&locations);
 
-    let usage_table = format_usage_table(&locations);
+    let usage_table = format_ast_table(&locations);
     let cross_tab_str = format_cross_tab(&cross_tab);
 
     let mut snapshot = String::new();
-    snapshot.push_str("=== Trust Boundary Usage Snapshot ===\n");
+    snapshot.push_str("=== StrawmanSuite (AST / syn) ===\n");
     snapshot.push('\n');
     snapshot.push_str(&usage_table);
     snapshot.push_str("\n\n=== Cross-Tabulation ===\n");
