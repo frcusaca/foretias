@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::foretias::encoding::FTByteVector;
+use crate::foretias::clean_auth::RecordBase;
 
 /// A peer's probity score at a point in time.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,6 +56,12 @@ impl EpochSnapshot {
             arr.sort_by(|a, b| a.as_str().unwrap_or("").cmp(b.as_str().unwrap_or("")));
         }
         serde_json::to_vec(&val).unwrap()
+    }
+}
+
+impl RecordBase for EpochSnapshot {
+    fn always_require_full_signature(&self) -> bool {
+        false
     }
 }
 

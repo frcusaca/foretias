@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 use crate::crypto_server::CryptoServer;
 use crate::error::NodeError;
-use crate::foretias::clean_auth::{CleanAuthenticated, CleanAuthError, UnverifiedSignatureEnvelope};
+use crate::foretias::clean_auth::{CleanAuthenticated, CleanAuthError, RecordBase, UnverifiedSignatureEnvelope};
 
 // ---------------------------------------------------------------------------
 // ProbityReport domain type
@@ -49,6 +49,13 @@ impl ProbityReport {
         let mut no_sig = self.clone();
         no_sig.signature = Vec::new();
         postcard::to_allocvec(&no_sig).expect("postcard serialize ProbityReport")
+    }
+}
+
+impl RecordBase for ProbityReport {
+    fn always_require_full_signature(&self) -> bool {
+        // Bruderschaft and Group-Notification-Feature require full signature
+        self.attribute == "fb" || self.attribute == "gnf"
     }
 }
 
