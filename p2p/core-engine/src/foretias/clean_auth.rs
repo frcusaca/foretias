@@ -110,6 +110,77 @@ impl<T> TrustedInner<T> for UnverifiedSignatureEnvelope<T> {
     fn into_inner(self) -> T { self.inner }
 }
 
+impl<T: RecordBase> UnverifiedSignatureEnvelope<T> {
+    /// Gate enforcement: verify all signatures and enforce full-signature requirement.
+    ///
+    /// Returns `CleanAuthenticated<T>` when the record does not require full signature
+    /// and all fast (Ed25519) signatures verify correctly.
+    /// Returns `CleanFullyAuthenticated<T>` when the record requires full signature
+    /// and all signatures (Ed25519 + SLH-DSA) verify correctly.
+    ///
+    /// Rejects with distinct errors for:
+    /// - Wrong signature count
+    /// - Invalid signature for any role
+    /// - Full signature required but only fast signatures present
+    pub fn verify_all_signatures(
+        self,
+        crypto: &dyn CryptoServer,
+        pub_key: &[u8],
+    ) -> Result<CleanAuthenticated<T>, CleanAuthError> {
+        let record = &self.inner;
+        let require_full = record.always_require_full_signature();
+        let sigs = &self.signatures;
+
+        // Enforce signature cardinality: exactly 2 (Chronomatter + CommunerdEnvelope)
+        if sigs.len() != 2 {
+            return Err(CleanAuthError::SignatureCountMismatch {
+                expected: 2,
+                got: sigs.len(),
+            });
+        }
+
+        // Verify each signature
+        for (i, entry) in sigs.iter().enumerate() {
+            let payload_bytes = postcard::to_allocvec(record)
+                .map_err(|e| CleanAuthError::Crypto(NodeError::Crypto(crate::error::CryptoError::UnknownAlgorithm(e.to_string()))))?;
+            let mut signing_data = payload_bytes.clone();
+            if i > 0 {
+                let prev_sigs = &sigs[..i];
+                let prev_bytes = postcard::to_allocvec(prev_sigs)
+                    .map_err(|e| CleanAuthError::Crypto(NodeError::Crypto(crate::error::CryptoError::UnknownAlgorithm(e.to_string()))))?;
+                signing_data.extend_from_slice(&prev_bytes);
+            }
+
+            let valid = crypto.verify_with(
+                pub_key,
+                match entry.algorithm {
+                    SigAlgorithm::Ed25519 => "Ed25519",
+                    SigAlgorithm::DualKey => "SLH-DSA",
+                },
+                &signing_data,
+                &entry.sig,
+            ).map_err(|e| CleanAuthError::Crypto(NodeError::Crypto(e)))?;
+
+            if !valid {
+                return Err(CleanAuthError::SignatureVerificationFailed {
+                    role: entry.role.clone(),
+                    tbid: entry.tbid.clone(),
+                });
+            }
+        }
+
+        // Enforce full-signature requirement
+        if require_full {
+            let has_dual = sigs.iter().any(|s| s.algorithm == SigAlgorithm::DualKey);
+            if !has_dual {
+                return Err(CleanAuthError::FullSignatureRequired);
+            }
+        }
+
+        Ok(CleanAuthenticated { inner: self.inner, signatures: self.signatures })
+    }
+}
+
 /// Per-record full-signature requirement trait.
 /// All signature-free payload types implement this common base trait.
 pub trait RecordBase: serde::Serialize {
@@ -209,6 +280,60 @@ impl<T> TrustedInner<T> for Externalized<T> {
     fn into_inner(self) -> T { self.inner }
 }
 
+/// Builder for Externalized<R> with ordered signature chain enforcement.
+///
+/// Collects signatures in order: each signature covers `postcard(payload) || postcard(&signatures_so_far)`.
+/// Terminal entry must be CommunerdEnvelope.
+#[derive(Debug, Clone)]
+pub struct ExternalizedBuilder<T> {
+    inner: T,
+    signatures: Vec<SignatureEntry>,
+}
+
+impl<T: serde::Serialize> ExternalizedBuilder<T> {
+    /// Create builder from a raw payload.
+    pub fn builder_from(inner: T) -> Self {
+        Self { inner, signatures: Vec::new() }
+    }
+
+    /// Create builder from a CleanAuthenticated payload (drops inbound signatures).
+    pub fn builder_from_authenticated(auth: CleanAuthenticated<T>) -> Self {
+        Self { inner: auth.into_inner(), signatures: Vec::new() }
+    }
+
+    /// Append a signature entry.
+    /// Signs: postcard(payload) || postcard(&signatures_so_far).
+    /// The caller must provide the pre-computed signature bytes.
+    pub fn add_signature(
+        &mut self,
+        role: SignerRole,
+        tbid: String,
+        algorithm: SigAlgorithm,
+        sig: Vec<u8>,
+    ) -> &mut Self {
+        self.signatures.push(SignatureEntry { role, tbid, algorithm, sig });
+        self
+    }
+
+    /// Finalize: validate terminal entry is CommunerdEnvelope and return Externalized.
+    pub fn build(self) -> Result<Externalized<T>, CleanAuthError> {
+        if self.signatures.is_empty() {
+            return Err(CleanAuthError::SignatureCountMismatch {
+                expected: 1,
+                got: 0,
+            });
+        }
+        let last = self.signatures.last().unwrap();
+        if last.role != SignerRole::CommunerdEnvelope {
+            return Err(CleanAuthError::SignatureVerificationFailed {
+                role: last.role.clone(),
+                tbid: last.tbid.clone(),
+            });
+        }
+        Ok(Externalized { inner: self.inner })
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Error types
 // ---------------------------------------------------------------------------
@@ -234,6 +359,12 @@ pub enum CleanAuthError {
     InvalidLength(String),
     /// Underlying crypto/server error.
     Crypto(NodeError),
+    /// Record requires full signature but only fast signatures present.
+    FullSignatureRequired,
+    /// Signature count mismatch (wrong cardinality).
+    SignatureCountMismatch { expected: usize, got: usize },
+    /// Signature verification failed for a specific role.
+    SignatureVerificationFailed { role: SignerRole, tbid: String },
 }
 
 impl From<ParseError> for CleanAuthError {
@@ -256,6 +387,9 @@ impl std::fmt::Display for CleanAuthError {
             CleanAuthError::NotYetImplemented => write!(f, "not yet implemented"),
             CleanAuthError::InvalidLength(msg) => write!(f, "invalid length: {msg}"),
             CleanAuthError::Crypto(e) => write!(f, "crypto error: {e}"),
+            CleanAuthError::FullSignatureRequired => write!(f, "full signature required but only fast signatures present"),
+            CleanAuthError::SignatureCountMismatch { expected, got } => write!(f, "signature count mismatch: expected {expected}, got {got}"),
+            CleanAuthError::SignatureVerificationFailed { role, tbid } => write!(f, "signature verification failed for role {:?} tbid {}", role, tbid),
         }
     }
 }
