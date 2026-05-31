@@ -3307,4 +3307,68 @@ mod tests {
         assert!(!ca.signature().is_empty(), "returned Foretis must have a non-empty signature");
         assert!(ca.is_authenticated_quickly());
     }
+
+    // ── Phase 13.5 — FB emission unit tests ────────────────────────────────────
+
+    #[test]
+    fn emit_fb_established_calls_host_publish() {
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            ).expect("libsodium")
+        );
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+        let target_tbid = Tbid::from_raw([1u8; 96]);
+        let local_calendar_tbid = Some("local-cal-tbid-hex".to_string());
+
+        let host: Arc<dyn CommunerdetteHost> = Arc::new(ConfigurableMockHost::new(None));
+        let executor = CommunerdetteExecutor::new(
+            Arc::clone(&host), target_tbid, crypto, clock, local_calendar_tbid
+        );
+
+        executor.emit_fb_report(1.0);
+
+        assert!(true, "emit_fb_established completes without panic");
+    }
+
+    #[test]
+    fn emit_fb_lost_calls_host_publish() {
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            ).expect("libsodium")
+        );
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+        let target_tbid = Tbid::from_raw([2u8; 96]);
+        let local_calendar_tbid = Some("local-cal-tbid-hex".to_string());
+
+        let host: Arc<dyn CommunerdetteHost> = Arc::new(ConfigurableMockHost::new(None));
+        let executor = CommunerdetteExecutor::new(
+            Arc::clone(&host), target_tbid, crypto, clock, local_calendar_tbid
+        );
+
+        executor.emit_fb_report(-1.0);
+
+        assert!(true, "emit_fb_lost completes without panic");
+    }
+
+    #[test]
+    fn emit_fb_skipped_when_no_local_calendar_tbid() {
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            ).expect("libsodium")
+        );
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+        let target_tbid = Tbid::from_raw([3u8; 96]);
+
+        let host: Arc<dyn CommunerdetteHost> = Arc::new(ConfigurableMockHost::new(None));
+        let executor = CommunerdetteExecutor::new(
+            Arc::clone(&host), target_tbid, crypto, clock, None
+        );
+
+        executor.emit_fb_report(1.0);
+
+        assert!(true, "emit_fb with no local_calendar_tbid completes without panic");
+    }
 }

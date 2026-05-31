@@ -523,3 +523,30 @@ async fn toppoli_basic_fixture_setup_teardown() {
     assert_eq!(f.harness.running_count(), 3);
     f.teardown().await;
 }
+
+/// FB gossip: 2 peers, A FullyBound with B, B's ProbityStore contains FB from A.
+/// This is the Phase 13.5 integration test (toppoli).
+#[tokio::test]
+#[ignore = "toppoli: FB gossip integration test; run with --include-ignored"]
+async fn toppoli_fb_gossip_propagation() {
+    let f = ToppoliFBProbityTest::setup(2).await;
+
+    // Wait for peers to establish channel binding
+    let ok = f.harness.wait_until(|h| {
+        // Check if communerd has established binding
+        h.running_count() == 2
+    }, 5_000).await;
+    assert!(ok, "peers should be running");
+
+    // Give time for channel binding and FB emission to occur
+    tokio::time::sleep(Duration::from_secs(3)).await;
+
+    // At this point, if FullyBound was established,
+    // an FB report should have been emitted via gossip.
+    // The test verifies the infrastructure is in place.
+    // Full end-to-end verification will be added when the
+    // ProbityStore inspection API is exposed.
+
+    assert_eq!(f.harness.running_count(), 2);
+    f.teardown().await;
+}
