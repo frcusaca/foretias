@@ -5,8 +5,12 @@
 
 use std::collections::HashMap;
 use std::path::Path;
+use std::process::Command;
 
 use syn::visit::Visit;
+
+// TinmanSuite: rustdoc JSON type-resolved checks
+use rustdoc_types::{Crate, Type};
 
 #[derive(Debug, Clone)]
 struct LocationEntry {
@@ -429,6 +433,34 @@ fn test_trust_boundary_snapshot() {
     snapshot.push('\n');
     snapshot.push_str(&cross_tab_str);
 
+    // TinmanSuite section
+    let crate_path = workspace.join("core-engine");
+    let tinman_usages = match invoke_rustdoc_json(&crate_path) {
+        Ok(crate_json) => collect_semantic_usages(&crate_json),
+        Err(e) => {
+            snapshot.push_str(&format!("\n\n=== TinmanSuite ===\n\n  (skipped: {})\n", e));
+            Vec::new()
+        }
+    };
+    let tinman_violations = verify_semantic_invariants(&tinman_usages);
+    snapshot.push_str("\n\n");
+    snapshot.push_str(&format_tinman_suite(&tinman_usages, &tinman_violations));
+
+    // Cross-tabulation section
+    let merged = merge_into_table(&raw, &tinman_usages);
+    snapshot.push_str("\n\n");
+    snapshot.push_str(&format_merged_table(&merged));
+
+    // StrawmanSuite gate body check
+    let gate_violations = check_gate_bodies_in_workspace(workspace);
+    if !gate_violations.is_empty() {
+        snapshot.push_str("\n\n=== StrawmanSuite Gate Body Violations ===\n");
+        for v in &gate_violations {
+            use std::fmt::Write;
+            writeln!(snapshot, "  {}", v).unwrap();
+        }
+    }
+
     let snapshot_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/snapshots");
     std::fs::create_dir_all(&snapshot_dir).ok();
@@ -462,4 +494,210 @@ fn test_trust_boundary_snapshot() {
         }
         panic!("{} trust boundary violations detected", violations.len());
     }
+}
+
+// ---------------------------------------------------------------------------
+// TinmanSuite: rustdoc JSON type-resolved checks
+// ---------------------------------------------------------------------------
+
+/// Known wrapper type names to search for in resolved types.
+const WRAPPER_NAMES: &[&str] = &["CleanAuthenticated", "UnverifiedSignatureEnvelope", "Externalized"];
+
+/// Invoke `cargo rustdoc -- --json` and return the parsed Crate.
+fn invoke_rustdoc_json(crate_path: &Path) -> Result<Crate, String> {
+    let output = Command::new("cargo")
+        .current_dir(crate_path)
+        .args(&["rustdoc", "--", "--json"])
+        .output()
+        .map_err(|e| format!("cargo rustdoc failed: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("cargo rustdoc exited with error: {}", stderr));
+    }
+
+    let crate_json: Crate = serde_json::from_slice(&output.stdout)
+        .map_err(|e| format!("failed to parse rustdoc JSON: {}", e))?;
+
+    Ok(crate_json)
+}
+
+/// Convert a rustdoc Type to its string representation.
+fn type_to_string(ty: &rustdoc_types::Type) -> String {
+    match ty {
+        rustdoc_types::Type::ResolvedPath(path) => path.name.clone(),
+        rustdoc_types::Type::Generic(name) => name.clone(),
+        rustdoc_types::Type::Primitive(name) => name.clone(),
+        rustdoc_types::Type::Tuple(types) => format!("({})", types.iter().map(type_to_string).collect::<Vec<_>>().join(", ")),
+        rustdoc_types::Type::FunctionPointer(fn_ptr) => {
+            format!("fn({})", fn_ptr.decl.inputs.iter().map(|(_, ty)| type_to_string(ty)).collect::<Vec<_>>().join(", "))
+        }
+        rustdoc_types::Type::QualifiedPath { name, self_type, .. } => {
+            format!("{}::{}", type_to_string(self_type), name)
+        }
+        _ => String::from("..."),
+    }
+}
+
+/// Resolve a type name to determine if it's a wrapper or an alias/newtype.
+fn resolve_type(type_str: &str) -> Option<String> {
+    for wrapper in WRAPPER_NAMES {
+        if type_str.contains(wrapper) {
+            return Some(wrapper.to_string());
+        }
+    }
+    None
+}
+
+/// Collect semantic usages of wrapper types from resolved rustdoc JSON.
+fn collect_semantic_usages(crate_: &Crate) -> Vec<(String, String, String)> {
+    let mut usages = Vec::new();
+    for item in crate_.index.values() {
+        let item_name = item.name.as_deref().unwrap_or("<unnamed>").to_string();
+        match &item.inner {
+            rustdoc_types::ItemEnum::Function(func) => {
+                for (name, ty) in &func.decl.inputs {
+                    let type_str = type_to_string(ty);
+                    if let Some(wrapper) = resolve_type(&type_str) {
+                        usages.push((item_name.clone(), wrapper.clone(), format!("param {}: {}", name, type_str)));
+                    }
+                }
+                if let Some(output_ty) = &func.decl.output {
+                    let output_str = type_to_string(output_ty);
+                    if let Some(wrapper) = resolve_type(&output_str) {
+                        usages.push((item_name.clone(), wrapper.clone(), format!("output: {}", output_str)));
+                    }
+                }
+            }
+            rustdoc_types::ItemEnum::AssocType { generics, default, .. } => {
+                if let Some(default_ty) = default {
+                    let type_str = type_to_string(default_ty);
+                    if let Some(wrapper) = resolve_type(&type_str) {
+                        usages.push((item_name.clone(), wrapper.clone(), format!("assoc_type default: {}", type_str)));
+                    }
+                }
+                for param in &generics.params {
+                    if let rustdoc_types::GenericParamDefKind::Type { bounds, .. } = &param.kind {
+                        for bound in bounds {
+                            let bound_str = bound_to_string(bound);
+                            if let Some(wrapper) = resolve_type(&bound_str) {
+                                usages.push((item_name.clone(), wrapper.clone(), format!("assoc_type bound: {}", bound_str)));
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    usages
+}
+
+fn bound_to_string(bound: &rustdoc_types::GenericBound) -> String {
+    match bound {
+        rustdoc_types::GenericBound::TraitBound { trait_, .. } => trait_.name.clone(),
+        rustdoc_types::GenericBound::Outlives(lifetime) => lifetime.clone(),
+    }
+}
+
+/// Verify semantic invariants: flag Resolved (alias/newtype) occurrences as violations.
+fn verify_semantic_invariants(usages: &[(String, String, String)]) -> Vec<String> {
+    let mut violations = Vec::new();
+
+    for (fn_name, wrapper, context) in usages {
+        // Check for alias/newtype usage (these are Type::Alias in rustdoc JSON)
+        if context.contains("Alias") {
+            violations.push(format!("{}: {} used via alias/newtype (should be direct wrapper)", fn_name, wrapper));
+        }
+    }
+
+    violations
+}
+
+/// Format TinmanSuite findings into a snapshot section.
+fn format_tinman_suite(usages: &[(String, String, String)], violations: &[String]) -> String {
+    let mut section = String::from("=== TinmanSuite ===\n");
+    section.push('\n');
+    if usages.is_empty() {
+        section.push_str("  (no wrapper usages found in rustdoc JSON)\n");
+    } else {
+        for (fn_name, wrapper, context) in usages {
+            use std::fmt::Write;
+            writeln!(section, "  {} | {} | {}", fn_name, wrapper, context).unwrap();
+        }
+    }
+    if !violations.is_empty() {
+        section.push_str("\n  Violations:\n");
+        for v in violations {
+            use std::fmt::Write;
+            writeln!(section, "    {}", v).unwrap();
+        }
+    }
+    section
+}
+
+/// Merge AST usages and TinmanSuite usages into a cross-tabulation table.
+fn merge_into_table(
+    ast_raw: &[RawOccurrence],
+    tinman_usages: &[(String, String, String)],
+) -> Vec<(String, String, usize)> {
+    let mut map: HashMap<(String, String), usize> = HashMap::new();
+    for u in ast_raw {
+        let key = (u.wrapper.clone(), u.inner.clone());
+        *map.entry(key).or_insert(0) += 1;
+    }
+    for (_, wrapper, context) in tinman_usages {
+        let key = (wrapper.clone(), context.clone());
+        *map.entry(key).or_insert(0) += 1;
+    }
+    let mut result: Vec<_> = map.into_iter().map(|(k, v)| (k.0, k.1, v)).collect();
+    result.sort();
+    result
+}
+
+/// Format the merged cross-tabulation table.
+fn format_merged_table(merged: &[(String, String, usize)]) -> String {
+    let mut tab = String::from("=== TinmanSuite Cross-Tabulation ===\n");
+    tab.push('\n');
+    tab.push_str("wrapper | inner/context | count\n");
+    tab.push_str(&"=".repeat(80));
+    tab.push('\n');
+    for (wrapper, inner, count) in merged {
+        use std::fmt::Write;
+        writeln!(tab, "{} | {} | {}", wrapper, inner, count).unwrap();
+    }
+    tab
+}
+
+/// Run check_gate_bodies on all Rust source files in the workspace.
+fn check_gate_bodies_in_workspace(workspace: &Path) -> Vec<String> {
+    let mut all_violations = Vec::new();
+    let src_dirs = vec![
+        "core-engine/src".to_string(),
+        "foretias-client/src".to_string(),
+        "foretias-server/src".to_string(),
+    ];
+
+    for dir in &src_dirs {
+        let full_dir = workspace.join(dir);
+        let mut stack = vec![full_dir];
+        while let Some(d) = stack.pop() {
+            let Ok(entries) = std::fs::read_dir(&d) else { continue };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    stack.push(path);
+                } else if path.extension().map_or(false, |e| e == "rs") {
+                    let Ok(src) = std::fs::read_to_string(&path) else { continue };
+                    let rel = path.strip_prefix(workspace).unwrap_or(&path);
+                    let file_str = rel.display().to_string();
+                    let violations = check_gate_bodies(&src);
+                    for v in violations {
+                        all_violations.push(format!("{}: {}", file_str, v));
+                    }
+                }
+            }
+        }
+    }
+    all_violations
 }

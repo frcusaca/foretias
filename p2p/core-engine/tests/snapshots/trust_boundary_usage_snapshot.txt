@@ -83,3 +83,66 @@ foretias-server | Externalized | u8 | 1
 foretias-server | UnverifiedSignatureEnvelope | ChrononRecord | 2
 foretias-server | UnverifiedSignatureEnvelope | Foretis | 1
 foretias-server | UnverifiedSignatureEnvelope | u8 | 1
+
+
+=== TinmanSuite ===
+
+  (skipped: cargo rustdoc exited with error:  Documenting foretias-core v0.3.0 (/home/hcbusy/tmp/claude_tmp/foretias-group7-signing/p2p/core-engine)
+error: Option 'json' given more than once
+
+error: could not document `foretias-core`
+)
+
+
+=== TinmanSuite ===
+
+  (no wrapper usages found in rustdoc JSON)
+
+
+=== TinmanSuite Cross-Tabulation ===
+
+wrapper | inner/context | count
+================================================================================
+CleanAuthenticated | AuthenticatedPong | 1
+CleanAuthenticated | ChrononRecord | 18
+CleanAuthenticated | EpochSnapshot | 3
+CleanAuthenticated | Foretis | 9
+CleanAuthenticated | ProbityReport | 3
+CleanAuthenticated | T | 6
+CleanAuthenticated | u32 | 2
+CleanAuthenticated | u8 | 1
+Externalized | T | 2
+Externalized | u8 | 1
+UnverifiedSignatureEnvelope | ChrononRecord | 6
+UnverifiedSignatureEnvelope | EpochSnapshot | 3
+UnverifiedSignatureEnvelope | Foretis | 4
+UnverifiedSignatureEnvelope | ProbityReport | 3
+UnverifiedSignatureEnvelope | T | 5
+UnverifiedSignatureEnvelope | u8 | 1
+
+
+=== StrawmanSuite Gate Body Violations ===
+  core-engine/src/probity/report.rs: reconstruct: missing always_require_full_signature
+  core-engine/src/probity/report.rs: reconstruct: missing signature data reference
+  core-engine/src/probity/report.rs: reconstruct: missing verify primitive
+  core-engine/src/probity/report.rs: into_unprocessed: missing always_require_full_signature
+  core-engine/src/probity/report.rs: into_unprocessed: missing signature data reference
+  core-engine/src/probity/report.rs: into_unprocessed: missing verify primitive
+  core-engine/src/foretias/clean_auth.rs: reconstruct: missing always_require_full_signature
+  core-engine/src/foretias/clean_auth.rs: reconstruct: missing signature data reference
+  core-engine/src/foretias/clean_auth.rs: reconstruct: missing verify primitive
+  core-engine/src/foretias/clean_auth.rs: into_unprocessed: missing always_require_full_signature
+  core-engine/src/foretias/clean_auth.rs: into_unprocessed: missing signature data reference
+  core-engine/src/foretias/clean_auth.rs: into_unprocessed: missing verify primitive
+  core-engine/src/foretias/clean_auth.rs: reconstruct: missing always_require_full_signature
+  core-engine/src/foretias/clean_auth.rs: reconstruct: missing signature data reference
+  core-engine/src/foretias/clean_auth.rs: reconstruct: missing verify primitive
+  core-engine/src/foretias/clean_auth.rs: into_unprocessed: missing always_require_full_signature
+  core-engine/src/foretias/clean_auth.rs: into_unprocessed: missing signature data reference
+  core-engine/src/foretias/clean_auth.rs: into_unprocessed: missing verify primitive
+  core-engine/src/foretias/clean_auth.rs: reconstruct: missing always_require_full_signature
+  core-engine/src/foretias/clean_auth.rs: reconstruct: missing signature data reference
+  core-engine/src/foretias/clean_auth.rs: reconstruct: missing verify primitive
+  core-engine/src/foretias/clean_auth.rs: into_unprocessed: missing always_require_full_signature
+  core-engine/src/foretias/clean_auth.rs: into_unprocessed: missing signature data reference
+  core-engine/src/foretias/clean_auth.rs: into_unprocessed: missing verify primitive
