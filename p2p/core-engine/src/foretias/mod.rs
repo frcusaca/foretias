@@ -7,7 +7,9 @@ pub mod external_attestation;
 pub mod callbacks;
 pub mod encoding;
 pub mod clean_auth;
+pub mod family_record;
 pub use clean_auth::{CleanAuthenticated, CleanFullyAuthenticated, Externalized, UnverifiedSignatureEnvelope};
+pub use family_record::{FamilyRecord, FamilyError, MAX_FAMILY_MEMBERS};
 
 pub use types::{Tbid, TbidSecret, PublicKeyBytes, SignatureBytes, AlgorithmId, Digest, Message, AaNonce, TickNumber, SignatureAlgorithm, KemAlgorithm};
 pub use tick::{ChrononRecord, Foretis, CalendarLookup, stamp, verify, auto_attestation_blob, auto_attestation_blob_with_count, auto_attestation_blob_with_genesis, verify_pair};
