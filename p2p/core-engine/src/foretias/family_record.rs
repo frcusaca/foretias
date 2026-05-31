@@ -85,7 +85,7 @@ impl FamilyRecord {
     /// For each cell `matrix[i][j]`, verify the Ed25519 portion (first 64 bytes)
     /// is member i's Ed25519 signature over member j's TBID raw bytes.
     /// Returns `Ok(())` if all k² signatures verify, `Err` on first failure.
-    pub fn verify_matrix<C: VerifyOps>(&self, crypto: &C) -> Result<(), CryptoError> {
+    pub fn verify_matrix<C: VerifyOps + ?Sized>(&self, crypto: &C) -> Result<(), CryptoError> {
         let k = self.k();
         let tbids: Vec<Tbid> = self
             .members

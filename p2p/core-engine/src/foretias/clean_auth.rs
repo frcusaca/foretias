@@ -17,6 +17,7 @@ use super::tick::{ChrononRecord, Foretis, verify_pair};
 use super::types::Tbid;
 use super::external_attestation::ExternalAttestation;
 use super::encoding::{FTByteVector, FTByteArray};
+use super::family_record::FamilyRecord;
 
 // ---------------------------------------------------------------------------
 // Signature types (Phase 16a — §21.2)
@@ -854,6 +855,29 @@ impl ExternalizedEpochSnapshot {
 }
 
 // ---------------------------------------------------------------------------
+// FamilyRecord — gate enforcement (CleanFullyAuthenticated only)
+// ---------------------------------------------------------------------------
+
+impl UnverifiedSignatureEnvelope<FamilyRecord> {
+    /// Verify FamilyRecord: envelope signatures + k×k matrix.
+    ///
+    /// Returns `CleanFullyAuthenticated<FamilyRecord>` on success.
+    /// Rejects with `FullSignatureRequired` if any signature is Ed25519-only (fast).
+    /// Rejects with `Crypto(BadSignature)` if the k×k matrix verification fails.
+    pub fn verify_family_record(
+        self,
+        crypto: &dyn CryptoServer,
+        pub_key: &[u8],
+    ) -> Result<CleanFullyAuthenticated<FamilyRecord>, CleanAuthError> {
+        let ca = self.verify_all_signatures(crypto, pub_key)?;
+        let record = ca.inner();
+        record.verify_matrix(crypto)
+            .map_err(|e| CleanAuthError::Crypto(NodeError::Crypto(e)))?;
+        Ok(CleanFullyAuthenticated::from_dual_verified(ca.into_inner()))
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -1097,5 +1121,50 @@ mod tests {
         let ca: CleanAuthenticated<u32> = cfa.into();
         assert_eq!(*ca.inner(), 99u32);
         assert!(ca.is_authenticated_quickly());
+    }
+
+    #[test]
+    fn family_record_fast_only_rejected() {
+        let tbid1 = Tbid::test();
+        let tbid2 = Tbid::from_bytes(&[0xBB; 96]).unwrap();
+        let members = vec![tbid1.to_hex(), tbid2.to_hex()];
+        let matrix = vec![
+            vec![vec![0u8; 64], vec![0u8; 64]],
+            vec![vec![0u8; 64], vec![0u8; 64]],
+        ];
+        let record = FamilyRecord::try_new(members, matrix).unwrap();
+        let envelope = UnverifiedSignatureEnvelope::from_parsed(record);
+        let crypto = crate::crypto_server::software::SoftwareCryptoServer::generate(crate::crypto_server::ForetiasCurve::Ed25519).unwrap();
+        let result = envelope.verify_family_record(&crypto, &[0u8; 32]);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), CleanAuthError::SignatureCountMismatch { .. }));
+    }
+
+    #[test]
+    fn family_record_bad_matrix_rejected() {
+        let tbid1 = Tbid::test();
+        let tbid2 = Tbid::from_bytes(&[0xBB; 96]).unwrap();
+        let members = vec![tbid1.to_hex(), tbid2.to_hex()];
+        let matrix = vec![
+            vec![vec![0u8; 64], vec![0u8; 64]],
+            vec![vec![0u8; 64], vec![0u8; 64]],
+        ];
+        let record = FamilyRecord::try_new(members, matrix).unwrap();
+        let mut envelope = UnverifiedSignatureEnvelope::from_parsed(record);
+        envelope.signatures.push(SignatureEntry {
+            role: SignerRole::Chronomatter,
+            tbid: tbid1.to_hex(),
+            algorithm: SigAlgorithm::DualKey,
+            sig: vec![0u8; 64],
+        });
+        envelope.signatures.push(SignatureEntry {
+            role: SignerRole::CommunerdEnvelope,
+            tbid: tbid2.to_hex(),
+            algorithm: SigAlgorithm::DualKey,
+            sig: vec![0u8; 64],
+        });
+        let crypto = crate::crypto_server::software::SoftwareCryptoServer::generate(crate::crypto_server::ForetiasCurve::Ed25519).unwrap();
+        let result = envelope.verify_family_record(&crypto, &[0u8; 32]);
+        assert!(result.is_err());
     }
 }
