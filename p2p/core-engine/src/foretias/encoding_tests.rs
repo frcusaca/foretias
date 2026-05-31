@@ -31,16 +31,14 @@ fn make_test_foretis() -> Foretis {
     for i in 0..32 {
         ch[i] = (i * 3 + 1) as u8;
     }
-    Foretis::new(
-        42,
-        FTByteArray::from(ch),
-        FTByteVector::from(vec![0xAB; 64]),
-        "Ed25519".to_string(),
-        make_test_tbid(),
-        "test-echo".to_string(),
-        "test-tbn".to_string(),
-        "2026-01-01T00:00:00Z".to_string(),
-    ).expect("valid foretis")
+    Foretis {
+        chronon_number: 42,
+        content_hash: FTByteArray::from(ch),
+        tbid: make_test_tbid(),
+        echo: "test-echo".to_string(),
+        tbn: "test-tbn".to_string(),
+        time_being_reference_time: "2026-01-01T00:00:00Z".to_string(),
+    }
 }
 
 fn make_test_tick_record(tick: u64) -> ChrononRecord {
@@ -238,7 +236,6 @@ fn foretis_serializes_to_base64_strings() {
     let f = make_test_foretis();
     let json = to_json(&f).unwrap();
     assert_field_is_base64_string(&json, "content_hash");
-    assert_field_is_base64_string(&json, "signature");
     // tbid inner is also base64
     let val: serde_json::Value = serde_json::from_str(&json).unwrap();
     let tbid_inner = val.get("tbid").unwrap().get("inner").unwrap();
@@ -252,8 +249,6 @@ fn foretis_roundtrip() {
     let decoded: Foretis = from_json(&json).unwrap();
     assert_eq!(decoded.chronon_number, f.chronon_number);
     assert_eq!(decoded.content_hash, f.content_hash);
-    assert_eq!(decoded.signature, f.signature);
-    assert_eq!(decoded.signature_algorithm, f.signature_algorithm);
     assert_eq!(decoded.tbid, f.tbid);
     assert_eq!(decoded.echo, f.echo);
     assert_eq!(decoded.tbn, f.tbn);
@@ -451,6 +446,8 @@ fn external_attestation_roundtrip() {
     let att = ExternalAttestation {
         attester_tbid: "test-attester".to_string(),
         foretis,
+        signature: FTByteVector::from(vec![0xAB; 64]),
+        signature_algorithm: "Ed25519".to_string(),
         attester_tick_record: tick,
         received_at_ns: 1_000_000_000,
     };
@@ -471,7 +468,6 @@ fn to_json_and_from_json_are_inverses() {
     let decoded: Foretis = from_json(&json).unwrap();
     assert_eq!(decoded.chronon_number, f.chronon_number);
     assert_eq!(decoded.content_hash, f.content_hash);
-    assert_eq!(decoded.signature, f.signature);
     assert_eq!(decoded.tbid, f.tbid);
 
     let tr = make_test_tick_record(10);
@@ -581,6 +577,8 @@ fn deep_nesting_external_attestation() {
     let att = ExternalAttestation {
         attester_tbid: "deep-attester".to_string(),
         foretis,
+        signature: FTByteVector::from(vec![0xCD; 64]),
+        signature_algorithm: "Ed25519".to_string(),
         attester_tick_record: tick,
         received_at_ns: 9_999_999_999,
     };
@@ -702,7 +700,6 @@ fn to_json_pretty_produces_valid_output() {
     let decoded: Foretis = serde_json::from_str(&json).unwrap();
     assert_eq!(decoded.chronon_number, f.chronon_number);
     assert_eq!(decoded.content_hash, f.content_hash);
-    assert_eq!(decoded.signature, f.signature);
     assert_eq!(decoded.tbid, f.tbid);
     // Pretty output should contain newlines
     assert!(json.contains('\n'), "pretty output should contain newlines");

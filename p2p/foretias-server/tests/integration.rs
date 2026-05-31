@@ -98,24 +98,37 @@ fn test_stamp_and_verify_e2e() {
     );
 
     let stamp_output = String::from_utf8_lossy(&stamp_result.stdout);
-    let foretis: Value = serde_json::from_str(stamp_output.trim())
-        .expect("Failed to parse Foretis JSON from stamp output");
+    let stamp_json: Value = serde_json::from_str(stamp_output.trim())
+        .expect("Failed to parse stamp JSON from stamp output");
+
+    // v2 wire format: {foretis, signature, signature_algorithm}
+    let foretis = stamp_json.get("foretis")
+        .expect("stamp output missing 'foretis' field");
+    let signature = stamp_json.get("signature")
+        .expect("stamp output missing 'signature' field");
+    let signature_algorithm = stamp_json.get("signature_algorithm")
+        .expect("stamp output missing 'signature_algorithm' field");
 
     assert!(foretis.get("chronon_number").is_some(), "Foretis missing chronon_number");
     assert!(foretis.get("content_hash").is_some(), "Foretis missing content_hash");
-    assert!(foretis.get("signature").is_some(), "Foretis missing signature");
     assert!(foretis.get("tbid").is_some(), "Foretis missing tbid");
     assert!(foretis.get("echo").is_some(), "Foretis missing echo");
     assert!(foretis.get("tbn").is_some(), "Foretis missing tbn");
     assert!(foretis.get("time_being_reference_time").is_some(), "Foretis missing time_being_reference_time");
 
     let foretis_json = serde_json::to_string(&foretis).unwrap();
+    let signature_hex = signature.as_str().unwrap_or("");
+    let sig_alg = signature_algorithm.as_str().unwrap_or("Ed25519");
     let verify_result = Command::new(&bin)
         .arg("verify")
         .arg("--message")
         .arg("hello world")
         .arg("--foretis")
         .arg(&foretis_json)
+        .arg("--signature")
+        .arg(signature_hex)
+        .arg("--signature-algorithm")
+        .arg(sig_alg)
         .arg("--server")
         .arg(&addr)
         .output()
@@ -142,6 +155,10 @@ fn test_stamp_and_verify_e2e() {
         .arg("wrong content")
         .arg("--foretis")
         .arg(&foretis_json)
+        .arg("--signature")
+        .arg(signature_hex)
+        .arg("--signature-algorithm")
+        .arg(sig_alg)
         .arg("--server")
         .arg(&addr)
         .output()
@@ -168,7 +185,8 @@ fn test_stamp_and_verify_e2e() {
     assert!(stamp2_result.status.success(), "Second stamp failed");
 
     let stamp2_output = String::from_utf8_lossy(&stamp2_result.stdout);
-    let foretis2: Value = serde_json::from_str(stamp2_output.trim()).unwrap();
+    let stamp2_json: Value = serde_json::from_str(stamp2_output.trim()).unwrap();
+    let foretis2 = stamp2_json.get("foretis").unwrap();
 
     let tick1 = foretis.get("chronon_number").unwrap().as_u64().unwrap();
     let tick2 = foretis2.get("chronon_number").unwrap().as_u64().unwrap();
@@ -289,7 +307,7 @@ async fn test_peer_unreachable_does_not_crash() {
         assert!(result.is_err(), "Expected error for unreachable peer");
     }
 
-    let foretis = server.chronomatter().stamp(b"still works".to_vec(), "ok".to_string())
+    let (foretis, _, _) = server.chronomatter().stamp(b"still works".to_vec(), "ok".to_string())
         .expect("Local stamp should work despite unreachable peer");
     assert!(foretis.chronon_number > 0);
 

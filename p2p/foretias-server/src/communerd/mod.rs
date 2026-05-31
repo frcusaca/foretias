@@ -322,8 +322,8 @@ impl Communerd {
         let unprocessed = UnverifiedSignatureEnvelope::<Foretis>::from_json_value(result)
             .map_err(|e| TransportError::Decode(e.to_string()))?;
         let f = unprocessed.inner();
-        if f.chronon_number == 0 || f.signature.is_empty() || f.signature_algorithm.is_empty() {
-            return Err(TransportError::Decode("structurally invalid Foretis".into()));
+        if f.chronon_number == 0 {
+            return Err(TransportError::Decode("structurally invalid Foretis: chronon_number == 0".into()));
         }
         #[allow(deprecated)]
         Ok(CleanAuthenticated::<Foretis>::from_trusted(unprocessed.into_inner()).into_inner())

@@ -52,7 +52,7 @@ async fn ptp_stamp_and_verify() {
     )
     .expect("connect client");
 
-    let foretis = client
+    let (foretis, sig, alg) = client
         .stamp(b"hello world", "ptp-test".into())
         .await
         .expect("stamp succeeds");
@@ -61,7 +61,7 @@ async fn ptp_stamp_and_verify() {
     assert!(!foretis.content_hash.is_empty());
 
     let valid = client
-        .verify(b"hello world", &foretis)
+        .verify(b"hello world", &foretis, &sig, &alg)
         .await
         .expect("verify succeeds");
     assert!(valid, "stamp should verify as valid");
@@ -79,19 +79,19 @@ async fn ptp_stamp_verify_roundtrip() {
     .expect("connect client");
 
     let content = b"roundtrip content data";
-    let foretis = client
+    let (foretis, sig, alg) = client
         .stamp(content, "roundtrip".into())
         .await
         .expect("stamp succeeds");
 
     let valid = client
-        .verify(content, &foretis)
+        .verify(content, &foretis, &sig, &alg)
         .await
         .expect("verify succeeds");
     assert!(valid, "roundtrip should verify");
 
     let invalid = client
-        .verify(b"tampered content", &foretis)
+        .verify(b"tampered content", &foretis, &sig, &alg)
         .await
         .expect("verify tampered succeeds");
     assert!(!invalid, "tampered content should not verify");

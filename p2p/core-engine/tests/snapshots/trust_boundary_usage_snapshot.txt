@@ -138,7 +138,6 @@ UnverifiedSignatureEnvelope | u8 | 1
   core-engine/src/foretias/clean_auth.rs: into_unprocessed: missing signature data reference
   core-engine/src/foretias/clean_auth.rs: into_unprocessed: missing verify primitive
   core-engine/src/foretias/clean_auth.rs: reconstruct: missing always_require_full_signature
-  core-engine/src/foretias/clean_auth.rs: reconstruct: missing signature data reference
   core-engine/src/foretias/clean_auth.rs: reconstruct: missing verify primitive
   core-engine/src/foretias/clean_auth.rs: into_unprocessed: missing always_require_full_signature
   core-engine/src/foretias/clean_auth.rs: into_unprocessed: missing signature data reference

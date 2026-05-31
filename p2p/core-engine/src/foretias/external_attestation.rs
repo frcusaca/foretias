@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::encoding::FTByteVector;
 use super::tick::ChrononRecord;
 
 /// An external attestation from another Time Family.
@@ -9,12 +10,22 @@ use super::tick::ChrononRecord;
 pub struct ExternalAttestation {
     /// Hex-encoded TBID of the attesting peer.
     pub attester_tbid: String,
-    /// B's stamp of A's tick record.
+    /// B's stamp of A's tick record (signature-free payload).
     pub foretis: super::tick::Foretis,
+    /// v2: Signature covering postcard-encoded Foretis payload (base64-encoded in JSON).
+    #[serde(default)]
+    pub signature: FTByteVector,
+    /// v2: Signature algorithm identifier (e.g. "Ed25519").
+    #[serde(default = "default_sig_algorithm")]
+    pub signature_algorithm: String,
     /// B's tick at attestation time (for offline re-verify).
     pub attester_tick_record: ChrononRecord,
     /// Wall-clock receive time in nanoseconds.
     pub received_at_ns: u64,
+}
+
+fn default_sig_algorithm() -> String {
+    "Ed25519".to_string()
 }
 
 #[cfg(test)]
@@ -43,8 +54,6 @@ mod tests {
         let foretis = crate::foretias::tick::Foretis {
             chronon_number: 42,
             content_hash: [1u8; 32].into(),
-            signature: vec![2u8; 64].into(),
-            signature_algorithm: "Ed25519".to_string(),
             tbid: crate::foretias::types::Tbid::from_raw([3u8; 96]),
             echo: "test".to_string(),
             tbn: "test".to_string(),
@@ -54,6 +63,8 @@ mod tests {
         let att = ExternalAttestation {
             attester_tbid: "ab".to_string(),
             foretis,
+            signature: FTByteVector::from(vec![2u8; 64]),
+            signature_algorithm: "Ed25519".to_string(),
             attester_tick_record: make_dummy_tick(),
             received_at_ns: 1_000_000,
         };

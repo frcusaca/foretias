@@ -59,12 +59,16 @@ pub fn handle_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse
             "node is dormant".into());
     }
     match cm.stamp(content, echo) {
-        Ok(foretis) => {
+        Ok((foretis, signature, signature_algorithm)) => {
             server.metrics().inc(MetricField::StampsTotal);
             if let Err(e) = server.save() {
                 tracing::warn!("failed to persist calendar after stamp: {}", e);
             }
-            resp_success(server, id, serde_json::to_value(&foretis).unwrap_or(Value::Null))
+            resp_success(server, id, serde_json::json!({
+                "foretis": foretis,
+                "signature": hex::encode(&signature),
+                "signature_algorithm": signature_algorithm,
+            }))
         }
         Err(e) => resp_error(server, id, jsonrpc::INTERNAL_ERROR,
             format!("stamp failed: {}", e)),
@@ -137,16 +141,15 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
             "missing 'content'".into()),
     };
 
-    let unproc_foretis = match params.get("foretis") {
-        Some(v) => UnverifiedSignatureEnvelope::<Foretis>::from_json_value(v.clone()),
+    let foretis_value = match params.get("foretis") {
+        Some(v) => v.clone(),
         None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
             "missing or invalid 'foretis'".into()),
     };
-    let unproc_foretis = match unproc_foretis {
-        Ok(f) => f,
-        Err(e) => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            format!("failed to parse foretis: {}", e)),
-    };
+
+    let signature_hex = params.get("signature").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let signature_algorithm = params.get("signature_algorithm").and_then(|v| v.as_str()).unwrap_or("Ed25519").to_string();
+    let signature = hex::decode(&signature_hex).unwrap_or_default();
 
     let content = match hex::decode(&content_hex) {
         Ok(b) => b,
@@ -159,26 +162,26 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
             format!("content exceeds maximum size of {} bytes", MAX_CONTENT_BYTES));
     }
 
+    let foretis: Foretis = match serde_json::from_value(foretis_value.clone()) {
+        Ok(f) => f,
+        Err(e) => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            format!("failed to parse foretis: {}", e)),
+    };
+
     let cross_node = params.get("cross_node")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
-
-    let foretis_ref = unproc_foretis.inner();
 
     // Try local calendar first
     let crypto = server.chronomatter().crypto_server();
     let calendar = server.calendar().inner();
     let cal_read = calendar.read();
-    let local_records = cal_read.get(foretis_ref.chronon_number, 1);
-    let local_valid = match local_records {
-        Ok(recs) if !recs.is_empty() => {
-            let calendar_record = CleanAuthenticated::<ChrononRecord>::from_trusted(recs[0].clone());
-            unproc_foretis
-                .clone()
-                .into_clean_authenticated(crypto.as_ref(), &content, &calendar_record)
-                .is_ok()
-        }
-        _ => false,
+    let local_valid = if let Ok(recs) = cal_read.get(foretis.chronon_number, 1) {
+        !recs.is_empty() && foretias_core::foretias::tick::verify(
+            crypto.as_ref(), &foretis, &content, &signature, &signature_algorithm, &*cal_read,
+        ).unwrap_or(false)
+    } else {
+        false
     };
     drop(cal_read);
 
@@ -191,12 +194,18 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
         return resp_success(server, id, serde_json::json!({"valid": false, "method": "local", "note": "foretis.tbid not found in local calendar"}));
     }
 
-    let foretis_tbid_hex = foretis_ref.tbid.to_hex();
-    if foretis_ref.tbid == server.get_tbid() {
+    let foretis_tbid_hex = foretis.tbid.to_hex();
+    if foretis.tbid == server.get_tbid() {
         return resp_success(server, id, serde_json::json!({"valid": false, "method": "local", "note": "own TBID but calendar miss"}));
     }
 
-    // Cross-node verification: lookup TBID owner via DHT, fetch calendar slice, retry
+    // Cross-node verification: construct envelope and use existing path
+    let unproc_foretis = match UnverifiedSignatureEnvelope::<Foretis>::from_json_value(foretis_value) {
+        Ok(f) => f,
+        Err(e) => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            format!("failed to parse foretis: {}", e)),
+    };
+
     match tokio::runtime::Handle::current().block_on(async {
         cross_node_verify(server, &unproc_foretis, &content, &foretis_tbid_hex).await
     }) {
@@ -1062,9 +1071,12 @@ mod tests {
         assert!(resp.error.is_none());
         assert!(resp.result.is_some());
         let result = resp.result.unwrap();
-        assert!(result.get("chronon_number").is_some());
-        assert!(result.get("content_hash").is_some());
-        assert!(result.get("signature").is_some());
+        assert!(result.get("foretis").is_some(), "v2 response must have foretis field");
+        assert!(result.get("signature").is_some(), "v2 response must have signature field");
+        assert!(result.get("signature_algorithm").is_some(), "v2 response must have signature_algorithm field");
+        let foretis = result.get("foretis").unwrap();
+        assert!(foretis.get("chronon_number").is_some());
+        assert!(foretis.get("content_hash").is_some());
     }
 
     #[test]
@@ -1124,14 +1136,19 @@ mod tests {
             "echo": "verify-test"
         });
         let stamp_resp = handle_stamp(&server, stamp_params);
-        let foretis_json = stamp_resp.result.unwrap();
+        let stamp_result = stamp_resp.result.unwrap();
+        let foretis_json = stamp_result.get("foretis").unwrap().clone();
+        let signature_hex = stamp_result.get("signature").unwrap().as_str().unwrap().to_string();
+        let sig_alg = stamp_result.get("signature_algorithm").unwrap().as_str().unwrap().to_string();
 
         let verify_params = serde_json::json!({
             "content": hex::encode(b"verify-me"),
             "foretis": foretis_json,
+            "signature": signature_hex,
+            "signature_algorithm": sig_alg,
         });
         let verify_resp = handle_verify(&server, verify_params);
-        assert!(verify_resp.error.is_none());
+        assert!(verify_resp.error.is_none(), "verify should succeed: {:?}", verify_resp.error);
         let result = verify_resp.result.unwrap();
         assert_eq!(result.get("valid").and_then(|v| v.as_bool()), Some(true));
     }
@@ -1144,14 +1161,19 @@ mod tests {
             "echo": "verify-test"
         });
         let stamp_resp = handle_stamp(&server, stamp_params);
-        let foretis_json = stamp_resp.result.unwrap();
+        let stamp_result = stamp_resp.result.unwrap();
+        let foretis_json = stamp_result.get("foretis").unwrap().clone();
+        let signature_hex = stamp_result.get("signature").unwrap().as_str().unwrap().to_string();
+        let sig_alg = stamp_result.get("signature_algorithm").unwrap().as_str().unwrap().to_string();
 
         let verify_params = serde_json::json!({
             "content": hex::encode(b"tampered"),
             "foretis": foretis_json,
+            "signature": signature_hex,
+            "signature_algorithm": sig_alg,
         });
         let verify_resp = handle_verify(&server, verify_params);
-        assert!(verify_resp.error.is_none());
+        assert!(verify_resp.error.is_none(), "verify should succeed: {:?}", verify_resp.error);
         let result = verify_resp.result.unwrap();
         assert_eq!(result.get("valid").and_then(|v| v.as_bool()), Some(false));
     }

@@ -1117,25 +1117,31 @@ impl CommunerdetteExecutor {
         chronon_record: &CleanAuthenticated<ChrononRecord>,
         content: &[u8],
     ) -> Result<CleanAuthenticated<Foretis>, CommunerdetteError> {
-        let unprocessed = UnverifiedSignatureEnvelope::<Foretis>::from_json_value(raw)
+        let unprocessed = UnverifiedSignatureEnvelope::<Foretis>::from_json_value_v2(raw)
             .map_err(|e| TransportError::Decode(e.to_string()))?;
 
-        // Structural validation
+        // Structural validation (signature is now in the envelope, not Foretis)
         {
             let f = unprocessed.inner();
-            if f.chronon_number == 0 || f.signature.is_empty() || f.signature_algorithm.is_empty() {
+            if f.chronon_number == 0 {
                 return Err(CommunerdetteError::Structural(
-                    "structurally invalid Foretis: chronon_number == 0, empty signature, or empty signature_algorithm".into(),
+                    "structurally invalid Foretis: chronon_number == 0".into(),
                 ));
             }
         }
 
-        // TBID match
+        // TBID match (before signature check — TBID mismatch is more specific)
         if *unprocessed.tbid() != self.target_tbid {
             return Err(CommunerdetteError::TbidMismatch {
                 expected: self.target_tbid.to_hex(),
                 actual: unprocessed.tbid().to_hex(),
             });
+        }
+
+        if !unprocessed.has_signatures() {
+            return Err(CommunerdetteError::Structural(
+                "structurally invalid Foretis: no signatures in envelope".into(),
+            ));
         }
 
         // TODO(slow-key): if Foretis carries a slow-key signature, verify it here
@@ -1211,7 +1217,7 @@ impl Communerdette {
 
         // Parse just enough to get chronon_number before consuming raw
         let chronon_number = {
-            let tmp = UnverifiedSignatureEnvelope::<Foretis>::from_json_value(raw.clone())
+            let tmp = UnverifiedSignatureEnvelope::<Foretis>::from_json_value_v2(raw.clone())
                 .map_err(|e| TransportError::Decode(e.to_string()))?;
             *tmp.chronon_number()
         };
@@ -2137,8 +2143,6 @@ mod tests {
         Foretis {
             chronon_number: 1,
             content_hash: FTByteArray::from([5u8; 32]),
-            signature: FTByteVector::from(vec![6u8; 64]),
-            signature_algorithm: "Ed25519".to_string(),
             tbid: tbid.clone(),
             echo: "test".to_string(),
             tbn: "test-tb".to_string(),
@@ -2324,8 +2328,6 @@ mod tests {
         let bad_foretis = Foretis {
             chronon_number: 0,
             content_hash: FTByteArray::from([0u8; 32]),
-            signature: FTByteVector::from(vec![1u8; 64]),
-            signature_algorithm: "Ed25519".to_string(),
             tbid: tbid.clone(),
             echo: "test".to_string(),
             tbn: "test".to_string(),
@@ -2364,8 +2366,6 @@ mod tests {
         let bad_foretis = Foretis {
             chronon_number: 1,
             content_hash: FTByteArray::from([0u8; 32]),
-            signature: FTByteVector::from(vec![]),
-            signature_algorithm: "Ed25519".to_string(),
             tbid: tbid.clone(),
             echo: "test".to_string(),
             tbn: "test".to_string(),
@@ -2404,8 +2404,6 @@ mod tests {
         let bad_foretis = Foretis {
             chronon_number: 1,
             content_hash: FTByteArray::from([0u8; 32]),
-            signature: FTByteVector::from(vec![1u8; 64]),
-            signature_algorithm: "".to_string(),
             tbid: tbid.clone(),
             echo: "test".to_string(),
             tbn: "test".to_string(),
@@ -2469,12 +2467,18 @@ mod tests {
         let content = b"valid foretis content" as &[u8];
         let chronon_number: u64 = 1;
 
-        // Build exactly the sig_input that UnverifiedSignatureEnvelope<Foretis>::verify uses
+        // v2: sign the postcard-encoded Foretis (not tbid || chronon_number || content)
         let content_hash = crypto.sha256(content).expect("sha256");
-        let mut sig_input = Vec::new();
-        sig_input.extend_from_slice(&target_tbid.raw_bytes());
-        sig_input.extend_from_slice(&chronon_number.to_be_bytes());
-        sig_input.extend_from_slice(content);
+
+        let foretis_for_signing = Foretis {
+            chronon_number,
+            content_hash: FTByteArray::from(content_hash.bytes),
+            tbid: target_tbid.clone(),
+            echo: "test".to_string(),
+            tbn: "test-tb".to_string(),
+            time_being_reference_time: "UE+1000000000ns".to_string(),
+        };
+        let sig_input = foretis_for_signing.sig_input_bytes();
 
         let sig = crypto.sign_with(&sig_input, SignatureAlgorithm::Ed25519).expect("sign");
         let pub_key = crypto.public_key();
@@ -2496,8 +2500,6 @@ mod tests {
         let foretis = Foretis {
             chronon_number,
             content_hash: FTByteArray::from(content_hash.bytes),
-            signature: FTByteVector::from(sig.as_bytes().to_vec()),
-            signature_algorithm: "Ed25519".to_string(),
             tbid: target_tbid.clone(),
             echo: "test".to_string(),
             tbn: "test-tb".to_string(),
@@ -2518,12 +2520,16 @@ mod tests {
             None,
         );
 
-        let json = serde_json::to_value(&foretis).unwrap();
+        let json = serde_json::json!({
+            "foretis": foretis,
+            "signature": hex::encode(&sig),
+            "signature_algorithm": "Ed25519",
+        });
         let result = executor.gate_foretis(json, &chronon_record, content);
         assert!(result.is_ok(), "gate_foretis must accept valid signed Foretis: {:?}", result);
         let ca = result.unwrap();
         assert_eq!(*ca.chronon_number(), 1);
-        assert_eq!(ca.signature_algorithm(), "Ed25519");
+        assert!(ca.is_authenticated_quickly());
         assert!(ca.is_authenticated_quickly());
     }
 
@@ -2560,8 +2566,6 @@ mod tests {
         let foretis = Foretis {
             chronon_number,
             content_hash: FTByteArray::from(content_hash.bytes),
-            signature: FTByteVector::from(vec![0xBAu8; 64]),
-            signature_algorithm: "Ed25519".to_string(),
             tbid: target_tbid.clone(),
             echo: "test".to_string(),
             tbn: "test-tb".to_string(),
@@ -2582,7 +2586,12 @@ mod tests {
             None,
         );
 
-        let json = serde_json::to_value(&foretis).unwrap();
+        let garbage_sig = vec![0xABu8; 64];
+        let json = serde_json::json!({
+            "foretis": foretis,
+            "signature": hex::encode(&garbage_sig),
+            "signature_algorithm": "Ed25519",
+        });
         let result = executor.gate_foretis(json, &chronon_record, content);
         assert!(
             matches!(result, Err(CommunerdetteError::CleanAuth(_))),
@@ -2956,14 +2965,17 @@ mod tests {
         let foretis_bad_sig = Foretis {
             chronon_number: 1,
             content_hash: FTByteArray::from(content_hash.bytes),
-            signature: FTByteVector::from(vec![0xdeu8; 64]),
-            signature_algorithm: "Ed25519".to_string(),
             tbid: target_tbid.clone(),
             echo: "test".to_string(),
             tbn: "test-tb".to_string(),
             time_being_reference_time: "UE+1000000000ns".to_string(),
         };
-        let json = serde_json::to_value(&foretis_bad_sig).unwrap();
+        let garbage_sig = vec![0xDEu8; 64];
+        let json = serde_json::json!({
+            "foretis": foretis_bad_sig,
+            "signature": hex::encode(&garbage_sig),
+            "signature_algorithm": "Ed25519",
+        });
 
         let executor = CommunerdetteExecutor::new(
             Arc::new(MockHost {
@@ -3251,13 +3263,18 @@ mod tests {
         let content = b"stamp-test-content" as &[u8];
         let chronon_number: u64 = 1;
 
-        // Build a valid Foretis signed by the crypto server.
+        // v2: sign the postcard-encoded Foretis
         let content_hash = crypto.sha256(content).expect("sha256");
-        let mut sig_input = Vec::new();
-        sig_input.extend_from_slice(&tbid.raw_bytes());
-        sig_input.extend_from_slice(&chronon_number.to_be_bytes());
-        sig_input.extend_from_slice(content);
-        let sig = crypto.sign_with(&sig_input, SignatureAlgorithm::Ed25519).expect("sign");
+
+        let foretis_for_signing = Foretis {
+            chronon_number,
+            content_hash: FTByteArray::from(content_hash.bytes),
+            tbid: tbid.clone(),
+            echo: "test".to_string(),
+            tbn: "test-tb".to_string(),
+            time_being_reference_time: "UE+1000000000ns".to_string(),
+        };
+        let sig = crypto.sign_with(&foretis_for_signing.sig_input_bytes(), SignatureAlgorithm::Ed25519).expect("sign");
         let pub_key_bytes = match crypto.public_key() {
             foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
             _ => panic!("expected Ed25519"),
@@ -3277,20 +3294,13 @@ mod tests {
             tbid: tbid.clone(),
         };
 
-        let foretis = Foretis {
-            chronon_number,
-            content_hash: FTByteArray::from(content_hash.bytes),
-            signature: FTByteVector::from(sig.as_bytes().to_vec()),
-            signature_algorithm: "Ed25519".to_string(),
-            tbid: tbid.clone(),
-            echo: "test".to_string(),
-            tbn: "test-tb".to_string(),
-            time_being_reference_time: "UE+1000000000ns".to_string(),
-        };
-
         let host = Arc::new(ConfigurableMockHost::new(Some(make_record("peer-1", "127.0.0.1:4002"))));
         host.set_calendar_response(vec![chronon_record]);
-        host.set_stamp_response(serde_json::to_value(&foretis).unwrap());
+        host.set_stamp_response(serde_json::json!({
+            "foretis": foretis_for_signing,
+            "signature": hex::encode(&sig),
+            "signature_algorithm": "Ed25519",
+        }));
 
         let executor = CommunerdetteExecutor::new(host, tbid.clone(), crypto, clock, None);
         let result = Communerdette::execute_stamp(
@@ -3304,7 +3314,7 @@ mod tests {
         let ca = result.unwrap();
         assert_eq!(*ca.tbid(), tbid, "returned Foretis must carry the target TBID");
         assert_eq!(*ca.chronon_number(), chronon_number);
-        assert!(!ca.signature().is_empty(), "returned Foretis must have a non-empty signature");
+        assert!(ca.is_authenticated_quickly(), "returned Foretis must be authenticated");
         assert!(ca.is_authenticated_quickly());
     }
 

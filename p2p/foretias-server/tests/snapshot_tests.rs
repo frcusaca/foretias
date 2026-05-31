@@ -41,20 +41,30 @@ impl Evaluator for ServerStampEvaluator {
         // Stamp each message
         let mut stamps = Vec::new();
         for msg in &self.messages {
-            let foretis = server.chronomatter()
+            let (foretis, sig, alg) = server.chronomatter()
                 .stamp(msg.as_bytes().to_vec(), msg.clone())
                 .map_err(|e| format!("Stamp failed for '{}': {}", msg, e))?;
-            stamps.push(serde_json::to_value(&foretis)
-                .map_err(|e| format!("Failed to serialize Foretis: {}", e))?);
+            stamps.push((
+                serde_json::to_value(&foretis)
+                    .map_err(|e| format!("Failed to serialize Foretis: {}", e))?,
+                serde_json::to_value(&sig)
+                    .map_err(|e| format!("Failed to serialize signature: {}", e))?,
+                serde_json::to_value(&alg)
+                    .map_err(|e| format!("Failed to serialize algorithm: {}", e))?,
+            ));
         }
 
         // Verify each stamp
         let mut verifications = Vec::new();
-        for (msg, foretis_val) in self.messages.iter().zip(stamps.iter()) {
+        for (msg, (foretis_val, sig_val, alg_val)) in self.messages.iter().zip(stamps.iter()) {
             let foretis: foretias_core::foretias::tick::Foretis = serde_json::from_value(foretis_val.clone())
                 .map_err(|e| format!("Failed to deserialize Foretis for verify: {}", e))?;
+            let sig: Vec<u8> = serde_json::from_value(sig_val.clone())
+                .map_err(|e| format!("Failed to deserialize signature: {}", e))?;
+            let alg: String = serde_json::from_value(alg_val.clone())
+                .map_err(|e| format!("Failed to deserialize algorithm: {}", e))?;
             let result = server.chronomatter()
-                .verify(&foretis, &msg.as_bytes().to_vec(), server.calendar())
+                .verify(&foretis, &msg.as_bytes().to_vec(), &sig, &alg, server.calendar())
                 .map_err(|e| format!("Verify failed for '{}': {}", msg, e))?;
             verifications.push(serde_json::json!({
                 "message": msg,

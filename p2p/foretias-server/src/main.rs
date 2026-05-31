@@ -101,6 +101,12 @@ enum Commands {
         /// Read Foretis from file
         #[arg(short = 'F', long = "foretis-file")]
         foretis_file: Option<String>,
+        /// Signature (hex-encoded) for v2 wire format
+        #[arg(long)]
+        signature: Option<String>,
+        /// Signature algorithm (default: Ed25519)
+        #[arg(long = "signature-algorithm", default_value = "Ed25519")]
+        signature_algorithm: String,
         /// Write verify output to file (default: stdout)
         #[arg(short = 'o', long = "verify-output")]
         verify_output: Option<String>,
@@ -460,12 +466,16 @@ async fn cmd_stamp(
         None,
     )?;
 
-    let foretis = client
+    let (foretis, sig, sig_alg) = client
         .stamp(&content, echo)
         .await
         .map_err(|e| format!("stamp failed: {}", e))?;
 
-    let output = serde_json::to_string_pretty(&foretis)?;
+    let output = serde_json::to_string_pretty(&serde_json::json!({
+        "foretis": foretis,
+        "signature": hex::encode(&sig),
+        "signature_algorithm": sig_alg,
+    }))?;
     match stamp_output {
         Some(path) => std::fs::write(&path, &output).map_err(|e| format!("Failed to write {}: {}", path, e))?,
         None => println!("{}", output),
@@ -478,12 +488,25 @@ async fn cmd_verify(
     message_file: Option<String>,
     foretis: Option<String>,
     foretis_file: Option<String>,
+    signature: Option<String>,
+    signature_algorithm: String,
     verify_output: Option<String>,
     server_addr: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let content = read_message(message, message_file)?;
-    let foretis_str = read_foretis(foretis, foretis_file)?;
-    let foretis: foretias_core::foretias::tick::Foretis = serde_json::from_str(&foretis_str)?;
+    let stamp_str = read_foretis(foretis, foretis_file)?;
+    let stamp_obj: serde_json::Value = serde_json::from_str(&stamp_str)?;
+    let foretis: foretias_core::foretias::tick::Foretis = serde_json::from_value(stamp_obj.get("foretis").cloned().unwrap_or(stamp_obj.clone()))?;
+    // v2: prefer CLI --signature, fall back to stamp object's signature field
+    let sig_hex = signature.clone().unwrap_or_else(|| {
+        stamp_obj.get("signature").and_then(|v| v.as_str()).unwrap_or("").to_string()
+    });
+    let signature_bytes = hex::decode(&sig_hex).unwrap_or_default();
+    let sig_alg = if signature.is_some() {
+        &signature_algorithm
+    } else {
+        stamp_obj.get("signature_algorithm").and_then(|v| v.as_str()).unwrap_or("Ed25519")
+    };
 
     let client = Foretias::connect_one(
         "cli-verify".into(),
@@ -492,7 +515,7 @@ async fn cmd_verify(
     )?;
 
     let valid = client
-        .verify(&content, &foretis)
+        .verify(&content, &foretis, &signature_bytes, sig_alg)
         .await
         .map_err(|e| format!("verify failed: {}", e))?;
 
@@ -518,8 +541,12 @@ async fn cmd_verify_with_proof(
     server_addr: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let content = read_message(message, message_file)?;
-    let foretis_str = read_foretis(foretis, foretis_file)?;
-    let foretis: foretias_core::foretias::tick::Foretis = serde_json::from_str(&foretis_str)?;
+    let stamp_str = read_foretis(foretis, foretis_file)?;
+    let stamp_obj: serde_json::Value = serde_json::from_str(&stamp_str)?;
+    let foretis: foretias_core::foretias::tick::Foretis = serde_json::from_value(stamp_obj.get("foretis").cloned().unwrap_or(stamp_obj.clone()))?;
+    let sig_hex = stamp_obj.get("signature").and_then(|v| v.as_str()).unwrap_or("");
+    let signature = hex::decode(sig_hex).unwrap_or_default();
+    let sig_alg = stamp_obj.get("signature_algorithm").and_then(|v| v.as_str()).unwrap_or("Ed25519");
 
     let client = Foretias::connect_one(
         "cli-verify-with-proof".into(),
@@ -528,7 +555,7 @@ async fn cmd_verify_with_proof(
     )?;
 
     let report = client
-        .verify_with_proof(&content, &foretis)
+        .verify_with_proof(&content, &foretis, &signature, sig_alg)
         .await
         .map_err(|e| format!("verify with proof failed: {}", e))?;
 
@@ -574,7 +601,7 @@ fn cmd_inspect_attestations(calendar_path: String) -> Result<(), Box<dyn std::er
             };
 
             let valid = match foretias_core::foretias::tick::verify(
-                &*crypto, &att.foretis, &content, &cal_lookup,
+                &*crypto, &att.foretis, &content, &att.signature, &att.signature_algorithm, &cal_lookup,
             ) {
                 Ok(v) => v,
                 Err(e) => {
@@ -696,8 +723,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Stamp { message, message_file, stamp_output, server } => {
             cmd_stamp(message, message_file, stamp_output, server).await
         }
-        Commands::Verify { message, message_file, foretis, foretis_file, verify_output, server } => {
-            cmd_verify(message, message_file, foretis, foretis_file, verify_output, server).await
+        Commands::Verify { message, message_file, foretis, foretis_file, signature, signature_algorithm, verify_output, server } => {
+            cmd_verify(message, message_file, foretis, foretis_file, signature, signature_algorithm, verify_output, server).await
         }
         Commands::VerifyWithProof { message, message_file, foretis, foretis_file, proof_output, server } => {
             cmd_verify_with_proof(message, message_file, foretis, foretis_file, proof_output, server).await

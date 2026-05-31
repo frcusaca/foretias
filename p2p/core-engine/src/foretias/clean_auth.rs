@@ -89,6 +89,11 @@ impl<T> UnverifiedSignatureEnvelope<T> {
     pub fn into_inner(self) -> T {
         self.inner
     }
+
+    /// Check if the envelope has any signatures.
+    pub fn has_signatures(&self) -> bool {
+        !self.signatures.is_empty()
+    }
 }
 
 impl<T: serde::de::DeserializeOwned> UnverifiedSignatureEnvelope<T> {
@@ -580,13 +585,13 @@ impl ExternalizedChrononRecord {
                     foretis: serde_json::from_value(ea.foretis).unwrap_or_else(|_| Foretis {
                         chronon_number: 0,
                         content_hash: [0u8; 32].into(),
-                        signature: vec![].into(),
-                        signature_algorithm: String::new(),
                         tbid: Tbid::default(),
                         echo: String::new(),
                         tbn: String::new(),
                         time_being_reference_time: String::new(),
                     }),
+                    signature: FTByteVector::new(),
+                    signature_algorithm: String::new(),
                     attester_tick_record: serde_json::from_value(ea.attester_tick_record).unwrap_or_else(|_| ChrononRecord {
                         chronon_number: 0,
                         public_key: vec![].into(),
@@ -621,14 +626,63 @@ impl ExternalizedChrononRecord {
 impl UnverifiedSignatureEnvelope<Foretis> {
     pub fn chronon_number(&self) -> &u64 { &self.inner.chronon_number }
     pub fn content_hash(&self) -> &FTByteArray<32> { &self.inner.content_hash }
-    pub fn signature(&self) -> &FTByteVector { &self.inner.signature }
-    pub fn signature_algorithm(&self) -> &str { &self.inner.signature_algorithm }
     pub fn tbid(&self) -> &Tbid { &self.inner.tbid }
     pub fn echo(&self) -> &str { &self.inner.echo }
     pub fn tbn(&self) -> &str { &self.inner.tbn }
     pub fn time_being_reference_time(&self) -> &str { &self.inner.time_being_reference_time }
 
+    /// Parse v2 wire format: `{foretis: <Foretis>, signature: <hex>, signature_algorithm: <string>}`.
+    ///
+    /// Falls back to bare `Foretis` JSON (v1 compat) if `foretis` key is absent.
+    /// When a signature is present, it is placed in the envelope's signatures list.
+    pub fn from_json_value_v2(v: serde_json::Value) -> Result<Self, ParseError> {
+        let obj = match v {
+            serde_json::Value::Object(map) => map,
+            _ => {
+                // Not an object — try bare Foretis
+                let val: Foretis = serde_json::from_value(v).map_err(ParseError::InvalidJson)?;
+                return Ok(Self::from_parsed(val));
+            }
+        };
+
+        // Check if this is v2 format (has "foretis" key)
+        if let Some(foretis_val) = obj.get("foretis") {
+            let foretis: Foretis = serde_json::from_value(foretis_val.clone())
+                .map_err(ParseError::InvalidJson)?;
+
+            let mut env = Self::from_parsed(foretis);
+
+            // Extract signature (hex-encoded) and algorithm
+            if let Some(sig_hex) = obj.get("signature").and_then(|v| v.as_str()) {
+                if let Ok(sig_bytes) = hex::decode(sig_hex) {
+                    if !sig_bytes.is_empty() {
+                        let algorithm = match obj.get("signature_algorithm").and_then(|v| v.as_str()) {
+                            Some("SLH-DSA") => SigAlgorithm::DualKey,
+                            _ => SigAlgorithm::Ed25519,
+                        };
+                        env.signatures.push(SignatureEntry {
+                            role: SignerRole::Chronomatter,
+                            tbid: String::new(),
+                            algorithm,
+                            sig: sig_bytes,
+                        });
+                    }
+                }
+            }
+
+            Ok(env)
+        } else {
+            // Bare Foretis JSON (v1 compat)
+            let val: Foretis = serde_json::from_value(serde_json::Value::Object(obj))
+                .map_err(ParseError::InvalidJson)?;
+            Ok(Self::from_parsed(val))
+        }
+    }
+
     /// Inbound gate: verify this Foretis against a calendar record.
+    ///
+    /// v2 wire-break: signature comes from the envelope's signatures list,
+    /// not from the inner Foretis. Uses postcard-encoded payload for sig_input.
     ///
     /// The `record` must cover the same chronon number as this Foretis.
     pub fn verify(
@@ -640,9 +694,6 @@ impl UnverifiedSignatureEnvelope<Foretis> {
         let rec = &record.inner;
         let foretis = &self.inner;
 
-        if foretis.signature_algorithm != rec.signature_algorithm {
-            return Err(CleanAuthError::AlgorithmMismatch);
-        }
         if foretis.chronon_number != rec.chronon_number {
             return Err(CleanAuthError::ChainBreak);
         }
@@ -653,16 +704,22 @@ impl UnverifiedSignatureEnvelope<Foretis> {
             return Err(CleanAuthError::InvalidSignature);
         }
 
-        let mut sig_input = Vec::new();
-        sig_input.extend_from_slice(&foretis.tbid.raw_bytes());
-        sig_input.extend_from_slice(&foretis.chronon_number.to_be_bytes());
-        sig_input.extend_from_slice(content);
+        // v2: verify postcard-encoded payload
+        let sig_input = postcard::to_allocvec(foretis)
+            .map_err(|e| CleanAuthError::Crypto(NodeError::Crypto(crate::error::CryptoError::UnknownAlgorithm(e.to_string()))))?;
+
+        // Extract signature from envelope's first signature entry
+        let entry = self.signatures.first().ok_or(CleanAuthError::InvalidSignature)?;
+        let sig_alg = match entry.algorithm {
+            SigAlgorithm::Ed25519 => "Ed25519",
+            SigAlgorithm::DualKey => "SLH-DSA",
+        };
 
         let valid = crypto.verify_with(
             &rec.public_key,
-            &foretis.signature_algorithm,
+            sig_alg,
             &sig_input,
-            &foretis.signature,
+            &entry.sig,
         ).map_err(|e| CleanAuthError::Crypto(NodeError::Crypto(e)))?;
 
         if !valid {
@@ -686,21 +743,24 @@ impl UnverifiedSignatureEnvelope<Foretis> {
 impl CleanAuthenticated<Foretis> {
     pub fn chronon_number(&self) -> &u64 { &self.inner.chronon_number }
     pub fn content_hash(&self) -> &FTByteArray<32> { &self.inner.content_hash }
-    pub fn signature(&self) -> &FTByteVector { &self.inner.signature }
-    pub fn signature_algorithm(&self) -> &str { &self.inner.signature_algorithm }
     pub fn tbid(&self) -> &Tbid { &self.inner.tbid }
     pub fn echo(&self) -> &str { &self.inner.echo }
     pub fn tbn(&self) -> &str { &self.inner.tbn }
     pub fn time_being_reference_time(&self) -> &str { &self.inner.time_being_reference_time }
 
     /// Outbound gate: strip to minimal wire form. No runtime context leaks.
+    /// v2: signature comes from the envelope's signatures list.
     pub fn externalize(self) -> ExternalizedForetis {
         let f = self.inner;
+        let entry = self.signatures.first();
         ExternalizedForetis {
             chronon_number: f.chronon_number,
             content_hash: (*f.content_hash).into(),
-            signature: f.signature.as_slice().to_vec(),
-            signature_algorithm: f.signature_algorithm,
+            signature: entry.map(|e| e.sig.clone()).unwrap_or_default(),
+            signature_algorithm: entry.map(|e| match e.algorithm {
+                SigAlgorithm::Ed25519 => "Ed25519".to_string(),
+                SigAlgorithm::DualKey => "SLH-DSA".to_string(),
+            }).unwrap_or_default(),
             tbid: f.tbid.raw_bytes().to_vec(),
             echo: if f.echo.is_empty() { None } else { Some(f.echo) },
             tbn: if f.tbn.is_empty() { 0 } else { f.tbn.len() as u64 },
@@ -722,18 +782,30 @@ pub struct ExternalizedForetis {
 
 impl ExternalizedForetis {
     /// Reconstruct as UnverifiedSignatureEnvelope for re-verification on the receiving side.
+    /// v2: signature is placed in the envelope's signatures list, not in Foretis.
     pub fn reconstruct(self) -> Result<UnverifiedSignatureEnvelope<Foretis>, ParseError> {
         let foretis = Foretis {
             chronon_number: self.chronon_number,
             content_hash: self.content_hash.into(),
-            signature: self.signature.into(),
-            signature_algorithm: self.signature_algorithm,
             tbid: Tbid::from_raw(self.tbid.try_into().unwrap_or([0u8; 96])),
             echo: self.echo.unwrap_or_default(),
             tbn: String::new(),
             time_being_reference_time: String::new(),
         };
-        Ok(UnverifiedSignatureEnvelope::from_parsed(foretis))
+        let mut env = UnverifiedSignatureEnvelope::from_parsed(foretis);
+        if !self.signature.is_empty() {
+            let algorithm = match self.signature_algorithm.as_str() {
+                "SLH-DSA" => SigAlgorithm::DualKey,
+                _ => SigAlgorithm::Ed25519,
+            };
+            env.signatures.push(SignatureEntry {
+                role: SignerRole::Chronomatter,
+                tbid: String::new(),
+                algorithm,
+                sig: self.signature,
+            });
+        }
+        Ok(env)
     }
 
     /// Alias for `reconstruct()` — backward compat.
@@ -915,8 +987,6 @@ mod tests {
         let foretis = Foretis {
             chronon_number: 42,
             content_hash: [0xABu8; 32].into(),
-            signature: vec![0xCDu8; 64].into(),
-            signature_algorithm: "Ed25519".to_string(),
             tbid: Tbid::default(),
             echo: "echo-42".to_string(),
             tbn: "test".to_string(),
@@ -963,17 +1033,22 @@ mod tests {
         let foretis = Foretis {
             chronon_number: 10,
             content_hash: [0x55u8; 32].into(),
-            signature: vec![0x66u8; 64].into(),
-            signature_algorithm: "Ed25519".to_string(),
             tbid: Tbid::default(),
             echo: "test".to_string(),
             tbn: "tbn".to_string(),
             time_being_reference_time: "UE+999ns".to_string(),
         };
-        let ca = CleanAuthenticated::<Foretis>::from_trusted(foretis);
+        let mut ca = CleanAuthenticated::<Foretis>::from_trusted(foretis);
+        ca.signatures.push(SignatureEntry {
+            role: SignerRole::Chronomatter,
+            tbid: String::new(),
+            algorithm: SigAlgorithm::Ed25519,
+            sig: vec![0x66u8; 64],
+        });
         let ext = ca.externalize();
         assert_eq!(ext.chronon_number, 10);
         assert_eq!(ext.content_hash, [0x55u8; 32]);
+        assert_eq!(ext.signature_algorithm, "Ed25519");
 
         let up = ext.into_unprocessed().unwrap();
         assert_eq!(up.inner().chronon_number, 10);
@@ -1035,14 +1110,18 @@ mod tests {
         let foretis = Foretis {
             chronon_number: 10,
             content_hash: [0x55u8; 32].into(),
-            signature: vec![0x66u8; 64].into(),
-            signature_algorithm: "Ed25519".to_string(),
             tbid: Tbid::default(),
             echo: "test".to_string(),
             tbn: "tbn".to_string(),
             time_being_reference_time: "UE+999ns".to_string(),
         };
-        let ca = CleanAuthenticated::<Foretis>::from_trusted(foretis);
+        let mut ca = CleanAuthenticated::<Foretis>::from_trusted(foretis);
+        ca.signatures.push(SignatureEntry {
+            role: SignerRole::Chronomatter,
+            tbid: String::new(),
+            algorithm: SigAlgorithm::Ed25519,
+            sig: vec![0x66u8; 64],
+        });
         let ext = ca.externalize();
         let json_bytes = serde_json::to_vec(&ext).unwrap();
         let obj: serde_json::Value = serde_json::from_slice(&json_bytes).unwrap();
