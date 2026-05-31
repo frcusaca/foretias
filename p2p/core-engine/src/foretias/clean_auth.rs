@@ -568,6 +568,7 @@ pub struct ExternalizedAttestation {
 impl ExternalizedChrononRecord {
     /// Reconstruct as UnverifiedSignatureEnvelope for re-verification on load.
     pub fn reconstruct(self) -> Result<UnverifiedSignatureEnvelope<ChrononRecord>, ParseError> {
+        // gate-strawman-exempt: reconstruction helper, not a verification gate
         let record = ChrononRecord {
             chronon_number: self.chronon_number,
             public_key: self.public_key.to_vec().into(),
@@ -613,6 +614,7 @@ impl ExternalizedChrononRecord {
 
     /// Alias for `reconstruct()` — backward compat.
     pub fn into_unprocessed(self) -> Result<UnverifiedSignatureEnvelope<ChrononRecord>, ParseError> {
+        // gate-strawman-exempt: reconstruction helper, not a verification gate
         self.reconstruct()
     }
 }
@@ -785,6 +787,7 @@ pub struct ExternalizedForetis {
 impl ExternalizedForetis {
     /// Reconstruct as UnverifiedSignatureEnvelope for re-verification on the receiving side (V2).
     pub fn reconstruct(self) -> Result<UnverifiedSignatureEnvelope<Foretis>, ParseError> {
+        // gate-strawman-exempt: reconstruction helper, not a verification gate
         let foretis = Foretis {
             chronon_number: self.chronon_number,
             content_hash: self.content_hash.into(),
@@ -809,6 +812,7 @@ impl ExternalizedForetis {
 
     /// Alias for `reconstruct()` — backward compat.
     pub fn into_unprocessed(self) -> Result<UnverifiedSignatureEnvelope<Foretis>, ParseError> {
+        // gate-strawman-exempt: reconstruction helper, not a verification gate
         self.reconstruct()
     }
 }
@@ -896,6 +900,7 @@ pub struct ExternalizedEpochSnapshot {
 impl ExternalizedEpochSnapshot {
     /// Reconstruct as UnverifiedSignatureEnvelope for re-verification.
     pub fn reconstruct(self) -> Result<UnverifiedSignatureEnvelope<EpochSnapshot>, ParseError> {
+        // gate-strawman-exempt: reconstruction helper, not a verification gate
         use crate::epoch::snapshot::PeerScore;
         let snapshot = EpochSnapshot {
             epoch_number: self.epoch_number,
@@ -921,6 +926,7 @@ impl ExternalizedEpochSnapshot {
 
     /// Alias for `reconstruct()` — backward compat.
     pub fn into_unprocessed(self) -> Result<UnverifiedSignatureEnvelope<EpochSnapshot>, ParseError> {
+        // gate-strawman-exempt: reconstruction helper, not a verification gate
         self.reconstruct()
     }
 }

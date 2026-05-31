@@ -245,6 +245,7 @@ pub struct ExternalizedProbityReport {
 impl ExternalizedProbityReport {
     /// Reconstruct as UnverifiedSignatureEnvelope for re-verification on load.
     pub fn reconstruct(self) -> Result<UnverifiedSignatureEnvelope<ProbityReport>, crate::foretias::clean_auth::ParseError> {
+        // gate-strawman-exempt: reconstruction helper, not a verification gate
         let report = ProbityReport {
             subject: self.subject,
             reporter: self.reporter,
@@ -260,6 +261,7 @@ impl ExternalizedProbityReport {
 
     /// Alias for `reconstruct()` — backward compat.
     pub fn into_unprocessed(self) -> Result<UnverifiedSignatureEnvelope<ProbityReport>, crate::foretias::clean_auth::ParseError> {
+        // gate-strawman-exempt: reconstruction helper, not a verification gate
         self.reconstruct()
     }
 }
