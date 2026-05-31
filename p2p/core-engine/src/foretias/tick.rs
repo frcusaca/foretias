@@ -436,6 +436,12 @@ pub fn verify_pair(
     Ok(forward_valid && backward_valid && genesis_valid)
 }
 
+impl super::clean_auth::RecordBase for ChrononRecord {
+    fn always_require_full_signature(&self) -> bool {
+        false
+    }
+}
+
 
 
 fn default_sig_algorithm() -> String {
@@ -452,6 +458,8 @@ mod tests {
     use crate::crypto_server;
     use crate::clock::SystemClock;
     use crate::foretias::calendar::Calendar;
+    use crate::foretias::clean_auth::RecordBase;
+    use postcard;
 
     fn make_server() -> Box<dyn CryptoServer> {
         crypto_server::new_software(crate::crypto_server::ForetiasCurve::Ed25519)
@@ -801,5 +809,75 @@ let valid = verify_pair(server.as_ref(), &tbid_str, &prev, &curr_tampered).unwra
             "deserialization must succeed when chronon_stamp_count is explicitly zero"
         );
         assert_eq!(result.unwrap().chronon_stamp_count, 0);
+    }
+
+    #[test]
+    fn postcard_round_trip_chronon_record() {
+        let record = ChrononRecord {
+            chronon_number: 1,
+            public_key: vec![0x01u8; 32].into(),
+            signature_algorithm: "Ed25519".to_string(),
+            forward_foretis: vec![0x02u8; 64].into(),
+            backward_foretis: vec![0x03u8; 64].into(),
+            aa_nonce: [0x04u8; 16].into(),
+            chronon_stamp_count: 7,
+            external_attestations: Vec::new(),
+            tb_version: 1,
+            tbid: Tbid::default(),
+        };
+        let bytes = postcard::to_allocvec(&record).expect("postcard serialize");
+        let decoded: ChrononRecord =
+            postcard::from_bytes(&bytes).expect("postcard deserialize");
+        assert_eq!(decoded.chronon_number, record.chronon_number);
+        assert_eq!(decoded.public_key.as_slice(), record.public_key.as_slice());
+        assert_eq!(decoded.signature_algorithm, record.signature_algorithm);
+        assert_eq!(decoded.forward_foretis.as_slice(), record.forward_foretis.as_slice());
+        assert_eq!(decoded.backward_foretis.as_slice(), record.backward_foretis.as_slice());
+        assert_eq!(decoded.aa_nonce.as_slice(), record.aa_nonce.as_slice());
+        assert_eq!(decoded.chronon_stamp_count, record.chronon_stamp_count);
+        assert_eq!(decoded.tb_version, record.tb_version);
+        assert_eq!(decoded.tbid, record.tbid);
+    }
+
+    #[test]
+    fn postcard_determinism_chronon_record() {
+        let record = ChrononRecord {
+            chronon_number: 42,
+            public_key: vec![0xABu8; 32].into(),
+            signature_algorithm: "Ed25519".to_string(),
+            forward_foretis: vec![0xCDu8; 64].into(),
+            backward_foretis: vec![0xEFu8; 64].into(),
+            aa_nonce: [0x12u8; 16].into(),
+            chronon_stamp_count: 99,
+            external_attestations: Vec::new(),
+            tb_version: 1,
+            tbid: Tbid::default(),
+        };
+        let bytes1 = postcard::to_allocvec(&record).expect("serialize 1");
+        let bytes2 = postcard::to_allocvec(&record).expect("serialize 2");
+        assert_eq!(
+            bytes1, bytes2,
+            "postcard must produce deterministic output for the same input"
+        );
+    }
+
+    #[test]
+    fn record_base_always_require_full_signature_default() {
+        let record = ChrononRecord {
+            chronon_number: 1,
+            public_key: vec![0x01u8; 32].into(),
+            signature_algorithm: "Ed25519".to_string(),
+            forward_foretis: vec![0x02u8; 64].into(),
+            backward_foretis: vec![0x03u8; 64].into(),
+            aa_nonce: [0x04u8; 16].into(),
+            chronon_stamp_count: 7,
+            external_attestations: Vec::new(),
+            tb_version: 1,
+            tbid: Tbid::default(),
+        };
+        assert!(
+            !record.always_require_full_signature(),
+            "ChrononRecord should not require full signature by default"
+        );
     }
 }

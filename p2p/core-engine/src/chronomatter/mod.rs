@@ -383,13 +383,13 @@ impl Chronomatter {
 
     /// Verify an unprocessed Foretis against the local calendar.
     ///
-    /// Accepts `Unprocessed<Foretis>` (parsed, not trusted) and returns
+    /// Accepts `UnverifiedSignatureEnvelope<Foretis>` (parsed, not trusted) and returns
     /// `CleanAuthenticated<Foretis>` (authenticated + cleansed) on success.
     /// The calendar record for the matching chronon must exist and be trusted
     /// by construction (locally produced or previously verified).
     pub fn verify_unprocessed(
         &self,
-        unprocessed: crate::foretias::clean_auth::Unprocessed<crate::foretias::tick::Foretis>,
+        unprocessed: crate::foretias::clean_auth::UnverifiedSignatureEnvelope<crate::foretias::tick::Foretis>,
         content: &[u8],
         calendar: &dyn CalendarLookup,
     ) -> Result<crate::foretias::clean_auth::CleanAuthenticated<crate::foretias::tick::Foretis>, NodeError> {

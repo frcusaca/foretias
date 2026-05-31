@@ -2,7 +2,7 @@ use serde_json::Value;
 
 use foretias_core::error::NodeError;
 use foretias_core::foretias::clean_auth::{
-    CleanAuthenticated, Unprocessed,
+    CleanAuthenticated, UnverifiedSignatureEnvelope,
 };
 use foretias_core::foretias::tick::{CalendarLookup, ChrononRecord, Foretis};
 use super::jsonrpc::{self, JsonRpcResponse};
@@ -138,7 +138,7 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
     };
 
     let unproc_foretis = match params.get("foretis") {
-        Some(v) => Unprocessed::<Foretis>::from_json_value(v.clone()),
+        Some(v) => UnverifiedSignatureEnvelope::<Foretis>::from_json_value(v.clone()),
         None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
             "missing or invalid 'foretis'".into()),
     };
@@ -208,7 +208,7 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
 
 async fn cross_node_verify(
     server: &TimeFamilyServer,
-    unproc_foretis: &Unprocessed<Foretis>,
+    unproc_foretis: &UnverifiedSignatureEnvelope<Foretis>,
     content: &[u8],
     foretis_tbid_hex: &str,
 ) -> Result<bool, NodeError> {
@@ -537,9 +537,9 @@ pub fn handle_ship_ack(server: &TimeFamilyServer, params: Value) -> JsonRpcRespo
     let tbid = params.get("tbid").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let empty_vec: Vec<Value> = vec![];
     let raw_records = params.get("records").and_then(|v| v.as_array()).unwrap_or(&empty_vec);
-    let unprocessed: Result<Vec<Unprocessed<ChrononRecord>>, _> = raw_records
+    let unprocessed: Result<Vec<UnverifiedSignatureEnvelope<ChrononRecord>>, _> = raw_records
         .iter()
-        .map(|v| Unprocessed::<ChrononRecord>::from_json_value(v.clone()))
+        .map(|v| UnverifiedSignatureEnvelope::<ChrononRecord>::from_json_value(v.clone()))
         .collect();
     let unprocessed = match unprocessed {
         Ok(r) => r,
@@ -601,7 +601,7 @@ pub fn handle_stream_tick(server: &TimeFamilyServer, params: Value) -> JsonRpcRe
     let tbid = params.get("tbid").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let chronon_number = params.get("chronon_number").and_then(|v| v.as_u64()).unwrap_or(0);
     let unproc = match params.get("record") {
-        Some(v) => Unprocessed::<ChrononRecord>::from_json_value(v.clone()),
+        Some(v) => UnverifiedSignatureEnvelope::<ChrononRecord>::from_json_value(v.clone()),
         None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
             "missing 'record'".into()),
     };
@@ -869,7 +869,7 @@ pub fn handle_history_dump_ack(server: &TimeFamilyServer, params: Value) -> Json
 
 /// `history_dump_chunk` — source delivering one chunk of N
 /// ExternalizedChrononRecords. Each record is parsed as
-/// `UnprocessedChrononRecord` and chain-verified against the previous
+/// `UnverifiedSignatureEnvelopeChrononRecord` and chain-verified against the previous
 /// authenticated record (or genesis) before insertion into the mirror
 /// store. Preserves the trust boundary.
 pub fn handle_history_dump_chunk(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
@@ -900,9 +900,9 @@ pub fn handle_history_dump_chunk(server: &TimeFamilyServer, params: Value) -> Js
         );
     }
 
-    let unprocessed: Result<Vec<Unprocessed<ChrononRecord>>, _> = raw_records
+    let unprocessed: Result<Vec<UnverifiedSignatureEnvelope<ChrononRecord>>, _> = raw_records
         .iter()
-        .map(|v| Unprocessed::<ChrononRecord>::from_json_value(v.clone()))
+        .map(|v| UnverifiedSignatureEnvelope::<ChrononRecord>::from_json_value(v.clone()))
         .collect();
     let unprocessed = match unprocessed {
         Ok(r) => r,
@@ -1096,7 +1096,7 @@ mod tests {
     /// g3-e regression: a malformed `foretis` field (e.g., an object with the
     /// wrong shape or a string instead of an object) must produce INVALID_PARAMS
     /// rather than panicking or silently returning a 500. Verifies the
-    /// `Unprocessed::<Foretis>::from_json_value` error surfaces correctly.
+    /// `UnverifiedSignatureEnvelope::<Foretis>::from_json_value` error surfaces correctly.
     #[test]
     fn handle_verify_malformed_foretis_returns_invalid_params() {
         let server = make_server();

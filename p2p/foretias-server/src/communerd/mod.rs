@@ -27,7 +27,7 @@ use foretias_core::core::bindings::ForetiasPubKey32;
 use foretias_core::crypto_server::{CryptoServer, new_software, ForetiasCurve};
 use foretias_core::error::NodeError;
 use foretias_core::foretias::callbacks::{CommunityQuery, CommunityResponse, PeerAddr as CorePeerAddr, PeerChangeCallback, PeerMessenger, TransportError as CoreTransportError};
-use foretias_core::foretias::clean_auth::{Unprocessed, CleanAuthenticated};
+use foretias_core::foretias::clean_auth::{UnverifiedSignatureEnvelope, CleanAuthenticated};
 use foretias_core::foretias::tick::{Foretis, ChrononRecord};
 use foretias_core::foretias::types::Tbid;
 
@@ -83,37 +83,11 @@ fn capability_discriminant(cap: &PeerCapability) -> u8 {
 }
 
 impl PeerRegistrationRecord {
-    /// Canonical byte representation for signing — fixed field order, no signature.
-    /// Layout (all multi-byte ints little-endian, all string lengths u16-LE):
-    ///   u16 peer_id_len    || peer_id_bytes
-    ///   u16 tbid_len       || tbid_bytes
-    ///   u16 multiaddr_len  || multiaddr_bytes
-    ///   u16 json_rpc_len   || json_rpc_bytes
-    ///   u64 chronon_ns
-    ///   u64 registered_at_ns
-    ///   u16 capability_count || (u8 per capability discriminant)
-    /// Any change to this function is a wire-breaking change.
+    /// Canonical byte representation for signing — postcard encoding, signature excluded.
     pub fn canonical_payload(&self) -> Vec<u8> {
-        let mut buf = Vec::new();
-        let peer_id = self.peer_id.as_bytes();
-        buf.extend_from_slice(&(peer_id.len() as u16).to_le_bytes());
-        buf.extend_from_slice(peer_id);
-        let tbid = self.tbid.as_bytes();
-        buf.extend_from_slice(&(tbid.len() as u16).to_le_bytes());
-        buf.extend_from_slice(tbid);
-        let multiaddr = self.multiaddr.as_bytes();
-        buf.extend_from_slice(&(multiaddr.len() as u16).to_le_bytes());
-        buf.extend_from_slice(multiaddr);
-        let json_rpc = self.json_rpc.as_bytes();
-        buf.extend_from_slice(&(json_rpc.len() as u16).to_le_bytes());
-        buf.extend_from_slice(json_rpc);
-        buf.extend_from_slice(&self.chronon_ns.to_le_bytes());
-        buf.extend_from_slice(&self.registered_at_ns.to_le_bytes());
-        buf.extend_from_slice(&(self.capabilities.len() as u16).to_le_bytes());
-        for cap in &self.capabilities {
-            buf.push(capability_discriminant(cap));
-        }
-        buf
+        let mut no_sig = self.clone();
+        no_sig.signature = Vec::new();
+        postcard::to_allocvec(&no_sig).expect("postcard serialize PeerRegistrationRecord")
     }
 }
 
@@ -323,7 +297,7 @@ impl Communerd {
         } else {
             self.transport.stamp(peer, content_hex, echo).await?
         };
-        let unprocessed = Unprocessed::<Foretis>::from_json_value(result)
+        let unprocessed = UnverifiedSignatureEnvelope::<Foretis>::from_json_value(result)
             .map_err(|e| TransportError::Decode(e.to_string()))?;
         let f = unprocessed.inner();
         if f.chronon_number == 0 || f.signature.is_empty() || f.signature_algorithm.is_empty() {
@@ -357,7 +331,7 @@ impl Communerd {
         count: u64,
     ) -> Result<Vec<ChrononRecord>, TransportError> {
         // TODO(Phase B.4): Add chain verification for returned ChrononRecords using
-        // UnprocessedChrononRecord -> CleanAuthenticatedChrononRecord flow.
+        // UnverifiedSignatureEnvelopeChrononRecord -> CleanAuthenticatedChrononRecord flow.
         if peer.peer_id.is_some() && self.p2p_cmd_tx.get().is_some() {
             match self.libp2p_transport.get_calendar_slice(peer, tick_start, count).await {
                 Ok(r) => {

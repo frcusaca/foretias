@@ -1,7 +1,7 @@
 //! Type-enforced cleansing and authentication.
 //!
 //! Enforces a three-stage type progression for inbound data:
-//! `Unprocessed<X>` (parsed, not trusted) -> `CleanAuthenticated<X>` (authenticated + cleansed) -> `Externalized<X>` (wire/disk, minimal fields).
+//! `UnverifiedSignatureEnvelope<X>` (parsed, not trusted) -> `CleanAuthenticated<X>` (authenticated + cleansed) -> `Externalized<X>` (wire/disk, minimal fields).
 //!
 //! The compiler enforces that data flows through this progression. You cannot skip the middle step.
 //!
@@ -17,6 +17,36 @@ use super::tick::{ChrononRecord, Foretis, verify_pair};
 use super::types::Tbid;
 use super::external_attestation::ExternalAttestation;
 use super::encoding::{FTByteVector, FTByteArray};
+
+// ---------------------------------------------------------------------------
+// Signature types (Phase 16a — §21.2)
+// ---------------------------------------------------------------------------
+
+/// Role of the signer in the ordered signature chain.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum SignerRole {
+    Chronomatter,
+    Calendar,
+    Member,
+    CommunerdEnvelope,
+}
+
+/// Signature algorithm used by this entry.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum SigAlgorithm {
+    Ed25519,  // fast
+    DualKey,  // Ed25519 ‖ SLH-DSA
+}
+
+/// One entry in the ordered signature list carried by trust-boundary wrappers.
+/// Each signature covers `postcard(payload) ‖ postcard(&signatures[0..i])`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SignatureEntry {
+    pub role:      SignerRole,
+    pub tbid:      String,
+    pub algorithm: SigAlgorithm,
+    pub sig:       Vec<u8>,
+}
 
 // ---------------------------------------------------------------------------
 // TrustedInner trait (retained for backward compat -- inherent methods are preferred)
@@ -37,14 +67,16 @@ pub trait TrustedInner<T>: Sized {
 ///
 /// Raw domain data from the wire/disk. Do NOT trust it.
 #[derive(Debug, Clone)]
-pub struct Unprocessed<T> {
+pub struct UnverifiedSignatureEnvelope<T> {
     inner: T,
+    pub(crate) signatures: Vec<SignatureEntry>,
 }
+pub type DontUse<T> = UnverifiedSignatureEnvelope<T>;
 
-impl<T> Unprocessed<T> {
+impl<T> UnverifiedSignatureEnvelope<T> {
     /// Construct from raw parsed data.
     pub fn from_parsed(inner: T) -> Self {
-        Self { inner }
+        Self { inner, signatures: Vec::new() }
     }
 
     /// Read-only accessor.
@@ -58,7 +90,7 @@ impl<T> Unprocessed<T> {
     }
 }
 
-impl<T: serde::de::DeserializeOwned> Unprocessed<T> {
+impl<T: serde::de::DeserializeOwned> UnverifiedSignatureEnvelope<T> {
     /// Parse from raw bytes (JSON). No verification performed.
     pub fn from_bytes(b: &[u8]) -> Result<Self, ParseError> {
         let val: T = serde_json::from_slice(b).map_err(ParseError::InvalidJson)?;
@@ -72,10 +104,20 @@ impl<T: serde::de::DeserializeOwned> Unprocessed<T> {
     }
 }
 
-impl<T> TrustedInner<T> for Unprocessed<T> {
-    fn from_trusted(inner: T) -> Self { Self { inner } }
+impl<T> TrustedInner<T> for UnverifiedSignatureEnvelope<T> {
+    fn from_trusted(inner: T) -> Self { Self { inner, signatures: Vec::new() } }
     fn inner(&self) -> &T { &self.inner }
     fn into_inner(self) -> T { self.inner }
+}
+
+/// Per-record full-signature requirement trait.
+/// All signature-free payload types implement this common base trait.
+pub trait RecordBase: serde::Serialize {
+    /// Must this record reach CleanFullyAuthenticated before it may be used?
+    /// Default: false (fast Ed25519 signatures suffice).
+    fn always_require_full_signature(&self) -> bool {
+        false
+    }
 }
 
 /// A domain type that has been authenticated and cleansed.
@@ -85,6 +127,7 @@ impl<T> TrustedInner<T> for Unprocessed<T> {
 #[derive(Debug, Clone)]
 pub struct CleanAuthenticated<T> {
     inner: T,
+    pub(crate) signatures: Vec<SignatureEntry>,
 }
 
 impl<T> CleanAuthenticated<T> {
@@ -93,7 +136,7 @@ impl<T> CleanAuthenticated<T> {
     /// Chronomatter-produced records use this path. The caller asserts
     /// the record was signed with our own key.
     pub fn from_trusted(inner: T) -> Self {
-        Self { inner }
+        Self { inner, signatures: Vec::new() }
     }
 
     /// Read-only accessor.
@@ -111,7 +154,7 @@ impl<T> CleanAuthenticated<T> {
 }
 
 impl<T> TrustedInner<T> for CleanAuthenticated<T> {
-    fn from_trusted(inner: T) -> Self { Self { inner } }
+    fn from_trusted(inner: T) -> Self { Self { inner, signatures: Vec::new() } }
     fn inner(&self) -> &T { &self.inner }
     fn into_inner(self) -> T { self.inner }
 }
@@ -123,13 +166,14 @@ impl<T> TrustedInner<T> for CleanAuthenticated<T> {
 #[derive(Debug, Clone)]
 pub struct CleanFullyAuthenticated<T> {
     inner: T,
+    pub(crate) signatures: Vec<SignatureEntry>,
 }
 
 impl<T> CleanFullyAuthenticated<T> {
     /// Construct from data verified against both the fast key and the slow key.
     /// Only dual-key verification paths in `communerd/` should call this.
     pub fn from_dual_verified(inner: T) -> Self {
-        Self { inner }
+        Self { inner, signatures: Vec::new() }
     }
 
     /// Read-only accessor.
@@ -147,7 +191,7 @@ impl<T> CleanFullyAuthenticated<T> {
 
 impl<T: Clone> From<CleanFullyAuthenticated<T>> for CleanAuthenticated<T> {
     fn from(full: CleanFullyAuthenticated<T>) -> CleanAuthenticated<T> {
-        CleanAuthenticated::from_trusted(full.into_inner())
+        CleanAuthenticated { inner: full.inner, signatures: full.signatures }
     }
 }
 
@@ -245,7 +289,7 @@ impl std::error::Error for ParseError {}
 // ChrononRecord — field accessors + verify + externalize
 // ---------------------------------------------------------------------------
 
-impl Unprocessed<ChrononRecord> {
+impl UnverifiedSignatureEnvelope<ChrononRecord> {
     pub fn chronon_number(&self) -> &u64 { &self.inner.chronon_number }
     pub fn public_key(&self) -> &FTByteVector { &self.inner.public_key }
     pub fn signature_algorithm(&self) -> &str { &self.inner.signature_algorithm }
@@ -277,21 +321,19 @@ impl Unprocessed<ChrononRecord> {
                 if !valid {
                     return Err(CleanAuthError::ChainBreak);
                 }
-                Ok(CleanAuthenticated::from_trusted(self.inner))
+                Ok(CleanAuthenticated { inner: self.inner, signatures: self.signatures })
             }
             None => {
-                // Genesis: must be tick 1 with a non-empty public key.
                 if self.inner.chronon_number != 1 {
                     return Err(CleanAuthError::ChainBreak);
                 }
                 if self.inner.public_key.is_empty() {
                     return Err(CleanAuthError::InvalidLength("public_key empty".into()));
                 }
-                // Full PQC genesis verification deferred until tbid_verify is wired.
                 if self.inner.tb_version >= 1 {
                     return Err(CleanAuthError::NotYetImplemented);
                 }
-                Ok(CleanAuthenticated::from_trusted(self.inner))
+                Ok(CleanAuthenticated { inner: self.inner, signatures: self.signatures })
             }
         }
     }
@@ -386,8 +428,8 @@ pub struct ExternalizedAttestation {
 }
 
 impl ExternalizedChrononRecord {
-    /// Reconstruct as Unprocessed for re-verification on load.
-    pub fn reconstruct(self) -> Result<Unprocessed<ChrononRecord>, ParseError> {
+    /// Reconstruct as UnverifiedSignatureEnvelope for re-verification on load.
+    pub fn reconstruct(self) -> Result<UnverifiedSignatureEnvelope<ChrononRecord>, ParseError> {
         let record = ChrononRecord {
             chronon_number: self.chronon_number,
             public_key: self.public_key.to_vec().into(),
@@ -428,11 +470,11 @@ impl ExternalizedChrononRecord {
             tb_version: self.tb_version as u32,
             tbid: Tbid::from_raw(self.tbid.try_into().unwrap_or([0u8; 96])),
         };
-        Ok(Unprocessed::from_parsed(record))
+        Ok(UnverifiedSignatureEnvelope::from_parsed(record))
     }
 
     /// Alias for `reconstruct()` — backward compat.
-    pub fn into_unprocessed(self) -> Result<Unprocessed<ChrononRecord>, ParseError> {
+    pub fn into_unprocessed(self) -> Result<UnverifiedSignatureEnvelope<ChrononRecord>, ParseError> {
         self.reconstruct()
     }
 }
@@ -441,7 +483,7 @@ impl ExternalizedChrononRecord {
 // Foretis — field accessors + verify + externalize
 // ---------------------------------------------------------------------------
 
-impl Unprocessed<Foretis> {
+impl UnverifiedSignatureEnvelope<Foretis> {
     pub fn chronon_number(&self) -> &u64 { &self.inner.chronon_number }
     pub fn content_hash(&self) -> &FTByteArray<32> { &self.inner.content_hash }
     pub fn signature(&self) -> &FTByteVector { &self.inner.signature }
@@ -492,7 +534,7 @@ impl Unprocessed<Foretis> {
             return Err(CleanAuthError::InvalidSignature);
         }
 
-        Ok(CleanAuthenticated::from_trusted(self.inner))
+        Ok(CleanAuthenticated { inner: self.inner, signatures: self.signatures })
     }
 
     /// Ergonomic alias for `verify(crypto, record, content)`.
@@ -544,8 +586,8 @@ pub struct ExternalizedForetis {
 }
 
 impl ExternalizedForetis {
-    /// Reconstruct as Unprocessed for re-verification on the receiving side.
-    pub fn reconstruct(self) -> Result<Unprocessed<Foretis>, ParseError> {
+    /// Reconstruct as UnverifiedSignatureEnvelope for re-verification on the receiving side.
+    pub fn reconstruct(self) -> Result<UnverifiedSignatureEnvelope<Foretis>, ParseError> {
         let foretis = Foretis {
             chronon_number: self.chronon_number,
             content_hash: self.content_hash.into(),
@@ -556,11 +598,11 @@ impl ExternalizedForetis {
             tbn: String::new(),
             time_being_reference_time: String::new(),
         };
-        Ok(Unprocessed::from_parsed(foretis))
+        Ok(UnverifiedSignatureEnvelope::from_parsed(foretis))
     }
 
     /// Alias for `reconstruct()` — backward compat.
-    pub fn into_unprocessed(self) -> Result<Unprocessed<Foretis>, ParseError> {
+    pub fn into_unprocessed(self) -> Result<UnverifiedSignatureEnvelope<Foretis>, ParseError> {
         self.reconstruct()
     }
 }
@@ -571,7 +613,7 @@ impl ExternalizedForetis {
 
 use crate::epoch::snapshot::EpochSnapshot;
 
-impl Unprocessed<EpochSnapshot> {
+impl UnverifiedSignatureEnvelope<EpochSnapshot> {
     pub fn epoch_number(&self) -> &u64 { &self.inner.epoch_number }
     pub fn epoch_start_ns(&self) -> &u64 { &self.inner.epoch_start_ns }
     pub fn epoch_end_ns(&self) -> &u64 { &self.inner.epoch_end_ns }
@@ -646,8 +688,8 @@ pub struct ExternalizedEpochSnapshot {
 }
 
 impl ExternalizedEpochSnapshot {
-    /// Reconstruct as Unprocessed for re-verification.
-    pub fn reconstruct(self) -> Result<Unprocessed<EpochSnapshot>, ParseError> {
+    /// Reconstruct as UnverifiedSignatureEnvelope for re-verification.
+    pub fn reconstruct(self) -> Result<UnverifiedSignatureEnvelope<EpochSnapshot>, ParseError> {
         use crate::epoch::snapshot::PeerScore;
         let snapshot = EpochSnapshot {
             epoch_number: self.epoch_number,
@@ -668,11 +710,11 @@ impl ExternalizedEpochSnapshot {
             frost_signature: self.frost_signature.into(),
             committee_pubkey: self.committee_pubkey.into(),
         };
-        Ok(Unprocessed::from_parsed(snapshot))
+        Ok(UnverifiedSignatureEnvelope::from_parsed(snapshot))
     }
 
     /// Alias for `reconstruct()` — backward compat.
-    pub fn into_unprocessed(self) -> Result<Unprocessed<EpochSnapshot>, ParseError> {
+    pub fn into_unprocessed(self) -> Result<UnverifiedSignatureEnvelope<EpochSnapshot>, ParseError> {
         self.reconstruct()
     }
 }
@@ -700,13 +742,13 @@ mod tests {
             tbid: Tbid::default(),
         };
         let json = serde_json::to_vec(&record).unwrap();
-        let up = Unprocessed::<ChrononRecord>::from_bytes(&json).unwrap();
+        let up = UnverifiedSignatureEnvelope::<ChrononRecord>::from_bytes(&json).unwrap();
         assert_eq!(up.inner().chronon_number, 1);
     }
 
     #[test]
     fn test_unprocessed_chronon_record_from_invalid_json() {
-        let result = Unprocessed::<ChrononRecord>::from_bytes(b"not json");
+        let result = UnverifiedSignatureEnvelope::<ChrononRecord>::from_bytes(b"not json");
         assert!(result.is_err());
     }
 
@@ -723,13 +765,13 @@ mod tests {
             time_being_reference_time: "UE+12345ns".to_string(),
         };
         let json = serde_json::to_vec(&foretis).unwrap();
-        let up = Unprocessed::<Foretis>::from_bytes(&json).unwrap();
+        let up = UnverifiedSignatureEnvelope::<Foretis>::from_bytes(&json).unwrap();
         assert_eq!(up.inner().chronon_number, 42);
     }
 
     #[test]
     fn test_unprocessed_foretis_from_invalid_json() {
-        let result = Unprocessed::<Foretis>::from_bytes(b"{invalid");
+        let result = UnverifiedSignatureEnvelope::<Foretis>::from_bytes(b"{invalid");
         assert!(result.is_err());
     }
 
@@ -782,10 +824,10 @@ mod tests {
     #[test]
     fn test_parse_error_variants() {
         // Empty JSON object -- missing required fields
-        let result = Unprocessed::<ChrononRecord>::from_bytes(b"{}");
+        let result = UnverifiedSignatureEnvelope::<ChrononRecord>::from_bytes(b"{}");
         assert!(result.is_err());
 
-        let result = Unprocessed::<Foretis>::from_bytes(b"[]");
+        let result = UnverifiedSignatureEnvelope::<Foretis>::from_bytes(b"[]");
         assert!(matches!(result, Err(ParseError::InvalidJson(_))));
     }
 
@@ -882,10 +924,10 @@ mod tests {
     #[test]
     fn test_unprocessed_cannot_be_used_as_clean_authenticated() {
         // This test verifies the type system enforces the distinction.
-        // An Unprocessed<ChrononRecord> CANNOT be directly assigned to
+        // An UnverifiedSignatureEnvelope<ChrononRecord> CANNOT be directly assigned to
         // CleanAuthenticated<ChrononRecord> -- the compiler rejects it.
         // If this compiles, the type discipline has failed.
-        let _up: Unprocessed<ChrononRecord> = Unprocessed::from_parsed(ChrononRecord {
+        let _up: UnverifiedSignatureEnvelope<ChrononRecord> = UnverifiedSignatureEnvelope::from_parsed(ChrononRecord {
             chronon_number: 1,
             public_key: vec![0u8; 32].into(),
             signature_algorithm: "Ed25519".to_string(),

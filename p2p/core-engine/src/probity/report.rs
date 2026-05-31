@@ -1,14 +1,14 @@
 //! ProbityReport — signed reputation/timing observations gossiped across the network.
 //!
 //! Three-stage type progression:
-//! `Unprocessed<ProbityReport>` (parsed, not trusted)
+//! `UnverifiedSignatureEnvelope<ProbityReport>` (parsed, not trusted)
 //! → `CleanAuthenticated<ProbityReport>` (authenticated + cleansed)
 //! → `ExternalizedProbityReport` (wire/disk, minimal fields).
 
 use serde::{Deserialize, Serialize};
 use crate::crypto_server::CryptoServer;
 use crate::error::NodeError;
-use crate::foretias::clean_auth::{CleanAuthenticated, CleanAuthError, Unprocessed};
+use crate::foretias::clean_auth::{CleanAuthenticated, CleanAuthError, UnverifiedSignatureEnvelope};
 
 // ---------------------------------------------------------------------------
 // ProbityReport domain type
@@ -41,30 +41,14 @@ impl ProbityReport {
     pub fn signature(&self) -> &Vec<u8> { &self.signature }
     pub fn curve(&self) -> &u8 { &self.curve }
 
-    /// Canonical byte representation for signing — fixed field order,
-    /// no signature field. Any change to this function is a wire-breaking change.
+    /// Canonical byte representation for signing — postcard encoding,
+    /// signature field excluded. Any change to this function is a wire-breaking change.
     pub fn canonical(&self) -> Vec<u8> {
-        let mut buf = Vec::new();
-        let subject = self.subject.as_bytes();
-        buf.extend_from_slice(&(subject.len() as u16).to_le_bytes());
-        buf.extend_from_slice(subject);
-        let reporter = self.reporter.as_bytes();
-        buf.extend_from_slice(&(reporter.len() as u16).to_le_bytes());
-        buf.extend_from_slice(reporter);
-        let attribute = self.attribute.as_bytes();
-        buf.extend_from_slice(&(attribute.len() as u16).to_le_bytes());
-        buf.extend_from_slice(attribute);
-        let value = if self.value.is_nan() || self.value.is_infinite() {
-            0.0f32
-        } else if self.value == 0.0 {
-            0.0f32
-        } else {
-            self.value
-        };
-        buf.extend_from_slice(&value.to_le_bytes());
-        buf.extend_from_slice(&self.timestamp_ns.to_le_bytes());
-        buf.extend_from_slice(&self.curve.to_le_bytes());
-        buf
+        // Serialize a signature-free copy to exclude `signature` from canonical bytes.
+        // postcard produces deterministic, no_std-compatible bytes.
+        let mut no_sig = self.clone();
+        no_sig.signature = Vec::new();
+        postcard::to_allocvec(&no_sig).expect("postcard serialize ProbityReport")
     }
 }
 
@@ -86,10 +70,10 @@ pub fn pub_key_from_tbid_hex(pub_key_hex: &str) -> Result<Vec<u8>, CleanAuthErro
 }
 
 // ---------------------------------------------------------------------------
-// Unprocessed<ProbityReport> — field accessors + verify
+// UnverifiedSignatureEnvelope<ProbityReport> — field accessors + verify
 // ---------------------------------------------------------------------------
 
-impl Unprocessed<ProbityReport> {
+impl UnverifiedSignatureEnvelope<ProbityReport> {
     pub fn subject(&self) -> &str { &self.inner().subject }
     pub fn reporter(&self) -> &str { &self.inner().reporter }
     pub fn attribute(&self) -> &str { &self.inner().attribute }
@@ -188,8 +172,8 @@ pub struct ExternalizedProbityReport {
 }
 
 impl ExternalizedProbityReport {
-    /// Reconstruct as Unprocessed for re-verification on load.
-    pub fn reconstruct(self) -> Result<Unprocessed<ProbityReport>, crate::foretias::clean_auth::ParseError> {
+    /// Reconstruct as UnverifiedSignatureEnvelope for re-verification on load.
+    pub fn reconstruct(self) -> Result<UnverifiedSignatureEnvelope<ProbityReport>, crate::foretias::clean_auth::ParseError> {
         let report = ProbityReport {
             subject: self.subject,
             reporter: self.reporter,
@@ -199,11 +183,11 @@ impl ExternalizedProbityReport {
             signature: self.signature,
             curve: self.curve,
         };
-        Ok(Unprocessed::from_parsed(report))
+        Ok(UnverifiedSignatureEnvelope::from_parsed(report))
     }
 
     /// Alias for `reconstruct()` — backward compat.
-    pub fn into_unprocessed(self) -> Result<Unprocessed<ProbityReport>, crate::foretias::clean_auth::ParseError> {
+    pub fn into_unprocessed(self) -> Result<UnverifiedSignatureEnvelope<ProbityReport>, crate::foretias::clean_auth::ParseError> {
         self.reconstruct()
     }
 }
@@ -271,8 +255,19 @@ mod tests {
         let crypto = make_crypto();
         let r = make_signed_report(crypto.as_ref());
         let canon = r.canonical();
-        let expected_len = 2 + r.subject.len() + 2 + r.reporter.len() + 2 + r.attribute.len() + 4 + 8 + 1;
-        assert_eq!(canon.len(), expected_len);
+        // Verify postcard roundtrip: canonical bytes must deserialize back to a signature-free report
+        let decoded: ProbityReport = postcard::from_bytes(&canon).expect("postcard deserialize");
+        assert_eq!(decoded.subject, r.subject);
+        assert_eq!(decoded.reporter, r.reporter);
+        assert_eq!(decoded.attribute, r.attribute);
+        assert_eq!(decoded.value, r.value);
+        assert_eq!(decoded.timestamp_ns, r.timestamp_ns);
+        assert_eq!(decoded.curve, r.curve);
+        assert!(decoded.signature.is_empty(), "canonical must exclude signature");
+        // Verify changing any field changes the canonical bytes
+        let mut r2 = r.clone();
+        r2.value = -1.0;
+        assert_ne!(canon, r2.canonical(), "canonical must reflect value changes");
     }
 
     #[test]
@@ -280,13 +275,13 @@ mod tests {
         let crypto = make_crypto();
         let report = make_signed_report(crypto.as_ref());
         let json = serde_json::to_vec(&report).unwrap();
-        let up = Unprocessed::<ProbityReport>::from_bytes(&json).unwrap();
+        let up = UnverifiedSignatureEnvelope::<ProbityReport>::from_bytes(&json).unwrap();
         assert_eq!(up.inner().subject, "peer-A");
     }
 
     #[test]
     fn test_unprocessed_from_invalid_json() {
-        let result = Unprocessed::<ProbityReport>::from_bytes(b"not json");
+        let result = UnverifiedSignatureEnvelope::<ProbityReport>::from_bytes(b"not json");
         assert!(result.is_err());
     }
 
@@ -303,7 +298,7 @@ mod tests {
     fn test_verify_valid_signature() {
         let crypto = make_crypto();
         let report = make_signed_report(crypto.as_ref());
-        let up = Unprocessed::from_parsed(report);
+        let up = UnverifiedSignatureEnvelope::from_parsed(report);
         let ca = up.into_clean_authenticated(crypto.as_ref()).unwrap();
         assert_eq!(ca.inner().subject, "peer-A");
     }
@@ -313,7 +308,7 @@ mod tests {
         let crypto = make_crypto();
         let mut report = make_signed_report(crypto.as_ref());
         report.signature = vec![0xFF; 64];
-        let up = Unprocessed::from_parsed(report);
+        let up = UnverifiedSignatureEnvelope::from_parsed(report);
         let result = up.into_clean_authenticated(crypto.as_ref());
         assert!(result.is_err());
         assert!(matches!(result, Err(CleanAuthError::InvalidSignature)));
@@ -324,7 +319,7 @@ mod tests {
         let crypto = make_crypto();
         let mut report = make_signed_report(crypto.as_ref());
         report.signature = vec![0xFF; 10];
-        let up = Unprocessed::from_parsed(report);
+        let up = UnverifiedSignatureEnvelope::from_parsed(report);
         let result = up.into_clean_authenticated(crypto.as_ref());
         assert!(result.is_err());
         assert!(matches!(result, Err(CleanAuthError::InvalidLength(_))));

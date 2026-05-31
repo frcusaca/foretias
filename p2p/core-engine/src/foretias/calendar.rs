@@ -158,7 +158,7 @@ impl Calendar {
     /// on the full calendar. If any pair fails verification, the load is rejected.
     ///
     /// This is the verification gate: data retrieved from disk is treated as
-    /// `Unprocessed` until the integrity check passes, at which point the calendar
+    /// `UnverifiedSignatureEnvelope` until the integrity check passes, at which point the calendar
     /// becomes `CleanAuthenticated`.
     ///
     /// If `start` is `None`, verification begins from the first tick.
