@@ -41,30 +41,14 @@ impl ProbityReport {
     pub fn signature(&self) -> &Vec<u8> { &self.signature }
     pub fn curve(&self) -> &u8 { &self.curve }
 
-    /// Canonical byte representation for signing — fixed field order,
-    /// no signature field. Any change to this function is a wire-breaking change.
+    /// Canonical byte representation for signing — postcard encoding,
+    /// signature field excluded. Any change to this function is a wire-breaking change.
     pub fn canonical(&self) -> Vec<u8> {
-        let mut buf = Vec::new();
-        let subject = self.subject.as_bytes();
-        buf.extend_from_slice(&(subject.len() as u16).to_le_bytes());
-        buf.extend_from_slice(subject);
-        let reporter = self.reporter.as_bytes();
-        buf.extend_from_slice(&(reporter.len() as u16).to_le_bytes());
-        buf.extend_from_slice(reporter);
-        let attribute = self.attribute.as_bytes();
-        buf.extend_from_slice(&(attribute.len() as u16).to_le_bytes());
-        buf.extend_from_slice(attribute);
-        let value = if self.value.is_nan() || self.value.is_infinite() {
-            0.0f32
-        } else if self.value == 0.0 {
-            0.0f32
-        } else {
-            self.value
-        };
-        buf.extend_from_slice(&value.to_le_bytes());
-        buf.extend_from_slice(&self.timestamp_ns.to_le_bytes());
-        buf.extend_from_slice(&self.curve.to_le_bytes());
-        buf
+        // Serialize a signature-free copy to exclude `signature` from canonical bytes.
+        // postcard produces deterministic, no_std-compatible bytes.
+        let mut no_sig = self.clone();
+        no_sig.signature = Vec::new();
+        postcard::to_allocvec(&no_sig).expect("postcard serialize ProbityReport")
     }
 }
 
@@ -271,8 +255,19 @@ mod tests {
         let crypto = make_crypto();
         let r = make_signed_report(crypto.as_ref());
         let canon = r.canonical();
-        let expected_len = 2 + r.subject.len() + 2 + r.reporter.len() + 2 + r.attribute.len() + 4 + 8 + 1;
-        assert_eq!(canon.len(), expected_len);
+        // Verify postcard roundtrip: canonical bytes must deserialize back to a signature-free report
+        let decoded: ProbityReport = postcard::from_bytes(&canon).expect("postcard deserialize");
+        assert_eq!(decoded.subject, r.subject);
+        assert_eq!(decoded.reporter, r.reporter);
+        assert_eq!(decoded.attribute, r.attribute);
+        assert_eq!(decoded.value, r.value);
+        assert_eq!(decoded.timestamp_ns, r.timestamp_ns);
+        assert_eq!(decoded.curve, r.curve);
+        assert!(decoded.signature.is_empty(), "canonical must exclude signature");
+        // Verify changing any field changes the canonical bytes
+        let mut r2 = r.clone();
+        r2.value = -1.0;
+        assert_ne!(canon, r2.canonical(), "canonical must reflect value changes");
     }
 
     #[test]
