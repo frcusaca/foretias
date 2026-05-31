@@ -638,6 +638,8 @@ See `specs/COMBINED_GROUP7_COMMUNERDETTE_SPEC.md` for the full design (invariant
 
 ## CALENDAR ACTIVE MIRRORING (Group 4b — Mandatory for mirror work)
 
+> **Status note (2026-05-26):** Group 4b Phases 4b.1–4b.5 are merged on alpha and continue to compile/test cleanly. **Further mirror work — Stream 4b.4c (StartStream), 4b.4d (DoAttestation refactor), 4b.6 (graceful shutdown), and all of Stream 4c (Proof of Storage) — is DEFERRED.** Mirror specifications and plans will be updated and remaining tasks executed AFTER Communerdette (`COMBINED_GROUP7_COMMUNERDETTE_SPEC.md`) reaches feature completion AND the `COMBINED_GROUP4_*` files are revised to integrate with Communerdette's `MirrorDispatcher` / `CommunerdetteLine` / per-TBID lifecycle. Do not start work on the open mirror items until both conditions hold. The content below documents the architecture as it stands today; the architecture WILL evolve through the post-Communerdette rewrite.
+
 Calendar is a **task-driven orchestrator** with a documented five-priority hierarchy. Mirror replication is priority 4 (persist family's calendar via mirrors); mirroring other calendars is priority 5 (starvable). Priorities 1–3 (record ticks, support local verify, mutual attestation) are synchronous and cannot be blocked by mirror back-pressure.
 
 ### Priority Invariant

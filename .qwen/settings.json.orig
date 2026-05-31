@@ -2,7 +2,14 @@
   "permissions": {
     "allow": [
       "Bash(ls *)",
-      "Bash(cmake *)"
+      "Bash(cmake *)",
+      "Bash(ctest *)",
+      "Agent(Explore)",
+      "Bash(git branch *)",
+      "Bash(git log *)",
+      "Bash(git status)",
+      "Bash(do *)",
+      "Bash(echo *)"
     ]
   },
   "$version": 4

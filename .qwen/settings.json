@@ -3,7 +3,14 @@
     "allow": [
       "Bash(ls *)",
       "Bash(cmake *)",
-      "Bash(ctest *)"
+      "Bash(ctest *)",
+      "Agent(Explore)",
+      "Bash(git branch *)",
+      "Bash(git log *)",
+      "Bash(git status)",
+      "Bash(do *)",
+      "Bash(echo *)",
+      "Bash(done)"
     ]
   },
   "$version": 4
