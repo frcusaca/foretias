@@ -38,7 +38,7 @@ impl std::error::Error for FamilyError {}
 /// Signature-free payload representing a TimeFamily membership record.
 /// Carries a k×k cross-signing matrix where matrix[i][j] is the dual-key
 /// (Ed25519 ‖ SLH-DSA) signature of member i over member j's TBID.
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, serde::Deserialize, PartialEq)]
 pub struct FamilyRecord {
     pub members: Vec<String>,
     pub matrix: Vec<Vec<Vec<u8>>>,

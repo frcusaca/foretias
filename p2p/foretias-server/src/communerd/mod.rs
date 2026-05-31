@@ -930,6 +930,79 @@ impl Communerd {
         }
     }
 
+    /// Publish a FamilyRecord to the DHT under the `/family/{tbid}/v1` key.
+    /// Called once per family by the Communerd that owns it.
+    pub fn publish_family_record(&self, ns: &str, record: &FamilyRecord) {
+        let Some(peer_id) = self.local_peer_id.get().cloned() else { return };
+        let Some(cmd_tx) = self.p2p_cmd_tx.get() else { return };
+        let value = match serde_json::to_vec(record) {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::warn!("failed to serialize FamilyRecord for DHT: {e}");
+                return;
+            }
+        };
+        // Publish under each member's family key
+        for member_tbid_hex in &record.members {
+            let key = kad::RecordKey::new(&format!("/foretias/{}/family/{}/v1", ns, member_tbid_hex));
+            let kad_record = kad::Record {
+                key: key.clone(),
+                value: value.clone(),
+                publisher: Some(peer_id),
+                expires: None,
+            };
+            let _ = cmd_tx.send(SwarmCommand::PutRecord { key, record: kad_record });
+        }
+        tracing::debug!(component = "communerd", members = %record.members.len(), "communerd: FamilyRecord published to DHT");
+    }
+
+    /// Fetch FamilyRecord from DHT, verify (full gate), insert into family cache.
+    /// Returns the cached record on success, None on any failure.
+    pub async fn fetch_and_cache_family_record(&self, tbid_hex: &str, ns: &str) -> Option<Arc<CleanFullyAuthenticated<FamilyRecord>>> {
+        // Check local cache first
+        if let Some(cached) = self.family_cache_lookup(tbid_hex) {
+            return Some(cached);
+        }
+        // DHT lookup
+        let key = kad::RecordKey::new(&format!("/foretias/{}/family/{}/v1", ns, tbid_hex));
+        let Some(cmd_tx) = self.p2p_cmd_tx.get() else { return None };
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        // Use pending_lookups with a wrapper key to get raw kad::Record back
+        self.pending_lookups.lock().unwrap().insert(key.clone(), tx);
+        let _ = cmd_tx.send(SwarmCommand::GetRecord { key: key.clone() });
+        let raw_bytes = match tokio::time::timeout(std::time::Duration::from_secs(10), rx).await {
+            Ok(Ok(Some(record))) => serde_json::to_vec(&record).ok()?,
+            Ok(Ok(None)) | Ok(Err(_)) => {
+                tracing::debug!(tbid = %tbid_hex, "FamilyRecord not found in DHT");
+                return None;
+            }
+            Err(_) => {
+                tracing::debug!(tbid = %tbid_hex, "FamilyRecord DHT lookup timed out");
+                self.pending_lookups.lock().unwrap().remove(&key);
+                return None;
+            }
+        };
+        let family_record: FamilyRecord = match serde_json::from_slice(&raw_bytes) {
+            Ok(fr) => fr,
+            Err(e) => {
+                tracing::warn!(tbid = %tbid_hex, "failed to deserialize FamilyRecord: {e}");
+                return None;
+            }
+        };
+        let envelope = UnverifiedSignatureEnvelope::from_parsed(family_record);
+        // Full gate verification
+        let ca = match envelope.verify_family_record(&*self.crypto, &[0u8; 32]) {
+            Ok(cfa) => cfa,
+            Err(e) => {
+                tracing::warn!(tbid = %tbid_hex, "FamilyRecord gate verification failed: {e}");
+                return None;
+            }
+        };
+        let arc = Arc::new(ca);
+        self.family_cache_insert(Arc::clone(&arc));
+        Some(arc)
+    }
+
     /// Phase 9: Shutdown all Communerdette relationships.
     ///
     /// Cancels all per-relationship tasks, drops cancellation tokens.
