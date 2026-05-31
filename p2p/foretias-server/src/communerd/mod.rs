@@ -701,6 +701,7 @@ impl Communerd {
             timestamp_ns: now_ns,
             signature: vec![],
             curve: 1u8,
+            slow_signature: vec![],
         };
         if let Ok(sig) = crypto.sign(&report.canonical()) {
             report.signature = sig.bytes.to_vec();

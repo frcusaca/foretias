@@ -16,6 +16,7 @@ core-engine/src/foretias/clean_auth.rs | EpochSnapshot | impl::ExternalizedEpoch
 core-engine/src/foretias/clean_auth.rs | EpochSnapshot | impl::UnverifiedSignatureEnvelope | Y | - | -
 core-engine/src/foretias/clean_auth.rs | EpochSnapshot | impl::UnverifiedSignatureEnvelope::fn::into_clean_authenticated | - | Y | -
 core-engine/src/foretias/clean_auth.rs | EpochSnapshot | impl::UnverifiedSignatureEnvelope::fn::verify | - | Y | -
+core-engine/src/foretias/clean_auth.rs | FamilyRecord | impl::UnverifiedSignatureEnvelope | Y | - | -
 core-engine/src/foretias/clean_auth.rs | Foretis | impl::CleanAuthenticated | - | Y | -
 core-engine/src/foretias/clean_auth.rs | Foretis | impl::ExternalizedForetis::fn::into_unprocessed | Y | - | -
 core-engine/src/foretias/clean_auth.rs | Foretis | impl::ExternalizedForetis::fn::reconstruct | Y | - | -
@@ -72,6 +73,7 @@ core-engine | CleanAuthenticated | u32 | 2
 core-engine | Externalized | T | 2
 core-engine | UnverifiedSignatureEnvelope | ChrononRecord | 4
 core-engine | UnverifiedSignatureEnvelope | EpochSnapshot | 3
+core-engine | UnverifiedSignatureEnvelope | FamilyRecord | 1
 core-engine | UnverifiedSignatureEnvelope | Foretis | 3
 core-engine | UnverifiedSignatureEnvelope | ProbityReport | 3
 core-engine | UnverifiedSignatureEnvelope | T | 5
@@ -115,6 +117,7 @@ Externalized | T | 2
 Externalized | u8 | 1
 UnverifiedSignatureEnvelope | ChrononRecord | 6
 UnverifiedSignatureEnvelope | EpochSnapshot | 3
+UnverifiedSignatureEnvelope | FamilyRecord | 1
 UnverifiedSignatureEnvelope | Foretis | 4
 UnverifiedSignatureEnvelope | ProbityReport | 3
 UnverifiedSignatureEnvelope | T | 5

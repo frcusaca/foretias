@@ -1,7 +1,11 @@
 //! GossipSub message handler — deserialize, validate, and ingest probity reports.
+//!
+//! FB/GNF reports require full-signature gate (CleanFullyAuthenticated).
+//! Other reports use fast-signature path (CleanAuthenticated).
 
 use foretias_core::error::NodeError;
 use foretias_core::crypto_server::CryptoServer;
+use foretias_core::foretias::clean_auth::{CleanAuthError, UnverifiedSignatureEnvelope};
 
 use super::report::ProbityReport;
 use super::store::ProbityStore;
@@ -35,8 +39,14 @@ pub fn handle_gossip_message(
     crypto:       &dyn CryptoServer,
     now_ns:       u64,
 ) -> Result<(), NodeError> {
-    let report: ProbityReport = serde_json::from_slice(data)
-        .map_err(|_| NodeError::BadFormat("ProbityReport deserialization".to_string()))?;
+    // Parse into unverified envelope
+    let envelope = UnverifiedSignatureEnvelope::<ProbityReport>::from_bytes(data)
+        .map_err(|e| {
+            tracing::trace!("gossip parse failed: {e}");
+            NodeError::BadFormat(format!("ProbityReport deserialization: {e}"))
+        })?;
+
+    let report = envelope.inner();
 
     // 1. Reject future-dated reports (> 5 min clock skew tolerance)
     if report.timestamp_ns > now_ns + 5 * 60 * 1_000_000_000 {
@@ -48,11 +58,51 @@ pub fn handle_gossip_message(
         return Ok(());
     }
 
-    // 3. Verify reporter signature over canonical bytes
-    verify_report_signature(&report, crypto)?;
+    // Clone attribute/reporter before consuming envelope
+    let attribute = report.attribute.clone();
+    let reporter = report.reporter.clone();
+
+    // 3. Route through appropriate verification gate
+    let authenticated = if attribute == "fb" || attribute == "gnf" {
+        // FB/GNF: full-signature gate → CleanFullyAuthenticated
+        match envelope.verify_full(crypto) {
+            Ok(cfa) => cfa.into(),
+            Err(CleanAuthError::FullSignatureRequired) => {
+                tracing::trace!(
+                    attribute = %attribute,
+                    reporter = %reporter,
+                    "FB/GNF report rejected: full signature required"
+                );
+                return Err(NodeError::BadFormat(
+                    "FB/GNF report requires full signature (Ed25519 + SLH-DSA)".to_string()
+                ));
+            }
+            Err(e) => {
+                tracing::trace!(
+                    attribute = %attribute,
+                    error = %e,
+                    "FB/GNF report verification failed"
+                );
+                return Err(NodeError::Crypto(foretias_core::error::CryptoError::UnknownAlgorithm(format!("verify_full: {e}"))));
+            }
+        }
+    } else {
+        // Other reports: fast-signature gate → CleanAuthenticated
+        match envelope.verify(crypto) {
+            Ok(ca) => ca,
+            Err(e) => {
+                tracing::trace!(
+                    attribute = %attribute,
+                    error = %e,
+                    "probity report verification failed"
+                );
+                return Err(NodeError::Crypto(foretias_core::error::CryptoError::UnknownAlgorithm(format!("verify: {e}"))));
+            }
+        }
+    };
 
     // 4. Ingest
-    store.ingest(report)?;
+    store.ingest(authenticated.into_inner())?;
     Ok(())
 }
 
@@ -124,6 +174,7 @@ mod tests {
             timestamp_ns: ts,
             signature: vec![0xAB; 64],
             curve: 1,
+            slow_signature: vec![],
         }
     }
 
@@ -144,6 +195,7 @@ mod tests {
             timestamp_ns: ts,
             signature: vec![],
             curve: 1,
+            slow_signature: vec![],
         };
 
         let canonical = report.canonical();
@@ -182,6 +234,7 @@ mod tests {
                 timestamp_ns: now - 1_000_000,
                 signature: vec![],
                 curve: 1,
+            slow_signature: vec![],
             }).unwrap();
         }
         // Each R reports badly on B
@@ -194,6 +247,7 @@ mod tests {
                 timestamp_ns: now - 1_000_000,
                 signature: vec![],
                 curve: 1,
+            slow_signature: vec![],
             }).unwrap();
         }
         store.recompute_all(now);
@@ -225,5 +279,99 @@ mod tests {
         let crypto = make_crypto();
         let result = handle_gossip_message(b"not json", &store, crypto.as_ref(), 1_000_000);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn gossip_handler_rejects_fb_fast_only() {
+        // FB report with only Ed25519 signature (no slow_signature) must be rejected
+        let store = ProbityStore::new();
+        let crypto = make_crypto();
+        let now = 1_000_000_000_000;
+
+        // Create a signed FB report (fast signature only)
+        let pub_key = match crypto.public_key() {
+            foretias_core::crypto_server::PublicKeyBytes::Ed25519(pk) => pk.bytes.to_vec(),
+            _ => panic!("expected Ed25519"),
+        };
+        let mut tbid = pub_key.clone();
+        tbid.resize(48, 0);
+        let reporter_hex = hex::encode(&tbid);
+
+        let mut report = ProbityReport {
+            subject: "A".to_string(),
+            reporter: reporter_hex,
+            attribute: "fb".to_string(), // FB attribute requires full signature
+            value: 1.0,
+            timestamp_ns: now - 1_000_000,
+            signature: vec![],
+            curve: 1,
+            slow_signature: vec![], // Empty — should trigger FullSignatureRequired
+        };
+
+        let canonical = report.canonical();
+        let sig = crypto.sign(&canonical).unwrap();
+        report.signature = sig.bytes.to_vec();
+
+        let data = serde_json::to_vec(&report).unwrap();
+        let result = handle_gossip_message(&data, &store, crypto.as_ref(), now);
+
+        // Must be rejected — FB requires full signature
+        assert!(result.is_err(), "FB report with fast-only signature must be rejected");
+        assert_eq!(store.report_count("A"), 0, "report must not be ingested");
+    }
+
+    #[test]
+    fn gossip_handler_rejects_gnf_fast_only() {
+        // GNF report with only Ed25519 signature must be rejected
+        let store = ProbityStore::new();
+        let crypto = make_crypto();
+        let now = 1_000_000_000_000;
+
+        let pub_key = match crypto.public_key() {
+            foretias_core::crypto_server::PublicKeyBytes::Ed25519(pk) => pk.bytes.to_vec(),
+            _ => panic!("expected Ed25519"),
+        };
+        let mut tbid = pub_key.clone();
+        tbid.resize(48, 0);
+        let reporter_hex = hex::encode(&tbid);
+
+        let mut report = ProbityReport {
+            subject: "A".to_string(),
+            reporter: reporter_hex,
+            attribute: "gnf".to_string(), // GNF attribute requires full signature
+            value: 1.0,
+            timestamp_ns: now - 1_000_000,
+            signature: vec![],
+            curve: 1,
+            slow_signature: vec![], // Empty — should trigger FullSignatureRequired
+        };
+
+        let canonical = report.canonical();
+        let sig = crypto.sign(&canonical).unwrap();
+        report.signature = sig.bytes.to_vec();
+
+        let data = serde_json::to_vec(&report).unwrap();
+        let result = handle_gossip_message(&data, &store, crypto.as_ref(), now);
+
+        assert!(result.is_err(), "GNF report with fast-only signature must be rejected");
+        assert_eq!(store.report_count("A"), 0, "report must not be ingested");
+    }
+
+    #[test]
+    fn gossip_handler_accepts_non_fb_fast_only() {
+        // Non-FB/GNF report with only Ed25519 signature must be accepted
+        let store = ProbityStore::new();
+        let crypto = make_crypto();
+        let now = 1_000_000_000_000;
+
+        let report = make_signed_report(crypto.as_ref(), "A", now - 1_000_000);
+        assert_ne!(report.attribute, "fb", "test helper should not produce FB");
+        assert_ne!(report.attribute, "gnf", "test helper should not produce GNF");
+
+        let data = serde_json::to_vec(&report).unwrap();
+        let result = handle_gossip_message(&data, &store, crypto.as_ref(), now);
+
+        assert!(result.is_ok(), "non-FB report with fast-only should be accepted");
+        assert_eq!(store.report_count("A"), 1);
     }
 }

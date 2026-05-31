@@ -112,6 +112,7 @@ mod tests {
             timestamp_ns: now + 1_000_000_000, // future
             signature: vec![],
             curve: 1,
+            slow_signature: vec![],
         }];
         let cred = |_: &str| 1.0f32;
         let score = aggregate(&reports, now, &cred, &cfg);
@@ -130,6 +131,7 @@ mod tests {
             timestamp_ns: now - 1_000_000,
             signature: vec![],
             curve: 1,
+            slow_signature: vec![],
         }).collect();
         let cred = |_: &str| 1.0f32;
         let score = aggregate(&reports, now, &cred, &cfg);

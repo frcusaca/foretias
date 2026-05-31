@@ -56,6 +56,7 @@ async fn test_e2e_gossip_unsigned_rejected() {
         timestamp_ns: 0,
         signature: vec![],
         curve: 1,
+            slow_signature: vec![],
     };
     let json = serde_json::to_vec(&unsigned_report).unwrap();
 

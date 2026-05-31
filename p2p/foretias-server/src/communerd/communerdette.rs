@@ -986,6 +986,7 @@ impl CommunerdetteExecutor {
             timestamp_ns: self.clock.now_ns().unwrap_or(0),
             signature: Vec::new(),
             curve: 1,
+            slow_signature: vec![],
         };
         match self.host.host_sign_probity_report(&report) {
             Ok(signed) => self.host.host_publish_probity_report(signed),

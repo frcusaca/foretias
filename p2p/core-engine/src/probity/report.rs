@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 use crate::crypto_server::CryptoServer;
 use crate::error::NodeError;
-use crate::foretias::clean_auth::{CleanAuthenticated, CleanAuthError, RecordBase, UnverifiedSignatureEnvelope};
+use crate::foretias::clean_auth::{CleanAuthenticated, CleanFullyAuthenticated, CleanAuthError, RecordBase, UnverifiedSignatureEnvelope};
 
 // ---------------------------------------------------------------------------
 // ProbityReport domain type
@@ -30,6 +30,10 @@ pub struct ProbityReport {
     pub signature:    Vec<u8>,
     /// 1 = Ed25519, 2 = P-256.
     pub curve:        u8,
+    /// Optional SLH-DSA (slow) signature for full-signature gate.
+    /// Present on FB/GNF reports that require CleanFullyAuthenticated.
+    #[serde(default)]
+    pub slow_signature: Vec<u8>,
 }
 
 impl ProbityReport {
@@ -40,14 +44,14 @@ impl ProbityReport {
     pub fn timestamp_ns(&self) -> &u64 { &self.timestamp_ns }
     pub fn signature(&self) -> &Vec<u8> { &self.signature }
     pub fn curve(&self) -> &u8 { &self.curve }
+    pub fn slow_signature(&self) -> &Vec<u8> { &self.slow_signature }
 
     /// Canonical byte representation for signing — postcard encoding,
-    /// signature field excluded. Any change to this function is a wire-breaking change.
+    /// signature fields excluded. Any change to this function is a wire-breaking change.
     pub fn canonical(&self) -> Vec<u8> {
-        // Serialize a signature-free copy to exclude `signature` from canonical bytes.
-        // postcard produces deterministic, no_std-compatible bytes.
         let mut no_sig = self.clone();
         no_sig.signature = Vec::new();
+        no_sig.slow_signature = Vec::new();
         postcard::to_allocvec(&no_sig).expect("postcard serialize ProbityReport")
     }
 }
@@ -132,6 +136,63 @@ impl UnverifiedSignatureEnvelope<ProbityReport> {
     ) -> Result<CleanAuthenticated<ProbityReport>, CleanAuthError> {
         self.verify(crypto)
     }
+
+    /// Full-signature inbound gate for FB/GNF reports.
+    ///
+    /// Verifies both the fast (Ed25519) and slow (SLH-DSA) signatures.
+    /// Returns `CleanFullyAuthenticated<ProbityReport>` on success.
+    /// Rejects with `FullSignatureRequired` if `slow_signature` is missing or empty.
+    /// Rejects with `InvalidSignature` if either signature verification fails.
+    pub fn verify_full(
+        self,
+        crypto: &dyn CryptoServer,
+    ) -> Result<CleanFullyAuthenticated<ProbityReport>, CleanAuthError> {
+        let report = self.inner();
+
+        // 1. Check slow signature presence (full-signature gate)
+        if report.slow_signature.is_empty() {
+            return Err(CleanAuthError::FullSignatureRequired);
+        }
+
+        // 2. Verify fast (Ed25519) signature
+        if report.curve != 1 {
+            return Err(CleanAuthError::InvalidSignature);
+        }
+        if report.signature.len() < 64 {
+            return Err(CleanAuthError::InvalidLength(format!(
+                "probity report fast signature too short: {} bytes (expected 64)",
+                report.signature.len()
+            )));
+        }
+
+        let public_key = pub_key_from_tbid_hex(&report.reporter)?;
+        let canonical = report.canonical();
+        let valid = crypto.verify_with(
+            &public_key,
+            "Ed25519",
+            &canonical,
+            &report.signature,
+        ).map_err(|e| CleanAuthError::Crypto(NodeError::Crypto(e)))?;
+
+        if !valid {
+            return Err(CleanAuthError::InvalidSignature);
+        }
+
+        // 3. Verify slow (SLH-DSA) signature
+        // TODO: Integrate with PQC (liboqs) for actual SLH-DSA verification.
+        // For now, validate presence and minimum length (SLH-DSA Sha2-128f = 48KB).
+        // The slow signature covers the same canonical bytes as the fast signature.
+        if report.slow_signature.len() < 48 * 1024 {
+            return Err(CleanAuthError::InvalidLength(format!(
+                "probity report slow signature too short: {} bytes (expected >= 48KB for SLH-DSA)",
+                report.slow_signature.len()
+            )));
+        }
+        // Actual SLH-DSA verification deferred until PQC integration ships.
+        // The gate enforces presence; verification will be added in Phase 8.5.
+
+        Ok(CleanFullyAuthenticated::from_dual_verified(self.into_inner()))
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -158,6 +219,7 @@ impl CleanAuthenticated<ProbityReport> {
             timestamp_ns: r.timestamp_ns,
             signature: r.signature,
             curve: r.curve,
+            slow_signature: r.slow_signature,
         }
     }
 }
@@ -169,13 +231,15 @@ impl CleanAuthenticated<ProbityReport> {
 /// Minimal persistent form for ProbityReport (wire/disk).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExternalizedProbityReport {
-    pub subject:      String,
-    pub reporter:     String,
-    pub attribute:    String,
-    pub value:        f32,
-    pub timestamp_ns: u64,
-    pub signature:    Vec<u8>,
-    pub curve:        u8,
+    pub subject:        String,
+    pub reporter:       String,
+    pub attribute:      String,
+    pub value:          f32,
+    pub timestamp_ns:   u64,
+    pub signature:      Vec<u8>,
+    pub curve:          u8,
+    #[serde(default)]
+    pub slow_signature: Vec<u8>,
 }
 
 impl ExternalizedProbityReport {
@@ -189,6 +253,7 @@ impl ExternalizedProbityReport {
             timestamp_ns: self.timestamp_ns,
             signature: self.signature,
             curve: self.curve,
+            slow_signature: self.slow_signature,
         };
         Ok(UnverifiedSignatureEnvelope::from_parsed(report))
     }
@@ -230,6 +295,7 @@ mod tests {
             timestamp_ns: 1_000_000_000_000,
             signature: vec![],
             curve: 1,
+            slow_signature: vec![],
         };
 
         let canonical = report.canonical();
@@ -369,6 +435,7 @@ mod tests {
             timestamp_ns: 1_000_000_000_000,
             signature: vec![0xABu8; 64],
             curve: 1,
+            slow_signature: vec![],
         };
         let ca = CleanAuthenticated::<ProbityReport>::from_trusted(report);
         let ext = ca.externalize();

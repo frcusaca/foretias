@@ -640,6 +640,7 @@ async fn gossip_probity_propagation() {
         timestamp_ns: now_ns,
         signature: vec![],
         curve: 1u8,
+        slow_signature: vec![],
     };
     let _ = handle_a.cmd_tx.send(SwarmCommand::PublishProbity {
         report: report.clone(),

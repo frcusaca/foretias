@@ -90,6 +90,7 @@ mod tests {
             timestamp_ns: ts,
             signature: vec![],
             curve: 1,
+            slow_signature: vec![],
         }
     }
 
@@ -123,39 +124,39 @@ mod tests {
         // V↔W mutual vouching gives both positive pass-1 scores → credibility in pass 2
         store.ingest(ProbityReport {
             subject: "W".into(), reporter: "V".into(), attribute: "correctness".into(),
-            value: 90.0, timestamp_ns: now - 1_000_000, signature: vec![], curve: 1,
+            value: 90.0, timestamp_ns: now - 1_000_000, signature: vec![], curve: 1, slow_signature: vec![],
         }).unwrap();
         store.ingest(ProbityReport {
             subject: "V".into(), reporter: "W".into(), attribute: "correctness".into(),
-            value: 80.0, timestamp_ns: now - 1_000_000, signature: vec![], curve: 1,
+            value: 80.0, timestamp_ns: now - 1_000_000, signature: vec![], curve: 1, slow_signature: vec![],
         }).unwrap();
 
         // W→Z→X chain gives Z and X positive pass-1 scores
         store.ingest(ProbityReport {
             subject: "Z".into(), reporter: "W".into(), attribute: "correctness".into(),
-            value: 90.0, timestamp_ns: now - 1_000_000, signature: vec![], curve: 1,
+            value: 90.0, timestamp_ns: now - 1_000_000, signature: vec![], curve: 1, slow_signature: vec![],
         }).unwrap();
         store.ingest(ProbityReport {
             subject: "X".into(), reporter: "Z".into(), attribute: "correctness".into(),
-            value: 50.0, timestamp_ns: now - 1_000_000, signature: vec![], curve: 1,
+            value: 50.0, timestamp_ns: now - 1_000_000, signature: vec![], curve: 1, slow_signature: vec![],
         }).unwrap();
 
         // X gives strong good report on A (+50), Y gives weak bad report (-20)
         // A pass-1 score = +50 - 20 = +30 → A has credibility in pass 2
         store.ingest(ProbityReport {
             subject: "A".into(), reporter: "X".into(), attribute: "correctness".into(),
-            value: 50.0, timestamp_ns: now - 1_000_000, signature: vec![], curve: 1,
+            value: 50.0, timestamp_ns: now - 1_000_000, signature: vec![], curve: 1, slow_signature: vec![],
         }).unwrap();
         store.ingest(ProbityReport {
             subject: "A".into(), reporter: "Y".into(), attribute: "correctness".into(),
-            value: -20.0, timestamp_ns: now - 1_000_000, signature: vec![], curve: 1,
+            value: -20.0, timestamp_ns: now - 1_000_000, signature: vec![], curve: 1, slow_signature: vec![],
         }).unwrap();
 
         // A reports badly on Y → Y gets negative pass-1 score
         // In pass 2: Y credibility = 0 (negative pass-1), A's bad report carries weight
         store.ingest(ProbityReport {
             subject: "Y".into(), reporter: "A".into(), attribute: "correctness".into(),
-            value: -100.0, timestamp_ns: now - 1_000_000, signature: vec![], curve: 1,
+            value: -100.0, timestamp_ns: now - 1_000_000, signature: vec![], curve: 1, slow_signature: vec![],
         }).unwrap();
 
         store.recompute_all(now);
