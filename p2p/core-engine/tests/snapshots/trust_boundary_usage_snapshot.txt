@@ -25,7 +25,11 @@ core-engine/src/foretias/clean_auth.rs | Foretis | impl::UnverifiedSignatureEnve
 core-engine/src/foretias/clean_auth.rs | T | impl::CleanAuthenticated | - | Y | -
 core-engine/src/foretias/clean_auth.rs | T | impl::CleanAuthenticated::fn::from | - | Y | -
 core-engine/src/foretias/clean_auth.rs | T | impl::Externalized | - | - | Y
+core-engine/src/foretias/clean_auth.rs | T | impl::ExternalizedBuilder::fn::build | - | - | Y
+core-engine/src/foretias/clean_auth.rs | T | impl::ExternalizedBuilder::fn::builder_from_authenticated | - | Y | -
 core-engine/src/foretias/clean_auth.rs | T | impl::UnverifiedSignatureEnvelope | Y | - | -
+core-engine/src/foretias/clean_auth.rs | T | impl::UnverifiedSignatureEnvelope::fn::verify_all_signatures | - | Y | -
+core-engine/src/foretias/clean_auth.rs | T | other | Y | - | -
 core-engine/src/foretias/clean_auth.rs | u32 | fn::clean_authenticated_is_authenticated_quickly | - | Y | -
 core-engine/src/foretias/clean_auth.rs | u32 | fn::clean_fully_authenticated_converts_to_clean_authenticated | - | Y | -
 core-engine/src/probity/report.rs | ProbityReport | impl::CleanAuthenticated | - | Y | -
@@ -63,14 +67,14 @@ core-engine | CleanAuthenticated | ChrononRecord | 8
 core-engine | CleanAuthenticated | EpochSnapshot | 3
 core-engine | CleanAuthenticated | Foretis | 3
 core-engine | CleanAuthenticated | ProbityReport | 3
-core-engine | CleanAuthenticated | T | 4
+core-engine | CleanAuthenticated | T | 6
 core-engine | CleanAuthenticated | u32 | 2
-core-engine | Externalized | T | 1
+core-engine | Externalized | T | 2
 core-engine | UnverifiedSignatureEnvelope | ChrononRecord | 4
 core-engine | UnverifiedSignatureEnvelope | EpochSnapshot | 3
 core-engine | UnverifiedSignatureEnvelope | Foretis | 3
 core-engine | UnverifiedSignatureEnvelope | ProbityReport | 3
-core-engine | UnverifiedSignatureEnvelope | T | 3
+core-engine | UnverifiedSignatureEnvelope | T | 5
 foretias-server | CleanAuthenticated | AuthenticatedPong | 1
 foretias-server | CleanAuthenticated | ChrononRecord | 10
 foretias-server | CleanAuthenticated | Foretis | 6
