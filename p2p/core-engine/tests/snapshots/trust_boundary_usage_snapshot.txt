@@ -10,6 +10,7 @@ core-engine/src/foretias/clean_auth.rs | ChrononRecord | impl::UnverifiedSignatu
 core-engine/src/foretias/clean_auth.rs | ChrononRecord | impl::UnverifiedSignatureEnvelope::fn::into_clean_authenticated | - | Y | -
 core-engine/src/foretias/clean_auth.rs | ChrononRecord | impl::UnverifiedSignatureEnvelope::fn::into_clean_authenticated_genesis | - | Y | -
 core-engine/src/foretias/clean_auth.rs | ChrononRecord | impl::UnverifiedSignatureEnvelope::fn::verify | - | Y | -
+core-engine/src/foretias/clean_auth.rs | ChrononRecord | struct::CalendarLookupFromCleanRecord | - | Y | -
 core-engine/src/foretias/clean_auth.rs | EpochSnapshot | impl::CleanAuthenticated | - | Y | -
 core-engine/src/foretias/clean_auth.rs | EpochSnapshot | impl::ExternalizedEpochSnapshot::fn::into_unprocessed | Y | - | -
 core-engine/src/foretias/clean_auth.rs | EpochSnapshot | impl::ExternalizedEpochSnapshot::fn::reconstruct | Y | - | -
@@ -49,7 +50,7 @@ foretias-server/src/communerd/communerdette.rs | ChrononRecord | impl::Communerd
 foretias-server/src/communerd/communerdette.rs | ChrononRecord | impl::CommunerdetteLine::fn::get_tick | - | Y | -
 foretias-server/src/communerd/communerdette.rs | ChrononRecord | other | - | Y | -
 foretias-server/src/communerd/communerdette.rs | Foretis | impl::Communerdette::fn::execute_stamp | - | Y | -
-foretias-server/src/communerd/communerdette.rs | Foretis | impl::CommunerdetteExecutor::fn::gate_foretis | - | Y | -
+foretias-server/src/communerd/communerdette.rs | Foretis | impl::CommunerdetteExecutor::fn::gate_foretis | Y | Y | -
 foretias-server/src/communerd/communerdette.rs | Foretis | impl::CommunerdetteLine::fn::stamp | - | Y | -
 foretias-server/src/communerd/communerdette.rs | Foretis | other | - | Y | -
 foretias-server/src/communerd/communerdette.rs | u8 | fn::clean_auth_types_are_importable | Y | Y | Y
@@ -64,7 +65,7 @@ foretias-server/src/server/handlers.rs | Foretis | fn::cross_node_verify | Y | -
 
 crate | wrapper | inner | count
 ================================================================================
-core-engine | CleanAuthenticated | ChrononRecord | 8
+core-engine | CleanAuthenticated | ChrononRecord | 9
 core-engine | CleanAuthenticated | EpochSnapshot | 3
 core-engine | CleanAuthenticated | Foretis | 3
 core-engine | CleanAuthenticated | ProbityReport | 3
@@ -83,7 +84,7 @@ foretias-server | CleanAuthenticated | Foretis | 6
 foretias-server | CleanAuthenticated | u8 | 1
 foretias-server | Externalized | u8 | 1
 foretias-server | UnverifiedSignatureEnvelope | ChrononRecord | 2
-foretias-server | UnverifiedSignatureEnvelope | Foretis | 1
+foretias-server | UnverifiedSignatureEnvelope | Foretis | 2
 foretias-server | UnverifiedSignatureEnvelope | u8 | 1
 
 
@@ -106,7 +107,7 @@ error: could not document `foretias-core`
 wrapper | inner/context | count
 ================================================================================
 CleanAuthenticated | AuthenticatedPong | 1
-CleanAuthenticated | ChrononRecord | 18
+CleanAuthenticated | ChrononRecord | 19
 CleanAuthenticated | EpochSnapshot | 3
 CleanAuthenticated | Foretis | 9
 CleanAuthenticated | ProbityReport | 3
@@ -118,7 +119,7 @@ Externalized | u8 | 1
 UnverifiedSignatureEnvelope | ChrononRecord | 6
 UnverifiedSignatureEnvelope | EpochSnapshot | 3
 UnverifiedSignatureEnvelope | FamilyRecord | 1
-UnverifiedSignatureEnvelope | Foretis | 4
+UnverifiedSignatureEnvelope | Foretis | 5
 UnverifiedSignatureEnvelope | ProbityReport | 3
 UnverifiedSignatureEnvelope | T | 5
 UnverifiedSignatureEnvelope | u8 | 1

@@ -8,14 +8,14 @@ INPUT:
 ```
 [0] RESULT:
 ```json
-core-engine/src/chronomatter/mod.rs                              138  sign    /// // SIGN(local-tbid, fast-key+slow-key)
-core-engine/src/chronomatter/mod.rs                              139  sign    pub fn sign_tbid_message(&self, msg: &[u8]) -> Result<crate::foretias::types::Si
-core-engine/src/chronomatter/mod.rs                              142  sign    .sign(msg)
-core-engine/src/chronomatter/mod.rs                              179  sign    let sig = kp.priv_key.sign(msg)
-core-engine/src/chronomatter/mod.rs                              225  sign    let genesis_sig = secret.sign(&genesis_blob)
-core-engine/src/chronomatter/mod.rs                              387  gate    unprocessed: crate::foretias::clean_auth::UnverifiedSignatureEnvelope<crate::for
-core-engine/src/chronomatter/mod.rs                              570  verify  let valid = cm.verify(&foretis, &content, &sig, &alg, &*calendar.read()).unwrap(
-core-engine/src/chronomatter/mod.rs                              578  verify  let valid = cm.verify(&foretis, &b"tampered".to_vec(), &sig, &alg, &*calendar.re
+core-engine/src/chronomatter/mod.rs                              139  sign    /// // SIGN(local-tbid, fast-key+slow-key)
+core-engine/src/chronomatter/mod.rs                              140  sign    pub fn sign_tbid_message(&self, msg: &[u8]) -> Result<crate::foretias::types::Si
+core-engine/src/chronomatter/mod.rs                              143  sign    .sign(msg)
+core-engine/src/chronomatter/mod.rs                              180  sign    let sig = kp.priv_key.sign(msg)
+core-engine/src/chronomatter/mod.rs                              226  sign    let genesis_sig = secret.sign(&genesis_blob)
+core-engine/src/chronomatter/mod.rs                              397  gate    unprocessed: crate::foretias::clean_auth::UnverifiedSignatureEnvelope<crate::for
+core-engine/src/chronomatter/mod.rs                              580  verify  let valid = cm.verify(&foretis.foretis, &foretis.signature_bytes, &foretis.signa
+core-engine/src/chronomatter/mod.rs                              588  verify  let valid = cm.verify(&foretis.foretis, &foretis.signature_bytes, &foretis.signa
 core-engine/src/collision/detector.rs                             58  verify  let valid = crypto.verify_ed25519(&self.my_pub_key, &hb.canonical(), &sig).ok()?
 core-engine/src/collision/detector.rs                             86  sign    let sig = server.sign(&hb.canonical()).unwrap();
 core-engine/src/core/signing.rs                                   21  sign    handle.sign(msg)
@@ -33,38 +33,37 @@ core-engine/src/crypto_server/software.rs                        193  verify  se
 core-engine/src/foretias/clean_auth.rs                            71  gate    pub struct UnverifiedSignatureEnvelope<T> {
 core-engine/src/foretias/clean_auth.rs                            75  gate    pub type DontUse<T> = UnverifiedSignatureEnvelope<T>;
 core-engine/src/foretias/clean_auth.rs                            77  gate    impl<T> UnverifiedSignatureEnvelope<T> {
-core-engine/src/foretias/clean_auth.rs                            99  gate    impl<T: serde::de::DeserializeOwned> UnverifiedSignatureEnvelope<T> {
-core-engine/src/foretias/clean_auth.rs                           113  gate    impl<T> TrustedInner<T> for UnverifiedSignatureEnvelope<T> {
-core-engine/src/foretias/clean_auth.rs                           119  gate    impl<T: RecordBase> UnverifiedSignatureEnvelope<T> {
-core-engine/src/foretias/clean_auth.rs                           160  verify  let valid = crypto.verify_with(
-core-engine/src/foretias/clean_auth.rs                           252  gate    pub fn from_dual_verified(inner: T) -> Self {
-core-engine/src/foretias/clean_auth.rs                           435  gate    impl UnverifiedSignatureEnvelope<ChrononRecord> {
-core-engine/src/foretias/clean_auth.rs                           490  verify  self.verify(crypto, Some(prev))
-core-engine/src/foretias/clean_auth.rs                           498  verify  self.verify(crypto, None)
-core-engine/src/foretias/clean_auth.rs                           575  gate    pub fn reconstruct(self) -> Result<UnverifiedSignatureEnvelope<ChrononRecord>, P
-core-engine/src/foretias/clean_auth.rs                           620  gate    pub fn into_unprocessed(self) -> Result<UnverifiedSignatureEnvelope<ChrononRecor
-core-engine/src/foretias/clean_auth.rs                           629  gate    impl UnverifiedSignatureEnvelope<Foretis> {
-core-engine/src/foretias/clean_auth.rs                           711  verify  let valid = crypto.verify_with(
-core-engine/src/foretias/clean_auth.rs                           732  verify  self.verify(crypto, record, content)
-core-engine/src/foretias/clean_auth.rs                           779  gate    pub fn reconstruct(self) -> Result<UnverifiedSignatureEnvelope<Foretis>, ParseEr
-core-engine/src/foretias/clean_auth.rs                           805  gate    pub fn into_unprocessed(self) -> Result<UnverifiedSignatureEnvelope<Foretis>, Pa
-core-engine/src/foretias/clean_auth.rs                           816  gate    impl UnverifiedSignatureEnvelope<EpochSnapshot> {
-core-engine/src/foretias/clean_auth.rs                           845  verify  self.verify(crypto, committee_pubkeys, threshold)
-core-engine/src/foretias/clean_auth.rs                           892  gate    pub fn reconstruct(self) -> Result<UnverifiedSignatureEnvelope<EpochSnapshot>, P
-core-engine/src/foretias/clean_auth.rs                           917  gate    pub fn into_unprocessed(self) -> Result<UnverifiedSignatureEnvelope<EpochSnapsho
-core-engine/src/foretias/clean_auth.rs                           926  gate    impl UnverifiedSignatureEnvelope<FamilyRecord> {
-core-engine/src/foretias/clean_auth.rs                           941  gate    Ok(CleanFullyAuthenticated::from_dual_verified(ca.into_inner()))
-core-engine/src/foretias/clean_auth.rs                          1160  gate    let _up: UnverifiedSignatureEnvelope<ChrononRecord> = UnverifiedSignatureEnvelop
-core-engine/src/foretias/clean_auth.rs                          1179  gate    let ca: CleanAuthenticated<u32> = CleanAuthenticated::from_trusted(42u32);
+core-engine/src/foretias/clean_auth.rs                            94  gate    impl<T: serde::de::DeserializeOwned> UnverifiedSignatureEnvelope<T> {
+core-engine/src/foretias/clean_auth.rs                           108  gate    impl<T> TrustedInner<T> for UnverifiedSignatureEnvelope<T> {
+core-engine/src/foretias/clean_auth.rs                           114  gate    impl<T: RecordBase> UnverifiedSignatureEnvelope<T> {
+core-engine/src/foretias/clean_auth.rs                           155  verify  let valid = crypto.verify_with(
+core-engine/src/foretias/clean_auth.rs                           247  gate    pub fn from_dual_verified(inner: T) -> Self {
+core-engine/src/foretias/clean_auth.rs                           430  gate    impl UnverifiedSignatureEnvelope<ChrononRecord> {
+core-engine/src/foretias/clean_auth.rs                           485  verify  self.verify(crypto, Some(prev))
+core-engine/src/foretias/clean_auth.rs                           493  verify  self.verify(crypto, None)
+core-engine/src/foretias/clean_auth.rs                           570  gate    pub fn reconstruct(self) -> Result<UnverifiedSignatureEnvelope<ChrononRecord>, P
+core-engine/src/foretias/clean_auth.rs                           615  gate    pub fn into_unprocessed(self) -> Result<UnverifiedSignatureEnvelope<ChrononRecor
+core-engine/src/foretias/clean_auth.rs                           624  gate    impl UnverifiedSignatureEnvelope<Foretis> {
+core-engine/src/foretias/clean_auth.rs                           728  verify  self.verify(crypto, record, content)
+core-engine/src/foretias/clean_auth.rs                           787  gate    pub fn reconstruct(self) -> Result<UnverifiedSignatureEnvelope<Foretis>, ParseEr
+core-engine/src/foretias/clean_auth.rs                           811  gate    pub fn into_unprocessed(self) -> Result<UnverifiedSignatureEnvelope<Foretis>, Pa
+core-engine/src/foretias/clean_auth.rs                           822  gate    impl UnverifiedSignatureEnvelope<EpochSnapshot> {
+core-engine/src/foretias/clean_auth.rs                           851  verify  self.verify(crypto, committee_pubkeys, threshold)
+core-engine/src/foretias/clean_auth.rs                           898  gate    pub fn reconstruct(self) -> Result<UnverifiedSignatureEnvelope<EpochSnapshot>, P
+core-engine/src/foretias/clean_auth.rs                           923  gate    pub fn into_unprocessed(self) -> Result<UnverifiedSignatureEnvelope<EpochSnapsho
+core-engine/src/foretias/clean_auth.rs                           932  gate    impl UnverifiedSignatureEnvelope<FamilyRecord> {
+core-engine/src/foretias/clean_auth.rs                           947  gate    Ok(CleanFullyAuthenticated::from_dual_verified(ca.into_inner()))
+core-engine/src/foretias/clean_auth.rs                          1153  gate    let _up: UnverifiedSignatureEnvelope<ChrononRecord> = UnverifiedSignatureEnvelop
+core-engine/src/foretias/clean_auth.rs                          1172  gate    let ca: CleanAuthenticated<u32> = CleanAuthenticated::from_trusted(42u32);
+core-engine/src/foretias/clean_auth.rs                          1178  gate    let cfa: CleanFullyAuthenticated<u32> = CleanFullyAuthenticated::from_dual_verif
 core-engine/src/foretias/clean_auth.rs                          1185  gate    let cfa: CleanFullyAuthenticated<u32> = CleanFullyAuthenticated::from_dual_verif
-core-engine/src/foretias/clean_auth.rs                          1192  gate    let cfa: CleanFullyAuthenticated<u32> = CleanFullyAuthenticated::from_dual_verif
 core-engine/src/foretias/family_record.rs                        104  verify  let valid = crypto.verify_ed25519(
-core-engine/src/foretias/tick.rs                                 185  sign    let signature = server.sign(&sig_input)?;
-core-engine/src/foretias/tick.rs                                 214  verify  Ok(server.verify_with(
-core-engine/src/foretias/tick.rs                                 404  verify  let forward_valid = crypto.verify_with(
-core-engine/src/foretias/tick.rs                                 411  verify  let backward_valid = crypto.verify_with(
-core-engine/src/foretias/tick.rs                                 575  sign    let sig = server.sign(&attest_blob).unwrap();
-core-engine/src/foretias/tick.rs                                 622  sign    let sig = server.sign(&attest_blob).unwrap();
+core-engine/src/foretias/tick.rs                                 212  sign    let signature = server.sign(&sig_input)?;
+core-engine/src/foretias/tick.rs                                 243  verify  Ok(server.verify_with(
+core-engine/src/foretias/tick.rs                                 433  verify  let forward_valid = crypto.verify_with(
+core-engine/src/foretias/tick.rs                                 440  verify  let backward_valid = crypto.verify_with(
+core-engine/src/foretias/tick.rs                                 603  sign    let sig = server.sign(&attest_blob).unwrap();
+core-engine/src/foretias/tick.rs                                 650  sign    let sig = server.sign(&attest_blob).unwrap();
 core-engine/src/foretias/types.rs                                114  sign    signing_tbid::tbid_sign(&SignatureBytes::from(secret_array), message)
 core-engine/src/integration_tests.rs                              20  sign    let sig = server.sign_with(msg, SignatureAlgorithm::SPHINCS_SHA2_128S).unwrap();
 core-engine/src/integration_tests.rs                              23  verify  let valid = server.verify_with(&sphincs_pk, "SPHINCS+-SHA2-128s-simple", msg, &s
@@ -118,7 +117,7 @@ core-engine/src/probity/report.rs                                247  gate    pu
 core-engine/src/probity/report.rs                                262  gate    pub fn into_unprocessed(self) -> Result<UnverifiedSignatureEnvelope<ProbityRepor
 core-engine/src/probity/report.rs                                302  sign    let sig = crypto.sign(&canonical).unwrap();
 core-engine/src/snapshot_signature.rs                             90  sign    let signature: Signature = signing_key.sign(content.as_bytes());
-foretias-client/src/foretias.rs                                  342  verify  let result = cm.verify(foretis, &content.to_vec(), signature, signature_algorith
+foretias-client/src/foretias.rs                                  342  verify  let result = cm.verify(foretis, signature, signature_algorithm, &content.to_vec(
 foretias-client/src/foretias.rs                                  617  verify  let verified = client.verify(content, &foretis, &sig, &alg).await.unwrap();
 foretias-client/src/foretias.rs                                  628  verify  let verified = client.verify(b"tampered", &foretis, &sig, &alg).await.unwrap();
 foretias-server/src/communerd/communerdette.rs                   272  gate    pub type UnverifiedSignatureEnvelopeChannelBinding = foretias_core::foretias::cl
@@ -131,6 +130,7 @@ foretias-server/src/communerd/communerdette.rs                   374  gate    Ok
 foretias-server/src/communerd/communerdette.rs                  1059  gate    fn gate_chronon_records(
 foretias-server/src/communerd/communerdette.rs                  1089  verify  unprocessed.verify(crypto, None).map_err(CommunerdetteError::CleanAuth)?
 foretias-server/src/communerd/communerdette.rs                  1114  gate    fn gate_foretis(
+foretias-server/src/communerd/communerdette.rs                  1120  gate    let unprocessed: Result<UnverifiedSignatureEnvelope<Foretis>, _> = UnverifiedSig
 foretias-server/src/communerd/communerdette.rs                  1159  verify  .verify(&*self.crypto, chronon_record, content)
 foretias-server/src/communerd/communerdette.rs                  1183  gate    executor.gate_chronon_records(raw)
 foretias-server/src/communerd/communerdette.rs                  1229  gate    executor.gate_foretis(raw, &chronon_record, &content)
@@ -210,7 +210,7 @@ foretias-server/tests/dht_record_signature.rs                     73  sign    le
 foretias-server/tests/dht_record_signature.rs                     94  sign    let sig = crypto.sign(&canonical).expect("sign canonical payload");
 foretias-server/tests/dht_record_signature.rs                    124  sign    let sig = crypto_a.sign(&canonical).expect("sign with key A");
 foretias-server/tests/e2e_verification.rs                         85  gate    let _up: UnverifiedSignatureEnvelope<ChrononRecord> = UnverifiedSignatureEnvelop
-foretias-server/tests/snapshot_tests.rs                           67  verify  .verify(&foretis, &msg.as_bytes().to_vec(), &sig, &alg, server.calendar())
+foretias-server/tests/snapshot_tests.rs                           67  verify  .verify(&foretis, &sig, &alg, &msg.as_bytes().to_vec(), server.calendar())
 ```
 COMMENTS:
 ```markdown
@@ -219,5 +219,5 @@ crypto_callsite_snapshot — update with UPDATE_SNAPSHOT=1 when adding new crypt
 SIGNATURES:
 Public key: 4193efbf702cde19fbae087ea53189f67e7768ebe888e0816e24a27282a5b030
 Input signature: NXV16j6PMfv3nInNLZ1rfB8uEYfqKa5rmazMaj8sRSZzKg720C6kvjaDAtxeV4bGtyC7uTO/BQ0Kk2fPpaV8AQ==
-Result signature: aboJToMPnQo+Bh51B+dnvxMaJN1wuXG/PlZ4wED2pmRh9vPZqqAOwbgBxwtX04tbshdi8XNzehHNEE/CSt7+Cg==
-Comments signature: 3pO7XgiX938XPFjEB4wAwmPOdp1pctuOfCXzKjMlx6w3qAKg+FZwZiYJvPWvkrAjTIs9t3qXFdstETSkjd5XAA==
+Result signature: hvtoIXYmqJcR1WO9354/oHzkdODnu0LhfiA/3yb7f/Xb3qyOsLa/Hi3FfB1KIIW10PFzq7SOQlK1JMNsJ3ZeCA==
+Comments signature: Cr/Ur3YvW9bkBptHqP3r9bYeGgYihJE/yzHyQbKuKriMfjR+hsHOCZ4Z43cokQRV+bWnEsUhLB32lET17OqCBw==

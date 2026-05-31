@@ -1117,7 +1117,7 @@ impl CommunerdetteExecutor {
         chronon_record: &CleanAuthenticated<ChrononRecord>,
         content: &[u8],
     ) -> Result<CleanAuthenticated<Foretis>, CommunerdetteError> {
-        let unprocessed: Result<UnverifiedSignatureEnvelope<Foretis>, _> = UnverifiedSignatureEnvelope::<Foretis>::from_json_value(raw);
+        let unprocessed: Result<UnverifiedSignatureEnvelope<Foretis>, _> = UnverifiedSignatureEnvelope::<Foretis>::from_json_value_v2(raw);
         let unprocessed = unprocessed.map_err(|e| TransportError::Decode(e.to_string()))?;
 
         // Structural validation (signature is now in the envelope, not Foretis)

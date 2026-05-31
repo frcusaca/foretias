@@ -696,7 +696,7 @@ impl UnverifiedSignatureEnvelope<Foretis> {
         }
 
         // V2: use wrapper signatures (ordered chain)
-        super::tick::verify(
+        let valid = super::tick::verify(
             crypto,
             foretis,
             &self.signatures.first()
@@ -711,6 +711,9 @@ impl UnverifiedSignatureEnvelope<Foretis> {
             content,
             &CalendarLookupFromCleanRecord(record),
         ).map_err(|e| CleanAuthError::Crypto(e))?;
+        if !valid {
+            return Err(CleanAuthError::InvalidSignature);
+        }
 
         Ok(CleanAuthenticated { inner: self.inner, signatures: self.signatures })
     }
