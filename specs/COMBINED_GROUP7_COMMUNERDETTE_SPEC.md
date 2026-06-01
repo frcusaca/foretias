@@ -898,6 +898,24 @@ Calendar wants to send a Chronomatter statement to remote TBID R.
 5. The remote side verifies the payload against the claimed signer TBID.
 ```
 
+**Signing boundary principle:** Internal calls between components in the same
+family (Calendar ↔ Chronomatter) do NOT need signing — they're within the same
+trust boundary. Signing happens at the external boundary: just before transmitting
+to CommunerdetteLine for external transmission. The signing key stays with the
+time being (component) that has the corresponding TBID.
+
+- Example: Calendar calls Chronomatter internally to stamp a mutual attestation →
+  no signing needed. Calendar signs the response just before handing it to
+  CommunerdetteLine for external transmission.
+- Example: Chronomatter produces a ChrononRecord → Chronomatter signs with
+  Chronomatter's key before handing to CommunerdetteLine.
+
+**Signing initiation:** Signing is performed by Calendar/Chronomatter at
+Communerdette's request/requirement. When Communerdette needs to transmit a
+record externally, it requests the producing component to sign it. The component
+signs with its own key. Records from Calendar/Chronomatter to Communerdette may
+be signed when Communerdette requires it for external transmission.
+
 If Communerd has its own TBID for network-level statements, that TBID authorizes
 only Communerd's own statements. It does not grant Communerd permission to sign
 for Calendar or Chronomatter.
