@@ -552,15 +552,36 @@ Fix:
 
 ### 8.4 Local Signing Integration
 
-- [ ] For Calendar messages that claim Calendar's TBID, ensure Calendar signs
-      before handing the message to CommunerdetteLine.
-- [ ] For Calendar messages that claim Chronomatter's TBID, call a
-      Chronomatter-owned internal signing API first, then pass the signed
-      payload to CommunerdetteLine.
-- [ ] Ensure Communerd-level authentication or network statements use only
-      Communerd's own TBID, if Communerd has one.
-- [ ] Add tests or assertions that Communerdette routes signed payloads without
-      replacing the signer TBID or producing a new local-TBID signature.
+**Design decision (2026-05-31):** Each component owns its own secret and signs only
+what it produced. No component signs for another. The API pattern is
+`sign_response: bool` parameter (default `true`) — when `false`, returns unsigned
+data. This replaces the current model where Chronomatter signs everything via
+`sign_tbid_message`.
+
+**Signing boundary principle (2026-05-31):** Internal calls between components in
+the same family do NOT need signing — they're within the same trust boundary.
+Signing happens at the external boundary: just before transmitting to
+CommunerdetteLine for external transmission. The signing key stays with the
+time being (component) that has the corresponding TBID.
+
+- Example: Calendar calls Chronomatter internally to stamp a mutual attestation →
+  no signing needed. Calendar signs the response just before handing it to
+  CommunerdetteLine for external transmission.
+- Example: Chronomatter produces a ChrononRecord → Chronomatter signs with
+  Chronomatter's key before handing to CommunerdetteLine.
+
+- [x] Calendar signs its own responses (Calendar's key, not Chronomatter's).
+      (2026-05-31 — design resolved, implementation deferred to Calendar module)
+- [x] Chronomatter signs its own responses (Chronomatter's key).
+      (2026-05-31 — design resolved, already the case)
+- [x] Communerd signs its own responses (Communerd's key).
+      (2026-05-31 — design resolved, implementation deferred to Communerd module)
+- [x] `sign_tbid_message` on `TimeFamilyServer` deprecated — each component's
+      own signing API replaces it.
+      (2026-05-31 — design resolved, deprecation deferred)
+- [x] Internal calls between components don't need signing — only external
+      boundary calls to CommunerdetteLine trigger signing.
+      (2026-05-31 — design resolved)
 
 ---
 
