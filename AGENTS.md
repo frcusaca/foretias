@@ -597,6 +597,23 @@ Before approving any Rust changes, verify:
 
 Never construct `CleanAuthenticated<X>` directly. The compiler enforces this.
 
+### Signing Boundary (Mandatory)
+
+Each component (Chronomatter, Calendar, Communerd) owns its own signing key and signs only what it produced. No component signs for another.
+
+- **Internal calls** (Calendar → Chronomatter) do NOT need signing — they're within the same trust boundary.
+- **Signing happens at the external boundary:** just before transmitting to `CommunerdetteLine` for external transmission.
+- **Signing key ownership:** the signing key stays with the time being (component) that has the corresponding TBID.
+- **Signing initiation:** Communerdette requests signing when external transmission is needed. The producing component signs with its own key at that point.
+
+```
+Calendar calls Chronomatter internally → no signing needed
+Calendar hands result to CommunerdetteLine → Calendar signs with Calendar's key
+Chronomatter hands result to CommunerdetteLine → Chronomatter signs with Chronomatter's key
+```
+
+**Never use `sign_tbid_message` on `TimeFamilyServer`** — each component's own signing API replaces it.
+
 ---
 
 ## COMMUNERDETTE AND PER-TBID RELATIONSHIPS (Mandatory)
