@@ -98,6 +98,17 @@ If a worktree branch is used for implementation, the PLAN.md **must** document t
 
 These tasks ensure the worktree lifecycle is tracked alongside the implementation work itself. Replace `${FULL_WORKTREE_PATH}` and `${BRANCH_NAME}` with actual values when writing the plan.
 
+### INDEX.md — Spec/Plan Tracking
+
+`specs/INDEX.md` tracks which specs and plans are being worked on, organized by **priority** and **dependency order** (highest priority + highest dependency first). It lists:
+
+- All plans/specs with open tasks
+- Their status (active, paused, blocked, backburnered)
+- Their dependencies (what must finish before this can start)
+- Deferred and backburnered features at the end
+
+When starting work on a new spec/plan, check `specs/INDEX.md` to understand the current priority order and what blocks what. Update it as work progresses.
+
 ---
 
 ### Sub-Tasks
