@@ -1424,16 +1424,27 @@ are separate work items scoped per-file.
 
 ---
 
-## Open Questions
+## Open Questions (Resolved 2026-05-31)
 
-- [ ] Should `CommunerdetteLine` expose `stamp` directly, or should mutual
-      attestation use a more specific `stamp_tick_for_attestation` method to
-      prevent accidental generic timestamp-service use?
-- [ ] Should TBID binding proof be required before any remote `stamp`, or only
-      before storing trust-bearing external attestations?
-- [ ] Should per-TBID liveness be driven by libp2p ping events, JSON-RPC ping,
-      or recent successful application calls?
-- [ ] Should bulk mirror streaming get a separate queue from request/response
-      RPCs, or is priority scheduling within one queue sufficient?
-- [ ] What exact signed-envelope type should Calendar, Chronomatter, and
-      Communerdette share for outbound application messages?
+- [x] **Q1: stamp vs stamp_tick_for_attestation** → Communerd exposes `stamp_chronon`
+      API to externals, controlling serialization algorithm. CommunerdetteLine provides
+      this for remote time families. New API **in progress** (bg_3956a74c).
+      (2026-05-31 — design decided, implementation in progress)
+- [x] **Q2: TBID binding proof scope** → Full dual-key proof required at first exchange
+      (channel binding, Phase 12.0). After that, fast-key only for subsequent messages
+      (L2 ongoing health, Phase 12.3). Already implemented.
+      (2026-05-31)
+- [x] **Q3: Liveness signal source** → Primary: successful application RPCs (stamp,
+      get_tick, get_calendar_slice). Secondary: libp2p transport-level ping. Tertiary:
+      JSON-RPC ping/pong sporadically (~once per earth day, 86400000ms). Liveness system
+      refactor **in progress** (bg_afa1a855).
+      (2026-05-31 — design decided, implementation in progress)
+- [x] **Q4: Mirror queue architecture** → Two cases for FB relationship calendar epoch
+      push: (1) server pushes block-by-block, (2) server pushes most recent readyed block.
+      Both are push-based (remote calls to submit new calendar data). Deferred until
+      mirror streaming resumes after Communerdette feature completion.
+      (2026-05-31)
+- [x] **Q5: Shared outbound envelope type** → `Externalized<T>` with `ExternalizedBuilder<T>`.
+      The concrete `Externalized*` structs (`ExternalizedChrononRecord`, etc.) are being
+      removed in favor of the generic wrapper.
+      (2026-05-31)

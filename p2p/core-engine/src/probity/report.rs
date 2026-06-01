@@ -3,12 +3,15 @@
 //! Three-stage type progression:
 //! `UnverifiedSignatureEnvelope<ProbityReport>` (parsed, not trusted)
 //! → `CleanAuthenticated<ProbityReport>` (authenticated + cleansed)
-//! → `ExternalizedProbityReport` (wire/disk, minimal fields).
+//! → `Externalized<ProbityReport>` (wire/disk, wraps domain type).
 
-use serde::{Deserialize, Serialize};
 use crate::crypto_server::CryptoServer;
 use crate::error::NodeError;
-use crate::foretias::clean_auth::{CleanAuthenticated, CleanFullyAuthenticated, CleanAuthError, RecordBase, UnverifiedSignatureEnvelope};
+use crate::foretias::clean_auth::{
+    CleanAuthError, CleanAuthenticated, CleanFullyAuthenticated, Externalized, RecordBase,
+    UnverifiedSignatureEnvelope,
+};
+use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
 // ProbityReport domain type
@@ -17,19 +20,19 @@ use crate::foretias::clean_auth::{CleanAuthenticated, CleanFullyAuthenticated, C
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProbityReport {
     /// PeerId (hex) of the peer being reported on.
-    pub subject:      String,
+    pub subject: String,
     /// PeerId (hex) of the reporting peer.
-    pub reporter:     String,
+    pub reporter: String,
     /// Opaque attribute name, e.g. "correctness", "liveness", "response_time".
-    pub attribute:    String,
+    pub attribute: String,
     /// Signed magnitude. Convention: positive = good, negative = bad.
-    pub value:        f32,
+    pub value: f32,
     /// Observation time, nanoseconds since UNIX epoch.
     pub timestamp_ns: u64,
     /// Ed25519 or P-256 signature over canonical() bytes.
-    pub signature:    Vec<u8>,
+    pub signature: Vec<u8>,
     /// 1 = Ed25519, 2 = P-256.
-    pub curve:        u8,
+    pub curve: u8,
     /// Optional SLH-DSA (slow) signature for full-signature gate.
     /// Present on FB/GNF reports that require CleanFullyAuthenticated.
     #[serde(default)]
@@ -37,14 +40,30 @@ pub struct ProbityReport {
 }
 
 impl ProbityReport {
-    pub fn subject(&self) -> &str { &self.subject }
-    pub fn reporter(&self) -> &str { &self.reporter }
-    pub fn attribute(&self) -> &str { &self.attribute }
-    pub fn value(&self) -> &f32 { &self.value }
-    pub fn timestamp_ns(&self) -> &u64 { &self.timestamp_ns }
-    pub fn signature(&self) -> &Vec<u8> { &self.signature }
-    pub fn curve(&self) -> &u8 { &self.curve }
-    pub fn slow_signature(&self) -> &Vec<u8> { &self.slow_signature }
+    pub fn subject(&self) -> &str {
+        &self.subject
+    }
+    pub fn reporter(&self) -> &str {
+        &self.reporter
+    }
+    pub fn attribute(&self) -> &str {
+        &self.attribute
+    }
+    pub fn value(&self) -> &f32 {
+        &self.value
+    }
+    pub fn timestamp_ns(&self) -> &u64 {
+        &self.timestamp_ns
+    }
+    pub fn signature(&self) -> &Vec<u8> {
+        &self.signature
+    }
+    pub fn curve(&self) -> &u8 {
+        &self.curve
+    }
+    pub fn slow_signature(&self) -> &Vec<u8> {
+        &self.slow_signature
+    }
 
     /// Canonical byte representation for signing — postcard encoding,
     /// signature fields excluded. Any change to this function is a wire-breaking change.
@@ -85,13 +104,27 @@ pub fn pub_key_from_tbid_hex(pub_key_hex: &str) -> Result<Vec<u8>, CleanAuthErro
 // ---------------------------------------------------------------------------
 
 impl UnverifiedSignatureEnvelope<ProbityReport> {
-    pub fn subject(&self) -> &str { &self.inner().subject }
-    pub fn reporter(&self) -> &str { &self.inner().reporter }
-    pub fn attribute(&self) -> &str { &self.inner().attribute }
-    pub fn value(&self) -> &f32 { &self.inner().value }
-    pub fn timestamp_ns(&self) -> &u64 { &self.inner().timestamp_ns }
-    pub fn signature(&self) -> &Vec<u8> { &self.inner().signature }
-    pub fn curve(&self) -> &u8 { &self.inner().curve }
+    pub fn subject(&self) -> &str {
+        &self.inner().subject
+    }
+    pub fn reporter(&self) -> &str {
+        &self.inner().reporter
+    }
+    pub fn attribute(&self) -> &str {
+        &self.inner().attribute
+    }
+    pub fn value(&self) -> &f32 {
+        &self.inner().value
+    }
+    pub fn timestamp_ns(&self) -> &u64 {
+        &self.inner().timestamp_ns
+    }
+    pub fn signature(&self) -> &Vec<u8> {
+        &self.inner().signature
+    }
+    pub fn curve(&self) -> &u8 {
+        &self.inner().curve
+    }
 
     /// Inbound gate: verify Ed25519 signature against the reporter's public key.
     ///
@@ -115,12 +148,9 @@ impl UnverifiedSignatureEnvelope<ProbityReport> {
 
         let public_key = pub_key_from_tbid_hex(&report.reporter)?;
         let canonical = report.canonical();
-        let valid = crypto.verify_with(
-            &public_key,
-            "Ed25519",
-            &canonical,
-            &report.signature,
-        ).map_err(|e| CleanAuthError::Crypto(NodeError::Crypto(e)))?;
+        let valid = crypto
+            .verify_with(&public_key, "Ed25519", &canonical, &report.signature)
+            .map_err(|e| CleanAuthError::Crypto(NodeError::Crypto(e)))?;
 
         if !valid {
             return Err(CleanAuthError::InvalidSignature);
@@ -167,12 +197,9 @@ impl UnverifiedSignatureEnvelope<ProbityReport> {
 
         let public_key = pub_key_from_tbid_hex(&report.reporter)?;
         let canonical = report.canonical();
-        let valid = crypto.verify_with(
-            &public_key,
-            "Ed25519",
-            &canonical,
-            &report.signature,
-        ).map_err(|e| CleanAuthError::Crypto(NodeError::Crypto(e)))?;
+        let valid = crypto
+            .verify_with(&public_key, "Ed25519", &canonical, &report.signature)
+            .map_err(|e| CleanAuthError::Crypto(NodeError::Crypto(e)))?;
 
         if !valid {
             return Err(CleanAuthError::InvalidSignature);
@@ -191,7 +218,9 @@ impl UnverifiedSignatureEnvelope<ProbityReport> {
         // Actual SLH-DSA verification deferred until PQC integration ships.
         // The gate enforces presence; verification will be added in Phase 8.5.
 
-        Ok(CleanFullyAuthenticated::from_dual_verified(self.into_inner()))
+        Ok(CleanFullyAuthenticated::from_dual_verified(
+            self.into_inner(),
+        ))
     }
 }
 
@@ -200,69 +229,31 @@ impl UnverifiedSignatureEnvelope<ProbityReport> {
 // ---------------------------------------------------------------------------
 
 impl CleanAuthenticated<ProbityReport> {
-    pub fn subject(&self) -> &str { &self.inner().subject }
-    pub fn reporter(&self) -> &str { &self.inner().reporter }
-    pub fn attribute(&self) -> &str { &self.inner().attribute }
-    pub fn value(&self) -> &f32 { &self.inner().value }
-    pub fn timestamp_ns(&self) -> &u64 { &self.inner().timestamp_ns }
-    pub fn signature(&self) -> &Vec<u8> { &self.inner().signature }
-    pub fn curve(&self) -> &u8 { &self.inner().curve }
-
-    /// Outbound gate: strip to minimal wire form.
-    pub fn externalize(self) -> ExternalizedProbityReport {
-        let r = self.into_inner();
-        ExternalizedProbityReport {
-            subject: r.subject,
-            reporter: r.reporter,
-            attribute: r.attribute,
-            value: r.value,
-            timestamp_ns: r.timestamp_ns,
-            signature: r.signature,
-            curve: r.curve,
-            slow_signature: r.slow_signature,
-        }
+    pub fn subject(&self) -> &str {
+        &self.inner().subject
     }
-}
-
-// ---------------------------------------------------------------------------
-// ExternalizedProbityReport — concrete wire format
-// ---------------------------------------------------------------------------
-
-/// Minimal persistent form for ProbityReport (wire/disk).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExternalizedProbityReport {
-    pub subject:        String,
-    pub reporter:       String,
-    pub attribute:      String,
-    pub value:          f32,
-    pub timestamp_ns:   u64,
-    pub signature:      Vec<u8>,
-    pub curve:          u8,
-    #[serde(default)]
-    pub slow_signature: Vec<u8>,
-}
-
-impl ExternalizedProbityReport {
-    /// Reconstruct as UnverifiedSignatureEnvelope for re-verification on load.
-    pub fn reconstruct(self) -> Result<UnverifiedSignatureEnvelope<ProbityReport>, crate::foretias::clean_auth::ParseError> {
-        // gate-strawman-exempt: reconstruction helper, not a verification gate
-        let report = ProbityReport {
-            subject: self.subject,
-            reporter: self.reporter,
-            attribute: self.attribute,
-            value: self.value,
-            timestamp_ns: self.timestamp_ns,
-            signature: self.signature,
-            curve: self.curve,
-            slow_signature: self.slow_signature,
-        };
-        Ok(UnverifiedSignatureEnvelope::from_parsed(report))
+    pub fn reporter(&self) -> &str {
+        &self.inner().reporter
+    }
+    pub fn attribute(&self) -> &str {
+        &self.inner().attribute
+    }
+    pub fn value(&self) -> &f32 {
+        &self.inner().value
+    }
+    pub fn timestamp_ns(&self) -> &u64 {
+        &self.inner().timestamp_ns
+    }
+    pub fn signature(&self) -> &Vec<u8> {
+        &self.inner().signature
+    }
+    pub fn curve(&self) -> &u8 {
+        &self.inner().curve
     }
 
-    /// Alias for `reconstruct()` — backward compat.
-    pub fn into_unprocessed(self) -> Result<UnverifiedSignatureEnvelope<ProbityReport>, crate::foretias::clean_auth::ParseError> {
-        // gate-strawman-exempt: reconstruction helper, not a verification gate
-        self.reconstruct()
+    /// Outbound gate: wrap the domain type for wire/disk.
+    pub fn externalize(self) -> Externalized<ProbityReport> {
+        Externalized::from_trusted(self.into_inner())
     }
 }
 
@@ -322,7 +313,11 @@ mod tests {
         let mut r2 = r1.clone();
         r1.signature = vec![];
         r2.signature = vec![0xFF; 64];
-        assert_eq!(r1.canonical(), r2.canonical(), "canonical must not include signature");
+        assert_eq!(
+            r1.canonical(),
+            r2.canonical(),
+            "canonical must not include signature"
+        );
     }
 
     #[test]
@@ -338,11 +333,18 @@ mod tests {
         assert_eq!(decoded.value, r.value);
         assert_eq!(decoded.timestamp_ns, r.timestamp_ns);
         assert_eq!(decoded.curve, r.curve);
-        assert!(decoded.signature.is_empty(), "canonical must exclude signature");
+        assert!(
+            decoded.signature.is_empty(),
+            "canonical must exclude signature"
+        );
         // Verify changing any field changes the canonical bytes
         let mut r2 = r.clone();
         r2.value = -1.0;
-        assert_ne!(canon, r2.canonical(), "canonical must reflect value changes");
+        assert_ne!(
+            canon,
+            r2.canonical(),
+            "canonical must reflect value changes"
+        );
     }
 
     #[test]
@@ -406,17 +408,19 @@ mod tests {
         let report = make_signed_report(crypto.as_ref());
         let ca = CleanAuthenticated::<ProbityReport>::from_trusted(report.clone());
         let ext = ca.externalize();
-        assert_eq!(ext.subject, report.subject);
-        assert_eq!(ext.value, report.value);
+        assert_eq!(ext.inner().subject, report.subject);
+        assert_eq!(ext.inner().value, report.value);
 
-        let up = ext.into_unprocessed().unwrap();
+        let inner = ext.into_inner();
+        let up = UnverifiedSignatureEnvelope::from_parsed(inner);
         assert_eq!(up.inner().subject, report.subject);
     }
 
     #[test]
     fn test_pub_key_from_tbid_hex() {
         let hex_str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-            .to_string() + "000011112222";
+            .to_string()
+            + "000011112222";
         let pk = pub_key_from_tbid_hex(&hex_str).unwrap();
         assert_eq!(pk.len(), 32);
     }
@@ -443,11 +447,14 @@ mod tests {
         let ext = ca.externalize();
         let json_bytes = serde_json::to_vec(&ext).unwrap();
         let v: serde_json::Value = serde_json::from_slice(&json_bytes).unwrap();
-        assert_eq!(v["subject"], "peer-A");
-        assert_eq!(v["reporter"], "peer-123");
-        assert_eq!(v["attribute"], "correctness");
-        assert_eq!(v["timestamp_ns"].as_u64().unwrap(), 1_000_000_000_000);
-        assert_eq!(v["signature"].as_array().unwrap().len(), 64);
-        assert_eq!(v["curve"], 1);
+        assert_eq!(v["inner"]["subject"], "peer-A");
+        assert_eq!(v["inner"]["reporter"], "peer-123");
+        assert_eq!(v["inner"]["attribute"], "correctness");
+        assert_eq!(
+            v["inner"]["timestamp_ns"].as_u64().unwrap(),
+            1_000_000_000_000
+        );
+        assert_eq!(v["inner"]["signature"].as_array().unwrap().len(), 64);
+        assert_eq!(v["inner"]["curve"], 1);
     }
 }

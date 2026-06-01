@@ -346,6 +346,23 @@ impl Communerd {
         self.line_for_tbid(tbid).stamp(content, echo.to_string()).await
     }
 
+    /// Route a stamp request through Communerdette with serialization control.
+    ///
+    /// Serializes `content` using the specified algorithm, then routes through
+    /// CommunerdetteLine. Returns `CleanAuthenticated<Foretis>` through the
+    /// Take 3 inbound gate.
+    pub async fn stamp_chronon(
+        &self,
+        target_tbid: &str,
+        content: &[u8],
+        serialization: foretias_core::foretias::tick::SerializationAlgorithm,
+        echo: &str,
+    ) -> Result<foretias_core::foretias::clean_auth::CleanAuthenticated<Foretis>, communerdette::CommunerdetteError> {
+        let tbid = Tbid::from_hex(target_tbid)
+            .map_err(|e| communerdette::CommunerdetteError::Structural(format!("bad tbid hex: {e}")))?;
+        self.line_for_tbid(tbid).stamp_chronon(content, serialization, echo.to_string()).await
+    }
+
     pub async fn get_calendar_slice(
         &self,
         peer: &PeerAddr,

@@ -10,14 +10,14 @@
 //!
 //! `CleanAuthenticated` covers authentication + cleansing, NOT full chain-of-trust to genesis.
 
-use serde::{Deserialize, Serialize};
+use super::encoding::{FTByteArray, FTByteVector};
+use super::external_attestation::ExternalAttestation;
+use super::family_record::FamilyRecord;
+use super::tick::{verify_pair, ChrononRecord, Foretis};
+use super::types::Tbid;
 use crate::crypto_server::CryptoServer;
 use crate::error::NodeError;
-use super::tick::{ChrononRecord, Foretis, verify_pair};
-use super::family_record::FamilyRecord;
-use super::types::Tbid;
-use super::external_attestation::ExternalAttestation;
-use super::encoding::{FTByteVector, FTByteArray};
+use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
 // Signature types (Phase 16a — §21.2)
@@ -35,18 +35,18 @@ pub enum SignerRole {
 /// Signature algorithm used by this entry.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum SigAlgorithm {
-    Ed25519,  // fast
-    DualKey,  // Ed25519 ‖ SLH-DSA
+    Ed25519, // fast
+    DualKey, // Ed25519 ‖ SLH-DSA
 }
 
 /// One entry in the ordered signature list carried by trust-boundary wrappers.
 /// Each signature covers `postcard(payload) ‖ postcard(&signatures[0..i])`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SignatureEntry {
-    pub role:      SignerRole,
-    pub tbid:      String,
+    pub role: SignerRole,
+    pub tbid: String,
     pub algorithm: SigAlgorithm,
-    pub sig:       Vec<u8>,
+    pub sig: Vec<u8>,
 }
 
 // ---------------------------------------------------------------------------
@@ -77,7 +77,10 @@ pub type DontUse<T> = UnverifiedSignatureEnvelope<T>;
 impl<T> UnverifiedSignatureEnvelope<T> {
     /// Construct from raw parsed data.
     pub fn from_parsed(inner: T) -> Self {
-        Self { inner, signatures: Vec::new() }
+        Self {
+            inner,
+            signatures: Vec::new(),
+        }
     }
 
     /// Read-only accessor.
@@ -106,9 +109,18 @@ impl<T: serde::de::DeserializeOwned> UnverifiedSignatureEnvelope<T> {
 }
 
 impl<T> TrustedInner<T> for UnverifiedSignatureEnvelope<T> {
-    fn from_trusted(inner: T) -> Self { Self { inner, signatures: Vec::new() } }
-    fn inner(&self) -> &T { &self.inner }
-    fn into_inner(self) -> T { self.inner }
+    fn from_trusted(inner: T) -> Self {
+        Self {
+            inner,
+            signatures: Vec::new(),
+        }
+    }
+    fn inner(&self) -> &T {
+        &self.inner
+    }
+    fn into_inner(self) -> T {
+        self.inner
+    }
 }
 
 impl<T: RecordBase> UnverifiedSignatureEnvelope<T> {
@@ -142,25 +154,33 @@ impl<T: RecordBase> UnverifiedSignatureEnvelope<T> {
 
         // Verify each signature
         for (i, entry) in sigs.iter().enumerate() {
-            let payload_bytes = postcard::to_allocvec(record)
-                .map_err(|e| CleanAuthError::Crypto(NodeError::Crypto(crate::error::CryptoError::UnknownAlgorithm(e.to_string()))))?;
+            let payload_bytes = postcard::to_allocvec(record).map_err(|e| {
+                CleanAuthError::Crypto(NodeError::Crypto(
+                    crate::error::CryptoError::UnknownAlgorithm(e.to_string()),
+                ))
+            })?;
             let mut signing_data = payload_bytes.clone();
             if i > 0 {
                 let prev_sigs = &sigs[..i];
-                let prev_bytes = postcard::to_allocvec(prev_sigs)
-                    .map_err(|e| CleanAuthError::Crypto(NodeError::Crypto(crate::error::CryptoError::UnknownAlgorithm(e.to_string()))))?;
+                let prev_bytes = postcard::to_allocvec(prev_sigs).map_err(|e| {
+                    CleanAuthError::Crypto(NodeError::Crypto(
+                        crate::error::CryptoError::UnknownAlgorithm(e.to_string()),
+                    ))
+                })?;
                 signing_data.extend_from_slice(&prev_bytes);
             }
 
-            let valid = crypto.verify_with(
-                pub_key,
-                match entry.algorithm {
-                    SigAlgorithm::Ed25519 => "Ed25519",
-                    SigAlgorithm::DualKey => "SLH-DSA",
-                },
-                &signing_data,
-                &entry.sig,
-            ).map_err(|e| CleanAuthError::Crypto(NodeError::Crypto(e)))?;
+            let valid = crypto
+                .verify_with(
+                    pub_key,
+                    match entry.algorithm {
+                        SigAlgorithm::Ed25519 => "Ed25519",
+                        SigAlgorithm::DualKey => "SLH-DSA",
+                    },
+                    &signing_data,
+                    &entry.sig,
+                )
+                .map_err(|e| CleanAuthError::Crypto(NodeError::Crypto(e)))?;
 
             if !valid {
                 return Err(CleanAuthError::SignatureVerificationFailed {
@@ -178,7 +198,10 @@ impl<T: RecordBase> UnverifiedSignatureEnvelope<T> {
             }
         }
 
-        Ok(CleanAuthenticated { inner: self.inner, signatures: self.signatures })
+        Ok(CleanAuthenticated {
+            inner: self.inner,
+            signatures: self.signatures,
+        })
     }
 }
 
@@ -208,7 +231,10 @@ impl<T> CleanAuthenticated<T> {
     /// Chronomatter-produced records use this path. The caller asserts
     /// the record was signed with our own key.
     pub fn from_trusted(inner: T) -> Self {
-        Self { inner, signatures: Vec::new() }
+        Self {
+            inner,
+            signatures: Vec::new(),
+        }
     }
 
     /// Read-only accessor.
@@ -222,13 +248,24 @@ impl<T> CleanAuthenticated<T> {
     }
 
     /// Runtime guarantee: fast-key (Ed25519) authentication has been performed.
-    pub fn is_authenticated_quickly(&self) -> bool { true }
+    pub fn is_authenticated_quickly(&self) -> bool {
+        true
+    }
 }
 
 impl<T> TrustedInner<T> for CleanAuthenticated<T> {
-    fn from_trusted(inner: T) -> Self { Self { inner, signatures: Vec::new() } }
-    fn inner(&self) -> &T { &self.inner }
-    fn into_inner(self) -> T { self.inner }
+    fn from_trusted(inner: T) -> Self {
+        Self {
+            inner,
+            signatures: Vec::new(),
+        }
+    }
+    fn inner(&self) -> &T {
+        &self.inner
+    }
+    fn into_inner(self) -> T {
+        self.inner
+    }
 }
 
 /// A domain type authenticated against both the fast key (Ed25519) and the slow key (SLH-DSA).
@@ -245,40 +282,76 @@ impl<T> CleanFullyAuthenticated<T> {
     /// Construct from data verified against both the fast key and the slow key.
     /// Only dual-key verification paths in `communerd/` should call this.
     pub fn from_dual_verified(inner: T) -> Self {
-        Self { inner, signatures: Vec::new() }
+        Self {
+            inner,
+            signatures: Vec::new(),
+        }
     }
 
     /// Read-only accessor.
-    pub fn inner(&self) -> &T { &self.inner }
+    pub fn inner(&self) -> &T {
+        &self.inner
+    }
 
     /// Consume and return the inner value.
-    pub fn into_inner(self) -> T { self.inner }
+    pub fn into_inner(self) -> T {
+        self.inner
+    }
 
     /// Runtime guarantee: fast-key (Ed25519) authentication has been performed.
-    pub fn is_authenticated_quickly(&self) -> bool { true }
+    pub fn is_authenticated_quickly(&self) -> bool {
+        true
+    }
 
     /// Runtime guarantee: slow-key (SLH-DSA) authentication has also been performed.
-    pub fn is_authenticated_fully(&self) -> bool { true }
+    pub fn is_authenticated_fully(&self) -> bool {
+        true
+    }
 }
 
 impl<T: Clone> From<CleanFullyAuthenticated<T>> for CleanAuthenticated<T> {
     fn from(full: CleanFullyAuthenticated<T>) -> CleanAuthenticated<T> {
-        CleanAuthenticated { inner: full.inner, signatures: full.signatures }
+        CleanAuthenticated {
+            inner: full.inner,
+            signatures: full.signatures,
+        }
     }
 }
 
 /// A domain type in its wire/disk form.
 ///
-/// Minimal fields only. No runtime context.
-#[derive(Debug, Clone)]
+/// Wraps the full domain type `T` directly. Callers use `into_inner()` to
+/// recover the domain type, then `UnverifiedSignatureEnvelope::from_parsed()`
+/// to re-enter the trust boundary.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Externalized<T> {
     inner: T,
 }
 
+impl<T> Externalized<T> {
+    pub fn from_trusted(inner: T) -> Self {
+        Self { inner }
+    }
+
+    pub fn inner(&self) -> &T {
+        &self.inner
+    }
+
+    pub fn into_inner(self) -> T {
+        self.inner
+    }
+}
+
 impl<T> TrustedInner<T> for Externalized<T> {
-    fn from_trusted(inner: T) -> Self { Self { inner } }
-    fn inner(&self) -> &T { &self.inner }
-    fn into_inner(self) -> T { self.inner }
+    fn from_trusted(inner: T) -> Self {
+        Self { inner }
+    }
+    fn inner(&self) -> &T {
+        &self.inner
+    }
+    fn into_inner(self) -> T {
+        self.inner
+    }
 }
 
 /// Builder for Externalized<R> with ordered signature chain enforcement.
@@ -294,12 +367,18 @@ pub struct ExternalizedBuilder<T> {
 impl<T: serde::Serialize> ExternalizedBuilder<T> {
     /// Create builder from a raw payload.
     pub fn builder_from(inner: T) -> Self {
-        Self { inner, signatures: Vec::new() }
+        Self {
+            inner,
+            signatures: Vec::new(),
+        }
     }
 
     /// Create builder from a CleanAuthenticated payload (drops inbound signatures).
     pub fn builder_from_authenticated(auth: CleanAuthenticated<T>) -> Self {
-        Self { inner: auth.into_inner(), signatures: Vec::new() }
+        Self {
+            inner: auth.into_inner(),
+            signatures: Vec::new(),
+        }
     }
 
     /// Append a signature entry.
@@ -312,7 +391,12 @@ impl<T: serde::Serialize> ExternalizedBuilder<T> {
         algorithm: SigAlgorithm,
         sig: Vec<u8>,
     ) -> &mut Self {
-        self.signatures.push(SignatureEntry { role, tbid, algorithm, sig });
+        self.signatures.push(SignatureEntry {
+            role,
+            tbid,
+            algorithm,
+            sig,
+        });
         self
     }
 
@@ -369,11 +453,15 @@ pub enum CleanAuthError {
 }
 
 impl From<ParseError> for CleanAuthError {
-    fn from(e: ParseError) -> Self { CleanAuthError::Parse(e) }
+    fn from(e: ParseError) -> Self {
+        CleanAuthError::Parse(e)
+    }
 }
 
 impl From<NodeError> for CleanAuthError {
-    fn from(e: NodeError) -> Self { CleanAuthError::Crypto(e) }
+    fn from(e: NodeError) -> Self {
+        CleanAuthError::Crypto(e)
+    }
 }
 
 impl std::fmt::Display for CleanAuthError {
@@ -388,9 +476,19 @@ impl std::fmt::Display for CleanAuthError {
             CleanAuthError::NotYetImplemented => write!(f, "not yet implemented"),
             CleanAuthError::InvalidLength(msg) => write!(f, "invalid length: {msg}"),
             CleanAuthError::Crypto(e) => write!(f, "crypto error: {e}"),
-            CleanAuthError::FullSignatureRequired => write!(f, "full signature required but only fast signatures present"),
-            CleanAuthError::SignatureCountMismatch { expected, got } => write!(f, "signature count mismatch: expected {expected}, got {got}"),
-            CleanAuthError::SignatureVerificationFailed { role, tbid } => write!(f, "signature verification failed for role {:?} tbid {}", role, tbid),
+            CleanAuthError::FullSignatureRequired => write!(
+                f,
+                "full signature required but only fast signatures present"
+            ),
+            CleanAuthError::SignatureCountMismatch { expected, got } => write!(
+                f,
+                "signature count mismatch: expected {expected}, got {got}"
+            ),
+            CleanAuthError::SignatureVerificationFailed { role, tbid } => write!(
+                f,
+                "signature verification failed for role {:?} tbid {}",
+                role, tbid
+            ),
         }
     }
 }
@@ -428,16 +526,36 @@ impl std::error::Error for ParseError {}
 // ---------------------------------------------------------------------------
 
 impl UnverifiedSignatureEnvelope<ChrononRecord> {
-    pub fn chronon_number(&self) -> &u64 { &self.inner.chronon_number }
-    pub fn public_key(&self) -> &FTByteVector { &self.inner.public_key }
-    pub fn signature_algorithm(&self) -> &str { &self.inner.signature_algorithm }
-    pub fn forward_foretis(&self) -> &FTByteVector { &self.inner.forward_foretis }
-    pub fn backward_foretis(&self) -> &FTByteVector { &self.inner.backward_foretis }
-    pub fn aa_nonce(&self) -> &FTByteArray<16> { &self.inner.aa_nonce }
-    pub fn chronon_stamp_count(&self) -> &u64 { &self.inner.chronon_stamp_count }
-    pub fn external_attestations(&self) -> &Vec<ExternalAttestation> { &self.inner.external_attestations }
-    pub fn tb_version(&self) -> &u32 { &self.inner.tb_version }
-    pub fn tbid(&self) -> &Tbid { &self.inner.tbid }
+    pub fn chronon_number(&self) -> &u64 {
+        &self.inner.chronon_number
+    }
+    pub fn public_key(&self) -> &FTByteVector {
+        &self.inner.public_key
+    }
+    pub fn signature_algorithm(&self) -> &str {
+        &self.inner.signature_algorithm
+    }
+    pub fn forward_foretis(&self) -> &FTByteVector {
+        &self.inner.forward_foretis
+    }
+    pub fn backward_foretis(&self) -> &FTByteVector {
+        &self.inner.backward_foretis
+    }
+    pub fn aa_nonce(&self) -> &FTByteArray<16> {
+        &self.inner.aa_nonce
+    }
+    pub fn chronon_stamp_count(&self) -> &u64 {
+        &self.inner.chronon_stamp_count
+    }
+    pub fn external_attestations(&self) -> &Vec<ExternalAttestation> {
+        &self.inner.external_attestations
+    }
+    pub fn tb_version(&self) -> &u32 {
+        &self.inner.tb_version
+    }
+    pub fn tbid(&self) -> &Tbid {
+        &self.inner.tbid
+    }
 
     /// Inbound gate: verify this record.
     ///
@@ -450,16 +568,16 @@ impl UnverifiedSignatureEnvelope<ChrononRecord> {
     ) -> Result<CleanAuthenticated<ChrononRecord>, CleanAuthError> {
         match prev {
             Some(prev) => {
-                let valid = verify_pair(
-                    crypto,
-                    &prev.inner.tbid.to_hex(),
-                    &prev.inner,
-                    &self.inner,
-                ).map_err(CleanAuthError::Crypto)?;
+                let valid =
+                    verify_pair(crypto, &prev.inner.tbid.to_hex(), &prev.inner, &self.inner)
+                        .map_err(CleanAuthError::Crypto)?;
                 if !valid {
                     return Err(CleanAuthError::ChainBreak);
                 }
-                Ok(CleanAuthenticated { inner: self.inner, signatures: self.signatures })
+                Ok(CleanAuthenticated {
+                    inner: self.inner,
+                    signatures: self.signatures,
+                })
             }
             None => {
                 if self.inner.chronon_number != 1 {
@@ -471,7 +589,10 @@ impl UnverifiedSignatureEnvelope<ChrononRecord> {
                 if self.inner.tb_version >= 1 {
                     return Err(CleanAuthError::NotYetImplemented);
                 }
-                Ok(CleanAuthenticated { inner: self.inner, signatures: self.signatures })
+                Ok(CleanAuthenticated {
+                    inner: self.inner,
+                    signatures: self.signatures,
+                })
             }
         }
     }
@@ -495,144 +616,73 @@ impl UnverifiedSignatureEnvelope<ChrononRecord> {
 }
 
 impl CleanAuthenticated<ChrononRecord> {
-    pub fn chronon_number(&self) -> &u64 { &self.inner.chronon_number }
-    pub fn public_key(&self) -> &FTByteVector { &self.inner.public_key }
-    pub fn signature_algorithm(&self) -> &str { &self.inner.signature_algorithm }
-    pub fn forward_foretis(&self) -> &FTByteVector { &self.inner.forward_foretis }
-    pub fn backward_foretis(&self) -> &FTByteVector { &self.inner.backward_foretis }
-    pub fn aa_nonce(&self) -> &FTByteArray<16> { &self.inner.aa_nonce }
-    pub fn chronon_stamp_count(&self) -> &u64 { &self.inner.chronon_stamp_count }
-    pub fn external_attestations(&self) -> &Vec<ExternalAttestation> { &self.inner.external_attestations }
-    pub fn tb_version(&self) -> &u32 { &self.inner.tb_version }
-    pub fn tbid(&self) -> &Tbid { &self.inner.tbid }
-
-    /// Outbound gate: strip to minimal persistent form. No runtime context leaks.
-    pub fn externalize(self) -> ExternalizedChrononRecord {
-        let r = self.inner;
-        ExternalizedChrononRecord {
-            chronon_number: r.chronon_number,
-            public_key: r.public_key.as_slice().try_into()
-                .unwrap_or_else(|_| {
-                    let mut pk = [0u8; 32];
-                    let len = std::cmp::min(r.public_key.len(), 32);
-                    pk[..len].copy_from_slice(&r.public_key[..len]);
-                    pk
-                }),
-            forward_foretis: r.forward_foretis.as_slice().to_vec(),
-            backward_foretis: r.backward_foretis.as_slice().to_vec(),
-            aa_nonce: (*r.aa_nonce).into(),
-            external_attestations: r.external_attestations
-                .into_iter()
-                .map(|ea| ExternalizedAttestation {
-                    attester_tbid: ea.attester_tbid,
-                    foretis: serde_json::to_value(&ea.foretis).unwrap_or_default(),
-                    attester_tick_record: serde_json::to_value(&ea.attester_tick_record).unwrap_or_default(),
-                    received_at_ns: ea.received_at_ns,
-                })
-                .collect(),
-            tb_version: r.tb_version as u8,
-            tbid: r.tbid.raw_bytes().to_vec(),
-            stamps_per_tick: r.chronon_stamp_count,
-            signature_algorithm: r.signature_algorithm,
-        }
+    pub fn chronon_number(&self) -> &u64 {
+        &self.inner.chronon_number
     }
-}
-
-/// Minimal persistent form for ChrononRecord (wire/disk).
-///
-/// Contains only fields needed for reconstruction and re-verification
-/// on the receiving side. No runtime artifacts.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExternalizedChrononRecord {
-    pub chronon_number: u64,
-    pub public_key: [u8; 32],
-    pub forward_foretis: Vec<u8>,
-    pub backward_foretis: Vec<u8>,
-    pub aa_nonce: [u8; 16],
-    pub external_attestations: Vec<ExternalizedAttestation>,
-    pub tb_version: u8,
-    pub tbid: Vec<u8>,
-    pub stamps_per_tick: u64,
-    pub signature_algorithm: String,
-}
-
-/// Minimal external attestation for wire/disk.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExternalizedAttestation {
-    pub attester_tbid: String,
-    pub foretis: serde_json::Value,
-    pub attester_tick_record: serde_json::Value,
-    pub received_at_ns: u64,
-}
-
-impl ExternalizedChrononRecord {
-    /// Reconstruct as UnverifiedSignatureEnvelope for re-verification on load.
-    pub fn reconstruct(self) -> Result<UnverifiedSignatureEnvelope<ChrononRecord>, ParseError> {
-        // gate-strawman-exempt: reconstruction helper, not a verification gate
-        let record = ChrononRecord {
-            chronon_number: self.chronon_number,
-            public_key: self.public_key.to_vec().into(),
-            signature_algorithm: self.signature_algorithm,
-            forward_foretis: self.forward_foretis.into(),
-            backward_foretis: self.backward_foretis.into(),
-            aa_nonce: self.aa_nonce.into(),
-            chronon_stamp_count: self.stamps_per_tick,
-            external_attestations: self.external_attestations
-                .into_iter()
-                .map(|ea| ExternalAttestation {
-                    attester_tbid: ea.attester_tbid,
-                    foretis: serde_json::from_value(ea.foretis).unwrap_or_else(|_| Foretis {
-                        chronon_number: 0,
-                        content_hash: [0u8; 32].into(),
-                        tbid: Tbid::default(),
-                        echo: String::new(),
-                        tbn: String::new(),
-                        time_being_reference_time: String::new(),
-                    }),
-                    attester_tick_record: serde_json::from_value(ea.attester_tick_record).unwrap_or_else(|_| ChrononRecord {
-                        chronon_number: 0,
-                        public_key: vec![].into(),
-                        signature_algorithm: String::new(),
-                        forward_foretis: vec![].into(),
-                        backward_foretis: vec![].into(),
-                        aa_nonce: [0u8; 16].into(),
-                        chronon_stamp_count: 0,
-                        external_attestations: vec![],
-                         tb_version: 0,
-                         tbid: Tbid::default(),
-                     }),
-                     received_at_ns: ea.received_at_ns,
-                     signature: FTByteVector::new(),
-                     signature_algorithm: String::new(),
-                 })
-                 .collect(),
-            tb_version: self.tb_version as u32,
-            tbid: Tbid::from_raw(self.tbid.try_into().unwrap_or([0u8; 96])),
-        };
-        Ok(UnverifiedSignatureEnvelope::from_parsed(record))
+    pub fn public_key(&self) -> &FTByteVector {
+        &self.inner.public_key
+    }
+    pub fn signature_algorithm(&self) -> &str {
+        &self.inner.signature_algorithm
+    }
+    pub fn forward_foretis(&self) -> &FTByteVector {
+        &self.inner.forward_foretis
+    }
+    pub fn backward_foretis(&self) -> &FTByteVector {
+        &self.inner.backward_foretis
+    }
+    pub fn aa_nonce(&self) -> &FTByteArray<16> {
+        &self.inner.aa_nonce
+    }
+    pub fn chronon_stamp_count(&self) -> &u64 {
+        &self.inner.chronon_stamp_count
+    }
+    pub fn external_attestations(&self) -> &Vec<ExternalAttestation> {
+        &self.inner.external_attestations
+    }
+    pub fn tb_version(&self) -> &u32 {
+        &self.inner.tb_version
+    }
+    pub fn tbid(&self) -> &Tbid {
+        &self.inner.tbid
     }
 
-    /// Alias for `reconstruct()` — backward compat.
-    pub fn into_unprocessed(self) -> Result<UnverifiedSignatureEnvelope<ChrononRecord>, ParseError> {
-        // gate-strawman-exempt: reconstruction helper, not a verification gate
-        self.reconstruct()
+    /// Outbound gate: wrap the domain type for wire/disk.
+    pub fn externalize(self) -> Externalized<ChrononRecord> {
+        Externalized::from_trusted(self.inner)
     }
 }
 
 // ---------------------------------------------------------------------------
 // Foretis — field accessors + verify + externalize
 // ---------------------------------------------------------------------------
+// Foretis — field accessors + verify + externalize
+// ---------------------------------------------------------------------------
 
 impl UnverifiedSignatureEnvelope<Foretis> {
-    pub fn chronon_number(&self) -> &u64 { &self.inner.chronon_number }
-    pub fn content_hash(&self) -> &FTByteArray<32> { &self.inner.content_hash }
-    pub fn tbid(&self) -> &Tbid { &self.inner.tbid }
-    pub fn echo(&self) -> &str { &self.inner.echo }
-    pub fn tbn(&self) -> &str { &self.inner.tbn }
-    pub fn time_being_reference_time(&self) -> &str { &self.inner.time_being_reference_time }
+    pub fn chronon_number(&self) -> &u64 {
+        &self.inner.chronon_number
+    }
+    pub fn content_hash(&self) -> &FTByteArray<32> {
+        &self.inner.content_hash
+    }
+    pub fn tbid(&self) -> &Tbid {
+        &self.inner.tbid
+    }
+    pub fn echo(&self) -> &str {
+        &self.inner.echo
+    }
+    pub fn tbn(&self) -> &str {
+        &self.inner.tbn
+    }
+    pub fn time_being_reference_time(&self) -> &str {
+        &self.inner.time_being_reference_time
+    }
 
     /// Returns true if this envelope has at least one signature.
-    pub fn has_signatures(&self) -> bool { !self.signatures.is_empty() }
+    pub fn has_signatures(&self) -> bool {
+        !self.signatures.is_empty()
+    }
 
     /// Parse v2 wire format: `{foretis: <Foretis>, signature: <hex>, signature_algorithm: <string>}`.
     ///
@@ -640,14 +690,19 @@ impl UnverifiedSignatureEnvelope<Foretis> {
     pub fn from_json_value_v2(v: serde_json::Value) -> Result<Self, ParseError> {
         let obj = match v {
             serde_json::Value::Object(map) => map,
-            _ => return Err(ParseError::BadFormat("v2 envelope requires JSON object".into())),
+            _ => {
+                return Err(ParseError::BadFormat(
+                    "v2 envelope requires JSON object".into(),
+                ))
+            }
         };
 
         // v2 format: must have "foretis" key
-        let foretis_val = obj.get("foretis")
+        let foretis_val = obj
+            .get("foretis")
             .ok_or_else(|| ParseError::BadFormat("v2 envelope requires 'foretis' key".into()))?;
-        let foretis: Foretis = serde_json::from_value(foretis_val.clone())
-            .map_err(ParseError::InvalidJson)?;
+        let foretis: Foretis =
+            serde_json::from_value(foretis_val.clone()).map_err(ParseError::InvalidJson)?;
 
         let mut env = Self::from_parsed(foretis);
 
@@ -691,7 +746,8 @@ impl UnverifiedSignatureEnvelope<Foretis> {
             return Err(CleanAuthError::ChainBreak);
         }
 
-        let recomputed = crypto.sha256(content)
+        let recomputed = crypto
+            .sha256(content)
             .map_err(|e| CleanAuthError::Crypto(NodeError::Crypto(e)))?;
         if recomputed.bytes != *foretis.content_hash {
             return Err(CleanAuthError::InvalidSignature);
@@ -701,10 +757,9 @@ impl UnverifiedSignatureEnvelope<Foretis> {
         let valid = super::tick::verify(
             crypto,
             foretis,
-            &self.signatures.first()
-                .map(|s| &s.sig[..])
-                .unwrap_or(&[]),
-            self.signatures.first()
+            &self.signatures.first().map(|s| &s.sig[..]).unwrap_or(&[]),
+            self.signatures
+                .first()
                 .map(|s| match s.algorithm {
                     SigAlgorithm::Ed25519 => "Ed25519",
                     SigAlgorithm::DualKey => "SLH-DSA",
@@ -712,12 +767,16 @@ impl UnverifiedSignatureEnvelope<Foretis> {
                 .unwrap_or("Ed25519"),
             content,
             &CalendarLookupFromCleanRecord(record),
-        ).map_err(|e| CleanAuthError::Crypto(e))?;
+        )
+        .map_err(|e| CleanAuthError::Crypto(e))?;
         if !valid {
             return Err(CleanAuthError::InvalidSignature);
         }
 
-        Ok(CleanAuthenticated { inner: self.inner, signatures: self.signatures })
+        Ok(CleanAuthenticated {
+            inner: self.inner,
+            signatures: self.signatures,
+        })
     }
 
     /// Ergonomic alias for `verify(crypto, record, content)`.
@@ -737,83 +796,40 @@ impl<'a> super::tick::CalendarLookup for CalendarLookupFromCleanRecord<'a> {
     fn get(&self, _chronon_number: u64, _count: usize) -> Result<Vec<ChrononRecord>, NodeError> {
         Ok(vec![self.0.inner().clone()])
     }
-    fn latest(&self) -> Option<u64> { Some(*self.0.chronon_number()) }
-    fn tbid(&self) -> Tbid { *self.0.tbid() }
-    fn tbn(&self) -> &str { "" }
+    fn latest(&self) -> Option<u64> {
+        Some(*self.0.chronon_number())
+    }
+    fn tbid(&self) -> Tbid {
+        *self.0.tbid()
+    }
+    fn tbn(&self) -> &str {
+        ""
+    }
 }
 
 impl CleanAuthenticated<Foretis> {
-    pub fn chronon_number(&self) -> &u64 { &self.inner.chronon_number }
-    pub fn content_hash(&self) -> &FTByteArray<32> { &self.inner.content_hash }
-    pub fn tbid(&self) -> &Tbid { &self.inner.tbid }
-    pub fn echo(&self) -> &str { &self.inner.echo }
-    pub fn tbn(&self) -> &str { &self.inner.tbn }
-    pub fn time_being_reference_time(&self) -> &str { &self.inner.time_being_reference_time }
-
-    /// Outbound gate (V2): strip to minimal wire form. Signatures in wrapper.
-    pub fn externalize(self) -> ExternalizedForetis {
-        let f = self.inner;
-        // V2: signatures come from wrapper's SignatureEntry, not from payload
-        let sig_entry = self.signatures.first();
-        ExternalizedForetis {
-            chronon_number: f.chronon_number,
-            content_hash: (*f.content_hash).into(),
-            signature: sig_entry.map(|s| s.sig.clone()).unwrap_or_default(),
-            signature_algorithm: sig_entry
-                .map(|s| match s.algorithm {
-                    SigAlgorithm::Ed25519 => "Ed25519".to_string(),
-                    SigAlgorithm::DualKey => "SLH-DSA".to_string(),
-                })
-                .unwrap_or_else(|| "Ed25519".to_string()),
-            tbid: f.tbid.raw_bytes().to_vec(),
-            echo: if f.echo.is_empty() { None } else { Some(f.echo) },
-            tbn: if f.tbn.is_empty() { 0 } else { f.tbn.len() as u64 },
-        }
+    pub fn chronon_number(&self) -> &u64 {
+        &self.inner.chronon_number
     }
-}
-
-/// Minimal wire form for a Foretis.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExternalizedForetis {
-    pub chronon_number: u64,
-    pub content_hash: [u8; 32],
-    pub signature: Vec<u8>,
-    pub signature_algorithm: String,
-    pub tbid: Vec<u8>,
-    pub echo: Option<String>,
-    pub tbn: u64,
-}
-
-impl ExternalizedForetis {
-    /// Reconstruct as UnverifiedSignatureEnvelope for re-verification on the receiving side (V2).
-    pub fn reconstruct(self) -> Result<UnverifiedSignatureEnvelope<Foretis>, ParseError> {
-        // gate-strawman-exempt: reconstruction helper, not a verification gate
-        let foretis = Foretis {
-            chronon_number: self.chronon_number,
-            content_hash: self.content_hash.into(),
-            tbid: Tbid::from_raw(self.tbid.try_into().unwrap_or([0u8; 96])),
-            echo: self.echo.unwrap_or_default(),
-            tbn: String::new(),
-            time_being_reference_time: String::new(),
-        };
-        let mut env = UnverifiedSignatureEnvelope::from_parsed(foretis);
-        // V2: signatures are stored in the wrapper, not the payload
-        env.signatures.push(SignatureEntry {
-            role: SignerRole::Chronomatter,
-            tbid: String::new(),
-            algorithm: match self.signature_algorithm.as_str() {
-                "SLH-DSA" => SigAlgorithm::DualKey,
-                _ => SigAlgorithm::Ed25519,
-            },
-            sig: self.signature,
-        });
-        Ok(env)
+    pub fn content_hash(&self) -> &FTByteArray<32> {
+        &self.inner.content_hash
+    }
+    pub fn tbid(&self) -> &Tbid {
+        &self.inner.tbid
+    }
+    pub fn echo(&self) -> &str {
+        &self.inner.echo
+    }
+    pub fn tbn(&self) -> &str {
+        &self.inner.tbn
+    }
+    pub fn time_being_reference_time(&self) -> &str {
+        &self.inner.time_being_reference_time
     }
 
-    /// Alias for `reconstruct()` — backward compat.
-    pub fn into_unprocessed(self) -> Result<UnverifiedSignatureEnvelope<Foretis>, ParseError> {
-        // gate-strawman-exempt: reconstruction helper, not a verification gate
-        self.reconstruct()
+    /// Outbound gate: wrap the domain type for wire/disk.
+    pub fn externalize(self) -> Externalized<Foretis> {
+        Externalized::from_trusted(self.inner)
     }
 }
 
@@ -824,14 +840,30 @@ impl ExternalizedForetis {
 use crate::epoch::snapshot::EpochSnapshot;
 
 impl UnverifiedSignatureEnvelope<EpochSnapshot> {
-    pub fn epoch_number(&self) -> &u64 { &self.inner.epoch_number }
-    pub fn epoch_start_ns(&self) -> &u64 { &self.inner.epoch_start_ns }
-    pub fn epoch_end_ns(&self) -> &u64 { &self.inner.epoch_end_ns }
-    pub fn peer_scores(&self) -> &Vec<crate::epoch::snapshot::PeerScore> { &self.inner.peer_scores }
-    pub fn committee(&self) -> &Vec<String> { &self.inner.committee }
-    pub fn threshold(&self) -> &u32 { &self.inner.threshold }
-    pub fn frost_signature(&self) -> &FTByteVector { &self.inner.frost_signature }
-    pub fn committee_pubkey(&self) -> &FTByteVector { &self.inner.committee_pubkey }
+    pub fn epoch_number(&self) -> &u64 {
+        &self.inner.epoch_number
+    }
+    pub fn epoch_start_ns(&self) -> &u64 {
+        &self.inner.epoch_start_ns
+    }
+    pub fn epoch_end_ns(&self) -> &u64 {
+        &self.inner.epoch_end_ns
+    }
+    pub fn peer_scores(&self) -> &Vec<crate::epoch::snapshot::PeerScore> {
+        &self.inner.peer_scores
+    }
+    pub fn committee(&self) -> &Vec<String> {
+        &self.inner.committee
+    }
+    pub fn threshold(&self) -> &u32 {
+        &self.inner.threshold
+    }
+    pub fn frost_signature(&self) -> &FTByteVector {
+        &self.inner.frost_signature
+    }
+    pub fn committee_pubkey(&self) -> &FTByteVector {
+        &self.inner.committee_pubkey
+    }
 
     /// Inbound gate: verify FROST threshold signature.
     ///
@@ -857,77 +889,34 @@ impl UnverifiedSignatureEnvelope<EpochSnapshot> {
 }
 
 impl CleanAuthenticated<EpochSnapshot> {
-    pub fn epoch_number(&self) -> &u64 { &self.inner.epoch_number }
-    pub fn epoch_start_ns(&self) -> &u64 { &self.inner.epoch_start_ns }
-    pub fn epoch_end_ns(&self) -> &u64 { &self.inner.epoch_end_ns }
-    pub fn peer_scores(&self) -> &Vec<crate::epoch::snapshot::PeerScore> { &self.inner.peer_scores }
-    pub fn committee(&self) -> &Vec<String> { &self.inner.committee }
-    pub fn threshold(&self) -> &u32 { &self.inner.threshold }
-    pub fn frost_signature(&self) -> &FTByteVector { &self.inner.frost_signature }
-    pub fn committee_pubkey(&self) -> &FTByteVector { &self.inner.committee_pubkey }
-
-    /// Outbound gate: strip to minimal wire form.
-    pub fn externalize(self) -> ExternalizedEpochSnapshot {
-        let s = self.inner;
-        ExternalizedEpochSnapshot {
-            epoch_number: s.epoch_number,
-            peer_scores: s.peer_scores
-                .into_iter()
-                .map(|ps| (ps.peer_id.into_bytes(), ps.score as i32))
-                .collect(),
-            committee: s.committee
-                .into_iter()
-                .map(|t| t.into_bytes())
-                .collect(),
-            threshold: s.threshold as usize,
-            frost_signature: s.frost_signature.as_slice().to_vec(),
-            committee_pubkey: s.committee_pubkey.as_slice().to_vec(),
-        }
+    pub fn epoch_number(&self) -> &u64 {
+        &self.inner.epoch_number
     }
-}
-
-/// Minimal epoch snapshot for wire transmission.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExternalizedEpochSnapshot {
-    pub epoch_number: u64,
-    pub peer_scores: Vec<(Vec<u8>, i32)>,
-    pub committee: Vec<Vec<u8>>,
-    pub threshold: usize,
-    pub frost_signature: Vec<u8>,
-    pub committee_pubkey: Vec<u8>,
-}
-
-impl ExternalizedEpochSnapshot {
-    /// Reconstruct as UnverifiedSignatureEnvelope for re-verification.
-    pub fn reconstruct(self) -> Result<UnverifiedSignatureEnvelope<EpochSnapshot>, ParseError> {
-        // gate-strawman-exempt: reconstruction helper, not a verification gate
-        use crate::epoch::snapshot::PeerScore;
-        let snapshot = EpochSnapshot {
-            epoch_number: self.epoch_number,
-            epoch_start_ns: 0,
-            epoch_end_ns: 0,
-            peer_scores: self.peer_scores
-                .into_iter()
-                .map(|(id, score)| PeerScore {
-                    peer_id: String::from_utf8(id).unwrap_or_default(),
-                    score: score as f32,
-                })
-                .collect(),
-            committee: self.committee
-                .into_iter()
-                .map(|t| String::from_utf8(t).unwrap_or_default())
-                .collect(),
-            threshold: self.threshold as u32,
-            frost_signature: self.frost_signature.into(),
-            committee_pubkey: self.committee_pubkey.into(),
-        };
-        Ok(UnverifiedSignatureEnvelope::from_parsed(snapshot))
+    pub fn epoch_start_ns(&self) -> &u64 {
+        &self.inner.epoch_start_ns
+    }
+    pub fn epoch_end_ns(&self) -> &u64 {
+        &self.inner.epoch_end_ns
+    }
+    pub fn peer_scores(&self) -> &Vec<crate::epoch::snapshot::PeerScore> {
+        &self.inner.peer_scores
+    }
+    pub fn committee(&self) -> &Vec<String> {
+        &self.inner.committee
+    }
+    pub fn threshold(&self) -> &u32 {
+        &self.inner.threshold
+    }
+    pub fn frost_signature(&self) -> &FTByteVector {
+        &self.inner.frost_signature
+    }
+    pub fn committee_pubkey(&self) -> &FTByteVector {
+        &self.inner.committee_pubkey
     }
 
-    /// Alias for `reconstruct()` — backward compat.
-    pub fn into_unprocessed(self) -> Result<UnverifiedSignatureEnvelope<EpochSnapshot>, ParseError> {
-        // gate-strawman-exempt: reconstruction helper, not a verification gate
-        self.reconstruct()
+    /// Outbound gate: wrap the domain type for wire/disk.
+    pub fn externalize(self) -> Externalized<EpochSnapshot> {
+        Externalized::from_trusted(self.inner)
     }
 }
 
@@ -948,7 +937,8 @@ impl UnverifiedSignatureEnvelope<FamilyRecord> {
     ) -> Result<CleanFullyAuthenticated<FamilyRecord>, CleanAuthError> {
         let ca = self.verify_all_signatures(crypto, pub_key)?;
         let record = ca.inner();
-        record.verify_matrix(crypto)
+        record
+            .verify_matrix(crypto)
             .map_err(|e| CleanAuthError::Crypto(NodeError::Crypto(e)))?;
         Ok(CleanFullyAuthenticated::from_dual_verified(ca.into_inner()))
     }
@@ -1024,11 +1014,13 @@ mod tests {
         };
         let ca = CleanAuthenticated::<ChrononRecord>::from_trusted(record);
         let ext = ca.externalize();
-        assert_eq!(ext.chronon_number, 7);
-        assert_eq!(ext.stamps_per_tick, 3);
-        assert_eq!(ext.public_key, [0x11u8; 32]);
+        assert_eq!(ext.inner().chronon_number, 7);
+        assert_eq!(ext.inner().chronon_stamp_count, 3);
 
-        let up = ext.into_unprocessed().unwrap();
+        let inner = ext.into_inner();
+        assert_eq!(inner.chronon_number, 7);
+        assert_eq!(inner.chronon_stamp_count, 3);
+        let up = UnverifiedSignatureEnvelope::from_parsed(inner);
         assert_eq!(up.inner().chronon_number, 7);
         assert_eq!(up.inner().chronon_stamp_count, 3);
     }
@@ -1045,10 +1037,10 @@ mod tests {
         };
         let ca = CleanAuthenticated::<Foretis>::from_trusted(foretis);
         let ext = ca.externalize();
-        assert_eq!(ext.chronon_number, 10);
-        assert_eq!(ext.content_hash, [0x55u8; 32]);
+        assert_eq!(ext.inner().chronon_number, 10);
 
-        let up = ext.into_unprocessed().unwrap();
+        let inner = ext.into_inner();
+        let up = UnverifiedSignatureEnvelope::from_parsed(inner);
         assert_eq!(up.inner().chronon_number, 10);
     }
 
@@ -1066,7 +1058,10 @@ mod tests {
     fn test_clean_auth_error_from_parse_error() {
         let parse_err = ParseError::TruncatedBytes;
         let ca_err: CleanAuthError = parse_err.into();
-        assert!(matches!(ca_err, CleanAuthError::Parse(ParseError::TruncatedBytes)));
+        assert!(matches!(
+            ca_err,
+            CleanAuthError::Parse(ParseError::TruncatedBytes)
+        ));
     }
 
     #[test]
@@ -1097,10 +1092,10 @@ mod tests {
         let ext = ca.externalize();
         let json_bytes = serde_json::to_vec(&ext).unwrap();
         let obj: serde_json::Value = serde_json::from_slice(&json_bytes).unwrap();
-        assert_eq!(obj["chronon_number"], 7);
-        assert_eq!(obj["stamps_per_tick"], 3);
-        assert_eq!(obj["signature_algorithm"], "Ed25519");
-        assert_eq!(obj["public_key"].as_array().unwrap().len(), 32);
+        assert_eq!(obj["inner"]["tick_number"], 7);
+        assert_eq!(obj["inner"]["chronon_stamp_count"], 3);
+        assert_eq!(obj["inner"]["signature_algorithm"], "Ed25519");
+        assert!(obj["inner"]["public_key"].is_string());
     }
 
     #[test]
@@ -1117,11 +1112,10 @@ mod tests {
         let ext = ca.externalize();
         let json_bytes = serde_json::to_vec(&ext).unwrap();
         let obj: serde_json::Value = serde_json::from_slice(&json_bytes).unwrap();
-        assert_eq!(obj["chronon_number"], 10);
-        assert_eq!(obj["signature_algorithm"], "Ed25519");
-        assert_eq!(obj["echo"], "test");
-        assert_eq!(obj["tbn"], 3);
-        assert_eq!(obj["content_hash"].as_array().unwrap().len(), 32);
+        assert_eq!(obj["inner"]["chronon_number"], 10);
+        assert_eq!(obj["inner"]["echo"], "test");
+        assert_eq!(obj["inner"]["tbn"], "tbn");
+        assert!(obj["inner"]["content_hash"].is_string());
     }
 
     #[test]
@@ -1132,8 +1126,14 @@ mod tests {
             epoch_start_ns: 1000,
             epoch_end_ns: 2000,
             peer_scores: vec![
-                PeerScore { peer_id: "A".into(), score: 10.0 },
-                PeerScore { peer_id: "B".into(), score: 20.0 },
+                PeerScore {
+                    peer_id: "A".into(),
+                    score: 10.0,
+                },
+                PeerScore {
+                    peer_id: "B".into(),
+                    score: 20.0,
+                },
             ],
             committee: vec!["C1".into(), "C2".into()],
             threshold: 2,
@@ -1144,10 +1144,10 @@ mod tests {
         let ext = ca.externalize();
         let json_bytes = serde_json::to_vec(&ext).unwrap();
         let obj: serde_json::Value = serde_json::from_slice(&json_bytes).unwrap();
-        assert_eq!(obj["epoch_number"], 5);
-        assert_eq!(obj["threshold"], 2);
-        assert_eq!(obj["peer_scores"].as_array().unwrap().len(), 2);
-        assert_eq!(obj["committee"].as_array().unwrap().len(), 2);
+        assert_eq!(obj["inner"]["epoch_number"], 5);
+        assert_eq!(obj["inner"]["threshold"], 2);
+        assert_eq!(obj["inner"]["peer_scores"].as_array().unwrap().len(), 2);
+        assert_eq!(obj["inner"]["committee"].as_array().unwrap().len(), 2);
     }
 
     #[test]
@@ -1156,18 +1156,19 @@ mod tests {
         // An UnverifiedSignatureEnvelope<ChrononRecord> CANNOT be directly assigned to
         // CleanAuthenticated<ChrononRecord> -- the compiler rejects it.
         // If this compiles, the type discipline has failed.
-        let _up: UnverifiedSignatureEnvelope<ChrononRecord> = UnverifiedSignatureEnvelope::from_parsed(ChrononRecord {
-            chronon_number: 1,
-            public_key: vec![0u8; 32].into(),
-            signature_algorithm: "Ed25519".to_string(),
-            forward_foretis: vec![].into(),
-            backward_foretis: vec![].into(),
-            aa_nonce: [0u8; 16].into(),
-            chronon_stamp_count: 0,
-            external_attestations: Vec::new(),
-            tb_version: 0,
-            tbid: Tbid::default(),
-        });
+        let _up: UnverifiedSignatureEnvelope<ChrononRecord> =
+            UnverifiedSignatureEnvelope::from_parsed(ChrononRecord {
+                chronon_number: 1,
+                public_key: vec![0u8; 32].into(),
+                signature_algorithm: "Ed25519".to_string(),
+                forward_foretis: vec![].into(),
+                backward_foretis: vec![].into(),
+                aa_nonce: [0u8; 16].into(),
+                chronon_stamp_count: 0,
+                external_attestations: Vec::new(),
+                tb_version: 0,
+                tbid: Tbid::default(),
+            });
         // The following line would NOT compile:
         // let _: CleanAuthenticated<ChrononRecord> = _up;
         // This is the desired behavior -- the compiler enforces the gate.

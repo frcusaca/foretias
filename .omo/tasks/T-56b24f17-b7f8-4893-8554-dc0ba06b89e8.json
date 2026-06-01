@@ -1,0 +1,10 @@
+{
+  "id": "T-56b24f17-b7f8-4893-8554-dc0ba06b89e8",
+  "subject": "Replace FB emission unit test stubs with real assertions",
+  "description": "Replace the three `assert!(true)` stub tests in communerdette.rs with real assertions using an FBMockHost that captures sign/publish calls.",
+  "status": "completed",
+  "activeForm": "Implementing FB emission unit tests",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_17e8990adffexlTH6wsgwqAl6t"
+}

@@ -1,0 +1,10 @@
+{
+  "id": "T-4950ddfa-5514-4368-b0e7-906f8302d168",
+  "subject": "Flesh out toppoli_fb_gossip_propagation integration test",
+  "description": "Replace the stub toppoli test with real ProbityStore inspection verifying FB report propagation.",
+  "status": "completed",
+  "activeForm": "Implementing toppoli FB gossip test",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_17e8990adffexlTH6wsgwqAl6t"
+}

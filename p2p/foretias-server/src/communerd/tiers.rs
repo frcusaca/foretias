@@ -55,6 +55,17 @@ impl CommunerdServer {
         self.inner.route_stamp(target_tbid, content_hex, echo).await
     }
 
+    /// Route a stamp through Communerdette with serialization control.
+    pub async fn stamp_chronon(
+        &self,
+        target_tbid: &str,
+        content: &[u8],
+        serialization: foretias_core::foretias::tick::SerializationAlgorithm,
+        echo: &str,
+    ) -> Result<CleanAuthenticated<Foretis>, CommunerdetteError> {
+        self.inner.stamp_chronon(target_tbid, content, serialization, echo).await
+    }
+
     /// Fetch calendar slice from a remote peer.
     pub async fn get_calendar_slice(&self, peer: &PeerAddr, tick_start: u64, count: u64) -> Result<Vec<ChrononRecord>, super::transport::TransportError> {
         self.inner.get_calendar_slice(peer, tick_start, count).await
@@ -165,6 +176,17 @@ impl CommunerdP2P {
     /// Route a stamp through Communerdette — returns `CleanAuthenticated<Foretis>`.
     pub async fn route_stamp(&self, target_tbid: &str, content_hex: &str, echo: &str) -> Result<CleanAuthenticated<Foretis>, CommunerdetteError> {
         self.server.route_stamp(target_tbid, content_hex, echo).await
+    }
+
+    /// Route a stamp through Communerdette with serialization control.
+    pub async fn stamp_chronon(
+        &self,
+        target_tbid: &str,
+        content: &[u8],
+        serialization: foretias_core::foretias::tick::SerializationAlgorithm,
+        echo: &str,
+    ) -> Result<CleanAuthenticated<Foretis>, CommunerdetteError> {
+        self.server.stamp_chronon(target_tbid, content, serialization, echo).await
     }
 
     /// Fetch calendar slice from a remote peer.

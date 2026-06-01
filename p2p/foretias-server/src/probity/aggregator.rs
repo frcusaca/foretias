@@ -4,28 +4,28 @@ use super::report::ProbityReport;
 
 #[derive(Debug, Clone, Copy)]
 pub struct UShapeConfig {
-    pub hot_window_ns:    u64,
+    pub hot_window_ns: u64,
     pub valley_center_ns: u64,
     pub ancient_start_ns: u64,
-    pub valley_floor:     f32,
-    pub max_weight:       f32,
+    pub valley_floor: f32,
+    pub max_weight: f32,
 }
 
 impl Default for UShapeConfig {
     fn default() -> Self {
         Self {
-            hot_window_ns:    3_600_000_000_000,         //  1 h
-            valley_center_ns: 604_800_000_000_000,       //  7 d
-            ancient_start_ns: 2_592_000_000_000_000,     // 30 d
-            valley_floor:     0.1,
-            max_weight:       1.0,
+            hot_window_ns: 3_600_000_000_000,        //  1 h
+            valley_center_ns: 604_800_000_000_000,   //  7 d
+            ancient_start_ns: 2_592_000_000_000_000, // 30 d
+            valley_floor: 0.1,
+            max_weight: 1.0,
         }
     }
 }
 
 pub fn u_shape_weight(age_ns: u64, cfg: &UShapeConfig) -> f32 {
-    let age   = age_ns as f32;
-    let hot   = cfg.hot_window_ns    as f32;
+    let age = age_ns as f32;
+    let hot = cfg.hot_window_ns as f32;
     let valley = cfg.valley_center_ns as f32;
     let ancient = cfg.ancient_start_ns as f32;
 
@@ -44,18 +44,20 @@ pub fn u_shape_weight(age_ns: u64, cfg: &UShapeConfig) -> f32 {
 
 /// Aggregate a probity score for one subject from a slice of reports.
 pub fn aggregate(
-    reports:     &[ProbityReport],
-    now_ns:      u64,
+    reports: &[ProbityReport],
+    now_ns: u64,
     credibility: &dyn Fn(&str) -> f32,
-    cfg:         &UShapeConfig,
+    cfg: &UShapeConfig,
 ) -> f32 {
     let mut score = 0.0f32;
     for r in reports {
-        if r.timestamp_ns > now_ns { continue; }
+        if r.timestamp_ns > now_ns {
+            continue;
+        }
         let age = now_ns - r.timestamp_ns;
-        let w   = u_shape_weight(age, cfg);
-        let cr  = credibility(&r.reporter).max(0.0);
-        score  += w * cr * r.value;
+        let w = u_shape_weight(age, cfg);
+        let cr = credibility(&r.reporter).max(0.0);
+        score += w * cr * r.value;
     }
     score.clamp(-100.0, 100.0)
 }
@@ -123,16 +125,18 @@ mod tests {
     fn aggregate_clamps_to_range() {
         let cfg = UShapeConfig::default();
         let now = 1_000_000_000_000;
-        let reports: Vec<ProbityReport> = (0..1000).map(|i| ProbityReport {
-            subject: "x".into(),
-            reporter: format!("r{}", i),
-            attribute: "correctness".into(),
-            value: 100.0,
-            timestamp_ns: now - 1_000_000,
-            signature: vec![],
-            curve: 1,
-            slow_signature: vec![],
-        }).collect();
+        let reports: Vec<ProbityReport> = (0..1000)
+            .map(|i| ProbityReport {
+                subject: "x".into(),
+                reporter: format!("r{}", i),
+                attribute: "correctness".into(),
+                value: 100.0,
+                timestamp_ns: now - 1_000_000,
+                signature: vec![],
+                curve: 1,
+                slow_signature: vec![],
+            })
+            .collect();
         let cred = |_: &str| 1.0f32;
         let score = aggregate(&reports, now, &cred, &cfg);
         assert!(score <= 100.0);

@@ -3,8 +3,8 @@
 //! FB/GNF reports require full-signature gate (CleanFullyAuthenticated).
 //! Other reports use fast-signature path (CleanAuthenticated).
 
-use foretias_core::error::NodeError;
 use foretias_core::crypto_server::CryptoServer;
+use foretias_core::error::NodeError;
 use foretias_core::foretias::clean_auth::{CleanAuthError, UnverifiedSignatureEnvelope};
 
 use super::report::ProbityReport;
@@ -34,17 +34,16 @@ impl ReporterKeyResolver for DefaultReporterKeyResolver {
 }
 
 pub fn handle_gossip_message(
-    data:         &[u8],
-    store:        &ProbityStore,
-    crypto:       &dyn CryptoServer,
-    now_ns:       u64,
+    data: &[u8],
+    store: &ProbityStore,
+    crypto: &dyn CryptoServer,
+    now_ns: u64,
 ) -> Result<(), NodeError> {
     // Parse into unverified envelope
-    let envelope = UnverifiedSignatureEnvelope::<ProbityReport>::from_bytes(data)
-        .map_err(|e| {
-            tracing::trace!("gossip parse failed: {e}");
-            NodeError::BadFormat(format!("ProbityReport deserialization: {e}"))
-        })?;
+    let envelope = UnverifiedSignatureEnvelope::<ProbityReport>::from_bytes(data).map_err(|e| {
+        tracing::trace!("gossip parse failed: {e}");
+        NodeError::BadFormat(format!("ProbityReport deserialization: {e}"))
+    })?;
 
     let report = envelope.inner();
 
@@ -104,11 +103,14 @@ pub fn handle_gossip_message(
     Ok(())
 }
 
-fn verify_report_signature(report: &ProbityReport, crypto: &dyn CryptoServer)
-    -> Result<(), NodeError>
-{
+fn verify_report_signature(
+    report: &ProbityReport,
+    crypto: &dyn CryptoServer,
+) -> Result<(), NodeError> {
     if report.curve != 1 {
-        return Err(NodeError::Unsupported("only Ed25519 probity signatures in v0.6"));
+        return Err(NodeError::Unsupported(
+            "only Ed25519 probity signatures in v0.6",
+        ));
     }
     if report.signature.len() < 64 {
         return Err(NodeError::BadFormat(format!(
@@ -116,40 +118,42 @@ fn verify_report_signature(report: &ProbityReport, crypto: &dyn CryptoServer)
             report.signature.len()
         )));
     }
-    
+
     // Get the reporter's public key from their TBID.
     // The TBID hex encodes the identity. For Ed25519 (curve=1),
     // the first 64 hex chars (32 bytes) of the TBID are the Ed25519 public key.
     let tbid_bytes = match hex::decode(&report.reporter) {
         Ok(b) => b,
-        Err(e) => return Err(NodeError::BadFormat(format!("invalid reporter TBID hex: {}", e))),
+        Err(e) => {
+            return Err(NodeError::BadFormat(format!(
+                "invalid reporter TBID hex: {}",
+                e
+            )))
+        }
     };
-    
+
     if tbid_bytes.len() < 32 {
         return Err(NodeError::BadFormat(format!(
             "reporter TBID too short for Ed25519: {} bytes (need 32)",
             tbid_bytes.len()
         )));
     }
-    
+
     let public_key = tbid_bytes[..32].to_vec();
-    
+
     // Verify Ed25519 signature over canonical bytes
     let canonical = report.canonical();
-    let valid = crypto.verify_with(
-        &public_key,
-        "Ed25519",
-        &canonical,
-        &report.signature,
-    ).map_err(|e| NodeError::Crypto(e))?;
-    
+    let valid = crypto
+        .verify_with(&public_key, "Ed25519", &canonical, &report.signature)
+        .map_err(|e| NodeError::Crypto(e))?;
+
     if !valid {
         return Err(NodeError::BadFormat(format!(
             "probity report signature verification failed for reporter {}",
             report.reporter
         )));
     }
-    
+
     Ok(())
 }
 
@@ -224,29 +228,33 @@ mod tests {
         // in pass 2, so we need reporters that receive good reports.
         // Q vouches for each R -> R has positive pass-1 score -> positive pass-2 credibility
         for i in 0..10 {
-            store.ingest(ProbityReport {
-                subject: format!("R{}", i),
-                reporter: "Q".to_string(),
-                attribute: "correctness".to_string(),
-                value: 80.0,
-                timestamp_ns: now - 1_000_000,
-                signature: vec![],
-                curve: 1,
-            slow_signature: vec![],
-            }).unwrap();
+            store
+                .ingest(ProbityReport {
+                    subject: format!("R{}", i),
+                    reporter: "Q".to_string(),
+                    attribute: "correctness".to_string(),
+                    value: 80.0,
+                    timestamp_ns: now - 1_000_000,
+                    signature: vec![],
+                    curve: 1,
+                    slow_signature: vec![],
+                })
+                .unwrap();
         }
         // Each R reports badly on B
         for i in 0..10 {
-            store.ingest(ProbityReport {
-                subject: "B".to_string(),
-                reporter: format!("R{}", i),
-                attribute: "correctness".to_string(),
-                value: -10.0,
-                timestamp_ns: now - 1_000_000,
-                signature: vec![],
-                curve: 1,
-            slow_signature: vec![],
-            }).unwrap();
+            store
+                .ingest(ProbityReport {
+                    subject: "B".to_string(),
+                    reporter: format!("R{}", i),
+                    attribute: "correctness".to_string(),
+                    value: -10.0,
+                    timestamp_ns: now - 1_000_000,
+                    signature: vec![],
+                    curve: 1,
+                    slow_signature: vec![],
+                })
+                .unwrap();
         }
         store.recompute_all(now);
         assert!(store.score("B") < -40.0, "B score: {}", store.score("B"));
@@ -314,7 +322,10 @@ mod tests {
         let result = handle_gossip_message(&data, &store, crypto.as_ref(), now);
 
         // Must be dropped (Ok) — FB requires full signature, fast-only is silently discarded
-        assert!(result.is_ok(), "FB report with fast-only signature must be dropped (Ok), not errored");
+        assert!(
+            result.is_ok(),
+            "FB report with fast-only signature must be dropped (Ok), not errored"
+        );
         assert_eq!(store.report_count("A"), 0, "report must not be ingested");
     }
 
@@ -351,7 +362,10 @@ mod tests {
         let data = serde_json::to_vec(&report).unwrap();
         let result = handle_gossip_message(&data, &store, crypto.as_ref(), now);
 
-        assert!(result.is_ok(), "GNF report with fast-only signature must be dropped (Ok), not errored");
+        assert!(
+            result.is_ok(),
+            "GNF report with fast-only signature must be dropped (Ok), not errored"
+        );
         assert_eq!(store.report_count("A"), 0, "report must not be ingested");
     }
 
@@ -364,12 +378,18 @@ mod tests {
 
         let report = make_signed_report(crypto.as_ref(), "A", now - 1_000_000);
         assert_ne!(report.attribute, "fb", "test helper should not produce FB");
-        assert_ne!(report.attribute, "gnf", "test helper should not produce GNF");
+        assert_ne!(
+            report.attribute, "gnf",
+            "test helper should not produce GNF"
+        );
 
         let data = serde_json::to_vec(&report).unwrap();
         let result = handle_gossip_message(&data, &store, crypto.as_ref(), now);
 
-        assert!(result.is_ok(), "non-FB report with fast-only should be accepted");
+        assert!(
+            result.is_ok(),
+            "non-FB report with fast-only should be accepted"
+        );
         assert_eq!(store.report_count("A"), 1);
     }
 }

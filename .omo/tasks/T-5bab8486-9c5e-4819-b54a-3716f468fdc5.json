@@ -1,0 +1,10 @@
+{
+  "id": "T-5bab8486-9c5e-4819-b54a-3716f468fdc5",
+  "subject": "Add trigger_channel_bind helper to Communerdette",
+  "description": "Add a pub(super) method on Communerdette that creates a CommunerdetteExecutor and spawns the channel bind task. This encapsulates the private CommunerdetteExecutor construction.",
+  "status": "completed",
+  "activeForm": "Adding trigger_channel_bind to Communerdette",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_17e8802a1ffeuQ4rBkH2guhG8Z"
+}

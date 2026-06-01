@@ -1,0 +1,10 @@
+{
+  "id": "T-0ce74f96-9e19-4125-9490-a2e2a41de0c1",
+  "subject": "Verify Phase 5.3 priority policy assignments",
+  "description": "Grep communerdette.rs for CommunerdettePriority:: usage, compare with spec, check boxes in plan",
+  "status": "completed",
+  "activeForm": "Verifying Phase 5.3 priority assignments",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_17e896de5ffeIka4lJM5tuzXFt"
+}

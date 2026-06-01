@@ -15,9 +15,9 @@ use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use foretias_core::clock::{Clock, SystemClock};
 use foretias_core::crypto_server::{CryptoServer, SealedBlob};
-use foretias_core::foretias::ChrononRecord;
-use foretias_core::foretias::clean_auth::{ExternalizedChrononRecord, CleanAuthenticated};
 use foretias_core::error::NodeError;
+use foretias_core::foretias::clean_auth::{CleanAuthenticated, Externalized};
+use foretias_core::foretias::ChrononRecord;
 use serde::{Deserialize, Serialize};
 
 /// A single block stored in the encrypted JSONL file.
@@ -28,7 +28,7 @@ pub struct CalendarBlock {
     /// Wall-clock nanoseconds when the block was written.
     pub written_at_ns: u64,
     /// Tick records contained in this block.
-    pub ticks: Vec<ExternalizedChrononRecord>,
+    pub ticks: Vec<Externalized<ChrononRecord>>,
 }
 
 /// Encrypted append-only calendar store backed by a JSONL file.
@@ -67,9 +67,11 @@ impl EncryptedJsonlCalendarStore {
     /// The ticks are wrapped in a [`CalendarBlock`], serialized to JSON,
     /// sealed with the node's seal key, CBOR-encoded, base64-encoded,
     /// and appended as a newline-terminated line to the backing file.
-    pub fn append_block(&self, ticks: Vec<ExternalizedChrononRecord>) -> Result<(), NodeError> {
+    pub fn append_block(&self, ticks: Vec<Externalized<ChrononRecord>>) -> Result<(), NodeError> {
         let block_id = self.next_block_id.fetch_add(1, Ordering::SeqCst);
-        let written_at_ns = self.clock.now_ns()
+        let written_at_ns = self
+            .clock
+            .now_ns()
             .map_err(|e| NodeError::Internal(format!("clock error: {}", e)))?;
 
         let block = CalendarBlock {
@@ -203,7 +205,8 @@ pub fn migrate_plaintext(
     let count = cal.ticks.len();
 
     if !cal.ticks.is_empty() {
-        let externalized: Vec<ExternalizedChrononRecord> = cal.ticks
+        let externalized: Vec<Externalized<ChrononRecord>> = cal
+            .ticks
             .into_iter()
             .map(|r| CleanAuthenticated::<ChrononRecord>::from_trusted(r).externalize())
             .collect();
@@ -213,18 +216,19 @@ pub fn migrate_plaintext(
     Ok(count)
 }
 
-    #[cfg(test)]
+#[cfg(test)]
 mod tests {
     use super::*;
     use foretias_core::{clock::FixedClock, crypto_server, foretias::Tbid};
 
     fn make_server() -> Arc<dyn CryptoServer> {
-        let server: Box<dyn CryptoServer> = crypto_server::new_software(crypto_server::ForetiasCurve::Ed25519)
-            .expect("failed to create software crypto server");
+        let server: Box<dyn CryptoServer> =
+            crypto_server::new_software(crypto_server::ForetiasCurve::Ed25519)
+                .expect("failed to create software crypto server");
         Arc::from(server)
     }
 
-    fn make_tick(chronon_number: u64) -> ExternalizedChrononRecord {
+    fn make_tick(chronon_number: u64) -> Externalized<ChrononRecord> {
         let record = ChrononRecord {
             chronon_number,
             public_key: vec![0u8; 32].into(),
@@ -243,7 +247,8 @@ mod tests {
 
     #[test]
     fn encrypted_jsonl_append_read() {
-        let tmp_dir = std::env::temp_dir().join(format!("foretias-ejl-test-{}", std::process::id()));
+        let tmp_dir =
+            std::env::temp_dir().join(format!("foretias-ejl-test-{}", std::process::id()));
         let path = tmp_dir.join("calendar.jsonl");
         let server = make_server();
         const FIXED_NS: u64 = 1_700_000_000_000_000_000;
@@ -263,8 +268,8 @@ mod tests {
         for (i, block) in blocks.iter().enumerate() {
             assert_eq!(block.block_id, i as u64);
             assert_eq!(block.ticks.len(), 2);
-            assert_eq!(block.ticks[0].chronon_number, i as u64);
-            assert_eq!(block.ticks[1].chronon_number, (i as u64 + 100));
+            assert_eq!(block.ticks[0].inner().chronon_number, i as u64);
+            assert_eq!(block.ticks[1].inner().chronon_number, (i as u64 + 100));
             assert_eq!(block.written_at_ns, FIXED_NS);
         }
 
@@ -275,7 +280,8 @@ mod tests {
 
     #[test]
     fn plaintext_migration() {
-        let tmp_dir = std::env::temp_dir().join(format!("foretias-migration-test-{}", std::process::id()));
+        let tmp_dir =
+            std::env::temp_dir().join(format!("foretias-migration-test-{}", std::process::id()));
         std::fs::create_dir_all(&tmp_dir).unwrap();
 
         let plaintext_path = tmp_dir.join("calendar.json");
@@ -283,7 +289,9 @@ mod tests {
 
         let pk_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(vec![0u8; 32]);
         let nonce_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(vec![0u8; 16]);
-        let tbid_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(vec![1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+        let tbid_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(vec![
+            1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+        ]);
         let cal_json = serde_json::json!({
             "tbid": tbid_b64,
             "tbn": "legacy-cal",
@@ -324,8 +332,8 @@ mod tests {
         let blocks = store.read_all().unwrap();
         assert_eq!(blocks.len(), 1);
         assert_eq!(blocks[0].ticks.len(), 2);
-        assert_eq!(blocks[0].ticks[0].chronon_number, 1);
-        assert_eq!(blocks[0].ticks[1].chronon_number, 2);
+        assert_eq!(blocks[0].ticks[0].inner().chronon_number, 1);
+        assert_eq!(blocks[0].ticks[1].inner().chronon_number, 2);
 
         // Cleanup
         std::fs::remove_file(&plaintext_path).ok();
@@ -335,7 +343,8 @@ mod tests {
 
     #[test]
     fn read_all_empty_file_returns_empty() {
-        let tmp_dir = std::env::temp_dir().join(format!("foretias-empty-test-{}", std::process::id()));
+        let tmp_dir =
+            std::env::temp_dir().join(format!("foretias-empty-test-{}", std::process::id()));
         let path = tmp_dir.join("calendar.jsonl");
         let server = make_server();
         let store = EncryptedJsonlCalendarStore::new(path.clone(), server);
@@ -346,12 +355,13 @@ mod tests {
 
     #[test]
     fn test_externalized_roundtrip() {
-        let tmp_dir = std::env::temp_dir().join(format!("foretias-ext-roundtrip-{}", std::process::id()));
+        let tmp_dir =
+            std::env::temp_dir().join(format!("foretias-ext-roundtrip-{}", std::process::id()));
         let path = tmp_dir.join("calendar.jsonl");
         let server = make_server();
         let store = EncryptedJsonlCalendarStore::new(path.clone(), server.clone());
 
-        // Append ExternalizedChrononRecord ticks
+        // Append Externalized<ChrononRecord> ticks
         let ticks = vec![make_tick(42), make_tick(43)];
         store.append_block(ticks).unwrap();
 
@@ -362,14 +372,14 @@ mod tests {
 
         // Verify fields preserved through serialization roundtrip
         assert_eq!(block.ticks.len(), 2);
-        assert_eq!(block.ticks[0].chronon_number, 42);
-        assert_eq!(block.ticks[1].chronon_number, 43);
-        assert_eq!(block.ticks[0].signature_algorithm, "Ed25519");
-        assert_eq!(block.ticks[0].public_key, [0u8; 32]);
-        assert_eq!(block.ticks[0].aa_nonce, [0u8; 16]);
-        assert!(block.ticks[0].forward_foretis.is_empty());
-        assert!(block.ticks[0].backward_foretis.is_empty());
-        assert!(block.ticks[0].external_attestations.is_empty());
+        assert_eq!(block.ticks[0].inner().chronon_number, 42);
+        assert_eq!(block.ticks[1].inner().chronon_number, 43);
+        assert_eq!(block.ticks[0].inner().signature_algorithm, "Ed25519");
+        assert_eq!(block.ticks[0].inner().public_key.as_slice(), &[0u8; 32]);
+        assert_eq!(&*block.ticks[0].inner().aa_nonce, &[0u8; 16]);
+        assert!(block.ticks[0].inner().forward_foretis.is_empty());
+        assert!(block.ticks[0].inner().backward_foretis.is_empty());
+        assert!(block.ticks[0].inner().external_attestations.is_empty());
 
         // Cleanup
         std::fs::remove_file(&path).ok();
@@ -378,7 +388,8 @@ mod tests {
 
     #[test]
     fn looks_like_plaintext_json_detects_json() {
-        let tmp_dir = std::env::temp_dir().join(format!("foretias-detect-test-{}", std::process::id()));
+        let tmp_dir =
+            std::env::temp_dir().join(format!("foretias-detect-test-{}", std::process::id()));
         std::fs::create_dir_all(&tmp_dir).unwrap();
 
         let json_path = tmp_dir.join("data.json");

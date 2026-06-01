@@ -179,6 +179,10 @@ pub struct CommunerdetteRouteStats {
     pub smoothed_rtt_ms: Option<f64>,
     /// Consecutive failures on this route (triggers backoff).
     pub consecutive_failures: u32,
+    /// Monotonic timestamp (ns) of last successful application RPC (stamp, get_tick,
+    /// get_calendar_slice). This is the primary liveness signal — if recent enough,
+    /// the transport-level ping is unnecessary.
+    pub last_application_rpc_ns: Option<u64>,
 }
 
 impl CommunerdetteRouteStats {
@@ -191,6 +195,11 @@ impl CommunerdetteRouteStats {
             Some(prev) => 0.2 * rtt_ms + 0.8 * prev,
             None => rtt_ms,
         });
+    }
+
+    /// Record a successful application RPC (stamp, get_tick, get_calendar_slice).
+    pub fn record_application_rpc_success(&mut self, now_ns: u64) {
+        self.last_application_rpc_ns = Some(now_ns);
     }
 
     /// Record a failed request.
@@ -227,6 +236,9 @@ struct CommunerdetteState {
     liveness_interval_ms: u64,
     /// Liveness loop policy (Phase 12.5).
     liveness_policy: LivenessPolicy,
+    /// Shared liveness cycle flags — updated by queue task (application RPC success)
+    /// and read by L1/L2/L3 liveness tasks.
+    liveness_flags: Arc<LivenessCycleFlags>,
 }
 
 impl Default for CommunerdetteState {
@@ -243,6 +255,7 @@ impl Default for CommunerdetteState {
             last_liveness_probe_ns: None,
             liveness_interval_ms: 30_000,
             liveness_policy: LivenessPolicy::default(),
+            liveness_flags: LivenessCycleFlags::new(),
         }
     }
 }
@@ -606,6 +619,10 @@ impl Communerdette {
     /// Get liveness probe interval in milliseconds.
     pub(super) fn liveness_interval_ms(&self) -> u64 {
         self.state.read().unwrap().liveness_interval_ms
+    }
+
+    pub(super) fn liveness_flags(&self) -> Arc<LivenessCycleFlags> {
+        Arc::clone(&self.state.read().unwrap().liveness_flags)
     }
 
     /// Get per-route stats snapshot.
@@ -1237,6 +1254,7 @@ impl Communerdette {
         executor: Arc<CommunerdetteExecutor>,
         mut rx: mpsc::Receiver<(CommunerdettePriority, CommunerdetteCommand)>,
         sequence: Arc<AtomicU64>,
+        liveness_flags: Arc<LivenessCycleFlags>,
     ) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
             let mut heap = BinaryHeap::new();
@@ -1267,10 +1285,18 @@ impl Communerdette {
                             match cmd.command {
                                 CommunerdetteCommand::CalendarSlice { tick_start, count, timeout, reply } => {
                                     let result = Self::execute_calendar_slice(&exec, tick_start, count, timeout).await;
+                                    if result.is_ok() {
+                                        let now_ns = exec.clock.now_ns().unwrap_or(0);
+                                        liveness_flags.last_application_rpc_ns.store(now_ns, Ordering::Relaxed);
+                                    }
                                     let _ = reply.send(result);
                                 }
                                 CommunerdetteCommand::Stamp { content, echo, timeout, reply } => {
                                     let result = Self::execute_stamp(&exec, content, echo, timeout).await;
+                                    if result.is_ok() {
+                                        let now_ns = exec.clock.now_ns().unwrap_or(0);
+                                        liveness_flags.last_application_rpc_ns.store(now_ns, Ordering::Relaxed);
+                                    }
                                     let _ = reply.send(result);
                                 }
                                 CommunerdetteCommand::Shutdown => {
@@ -1396,8 +1422,10 @@ impl Communerdette {
 impl Communerdette {
     /// Spawn the L1 liveness loop for this relationship (Phase 12.1 — spec §12.1).
     ///
-    /// Periodically pings the remote to confirm network-stack reachability.
-    /// Records success/failure in `CommunerdetteRouteStats`.
+    /// Primary liveness signal: recent successful application RPCs (stamp, get_tick,
+    /// get_calendar_slice). If a successful application RPC occurred within the last
+    /// `interval_ms`, L1 is considered healthy without a transport ping. Falls back
+    /// to libp2p transport-level ping when no recent application RPC is found.
     pub(super) fn spawn_l1_liveness_task(
         executor: Arc<CommunerdetteExecutor>,
         interval_ms: u64,
@@ -1412,6 +1440,25 @@ impl Communerdette {
                     _ = cancel.cancelled() => break,
                     _ = interval.tick() => {},
                 }
+
+                // Primary signal: check if a recent application RPC succeeded.
+                let now_ns = executor.clock.now_ns().unwrap_or(0);
+                let last_rpc_ns = flags.last_application_rpc_ns.load(Ordering::Relaxed);
+                if last_rpc_ns > 0 {
+                    let elapsed_ns = now_ns.saturating_sub(last_rpc_ns);
+                    let threshold_ns = (interval_ms as u64).saturating_mul(1_000_000);
+                    if elapsed_ns < threshold_ns {
+                        tracing::trace!(
+                            target_tbid = %executor.target_tbid.to_hex(),
+                            elapsed_ms = elapsed_ns / 1_000_000,
+                            "L1 ok via recent application RPC"
+                        );
+                        flags.l1_last_ok.store(true, Ordering::Relaxed);
+                        continue;
+                    }
+                }
+
+                // Secondary signal: fall back to transport-level ping.
                 let peer = match executor.resolve_peer().await {
                     Ok(p) => p,
                     Err(_) => {
@@ -1424,7 +1471,7 @@ impl Communerdette {
                     executor.do_ping(&peer),
                 ).await {
                     Ok(Ok(())) => {
-                        tracing::trace!(target_tbid = %executor.target_tbid.to_hex(), "L1 ping ok");
+                        tracing::trace!(target_tbid = %executor.target_tbid.to_hex(), "L1 ok via transport ping");
                         true
                     }
                     Ok(Err(e)) => {
@@ -1635,6 +1682,10 @@ pub(super) struct LivenessCycleFlags {
     pub l2_last_ok: std::sync::atomic::AtomicBool,
     /// Set to true when TbidBindingStatus transitions to Rejected.
     pub binding_rejected: std::sync::atomic::AtomicBool,
+    /// Monotonic timestamp (ns) of last successful application RPC.
+    /// Updated by queue task on stamp/get_tick/get_calendar_slice success.
+    /// Read by L1 liveness task as the primary liveness signal.
+    pub last_application_rpc_ns: AtomicU64,
 }
 
 impl LivenessCycleFlags {
@@ -1643,6 +1694,7 @@ impl LivenessCycleFlags {
             l1_last_ok: std::sync::atomic::AtomicBool::new(true),
             l2_last_ok: std::sync::atomic::AtomicBool::new(true),
             binding_rejected: std::sync::atomic::AtomicBool::new(false),
+            last_application_rpc_ns: AtomicU64::new(0),
         })
     }
 }
@@ -1664,7 +1716,7 @@ impl Default for LivenessPolicy {
         Self {
             l1_interval_ms: 5_000,
             l2_interval_ms: 30_000,
-            l3_interval_ms: 60_000,
+            l3_interval_ms: 86_400_000,
             run_l2: true,
             run_l3: true,
         }
@@ -1696,7 +1748,13 @@ impl CommunerdetteLine {
             Arc::clone(&self.clock),
             None,
         );
-        Communerdette::execute_calendar_slice(&executor, tick_start, count, timeout).await
+        let result = Communerdette::execute_calendar_slice(&executor, tick_start, count, timeout).await;
+        if result.is_ok() {
+            let now_ns = self.clock.now_ns().unwrap_or(0);
+            let flags = self.inner.liveness_flags();
+            flags.last_application_rpc_ns.store(now_ns, std::sync::atomic::Ordering::Relaxed);
+        }
+        result
     }
 
     /// Fetch a single tick from the remote TBID.
@@ -1715,7 +1773,13 @@ impl CommunerdetteLine {
             Arc::clone(&self.clock),
             None,
         );
-        Communerdette::execute_tick(&executor, tick_number, timeout).await
+        let result = Communerdette::execute_tick(&executor, tick_number, timeout).await;
+        if result.is_ok() {
+            let now_ns = self.clock.now_ns().unwrap_or(0);
+            let flags = self.inner.liveness_flags();
+            flags.last_application_rpc_ns.store(now_ns, std::sync::atomic::Ordering::Relaxed);
+        }
+        result
     }
 
     /// Stamp content on the remote TBID.
@@ -1738,7 +1802,13 @@ impl CommunerdetteLine {
             Arc::clone(&self.clock),
             None,
         );
-        Communerdette::execute_stamp(&executor, content, echo, timeout).await
+        let result = Communerdette::execute_stamp(&executor, content, echo, timeout).await;
+        if result.is_ok() {
+            let now_ns = self.clock.now_ns().unwrap_or(0);
+            let flags = self.inner.liveness_flags();
+            flags.last_application_rpc_ns.store(now_ns, std::sync::atomic::Ordering::Relaxed);
+        }
+        result
     }
 }
 ///
@@ -1781,6 +1851,25 @@ impl CommunerdetteLine {
     #[doc(hidden)]
     pub fn shutdown_token(&self) -> CancellationToken {
         self.inner.shutdown_token()
+    }
+
+    /// Stamp content on the remote TBID with explicit serialization control.
+    ///
+    /// Serializes `content` using the specified algorithm and delegates to
+    /// [`stamp`](Self::stamp). The remote TBID receives the serialized bytes
+    /// (hex-encoded at the transport layer) and returns a
+    /// `CleanAuthenticated<Foretis>` through the Take 3 inbound gate.
+    pub async fn stamp_chronon(
+        &self,
+        content: &[u8],
+        serialization: foretias_core::foretias::tick::SerializationAlgorithm,
+        echo: String,
+    ) -> Result<CleanAuthenticated<Foretis>, CommunerdetteError> {
+        let serialized = serialization.serialize(content)
+            .map_err(|e| CommunerdetteError::Structural(
+                format!("{} serialization failed: {e}", serialization.name())
+            ))?;
+        self.stamp(serialized, echo).await
     }
 }
 
@@ -3992,5 +4081,288 @@ mod tests {
         cancel.cancel();
         let result = handle.await;
         assert!(result.is_ok(), "L3 task must not panic when binding is rejected");
+    }
+
+    // ── Application RPC liveness hierarchy tests ────────────────────────
+
+    #[tokio::test]
+    async fn l1_skips_ping_when_recent_application_rpc_exists() {
+        let record = make_record("peer-1", "127.0.0.1:4002");
+        let ping_succeeds = false;
+        let host: Arc<dyn CommunerdetteHost> = Arc::new(LivenessMockHost::new(Some(record), ping_succeeds));
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            ).expect("libsodium")
+        );
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+        let target_tbid = Tbid::from_raw([0xEE; 96]);
+        let executor = Arc::new(CommunerdetteExecutor::new(
+            host, target_tbid, crypto, clock, None,
+        ));
+        let flags = LivenessCycleFlags::new();
+        let cancel = CancellationToken::new();
+
+        // Record a recent application RPC success.
+        let now_ns = executor.clock.now_ns().unwrap_or(0);
+        flags.last_application_rpc_ns.store(now_ns, std::sync::atomic::Ordering::Relaxed);
+
+        let handle = Communerdette::spawn_l1_liveness_task(
+            executor, 500, cancel.clone(), flags.clone(),
+        );
+
+        tokio::time::sleep(TokioDuration::from_millis(200)).await;
+
+        assert!(
+            flags.l1_last_ok.load(std::sync::atomic::Ordering::Relaxed),
+            "L1 must record success when recent application RPC exists (even if ping would fail)"
+        );
+
+        cancel.cancel();
+        let _ = handle.await;
+    }
+
+    #[tokio::test]
+    async fn l1_falls_back_to_ping_when_no_recent_application_rpc() {
+        let record = make_record("peer-1", "127.0.0.1:4002");
+        let host: Arc<dyn CommunerdetteHost> = Arc::new(LivenessMockHost::new(Some(record), true));
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            ).expect("libsodium")
+        );
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+        let target_tbid = Tbid::from_raw([0xFF; 96]);
+        let executor = Arc::new(CommunerdetteExecutor::new(
+            host, target_tbid, crypto, clock, None,
+        ));
+        let flags = LivenessCycleFlags::new();
+        let cancel = CancellationToken::new();
+
+        // No application RPC recorded (last_application_rpc_ns = 0).
+        // L1 should fall back to transport ping, which succeeds.
+        let handle = Communerdette::spawn_l1_liveness_task(
+            executor, 50, cancel.clone(), flags.clone(),
+        );
+
+        tokio::time::sleep(TokioDuration::from_millis(200)).await;
+
+        assert!(
+            flags.l1_last_ok.load(std::sync::atomic::Ordering::Relaxed),
+            "L1 must record success via transport ping when no recent application RPC"
+        );
+
+        cancel.cancel();
+        let _ = handle.await;
+    }
+
+    #[tokio::test]
+    async fn l1_fails_when_no_rpc_and_ping_fails() {
+        let record = make_record("peer-1", "127.0.0.1:4002");
+        let host: Arc<dyn CommunerdetteHost> = Arc::new(LivenessMockHost::new(Some(record), false));
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            ).expect("libsodium")
+        );
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+        let target_tbid = Tbid::from_raw([0x11; 96]);
+        let executor = Arc::new(CommunerdetteExecutor::new(
+            host, target_tbid, crypto, clock, None,
+        ));
+        let flags = LivenessCycleFlags::new();
+        let cancel = CancellationToken::new();
+
+        // No application RPC, ping fails -> L1 must fail.
+        let handle = Communerdette::spawn_l1_liveness_task(
+            executor, 50, cancel.clone(), flags.clone(),
+        );
+
+        tokio::time::sleep(TokioDuration::from_millis(200)).await;
+
+        assert!(
+            !flags.l1_last_ok.load(std::sync::atomic::Ordering::Relaxed),
+            "L1 must fail when no application RPC and ping fails"
+        );
+
+        cancel.cancel();
+        let _ = handle.await;
+    }
+
+    #[test]
+    fn record_application_rpc_success_updates_timestamp() {
+        let mut stats = CommunerdetteRouteStats::default();
+        assert!(stats.last_application_rpc_ns.is_none());
+
+        stats.record_application_rpc_success(1_000_000_000);
+        assert_eq!(stats.last_application_rpc_ns, Some(1_000_000_000));
+
+        stats.record_application_rpc_success(2_000_000_000);
+        assert_eq!(stats.last_application_rpc_ns, Some(2_000_000_000));
+    }
+
+    #[test]
+    fn liveness_policy_default_l3_is_daily() {
+        let policy = LivenessPolicy::default();
+        assert_eq!(policy.l1_interval_ms, 5_000);
+        assert_eq!(policy.l2_interval_ms, 30_000);
+        assert_eq!(policy.l3_interval_ms, 86_400_000);
+        assert!(policy.run_l2);
+        assert!(policy.run_l3);
+    }
+
+    #[tokio::test]
+    async fn stamp_chronon_postcard_serialization_produces_correct_content_hash() {
+        use foretias_core::foretias::types::SignatureAlgorithm;
+        use foretias_core::foretias::tick::SerializationAlgorithm;
+
+        let tbid = Tbid::from_raw([0u8; 96]);
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            ).expect("libsodium")
+        );
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+
+        let original_content = b"chronon stamp test payload" as &[u8];
+        let serialized = SerializationAlgorithm::Postcard.serialize(original_content).unwrap();
+        let chronon_number: u64 = 1;
+
+        let content_hash = crypto.sha256(&serialized).expect("sha256");
+        let foretis_for_signing = Foretis {
+            chronon_number,
+            content_hash: FTByteArray::from(content_hash.bytes),
+            tbid,
+            echo: "test".to_string(),
+            tbn: "test-tb".to_string(),
+            time_being_reference_time: "UE+1000000000ns".to_string(),
+        };
+        let sig = crypto.sign_with(&foretis_for_signing.sig_input_bytes(), SignatureAlgorithm::Ed25519).expect("sign");
+        let pub_key_bytes = match crypto.public_key() {
+            foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
+            _ => panic!("expected Ed25519"),
+        };
+        let chronon_record = ChrononRecord {
+            chronon_number,
+            public_key: FTByteVector::from(pub_key_bytes),
+            signature_algorithm: "Ed25519".to_string(),
+            forward_foretis: FTByteVector::from(vec![2u8; 64]),
+            backward_foretis: FTByteVector::from(vec![3u8; 64]),
+            aa_nonce: FTByteArray::from([4u8; 16]),
+            chronon_stamp_count: 0,
+            external_attestations: vec![],
+            tb_version: 0,
+            tbid,
+        };
+
+        let host = Arc::new(ConfigurableMockHost::new(Some(make_record("peer-1", "127.0.0.1:4002"))));
+        host.set_calendar_response(vec![chronon_record]);
+        host.set_stamp_response(serde_json::json!({
+            "foretis": foretis_for_signing,
+            "signature": hex::encode(&sig),
+            "signature_algorithm": "Ed25519",
+        }));
+
+        let executor = CommunerdetteExecutor::new(host, tbid, crypto.clone(), clock, None);
+        let result = Communerdette::execute_stamp(
+            &executor,
+            serialized.clone(),
+            "test".to_string(),
+            TokioDuration::from_secs(5),
+        ).await;
+
+        assert!(result.is_ok(), "stamp_chronon with postcard must succeed: {:?}", result);
+        let ca = result.unwrap();
+        let expected_hash = crypto.sha256(&serialized).unwrap();
+        assert_eq!(ca.content_hash().as_slice(), &expected_hash.bytes);
+    }
+
+    #[tokio::test]
+    async fn stamp_chronon_bincode_serialization_produces_correct_content_hash() {
+        use foretias_core::foretias::types::SignatureAlgorithm;
+        use foretias_core::foretias::tick::SerializationAlgorithm;
+
+        let tbid = Tbid::from_raw([0u8; 96]);
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            ).expect("libsodium")
+        );
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+
+        let original_content = b"chronon stamp test payload" as &[u8];
+        let serialized = SerializationAlgorithm::Bincode.serialize(original_content).unwrap();
+        let chronon_number: u64 = 1;
+
+        let content_hash = crypto.sha256(&serialized).expect("sha256");
+        let foretis_for_signing = Foretis {
+            chronon_number,
+            content_hash: FTByteArray::from(content_hash.bytes),
+            tbid,
+            echo: "test".to_string(),
+            tbn: "test-tb".to_string(),
+            time_being_reference_time: "UE+1000000000ns".to_string(),
+        };
+        let sig = crypto.sign_with(&foretis_for_signing.sig_input_bytes(), SignatureAlgorithm::Ed25519).expect("sign");
+        let pub_key_bytes = match crypto.public_key() {
+            foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
+            _ => panic!("expected Ed25519"),
+        };
+        let chronon_record = ChrononRecord {
+            chronon_number,
+            public_key: FTByteVector::from(pub_key_bytes),
+            signature_algorithm: "Ed25519".to_string(),
+            forward_foretis: FTByteVector::from(vec![2u8; 64]),
+            backward_foretis: FTByteVector::from(vec![3u8; 64]),
+            aa_nonce: FTByteArray::from([4u8; 16]),
+            chronon_stamp_count: 0,
+            external_attestations: vec![],
+            tb_version: 0,
+            tbid,
+        };
+
+        let host = Arc::new(ConfigurableMockHost::new(Some(make_record("peer-1", "127.0.0.1:4002"))));
+        host.set_calendar_response(vec![chronon_record]);
+        host.set_stamp_response(serde_json::json!({
+            "foretis": foretis_for_signing,
+            "signature": hex::encode(&sig),
+            "signature_algorithm": "Ed25519",
+        }));
+
+        let executor = CommunerdetteExecutor::new(host, tbid, crypto.clone(), clock, None);
+        let result = Communerdette::execute_stamp(
+            &executor,
+            serialized.clone(),
+            "test".to_string(),
+            TokioDuration::from_secs(5),
+        ).await;
+
+        assert!(result.is_ok(), "stamp_chronon with bincode must succeed: {:?}", result);
+        let ca = result.unwrap();
+        let expected_hash = crypto.sha256(&serialized).unwrap();
+        assert_eq!(ca.content_hash().as_slice(), &expected_hash.bytes);
+    }
+
+    #[tokio::test]
+    async fn stamp_chronon_different_algorithms_produce_different_content_hashes() {
+        use foretias_core::foretias::tick::SerializationAlgorithm;
+
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            ).expect("libsodium")
+        );
+
+        let content = b"same content, different serialization" as &[u8];
+        let postcard_bytes = SerializationAlgorithm::Postcard.serialize(content).unwrap();
+        let bincode_bytes = SerializationAlgorithm::Bincode.serialize(content).unwrap();
+
+        let hash_postcard = crypto.sha256(&postcard_bytes).unwrap();
+        let hash_bincode = crypto.sha256(&bincode_bytes).unwrap();
+
+        assert_ne!(
+            hash_postcard.bytes, hash_bincode.bytes,
+            "different serialization algorithms must produce different content hashes"
+        );
     }
 }

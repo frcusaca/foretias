@@ -877,7 +877,7 @@ pub fn handle_history_dump_ack(server: &TimeFamilyServer, params: Value) -> Json
 }
 
 /// `history_dump_chunk` — source delivering one chunk of N
-/// ExternalizedChrononRecords. Each record is parsed as
+/// Externalized<ChrononRecord>. Each record is parsed as
 /// `UnverifiedSignatureEnvelopeChrononRecord` and chain-verified against the previous
 /// authenticated record (or genesis) before insertion into the mirror
 /// store. Preserves the trust boundary.

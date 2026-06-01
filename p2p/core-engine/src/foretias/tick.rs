@@ -2,12 +2,12 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::clock::Clock;
-use crate::crypto_server::CryptoServer;
-use crate::core::rng::random_bytes;
-use crate::error::NodeError;
-use super::encoding::{FTByteVector, FTByteArray};
+use super::encoding::{FTByteArray, FTByteVector};
 use super::types::Tbid;
+use crate::clock::Clock;
+use crate::core::rng::random_bytes;
+use crate::crypto_server::CryptoServer;
+use crate::error::NodeError;
 
 /// A single entry in the Calendar, linking consecutive chronons via Foretis attestations.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,7 +60,9 @@ impl ChrononRecord {
             return Err(NodeError::InvalidInput("chronon_number must be > 0".into()));
         }
         if public_key.is_empty() {
-            return Err(NodeError::InvalidInput("public_key must not be empty".into()));
+            return Err(NodeError::InvalidInput(
+                "public_key must not be empty".into(),
+            ));
         }
         Ok(Self {
             chronon_number,
@@ -81,16 +83,36 @@ impl ChrononRecord {
         self.chronon_number == 1
     }
 
-    pub fn chronon_number(&self) -> &u64 { &self.chronon_number }
-    pub fn public_key(&self) -> &FTByteVector { &self.public_key }
-    pub fn signature_algorithm(&self) -> &str { &self.signature_algorithm }
-    pub fn forward_foretis(&self) -> &FTByteVector { &self.forward_foretis }
-    pub fn backward_foretis(&self) -> &FTByteVector { &self.backward_foretis }
-    pub fn aa_nonce(&self) -> &FTByteArray<16> { &self.aa_nonce }
-    pub fn chronon_stamp_count(&self) -> &u64 { &self.chronon_stamp_count }
-    pub fn external_attestations(&self) -> &Vec<super::external_attestation::ExternalAttestation> { &self.external_attestations }
-    pub fn tb_version(&self) -> &u32 { &self.tb_version }
-    pub fn tbid(&self) -> &Tbid { &self.tbid }
+    pub fn chronon_number(&self) -> &u64 {
+        &self.chronon_number
+    }
+    pub fn public_key(&self) -> &FTByteVector {
+        &self.public_key
+    }
+    pub fn signature_algorithm(&self) -> &str {
+        &self.signature_algorithm
+    }
+    pub fn forward_foretis(&self) -> &FTByteVector {
+        &self.forward_foretis
+    }
+    pub fn backward_foretis(&self) -> &FTByteVector {
+        &self.backward_foretis
+    }
+    pub fn aa_nonce(&self) -> &FTByteArray<16> {
+        &self.aa_nonce
+    }
+    pub fn chronon_stamp_count(&self) -> &u64 {
+        &self.chronon_stamp_count
+    }
+    pub fn external_attestations(&self) -> &Vec<super::external_attestation::ExternalAttestation> {
+        &self.external_attestations
+    }
+    pub fn tb_version(&self) -> &u32 {
+        &self.tb_version
+    }
+    pub fn tbid(&self) -> &Tbid {
+        &self.tbid
+    }
 }
 
 /// A cryptographically signed attestation of content at a specific chronon.
@@ -139,16 +161,80 @@ impl Foretis {
         })
     }
 
-    pub fn chronon_number(&self) -> &u64 { &self.chronon_number }
-    pub fn content_hash(&self) -> &FTByteArray<32> { &self.content_hash }
-    pub fn tbid(&self) -> &Tbid { &self.tbid }
-    pub fn echo(&self) -> &str { &self.echo }
-    pub fn tbn(&self) -> &str { &self.tbn }
-    pub fn time_being_reference_time(&self) -> &str { &self.time_being_reference_time }
+    pub fn chronon_number(&self) -> &u64 {
+        &self.chronon_number
+    }
+    pub fn content_hash(&self) -> &FTByteArray<32> {
+        &self.content_hash
+    }
+    pub fn tbid(&self) -> &Tbid {
+        &self.tbid
+    }
+    pub fn echo(&self) -> &str {
+        &self.echo
+    }
+    pub fn tbn(&self) -> &str {
+        &self.tbn
+    }
+    pub fn time_being_reference_time(&self) -> &str {
+        &self.time_being_reference_time
+    }
 
     /// Returns postcard-encoded canonical bytes for signing (v2 wire format).
     pub fn sig_input_bytes(&self) -> Vec<u8> {
         postcard::to_allocvec(self).expect("postcard serialize Foretis")
+    }
+}
+
+/// Serialization algorithm used to encode content before stamping.
+///
+/// Controls how raw bytes are serialized before being hashed and signed.
+/// `Postcard` is the canonical wire format for Foretias; `Bincode` is
+/// provided for interoperability with systems that prefer bincode encoding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SerializationAlgorithm {
+    /// Postcard serialization (canonical, compact, no-field-names).
+    Postcard,
+    /// Bincode serialization (length-prefixed, big-endian).
+    Bincode,
+}
+
+impl SerializationAlgorithm {
+    pub fn serialize(&self, content: &[u8]) -> Result<Vec<u8>, NodeError> {
+        match self {
+            SerializationAlgorithm::Postcard => postcard::to_allocvec(content)
+                .map_err(|e| NodeError::Internal(format!("postcard serialize: {e}"))),
+            SerializationAlgorithm::Bincode => bincode::serialize(content)
+                .map_err(|e| NodeError::Internal(format!("bincode serialize: {e}"))),
+        }
+    }
+
+    /// Returns the human-readable name of this algorithm.
+    pub fn name(&self) -> &'static str {
+        match self {
+            SerializationAlgorithm::Postcard => "postcard",
+            SerializationAlgorithm::Bincode => "bincode",
+        }
+    }
+}
+
+impl std::fmt::Display for SerializationAlgorithm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name())
+    }
+}
+
+impl std::str::FromStr for SerializationAlgorithm {
+    type Err = NodeError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "postcard" => Ok(SerializationAlgorithm::Postcard),
+            "bincode" => Ok(SerializationAlgorithm::Bincode),
+            other => Err(NodeError::InvalidInput(format!(
+                "unknown serialization algorithm: '{other}' (expected 'postcard' or 'bincode')"
+            ))),
+        }
     }
 }
 
@@ -172,7 +258,7 @@ pub trait CalendarLookup: Send + Sync {
 /// The `Foretis` payload is signature-free. The `signature_bytes` and `signature_algorithm`
 /// are stored in the `UnverifiedSignatureEnvelope` / `CleanAuthenticated` wrappers.
 pub struct StampedForetis {
-    pub foretis:    Foretis,
+    pub foretis: Foretis,
     pub signature_bytes: Vec<u8>,
     pub signature_algorithm: String,
 }
@@ -192,7 +278,8 @@ pub fn stamp(
 ) -> Result<StampedForetis, NodeError> {
     let content_hash = server.sha256(content)?;
 
-    let now_ns = clock.now_ns()
+    let now_ns = clock
+        .now_ns()
         .map_err(|e| NodeError::Internal(format!("clock error: {e}")))?;
     let time_being_reference_time = format!("UE+{}ns", now_ns);
 
@@ -240,12 +327,7 @@ pub fn verify(
     let sig_input = postcard::to_allocvec(foretis)
         .map_err(|e| NodeError::Internal(format!("postcard serialize error: {e}")))?;
 
-    Ok(server.verify_with(
-        &rec.public_key,
-        signature_algorithm,
-        &sig_input,
-        signature,
-    )?)
+    Ok(server.verify_with(&rec.public_key, signature_algorithm, &sig_input, signature)?)
 }
 
 /// Build auto-attestation blob: tbid || A.tick || A.pk || B.tick || B.pk || chronon_stamp_count || nonce
@@ -329,106 +411,118 @@ pub fn verify_pair(
     let nonce = curr.aa_nonce;
     let stamps = curr.chronon_stamp_count;
 
-    let (forward_sig, backward_sig, attest_blob, genesis_valid) = if curr.chronon_number == 1 && curr.tb_version == 1 {
-        let forward = &curr.forward_foretis;
-        let backward = &curr.backward_foretis;
+    let (forward_sig, backward_sig, attest_blob, genesis_valid) =
+        if curr.chronon_number == 1 && curr.tb_version == 1 {
+            let forward = &curr.forward_foretis;
+            let backward = &curr.backward_foretis;
 
-        // Validate minimum length for genesis foretis
-        // forward_foretis and backward_foretis must contain at least an Ed25519 signature (64 bytes)
-        const ED25519_SIG_LEN: usize = 64;
-        if forward.len() < ED25519_SIG_LEN {
-            return Err(NodeError::InvalidInput(
-                "forward_foretis too short for genesis split".into()
-            ));
-        }
-        if backward.len() < ED25519_SIG_LEN {
-            return Err(NodeError::InvalidInput(
-                "backward_foretis too short for genesis split".into()
-            ));
-        }
+            // Validate minimum length for genesis foretis
+            // forward_foretis and backward_foretis must contain at least an Ed25519 signature (64 bytes)
+            const ED25519_SIG_LEN: usize = 64;
+            if forward.len() < ED25519_SIG_LEN {
+                return Err(NodeError::InvalidInput(
+                    "forward_foretis too short for genesis split".into(),
+                ));
+            }
+            if backward.len() < ED25519_SIG_LEN {
+                return Err(NodeError::InvalidInput(
+                    "backward_foretis too short for genesis split".into(),
+                ));
+            }
 
-        let ed25519_sig_len = 64usize;
+            let ed25519_sig_len = 64usize;
 
-        let forward_ed_sig = if forward.len() > ed25519_sig_len {
-            &forward[..ed25519_sig_len]
-        } else {
-            forward
-        };
-        let forward_genesis = if forward.len() > ed25519_sig_len {
-            &forward[ed25519_sig_len..]
-        } else {
-            &[]
-        };
+            let forward_ed_sig = if forward.len() > ed25519_sig_len {
+                &forward[..ed25519_sig_len]
+            } else {
+                forward
+            };
+            let forward_genesis = if forward.len() > ed25519_sig_len {
+                &forward[ed25519_sig_len..]
+            } else {
+                &[]
+            };
 
-        let backward_ed_sig = if backward.len() > ed25519_sig_len {
-            &backward[..ed25519_sig_len]
-        } else {
-            backward
-        };
-        let backward_genesis = if backward.len() > ed25519_sig_len {
-            &backward[ed25519_sig_len..]
-        } else {
-            &[]
-        };
+            let backward_ed_sig = if backward.len() > ed25519_sig_len {
+                &backward[..ed25519_sig_len]
+            } else {
+                backward
+            };
+            let backward_genesis = if backward.len() > ed25519_sig_len {
+                &backward[ed25519_sig_len..]
+            } else {
+                &[]
+            };
 
-        let genesis_match = forward_genesis == backward_genesis;
+            let genesis_match = forward_genesis == backward_genesis;
 
-        let mut genesis_blob = Vec::with_capacity(96 + 8 + curr.public_key.len());
-        genesis_blob.extend_from_slice(&prev.tbid.raw_bytes());
-        genesis_blob.extend_from_slice(&curr.chronon_number.to_be_bytes());
-        genesis_blob.extend_from_slice(&curr.public_key);
+            let mut genesis_blob = Vec::with_capacity(96 + 8 + curr.public_key.len());
+            genesis_blob.extend_from_slice(&prev.tbid.raw_bytes());
+            genesis_blob.extend_from_slice(&curr.chronon_number.to_be_bytes());
+            genesis_blob.extend_from_slice(&curr.public_key);
 
-        let genesis_valid = if !forward_genesis.is_empty() && genesis_match {
-            let pub_bytes = crate::foretias::types::SignatureBytes::from(prev.tbid.raw_bytes().clone());
-            let sig = crate::foretias::types::SignatureBytes::from(forward_genesis.to_vec());
-            crate::crypto_server::signing_tbid::tbid_verify(
-                &pub_bytes,
-                &genesis_blob,
-                &sig,
+            let genesis_valid = if !forward_genesis.is_empty() && genesis_match {
+                let pub_bytes =
+                    crate::foretias::types::SignatureBytes::from(prev.tbid.raw_bytes().clone());
+                let sig = crate::foretias::types::SignatureBytes::from(forward_genesis.to_vec());
+                crate::crypto_server::signing_tbid::tbid_verify(&pub_bytes, &genesis_blob, &sig)
+                    .map_err(|e| NodeError::Crypto(e))?
+            } else if forward_genesis.is_empty() && curr.tb_version == 0 {
+                true
+            } else {
+                false
+            };
+
+            let attest_blob = if !forward_genesis.is_empty() {
+                let mut attest_blob = Vec::with_capacity(
+                    tbid_str.len() + 8 + 32 + 8 + 32 + forward_genesis.len() + 8 + 16,
+                );
+                attest_blob.extend_from_slice(tbid_str.as_bytes());
+                attest_blob.extend_from_slice(&curr.chronon_number.to_be_bytes());
+                attest_blob.extend_from_slice(&curr.public_key);
+                attest_blob.extend_from_slice(&curr.chronon_number.to_be_bytes());
+                attest_blob.extend_from_slice(&curr.public_key);
+                attest_blob.extend_from_slice(forward_genesis);
+                attest_blob.extend_from_slice(&stamps.to_be_bytes());
+                attest_blob.extend_from_slice(&nonce[..]);
+                attest_blob
+            } else {
+                let mut attest_blob = Vec::with_capacity(tbid_str.len() + 8 + 32 + 8 + 32 + 8 + 16);
+                attest_blob.extend_from_slice(tbid_str.as_bytes());
+                attest_blob.extend_from_slice(&curr.chronon_number.to_be_bytes());
+                attest_blob.extend_from_slice(&curr.public_key);
+                attest_blob.extend_from_slice(&curr.chronon_number.to_be_bytes());
+                attest_blob.extend_from_slice(&curr.public_key);
+                attest_blob.extend_from_slice(&stamps.to_be_bytes());
+                attest_blob.extend_from_slice(&nonce[..]);
+                attest_blob
+            };
+
+            (
+                forward_ed_sig.to_vec().into(),
+                backward_ed_sig.to_vec().into(),
+                attest_blob,
+                genesis_valid,
             )
-            .map_err(|e| NodeError::Crypto(e))?
-        } else if forward_genesis.is_empty() && curr.tb_version == 0 {
-            true
         } else {
-            false
-        };
-
-        let attest_blob = if !forward_genesis.is_empty() {
-            let mut attest_blob = Vec::with_capacity(tbid_str.len() + 8 + 32 + 8 + 32 + forward_genesis.len() + 8 + 16);
+            let mut attest_blob = Vec::with_capacity(
+                tbid_str.len() + 8 + prev.public_key.len() + 8 + curr.public_key.len() + 8 + 16,
+            );
             attest_blob.extend_from_slice(tbid_str.as_bytes());
-            attest_blob.extend_from_slice(&curr.chronon_number.to_be_bytes());
-            attest_blob.extend_from_slice(&curr.public_key);
-            attest_blob.extend_from_slice(&curr.chronon_number.to_be_bytes());
-            attest_blob.extend_from_slice(&curr.public_key);
-            attest_blob.extend_from_slice(forward_genesis);
-            attest_blob.extend_from_slice(&stamps.to_be_bytes());
-            attest_blob.extend_from_slice(&nonce[..]);
-            attest_blob
-        } else {
-            let mut attest_blob = Vec::with_capacity(tbid_str.len() + 8 + 32 + 8 + 32 + 8 + 16);
-            attest_blob.extend_from_slice(tbid_str.as_bytes());
-            attest_blob.extend_from_slice(&curr.chronon_number.to_be_bytes());
-            attest_blob.extend_from_slice(&curr.public_key);
+            attest_blob.extend_from_slice(&prev.chronon_number.to_be_bytes());
+            attest_blob.extend_from_slice(&prev.public_key);
             attest_blob.extend_from_slice(&curr.chronon_number.to_be_bytes());
             attest_blob.extend_from_slice(&curr.public_key);
             attest_blob.extend_from_slice(&stamps.to_be_bytes());
             attest_blob.extend_from_slice(&nonce[..]);
-            attest_blob
+
+            (
+                curr.forward_foretis.clone(),
+                curr.backward_foretis.clone(),
+                attest_blob,
+                true,
+            )
         };
-
-        (forward_ed_sig.to_vec().into(), backward_ed_sig.to_vec().into(), attest_blob, genesis_valid)
-    } else {
-        let mut attest_blob = Vec::with_capacity(tbid_str.len() + 8 + prev.public_key.len() + 8 + curr.public_key.len() + 8 + 16);
-        attest_blob.extend_from_slice(tbid_str.as_bytes());
-        attest_blob.extend_from_slice(&prev.chronon_number.to_be_bytes());
-        attest_blob.extend_from_slice(&prev.public_key);
-        attest_blob.extend_from_slice(&curr.chronon_number.to_be_bytes());
-        attest_blob.extend_from_slice(&curr.public_key);
-        attest_blob.extend_from_slice(&stamps.to_be_bytes());
-        attest_blob.extend_from_slice(&nonce[..]);
-
-        (curr.forward_foretis.clone(), curr.backward_foretis.clone(), attest_blob, true)
-    };
 
     let forward_valid = crypto.verify_with(
         &prev.public_key,
@@ -453,8 +547,6 @@ impl super::clean_auth::RecordBase for ChrononRecord {
     }
 }
 
-
-
 fn default_sig_algorithm() -> String {
     "Ed25519".to_string()
 }
@@ -466,8 +558,8 @@ fn default_tb_version() -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::crypto_server;
     use crate::clock::SystemClock;
+    use crate::crypto_server;
     use crate::foretias::calendar::Calendar;
     use crate::foretias::clean_auth::RecordBase;
     use postcard;
@@ -482,8 +574,16 @@ mod tests {
         let mut cal = Calendar::new(tbid, "test-cal");
         let chronon_number = 1;
         let content = b"init";
-        let foretis = stamp(server, &SystemClock, &tbid, chronon_number, content, "init", "test-cal")
-            .expect("stamp init tick");
+        let foretis = stamp(
+            server,
+            &SystemClock,
+            &tbid,
+            chronon_number,
+            content,
+            "init",
+            "test-cal",
+        )
+        .expect("stamp init tick");
         let public_key = match server.public_key() {
             crate::crypto_server::PublicKeyBytes::Ed25519(pk) => pk.bytes.to_vec(),
             crate::crypto_server::PublicKeyBytes::P256Compressed(pk) => pk.bytes.to_vec(),
@@ -500,7 +600,8 @@ mod tests {
 
             tb_version: 0,
             tbid: Tbid::default(),
-        }).unwrap();
+        })
+        .unwrap();
         cal
     }
 
@@ -508,8 +609,16 @@ mod tests {
     fn stamp_creates_valid_foretis() {
         let server = make_server();
         let tbid = Tbid::from_raw([1u8; 96]);
-        let foretis = stamp(server.as_ref(), &SystemClock, &tbid, 42, b"hello", "echo-42", "tbn")
-            .expect("stamp should succeed");
+        let foretis = stamp(
+            server.as_ref(),
+            &SystemClock,
+            &tbid,
+            42,
+            b"hello",
+            "echo-42",
+            "tbn",
+        )
+        .expect("stamp should succeed");
         assert_eq!(foretis.foretis.chronon_number, 42);
         assert_eq!(foretis.foretis.tbid, tbid);
         assert_eq!(foretis.foretis.echo, "echo-42");
@@ -542,10 +651,25 @@ mod tests {
         let cal = make_cal(server.as_ref());
         let tbid = Tbid::from_raw([0xAA; 96]);
         let content = b"init";
-        let foretis = stamp(server.as_ref(), &SystemClock, &tbid, 1, content, "init", "test-cal")
-            .expect("stamp");
-        let valid = verify(server.as_ref(), &foretis.foretis, &foretis.signature_bytes, &foretis.signature_algorithm, content, &cal)
-            .expect("verify should not error");
+        let foretis = stamp(
+            server.as_ref(),
+            &SystemClock,
+            &tbid,
+            1,
+            content,
+            "init",
+            "test-cal",
+        )
+        .expect("stamp");
+        let valid = verify(
+            server.as_ref(),
+            &foretis.foretis,
+            &foretis.signature_bytes,
+            &foretis.signature_algorithm,
+            content,
+            &cal,
+        )
+        .expect("verify should not error");
         assert!(valid);
     }
 
@@ -555,10 +679,25 @@ mod tests {
         let cal = make_cal(server.as_ref());
         let tbid = Tbid::from_raw([0xAA; 96]);
         let content = b"init";
-        let foretis = stamp(server.as_ref(), &SystemClock, &tbid, 1, content, "init", "test-cal")
-            .expect("stamp");
-        let valid = verify(server.as_ref(), &foretis.foretis, &foretis.signature_bytes, &foretis.signature_algorithm, b"wrong", &cal)
-            .expect("verify should not error");
+        let foretis = stamp(
+            server.as_ref(),
+            &SystemClock,
+            &tbid,
+            1,
+            content,
+            "init",
+            "test-cal",
+        )
+        .expect("stamp");
+        let valid = verify(
+            server.as_ref(),
+            &foretis.foretis,
+            &foretis.signature_bytes,
+            &foretis.signature_algorithm,
+            b"wrong",
+            &cal,
+        )
+        .expect("verify should not error");
         assert!(!valid);
     }
 
@@ -579,11 +718,27 @@ mod tests {
 
             tb_version: 0,
             tbid: Tbid::default(),
-        }).unwrap();
+        })
+        .unwrap();
         let content = b"test";
-        let foretis = stamp(server.as_ref(), &SystemClock, &tbid, 1, content, "e", "bad-cal")
-            .expect("stamp");
-        let result = verify(server.as_ref(), &foretis.foretis, &foretis.signature_bytes, &foretis.signature_algorithm, content, &cal);
+        let foretis = stamp(
+            server.as_ref(),
+            &SystemClock,
+            &tbid,
+            1,
+            content,
+            "e",
+            "bad-cal",
+        )
+        .expect("stamp");
+        let result = verify(
+            server.as_ref(),
+            &foretis.foretis,
+            &foretis.signature_bytes,
+            &foretis.signature_algorithm,
+            content,
+            &cal,
+        );
         if let Ok(valid) = result {
             assert!(!valid);
         }
@@ -596,10 +751,13 @@ mod tests {
         let tbid_str = tbid.to_hex();
         let pub_key = match server.public_key() {
             crate::crypto_server::PublicKeyBytes::Ed25519(pk) => pk.bytes,
-            crate::crypto_server::PublicKeyBytes::P256Compressed(pk) => pk.bytes[..32].try_into().unwrap(),
+            crate::crypto_server::PublicKeyBytes::P256Compressed(pk) => {
+                pk.bytes[..32].try_into().unwrap()
+            }
         };
 
-        let (attest_blob, nonce) = auto_attestation_blob_with_count(&tbid_str, 1, &pub_key, 2, &pub_key, 0).unwrap();
+        let (attest_blob, nonce) =
+            auto_attestation_blob_with_count(&tbid_str, 1, &pub_key, 2, &pub_key, 0).unwrap();
         let sig = server.sign(&attest_blob).unwrap();
         let sig_bytes = sig.bytes.to_vec();
 
@@ -643,10 +801,13 @@ mod tests {
         let tbid_str = tbid.to_hex();
         let pub_key = match server.public_key() {
             crate::crypto_server::PublicKeyBytes::Ed25519(pk) => pk.bytes,
-            crate::crypto_server::PublicKeyBytes::P256Compressed(pk) => pk.bytes[..32].try_into().unwrap(),
+            crate::crypto_server::PublicKeyBytes::P256Compressed(pk) => {
+                pk.bytes[..32].try_into().unwrap()
+            }
         };
 
-        let (attest_blob, nonce) = auto_attestation_blob_with_count(&tbid_str, 1, &pub_key, 2, &pub_key, 0).unwrap();
+        let (attest_blob, nonce) =
+            auto_attestation_blob_with_count(&tbid_str, 1, &pub_key, 2, &pub_key, 0).unwrap();
         let sig = server.sign(&attest_blob).unwrap();
         let mut sig_bytes = sig.bytes.to_vec();
         let sig_alg = "Ed25519".to_string();
@@ -695,7 +856,7 @@ mod tests {
             tbid: Tbid::default(),
         };
 
-let valid = verify_pair(server.as_ref(), &tbid_str, &prev, &curr_tampered).unwrap();
+        let valid = verify_pair(server.as_ref(), &tbid_str, &prev, &curr_tampered).unwrap();
         assert!(!valid);
     }
 
@@ -743,8 +904,10 @@ let valid = verify_pair(server.as_ref(), &tbid_str, &prev, &curr_tampered).unwra
         let tbid_str = tbid.to_hex();
         let pk = [0xABu8; 32];
 
-        let (blob1, nonce1) = auto_attestation_blob_with_count(&tbid_str, 1, &pk, 2, &pk, 0).unwrap();
-        let (blob2, nonce2) = auto_attestation_blob_with_count(&tbid_str, 1, &pk, 2, &pk, 0).unwrap();
+        let (blob1, nonce1) =
+            auto_attestation_blob_with_count(&tbid_str, 1, &pk, 2, &pk, 0).unwrap();
+        let (blob2, nonce2) =
+            auto_attestation_blob_with_count(&tbid_str, 1, &pk, 2, &pk, 0).unwrap();
 
         assert_ne!(nonce1, nonce2, "nonces must be unique");
         assert_eq!(blob1.len(), tbid_str.len() + 8 + 32 + 8 + 32 + 8 + 16);
@@ -777,10 +940,7 @@ let valid = verify_pair(server.as_ref(), &tbid_str, &prev, &curr_tampered).unwra
             tbid: Tbid::default(),
         };
         let json = serde_json::to_string(&record).unwrap();
-        let json_missing = json.replace(
-            r#""chronon_stamp_count":5"#,
-            "",
-        );
+        let json_missing = json.replace(r#""chronon_stamp_count":5"#, "");
         let json_missing = if json_missing.contains(r#"":}"#) {
             json_missing.replace(r#"":}"#, r#"}}"#)
         } else {
@@ -809,10 +969,8 @@ let valid = verify_pair(server.as_ref(), &tbid_str, &prev, &curr_tampered).unwra
             tbid: Tbid::default(),
         };
         let json = serde_json::to_string(&record).unwrap();
-        let json_with_zero = json.replace(
-            r#""chronon_stamp_count":7"#,
-            r#""chronon_stamp_count":0"#,
-        );
+        let json_with_zero =
+            json.replace(r#""chronon_stamp_count":7"#, r#""chronon_stamp_count":0"#);
 
         let result = serde_json::from_str::<ChrononRecord>(&json_with_zero);
         assert!(
@@ -837,13 +995,18 @@ let valid = verify_pair(server.as_ref(), &tbid_str, &prev, &curr_tampered).unwra
             tbid: Tbid::default(),
         };
         let bytes = postcard::to_allocvec(&record).expect("postcard serialize");
-        let decoded: ChrononRecord =
-            postcard::from_bytes(&bytes).expect("postcard deserialize");
+        let decoded: ChrononRecord = postcard::from_bytes(&bytes).expect("postcard deserialize");
         assert_eq!(decoded.chronon_number, record.chronon_number);
         assert_eq!(decoded.public_key.as_slice(), record.public_key.as_slice());
         assert_eq!(decoded.signature_algorithm, record.signature_algorithm);
-        assert_eq!(decoded.forward_foretis.as_slice(), record.forward_foretis.as_slice());
-        assert_eq!(decoded.backward_foretis.as_slice(), record.backward_foretis.as_slice());
+        assert_eq!(
+            decoded.forward_foretis.as_slice(),
+            record.forward_foretis.as_slice()
+        );
+        assert_eq!(
+            decoded.backward_foretis.as_slice(),
+            record.backward_foretis.as_slice()
+        );
         assert_eq!(decoded.aa_nonce.as_slice(), record.aa_nonce.as_slice());
         assert_eq!(decoded.chronon_stamp_count, record.chronon_stamp_count);
         assert_eq!(decoded.tb_version, record.tb_version);
@@ -890,5 +1053,103 @@ let valid = verify_pair(server.as_ref(), &tbid_str, &prev, &curr_tampered).unwra
             !record.always_require_full_signature(),
             "ChrononRecord should not require full signature by default"
         );
+    }
+
+    #[test]
+    fn serialization_algorithm_postcard_roundtrip() {
+        let content = b"hello chronon world";
+        let serialized = SerializationAlgorithm::Postcard.serialize(content).unwrap();
+        assert!(!serialized.is_empty());
+        assert_ne!(serialized, content);
+        let deserialized: Vec<u8> = postcard::from_bytes(&serialized).unwrap();
+        assert_eq!(deserialized, content);
+    }
+
+    #[test]
+    fn serialization_algorithm_bincode_roundtrip() {
+        let content = b"hello chronon world";
+        let serialized = SerializationAlgorithm::Bincode.serialize(content).unwrap();
+        assert!(!serialized.is_empty());
+        assert_ne!(serialized, content);
+        let deserialized: Vec<u8> = bincode::deserialize(&serialized).unwrap();
+        assert_eq!(deserialized, content);
+    }
+
+    #[test]
+    fn serialization_algorithm_postcard_and_bincode_produce_different_bytes() {
+        let content = b"same input, different encoding";
+        let postcard_bytes = SerializationAlgorithm::Postcard.serialize(content).unwrap();
+        let bincode_bytes = SerializationAlgorithm::Bincode.serialize(content).unwrap();
+        assert_ne!(postcard_bytes, bincode_bytes);
+    }
+
+    #[test]
+    fn serialization_algorithm_from_str_roundtrip() {
+        assert_eq!(
+            "postcard".parse::<SerializationAlgorithm>().unwrap(),
+            SerializationAlgorithm::Postcard
+        );
+        assert_eq!(
+            "bincode".parse::<SerializationAlgorithm>().unwrap(),
+            SerializationAlgorithm::Bincode
+        );
+        assert_eq!(
+            "Postcard".parse::<SerializationAlgorithm>().unwrap(),
+            SerializationAlgorithm::Postcard
+        );
+        assert_eq!(
+            "BINCODE".parse::<SerializationAlgorithm>().unwrap(),
+            SerializationAlgorithm::Bincode
+        );
+    }
+
+    #[test]
+    fn serialization_algorithm_from_str_rejects_unknown() {
+        let result = "json".parse::<SerializationAlgorithm>();
+        assert!(result.is_err());
+        let result = "protobuf".parse::<SerializationAlgorithm>();
+        assert!(result.is_err());
+        let result = "".parse::<SerializationAlgorithm>();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn serialization_algorithm_display() {
+        assert_eq!(SerializationAlgorithm::Postcard.to_string(), "postcard");
+        assert_eq!(SerializationAlgorithm::Bincode.to_string(), "bincode");
+    }
+
+    #[test]
+    fn serialization_algorithm_name() {
+        assert_eq!(SerializationAlgorithm::Postcard.name(), "postcard");
+        assert_eq!(SerializationAlgorithm::Bincode.name(), "bincode");
+    }
+
+    #[test]
+    fn serialization_algorithm_empty_content() {
+        let content = b"";
+        let postcard_bytes = SerializationAlgorithm::Postcard.serialize(content).unwrap();
+        let bincode_bytes = SerializationAlgorithm::Bincode.serialize(content).unwrap();
+        assert!(!postcard_bytes.is_empty());
+        assert!(!bincode_bytes.is_empty());
+
+        let deserialized_p: Vec<u8> = postcard::from_bytes(&postcard_bytes).unwrap();
+        let deserialized_b: Vec<u8> = bincode::deserialize(&bincode_bytes).unwrap();
+        assert_eq!(deserialized_p, content);
+        assert_eq!(deserialized_b, content);
+    }
+
+    #[test]
+    fn serialization_algorithm_large_content() {
+        let content = vec![0xABu8; 10_000];
+        let postcard_bytes = SerializationAlgorithm::Postcard
+            .serialize(&content)
+            .unwrap();
+        let bincode_bytes = SerializationAlgorithm::Bincode.serialize(&content).unwrap();
+
+        let deserialized_p: Vec<u8> = postcard::from_bytes(&postcard_bytes).unwrap();
+        let deserialized_b: Vec<u8> = bincode::deserialize(&bincode_bytes).unwrap();
+        assert_eq!(deserialized_p, content);
+        assert_eq!(deserialized_b, content);
     }
 }

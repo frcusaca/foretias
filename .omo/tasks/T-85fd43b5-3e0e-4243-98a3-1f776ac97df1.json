@@ -1,0 +1,10 @@
+{
+  "id": "T-85fd43b5-3e0e-4243-98a3-1f776ac97df1",
+  "subject": "Wire channel bind trigger into gossip_event_loop",
+  "description": "Update gossip_event_loop to accept communerdettes and host, trigger channel bind in TBID discovery path, update call site",
+  "status": "completed",
+  "activeForm": "Wiring trigger in gossip_event_loop",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_17e8802a1ffeuQ4rBkH2guhG8Z"
+}

@@ -12,7 +12,7 @@ pub use clean_auth::{CleanAuthenticated, CleanFullyAuthenticated, Externalized, 
 pub use family_record::{FamilyRecord, FamilyError, MAX_FAMILY_MEMBERS};
 
 pub use types::{Tbid, TbidSecret, PublicKeyBytes, SignatureBytes, AlgorithmId, Digest, Message, AaNonce, TickNumber, SignatureAlgorithm, KemAlgorithm};
-pub use tick::{ChrononRecord, Foretis, CalendarLookup, stamp, verify, auto_attestation_blob, auto_attestation_blob_with_count, auto_attestation_blob_with_genesis, verify_pair};
+pub use tick::{ChrononRecord, Foretis, SerializationAlgorithm, CalendarLookup, stamp, verify, auto_attestation_blob, auto_attestation_blob_with_count, auto_attestation_blob_with_genesis, verify_pair};
 pub use calendar::Calendar;
 pub use external_attestation::ExternalAttestation;
 pub use callbacks::{TickObserver, Attester, PeerMessenger, PeerAddr, CommunityQuery, CommunityResponse, TransportError, MutualAttestObserver};

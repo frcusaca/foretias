@@ -1,0 +1,10 @@
+{
+  "id": "T-4f005188-8b76-4a5d-8fcf-fd80fc86ff2b",
+  "subject": "Complete ALL open Group 7 (Communerdette) tasks",
+  "description": "Execute all unchecked items in COMBINED_GROUP7_COMMUNERDETTE_PLAN.md directly on alpha branch (no worktree). Phases: 1.5, 4.2, 5.3, 8.2, 8.4, 10, 12 tests, 13 (FB gossip), 14 tests+docs, 15 (FamilyRecord), 16 (canonical encoding), 17 (test suites), 18 (test remediation).",
+  "status": "pending",
+  "activeForm": "Planning Group 7 execution",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_17f3c058cffefj2YIprGIWeetB"
+}

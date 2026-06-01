@@ -1,0 +1,10 @@
+{
+  "id": "T-1dc83a37-2bc5-48ea-b1c9-bd51cfc3f4a1",
+  "subject": "Write unit tests for Phase 12 liveness tasks (L1, L2, L3)",
+  "description": "Add 8 unit tests to communerdette.rs test block for spawn_l1_liveness_task, spawn_l2_liveness_task, spawn_l3_liveness_task",
+  "status": "completed",
+  "activeForm": "Writing liveness task unit tests",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_17e89bf86ffeiX7O4LeLe7LO6I"
+}

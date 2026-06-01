@@ -1,7 +1,7 @@
 //! ProbityStore — stores peer probity scores for epoch consensus.
 
-use std::collections::HashMap;
 use parking_lot::RwLock;
+use std::collections::HashMap;
 
 /// Stores peer probity scores and provides them for committee selection.
 pub struct ProbityStore {
@@ -25,7 +25,11 @@ impl ProbityStore {
 
     /// Return all (peer_id, score) pairs.
     pub fn all_scores(&self) -> Vec<(String, f32)> {
-        self.scores.read().iter().map(|(k, v)| (k.clone(), *v)).collect()
+        self.scores
+            .read()
+            .iter()
+            .map(|(k, v)| (k.clone(), *v))
+            .collect()
     }
 
     /// Snapshot of current scores for epoch consensus.
