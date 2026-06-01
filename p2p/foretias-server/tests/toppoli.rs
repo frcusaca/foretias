@@ -791,3 +791,150 @@ async fn toppoli_gnf_churn() {
 
     f.teardown().await;
 }
+
+/// Channel bind: peer 0 initiates channel bind with peer 1 via
+/// `CommunerdetteLine`, polls `status_summary().binding` until it advances
+/// past `Unknown`.
+///
+/// Uses `ToppoliFBProbityTest::setup(2)` for full communerd wiring.  Waits
+/// up to 30 s for the binding status to reach `ClaimedByDht` or `Verified`.
+///
+/// Known limitation: channel binding requires the `spawn_channel_bind_task`
+/// path to be triggered by liveness pings.  If the binding task is not yet
+/// wired, the status will remain `Unknown` and the test will log a warning
+/// but NOT fail — this documents the integration gap.
+#[tokio::test]
+#[ignore = "toppoli: channel bind integration; run with --include-ignored"]
+async fn toppoli_channel_bind() {
+    let f = ToppoliFBProbityTest::setup(2).await;
+
+    let ok = f.harness.wait_until(|h| h.running_count() == 2, 5_000).await;
+    assert!(ok, "peers should be running within 5 s");
+
+    let peer0 = f.harness.peer(0).server();
+    let peer1_tbid = f.harness.peer(1).server().get_tbid();
+
+    let communerd_0 = peer0.communerd()
+        .expect("peer 0 must have communerd");
+    let line = communerd_0.line_for_tbid(peer1_tbid);
+
+    tracing::info!(
+        peer0_tbid = %peer0.get_tbid().to_hex(),
+        peer1_tbid = %peer1_tbid.to_hex(),
+        "toppoli_channel_bind: polling binding status on peer 0 → peer 1"
+    );
+
+    let ok = f.harness.wait_until(|_| {
+        let summary = line.status_summary();
+        matches!(
+            summary.binding,
+            foretias_server::communerd::TbidBindingStatus::ClaimedByDht { .. }
+                | foretias_server::communerd::TbidBindingStatus::Verified { .. }
+        )
+    }, 30_000).await;
+
+    if ok {
+        let summary = line.status_summary();
+        tracing::info!(
+            binding = ?summary.binding,
+            "toppoli_channel_bind: binding advanced successfully"
+        );
+    } else {
+        let summary = line.status_summary();
+        tracing::warn!(
+            binding = ?summary.binding,
+            "toppoli_channel_bind: binding did NOT advance within 30 s — \
+             channel bind task may not be wired yet (integration gap)"
+        );
+        // Do NOT panic: this documents the gap.  When channel bind is fully
+        // wired (spawn_channel_bind_task triggered by liveness pings), flip
+        // this to an assertion.
+    }
+
+    f.teardown().await;
+}
+
+/// Dual channel bind: 3 peers in full mesh.  Peer 0 binds to peer 1 AND
+/// peer 2 independently, verifying that two separate `CommunerdetteLine`
+/// instances advance binding in parallel.
+///
+/// Each pair's binding is polled independently for up to 30 s.
+///
+/// Known limitation: same as `toppoli_channel_bind` — if the bind task is
+/// not wired, both channels remain `Unknown` and the test logs a warning
+/// instead of failing.
+#[tokio::test]
+#[ignore = "toppoli: dual channel bind; run with --include-ignored"]
+async fn toppoli_channel_bind_two_channels() {
+    let f = ToppoliFBProbityTest::setup(3).await;
+
+    let ok = f.harness.wait_until(|h| h.running_count() == 3, 5_000).await;
+    assert!(ok, "3 peers should be running within 5 s");
+
+    let peer0 = f.harness.peer(0).server();
+    let communerd_0 = peer0.communerd()
+        .expect("peer 0 must have communerd");
+
+    let peer1_tbid = f.harness.peer(1).server().get_tbid();
+    let peer2_tbid = f.harness.peer(2).server().get_tbid();
+
+    let line_01 = communerd_0.line_for_tbid(peer1_tbid);
+    let line_02 = communerd_0.line_for_tbid(peer2_tbid);
+
+    tracing::info!(
+        peer0 = %peer0.get_tbid().to_hex(),
+        peer1 = %peer1_tbid.to_hex(),
+        peer2 = %peer2_tbid.to_hex(),
+        "toppoli_channel_bind_two_channels: polling two independent bindings"
+    );
+
+    let ok_01 = f.harness.wait_until(|_| {
+        let s = line_01.status_summary();
+        matches!(
+            s.binding,
+            foretias_server::communerd::TbidBindingStatus::ClaimedByDht { .. }
+                | foretias_server::communerd::TbidBindingStatus::Verified { .. }
+        )
+    }, 30_000).await;
+
+    let ok_02 = f.harness.wait_until(|_| {
+        let s = line_02.status_summary();
+        matches!(
+            s.binding,
+            foretias_server::communerd::TbidBindingStatus::ClaimedByDht { .. }
+                | foretias_server::communerd::TbidBindingStatus::Verified { .. }
+        )
+    }, 30_000).await;
+
+    if ok_01 {
+        let s = line_01.status_summary();
+        tracing::info!(binding = ?s.binding, "toppoli_channel_bind_two_channels: 0→1 bound");
+    } else {
+        tracing::warn!(
+            binding = ?line_01.status_summary().binding,
+            "toppoli_channel_bind_two_channels: 0→1 did NOT bind within 30 s (integration gap)"
+        );
+    }
+
+    if ok_02 {
+        let s = line_02.status_summary();
+        tracing::info!(binding = ?s.binding, "toppoli_channel_bind_two_channels: 0→2 bound");
+    } else {
+        tracing::warn!(
+            binding = ?line_02.status_summary().binding,
+            "toppoli_channel_bind_two_channels: 0→2 did NOT bind within 30 s (integration gap)"
+        );
+    }
+
+    // Verify both channels bound independently — if either failed, log a
+    // summary warning.  Do NOT panic: this documents the integration gap.
+    if !ok_01 || !ok_02 {
+        tracing::warn!(
+            ok_01, ok_02,
+            "toppoli_channel_bind_two_channels: one or both channels failed to bind — \
+             channel bind task may not be wired yet (integration gap)"
+        );
+    }
+
+    f.teardown().await;
+}

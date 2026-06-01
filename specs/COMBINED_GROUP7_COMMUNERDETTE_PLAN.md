@@ -1198,13 +1198,16 @@ No CancellationToken changes to `TimeFamilyServer` are needed.
 
 ### 14.6 Later toppoli tests (require Phase 12/13)
 
-- [ ] `toppoli_l2_auth_ping` — 2 peers with Communerd wired; peer 0's
+- [x] `toppoli_l2_auth_ping` — 2 peers with Communerd wired; peer 0's
       Communerdette sends `authenticated_ping` to peer 1; assert
       `TbidBindingStatus` advances toward `Verified`.
-- [ ] `toppoli_fb_gossip` — 2 peers, A reaches `FullyBound` with B;
+      (2026-05-31 23:45)
+- [x] `toppoli_fb_gossip` — 2 peers, A reaches `FullyBound` with B;
       assert B's `ProbityStore` contains FB report from A within 5 s.
-- [ ] `toppoli_gnf_churn` — 12 peers, bring 3 down mid-test, bring them
+      (2026-05-31 23:45)
+- [x] `toppoli_gnf_churn` — 12 peers, bring 3 down mid-test, bring them
       back, assert gossip still propagates to all 12 within timeout.
+      (2026-05-31 23:45)
 
 ### 14.7 Documentation (AGENTS.md + README.md)
 
@@ -1411,9 +1414,12 @@ work (Phase 17) — it focuses on missing tests and production code hygiene.
 
 - [x] `toppoli_l1_ping_round_trip` — 2 peers, JSON-RPC ping round trip.
       (2026-05-31 23:30)
-- [ ] `toppoli_l2_auth_ping` — 2 peers, authenticated_ping, binding advances.
-- [ ] `toppoli_fb_gossip` — 2 peers, FullyBound, ProbityStore contains FB report.
-- [ ] `toppoli_gnf_churn` — 12 peers, churn, gossip propagates.
+- [x] `toppoli_l2_auth_ping` — 2 peers, authenticated_ping, binding advances.
+      (2026-05-31 23:45)
+- [x] `toppoli_fb_gossip` — 2 peers, FullyBound, ProbityStore contains FB report.
+      (2026-05-31 23:45)
+- [x] `toppoli_gnf_churn` — 12 peers, churn, gossip propagates.
+      (2026-05-31 23:45)
 
 ### 18.4 Phase 14.7 Documentation
 
