@@ -559,6 +559,8 @@ opencode 1.14.39, Qwen3.6-27B-AWQ-BF16-INT4
 
 ## TYPE-ENFORCED TRUST BOUNDARIES (Mandatory)
 
+**Source of truth for all security requirements: `SAFETY.md`.** This section provides the programming essentials only.
+
 Foretias enforces a three-stage type progression for all inbound data:
 
 ```
@@ -574,12 +576,6 @@ Unprocessed<X>  →  CleanAuthenticated<X>  →  Externalized<X>
 | **`Unprocessed<X>`** | Communerd inbound handlers ONLY (`communerd/mod.rs`, `handlers.rs`, `gossip_handler.rs`), unit tests | Everywhere else — Chronomatter, Calendar, core-engine domain logic |
 | **`CleanAuthenticated<X>`** | Chronomatter, Calendar, core-engine domain logic, intra-family communication | Never at wire/disk boundaries |
 | **`Externalized<X>`** | Communerd outbound (wire transmission), Calendar storage (disk persistence) | Never in domain logic or intra-family communication |
-
-### Transition Points
-
-1. **Inbound Gate (Communerd):** Raw bytes → `Unprocessed<X>` → `CleanAuthenticated<X>` (via `into_clean_authenticated()`)
-2. **Intra-Family:** Only `CleanAuthenticated<X>` flows between Chronomatter, Calendar, and server logic
-3. **Outbound Gate (Communerd/Calendar):** `CleanAuthenticated<X>` → `Externalized<X>` (via `externalize()`) for wire/disk
 
 ### Code Review Checklist
 
