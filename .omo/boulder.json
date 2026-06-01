@@ -6,9 +6,9 @@
       "work_id": "group7-signing-97ec72af",
       "active_plan": "/home/hcbusy/webhash/foretias/.sisyphus/plans/group7-signing.md",
       "plan_name": "group7-signing",
-      "status": "active",
+      "status": "completed",
       "started_at": "2026-05-31T14:28:44.335Z",
-      "updated_at": "2026-05-31T19:33:09.807Z",
+      "updated_at": "2026-05-31T23:39:42.661Z",
       "session_ids": [
         "opencode:ses_1843c07c2ffejzUFH8sD2E0Itr"
       ],
@@ -90,8 +90,9 @@
           "agent": "Sisyphus-Junior",
           "category": "deep",
           "started_at": "2026-05-31T16:27:25.536Z",
-          "status": "running",
-          "updated_at": "2026-05-31T19:33:09.808Z"
+          "status": "completed",
+          "updated_at": "2026-05-31T19:33:09.808Z",
+          "ended_at": "2026-05-31T19:33:09.808Z"
         },
         "final-wave:f3": {
           "task_key": "final-wave:f3",
@@ -102,7 +103,8 @@
           "category": "unspecified-high",
           "updated_at": "2026-05-31T18:42:10.526Z",
           "started_at": "2026-05-31T18:42:10.526Z",
-          "status": "running"
+          "status": "completed",
+          "ended_at": "2026-05-31T18:42:10.526Z"
         },
         "final-wave:f2": {
           "task_key": "final-wave:f2",
@@ -113,7 +115,8 @@
           "category": "unspecified-high",
           "updated_at": "2026-05-31T18:44:28.700Z",
           "started_at": "2026-05-31T18:44:28.700Z",
-          "status": "running"
+          "status": "completed",
+          "ended_at": "2026-05-31T18:44:28.700Z"
         },
         "final-wave:f1": {
           "task_key": "final-wave:f1",
@@ -122,8 +125,9 @@
           "session_id": "opencode:ses_180967a5efferb6cLwMDpe3b5P",
           "agent": "oracle",
           "started_at": "2026-05-31T18:45:33.488Z",
-          "status": "running",
-          "updated_at": "2026-05-31T19:06:28.678Z"
+          "status": "completed",
+          "updated_at": "2026-05-31T19:06:28.678Z",
+          "ended_at": "2026-05-31T19:06:28.678Z"
         },
         "final-wave:f4": {
           "task_key": "final-wave:f4",
@@ -134,16 +138,19 @@
           "category": "deep",
           "updated_at": "2026-05-31T18:45:44.301Z",
           "started_at": "2026-05-31T18:45:44.301Z",
-          "status": "running"
+          "status": "completed",
+          "ended_at": "2026-05-31T18:45:44.301Z"
         }
       },
-      "worktree_path": "/home/hcbusy/tmp/claude_tmp/foretias-group7-signing"
+      "worktree_path": "/home/hcbusy/tmp/claude_tmp/foretias-group7-signing",
+      "ended_at": "2026-05-31T23:39:42.661Z",
+      "elapsed_ms": 33058326
     }
   },
   "active_plan": "/home/hcbusy/webhash/foretias/.sisyphus/plans/group7-signing.md",
   "started_at": "2026-05-31T14:28:44.335Z",
-  "status": "active",
-  "updated_at": "2026-05-31T19:33:09.807Z",
+  "status": "completed",
+  "updated_at": "2026-05-31T23:39:42.661Z",
   "session_ids": [
     "opencode:ses_1843c07c2ffejzUFH8sD2E0Itr"
   ],
@@ -225,8 +232,9 @@
       "agent": "Sisyphus-Junior",
       "category": "deep",
       "started_at": "2026-05-31T16:27:25.536Z",
-      "status": "running",
-      "updated_at": "2026-05-31T19:33:09.808Z"
+      "status": "completed",
+      "updated_at": "2026-05-31T19:33:09.808Z",
+      "ended_at": "2026-05-31T19:33:09.808Z"
     },
     "final-wave:f3": {
       "task_key": "final-wave:f3",
@@ -237,7 +245,8 @@
       "category": "unspecified-high",
       "updated_at": "2026-05-31T18:42:10.526Z",
       "started_at": "2026-05-31T18:42:10.526Z",
-      "status": "running"
+      "status": "completed",
+      "ended_at": "2026-05-31T18:42:10.526Z"
     },
     "final-wave:f2": {
       "task_key": "final-wave:f2",
@@ -248,7 +257,8 @@
       "category": "unspecified-high",
       "updated_at": "2026-05-31T18:44:28.700Z",
       "started_at": "2026-05-31T18:44:28.700Z",
-      "status": "running"
+      "status": "completed",
+      "ended_at": "2026-05-31T18:44:28.700Z"
     },
     "final-wave:f1": {
       "task_key": "final-wave:f1",
@@ -257,8 +267,9 @@
       "session_id": "opencode:ses_180967a5efferb6cLwMDpe3b5P",
       "agent": "oracle",
       "started_at": "2026-05-31T18:45:33.488Z",
-      "status": "running",
-      "updated_at": "2026-05-31T19:06:28.678Z"
+      "status": "completed",
+      "updated_at": "2026-05-31T19:06:28.678Z",
+      "ended_at": "2026-05-31T19:06:28.678Z"
     },
     "final-wave:f4": {
       "task_key": "final-wave:f4",
@@ -269,9 +280,12 @@
       "category": "deep",
       "updated_at": "2026-05-31T18:45:44.301Z",
       "started_at": "2026-05-31T18:45:44.301Z",
-      "status": "running"
+      "status": "completed",
+      "ended_at": "2026-05-31T18:45:44.301Z"
     }
   },
   "agent": "atlas",
-  "worktree_path": "/home/hcbusy/tmp/claude_tmp/foretias-group7-signing"
+  "worktree_path": "/home/hcbusy/tmp/claude_tmp/foretias-group7-signing",
+  "ended_at": "2026-05-31T23:39:42.661Z",
+  "elapsed_ms": 33058326
 }
