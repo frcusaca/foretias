@@ -90,16 +90,22 @@ foretias-server | UnverifiedSignatureEnvelope | u8 | 1
 
 === TinmanSuite ===
 
-  (skipped: cargo rustdoc exited with error:  Documenting foretias-core v0.3.0 (/home/hcbusy/webhash/foretias/p2p/core-engine)
-error: Option 'json' given more than once
-
-error: could not document `foretias-core`
-)
-
-
-=== TinmanSuite ===
-
-  (no wrapper usages found in rustdoc JSON)
+  builder_from_authenticated | CleanAuthenticated | param auth: CleanAuthenticated
+  clone | CleanAuthenticated | output: CleanAuthenticated
+  clone | Externalized | output: Externalized
+  clone | Externalized | output: ExternalizedAttestation
+  clone | Externalized | output: ExternalizedBuilder
+  clone | Externalized | output: ExternalizedChrononRecord
+  clone | Externalized | output: ExternalizedEpochSnapshot
+  clone | Externalized | output: ExternalizedForetis
+  clone | Externalized | output: ExternalizedProbityReport
+  clone | UnverifiedSignatureEnvelope | output: UnverifiedSignatureEnvelope
+  externalize | Externalized | output: ExternalizedChrononRecord
+  externalize | Externalized | output: ExternalizedEpochSnapshot
+  externalize | Externalized | output: ExternalizedForetis
+  externalize | Externalized | output: ExternalizedProbityReport
+  from | CleanAuthenticated | output: CleanAuthenticated
+  verify_unprocessed | UnverifiedSignatureEnvelope | param unprocessed: crate::foretias::clean_auth::UnverifiedSignatureEnvelope
 
 
 === TinmanSuite Cross-Tabulation ===
@@ -112,9 +118,18 @@ CleanAuthenticated | EpochSnapshot | 3
 CleanAuthenticated | Foretis | 9
 CleanAuthenticated | ProbityReport | 3
 CleanAuthenticated | T | 6
+CleanAuthenticated | output: CleanAuthenticated | 2
+CleanAuthenticated | param auth: CleanAuthenticated | 1
 CleanAuthenticated | u32 | 2
 CleanAuthenticated | u8 | 1
 Externalized | T | 2
+Externalized | output: Externalized | 1
+Externalized | output: ExternalizedAttestation | 1
+Externalized | output: ExternalizedBuilder | 1
+Externalized | output: ExternalizedChrononRecord | 2
+Externalized | output: ExternalizedEpochSnapshot | 2
+Externalized | output: ExternalizedForetis | 2
+Externalized | output: ExternalizedProbityReport | 2
 Externalized | u8 | 1
 UnverifiedSignatureEnvelope | ChrononRecord | 6
 UnverifiedSignatureEnvelope | EpochSnapshot | 3
@@ -122,4 +137,6 @@ UnverifiedSignatureEnvelope | FamilyRecord | 1
 UnverifiedSignatureEnvelope | Foretis | 5
 UnverifiedSignatureEnvelope | ProbityReport | 3
 UnverifiedSignatureEnvelope | T | 5
+UnverifiedSignatureEnvelope | output: UnverifiedSignatureEnvelope | 1
+UnverifiedSignatureEnvelope | param unprocessed: crate::foretias::clean_auth::UnverifiedSignatureEnvelope | 1
 UnverifiedSignatureEnvelope | u8 | 1

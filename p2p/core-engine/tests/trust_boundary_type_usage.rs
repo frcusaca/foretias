@@ -10,7 +10,7 @@ use std::process::Command;
 use syn::visit::Visit;
 
 // TinmanSuite: rustdoc JSON type-resolved checks
-use rustdoc_types::{Crate, Type};
+use rustdoc_types::Crate;
 
 #[derive(Debug, Clone)]
 struct LocationEntry {
@@ -199,7 +199,12 @@ fn collect_ast_usages(workspace_root: &Path) -> (Vec<LocationEntry>, Vec<RawOccu
         }
     }
     let mut result: Vec<LocationEntry> = all_locations.into_values().collect();
-    result.sort_by(|a, b| a.file.cmp(&b.file).then(a.inner.cmp(&b.inner)).then(a.context.cmp(&b.context)));
+    result.sort_by(|a, b| {
+        a.file
+            .cmp(&b.file)
+            .then(a.inner.cmp(&b.inner))
+            .then(a.context.cmp(&b.context))
+    });
     (result, all_raw)
 }
 
@@ -243,7 +248,11 @@ fn test_wrapper_type_visitor_detects_wrappers() {
             (loc.is_clean_authenticated, "CleanAuthenticated"),
             (loc.is_externalized, "Externalized"),
         ];
-        let active: Vec<_> = wrappers.into_iter().filter(|(b, _)| *b).map(|(_, n)| n).collect();
+        let active: Vec<_> = wrappers
+            .into_iter()
+            .filter(|(b, _)| *b)
+            .map(|(_, n)| n)
+            .collect();
         println!(
             "  {} [{}] {} (context: {})",
             loc.file,
@@ -274,8 +283,8 @@ fn verify_ast_invariants(locations: &[LocationEntry]) -> Vec<String> {
     // Gate files: clean_auth.rs (primary gate) or probity/report.rs (domain-specific gate)
     for loc in locations {
         if loc.file.starts_with("core-engine/src") && loc.is_unprocessed {
-            let is_gate_file = loc.file.ends_with("clean_auth.rs")
-                || loc.file.ends_with("probity/report.rs");
+            let is_gate_file =
+                loc.file.ends_with("clean_auth.rs") || loc.file.ends_with("probity/report.rs");
             if !is_gate_file {
                 violations.push(format!(
                     "VIOLATION: UnverifiedSignatureEnvelope found in core-engine outside a gate file: {} [{}] {}",
@@ -288,8 +297,8 @@ fn verify_ast_invariants(locations: &[LocationEntry]) -> Vec<String> {
     // Rule 2: core-engine should NOT contain Externalized usage EXCEPT in gate files
     for loc in locations {
         if loc.file.starts_with("core-engine/src") && loc.is_externalized {
-            let is_gate_file = loc.file.ends_with("clean_auth.rs")
-                || loc.file.ends_with("probity/report.rs");
+            let is_gate_file =
+                loc.file.ends_with("clean_auth.rs") || loc.file.ends_with("probity/report.rs");
             if !is_gate_file {
                 violations.push(format!(
                     "VIOLATION: Externalized found in core-engine outside a gate file: {} [{}] {}",
@@ -372,9 +381,18 @@ fn check_gate_bodies(source: &str) -> Vec<String> {
     for (i, line) in lines.iter().enumerate() {
         let trimmed = line.trim();
 
-        if !in_gate_fn && (trimmed.contains("fn ") && trimmed.contains("UnverifiedSignatureEnvelope")) {
+        if !in_gate_fn
+            && (trimmed.contains("fn ") && trimmed.contains("UnverifiedSignatureEnvelope"))
+        {
             in_gate_fn = true;
-            fn_name = trimmed.split("fn ").nth(1).unwrap_or("").split('(').next().unwrap_or("").to_string();
+            fn_name = trimmed
+                .split("fn ")
+                .nth(1)
+                .unwrap_or("")
+                .split('(')
+                .next()
+                .unwrap_or("")
+                .to_string();
             fn_start = i;
             brace_depth = 0;
         }
@@ -395,7 +413,10 @@ fn check_gate_bodies(source: &str) -> Vec<String> {
                 let has_verify = VERIFY_PRIMITIVES.iter().any(|p| body.contains(*p));
 
                 if !has_always {
-                    violations.push(format!("{}: missing always_require_full_signature", fn_name));
+                    violations.push(format!(
+                        "{}: missing always_require_full_signature",
+                        fn_name
+                    ));
                 }
                 if !has_sig_data {
                     violations.push(format!("{}: missing signature data reference", fn_name));
@@ -435,16 +456,17 @@ fn test_trust_boundary_snapshot() {
 
     // TinmanSuite section
     let crate_path = workspace.join("core-engine");
-    let tinman_usages = match invoke_rustdoc_json(&crate_path) {
-        Ok(crate_json) => collect_semantic_usages(&crate_json),
-        Err(e) => {
-            snapshot.push_str(&format!("\n\n=== TinmanSuite ===\n\n  (skipped: {})\n", e));
-            Vec::new()
-        }
+    let (tinman_usages, tinman_skipped) = match invoke_rustdoc_json(&crate_path) {
+        Ok(crate_json) => (collect_semantic_usages(&crate_json), None),
+        Err(e) => (Vec::new(), Some(e)),
     };
     let tinman_violations = verify_semantic_invariants(&tinman_usages);
     snapshot.push_str("\n\n");
-    snapshot.push_str(&format_tinman_suite(&tinman_usages, &tinman_violations));
+    if let Some(e) = tinman_skipped {
+        snapshot.push_str(&format!("=== TinmanSuite ===\n\n  (skipped: {})\n", e));
+    } else {
+        snapshot.push_str(&format_tinman_suite(&tinman_usages, &tinman_violations));
+    }
 
     // Cross-tabulation section
     let merged = merge_into_table(&raw, &tinman_usages);
@@ -461,16 +483,16 @@ fn test_trust_boundary_snapshot() {
         }
     }
 
-    let snapshot_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/snapshots");
+    let snapshot_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots");
     std::fs::create_dir_all(&snapshot_dir).ok();
     let snapshot_path = snapshot_dir.join("trust_boundary_usage_snapshot.txt");
 
-    let update_snapshot = std::env::var("UPDATE_SNAPSHOT").map(|v| v == "1").unwrap_or(false);
+    let update_snapshot = std::env::var("UPDATE_SNAPSHOT")
+        .map(|v| v == "1")
+        .unwrap_or(false);
 
     if snapshot_path.exists() {
-        let existing = std::fs::read_to_string(&snapshot_path)
-            .expect("failed to read snapshot");
+        let existing = std::fs::read_to_string(&snapshot_path).expect("failed to read snapshot");
         if existing != snapshot && !update_snapshot {
             panic!(
                 "Snapshot mismatch.\n\nExpected:\n{}\n\nActual:\n{}\n\nSet UPDATE_SNAPSHOT=1 to update.",
@@ -501,13 +523,36 @@ fn test_trust_boundary_snapshot() {
 // ---------------------------------------------------------------------------
 
 /// Known wrapper type names to search for in resolved types.
-const WRAPPER_NAMES: &[&str] = &["CleanAuthenticated", "UnverifiedSignatureEnvelope", "Externalized"];
+const WRAPPER_NAMES: &[&str] = &[
+    "CleanAuthenticated",
+    "UnverifiedSignatureEnvelope",
+    "Externalized",
+];
 
-/// Invoke `cargo rustdoc -- --json` and return the parsed Crate.
+/// Invoke `cargo +nightly rustdoc -Z unstable-options --output-format json`
+/// and return the parsed Crate.
+///
+/// Reads the JSON from the generated file (`target/doc/{crate_name}.json`)
+/// rather than stdout, because `cargo rustdoc --output-format json` writes
+/// to a file.
+///
+/// **Rustdoc JSON schema versioning limitation:** The `rustdoc-types` crate
+/// version must match the nightly rustdoc JSON output format. If the
+/// `format_version` field in the JSON doesn't match the expected version,
+/// parsing will fail. Pin `rustdoc-types` in Cargo.toml and update when
+/// upgrading nightly.
 fn invoke_rustdoc_json(crate_path: &Path) -> Result<Crate, String> {
+    // Try nightly first (needed for --output-format json / -Z unstable-options)
     let output = Command::new("cargo")
         .current_dir(crate_path)
-        .args(&["rustdoc", "--", "--json"])
+        .args(&[
+            "+nightly",
+            "rustdoc",
+            "-Z",
+            "unstable-options",
+            "--output-format",
+            "json",
+        ])
         .output()
         .map_err(|e| format!("cargo rustdoc failed: {}", e))?;
 
@@ -516,8 +561,33 @@ fn invoke_rustdoc_json(crate_path: &Path) -> Result<Crate, String> {
         return Err(format!("cargo rustdoc exited with error: {}", stderr));
     }
 
-    let crate_json: Crate = serde_json::from_slice(&output.stdout)
+    // Read the JSON from the generated file (not stdout)
+    // Cargo uses the workspace-level target dir, not the crate's own target dir
+    let json_path = crate_path
+        .parent()
+        .unwrap()
+        .join("target/doc/foretias_core.json");
+    let json_bytes = std::fs::read(&json_path).map_err(|e| {
+        format!(
+            "failed to read rustdoc JSON at {}: {}",
+            json_path.display(),
+            e
+        )
+    })?;
+
+    let crate_json: Crate = serde_json::from_slice(&json_bytes)
         .map_err(|e| format!("failed to parse rustdoc JSON: {}", e))?;
+
+    // Assert format_version to catch schema drift early
+    // rustdoc-types 0.57.x uses format_version 57; update this when upgrading
+    let expected_version: u32 = 57;
+    if crate_json.format_version != expected_version {
+        return Err(format!(
+            "rustdoc JSON format_version mismatch: got {}, expected {}. \
+             Update the rustdoc-types dependency to match your nightly toolchain.",
+            crate_json.format_version, expected_version
+        ));
+    }
 
     Ok(crate_json)
 }
@@ -525,14 +595,32 @@ fn invoke_rustdoc_json(crate_path: &Path) -> Result<Crate, String> {
 /// Convert a rustdoc Type to its string representation.
 fn type_to_string(ty: &rustdoc_types::Type) -> String {
     match ty {
-        rustdoc_types::Type::ResolvedPath(path) => path.name.clone(),
+        rustdoc_types::Type::ResolvedPath(path) => path.path.clone(),
         rustdoc_types::Type::Generic(name) => name.clone(),
         rustdoc_types::Type::Primitive(name) => name.clone(),
-        rustdoc_types::Type::Tuple(types) => format!("({})", types.iter().map(type_to_string).collect::<Vec<_>>().join(", ")),
+        rustdoc_types::Type::Tuple(types) => format!(
+            "({})",
+            types
+                .iter()
+                .map(type_to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
         rustdoc_types::Type::FunctionPointer(fn_ptr) => {
-            format!("fn({})", fn_ptr.decl.inputs.iter().map(|(_, ty)| type_to_string(ty)).collect::<Vec<_>>().join(", "))
+            format!(
+                "fn({})",
+                fn_ptr
+                    .sig
+                    .inputs
+                    .iter()
+                    .map(|(_, ty)| type_to_string(ty))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
         }
-        rustdoc_types::Type::QualifiedPath { name, self_type, .. } => {
+        rustdoc_types::Type::QualifiedPath {
+            name, self_type, ..
+        } => {
             format!("{}::{}", type_to_string(self_type), name)
         }
         _ => String::from("..."),
@@ -556,24 +644,40 @@ fn collect_semantic_usages(crate_: &Crate) -> Vec<(String, String, String)> {
         let item_name = item.name.as_deref().unwrap_or("<unnamed>").to_string();
         match &item.inner {
             rustdoc_types::ItemEnum::Function(func) => {
-                for (name, ty) in &func.decl.inputs {
+                for (name, ty) in &func.sig.inputs {
                     let type_str = type_to_string(ty);
                     if let Some(wrapper) = resolve_type(&type_str) {
-                        usages.push((item_name.clone(), wrapper.clone(), format!("param {}: {}", name, type_str)));
+                        usages.push((
+                            item_name.clone(),
+                            wrapper.clone(),
+                            format!("param {}: {}", name, type_str),
+                        ));
                     }
                 }
-                if let Some(output_ty) = &func.decl.output {
+                if let Some(output_ty) = &func.sig.output {
                     let output_str = type_to_string(output_ty);
                     if let Some(wrapper) = resolve_type(&output_str) {
-                        usages.push((item_name.clone(), wrapper.clone(), format!("output: {}", output_str)));
+                        usages.push((
+                            item_name.clone(),
+                            wrapper.clone(),
+                            format!("output: {}", output_str),
+                        ));
                     }
                 }
             }
-            rustdoc_types::ItemEnum::AssocType { generics, default, .. } => {
+            rustdoc_types::ItemEnum::AssocType {
+                generics,
+                type_: default,
+                ..
+            } => {
                 if let Some(default_ty) = default {
                     let type_str = type_to_string(default_ty);
                     if let Some(wrapper) = resolve_type(&type_str) {
-                        usages.push((item_name.clone(), wrapper.clone(), format!("assoc_type default: {}", type_str)));
+                        usages.push((
+                            item_name.clone(),
+                            wrapper.clone(),
+                            format!("assoc_type default: {}", type_str),
+                        ));
                     }
                 }
                 for param in &generics.params {
@@ -581,7 +685,11 @@ fn collect_semantic_usages(crate_: &Crate) -> Vec<(String, String, String)> {
                         for bound in bounds {
                             let bound_str = bound_to_string(bound);
                             if let Some(wrapper) = resolve_type(&bound_str) {
-                                usages.push((item_name.clone(), wrapper.clone(), format!("assoc_type bound: {}", bound_str)));
+                                usages.push((
+                                    item_name.clone(),
+                                    wrapper.clone(),
+                                    format!("assoc_type bound: {}", bound_str),
+                                ));
                             }
                         }
                     }
@@ -590,13 +698,15 @@ fn collect_semantic_usages(crate_: &Crate) -> Vec<(String, String, String)> {
             _ => {}
         }
     }
+    usages.sort();
     usages
 }
 
 fn bound_to_string(bound: &rustdoc_types::GenericBound) -> String {
     match bound {
-        rustdoc_types::GenericBound::TraitBound { trait_, .. } => trait_.name.clone(),
+        rustdoc_types::GenericBound::TraitBound { trait_, .. } => trait_.path.clone(),
         rustdoc_types::GenericBound::Outlives(lifetime) => lifetime.clone(),
+        _ => "...".to_string(),
     }
 }
 
@@ -607,7 +717,10 @@ fn verify_semantic_invariants(usages: &[(String, String, String)]) -> Vec<String
     for (fn_name, wrapper, context) in usages {
         // Check for alias/newtype usage (these are Type::Alias in rustdoc JSON)
         if context.contains("Alias") {
-            violations.push(format!("{}: {} used via alias/newtype (should be direct wrapper)", fn_name, wrapper));
+            violations.push(format!(
+                "{}: {} used via alias/newtype (should be direct wrapper)",
+                fn_name, wrapper
+            ));
         }
     }
 
@@ -682,13 +795,17 @@ fn check_gate_bodies_in_workspace(workspace: &Path) -> Vec<String> {
         let full_dir = workspace.join(dir);
         let mut stack = vec![full_dir];
         while let Some(d) = stack.pop() {
-            let Ok(entries) = std::fs::read_dir(&d) else { continue };
+            let Ok(entries) = std::fs::read_dir(&d) else {
+                continue;
+            };
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.is_dir() {
                     stack.push(path);
                 } else if path.extension().map_or(false, |e| e == "rs") {
-                    let Ok(src) = std::fs::read_to_string(&path) else { continue };
+                    let Ok(src) = std::fs::read_to_string(&path) else {
+                        continue;
+                    };
                     let rel = path.strip_prefix(workspace).unwrap_or(&path);
                     let file_str = rel.display().to_string();
                     let violations = check_gate_bodies(&src);

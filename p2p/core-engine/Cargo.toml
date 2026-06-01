@@ -42,7 +42,7 @@ argon2              = "0.5"
 [dev-dependencies]
 static_assertions = "1.1"
 syn               = { version = "2.0", features = ["full", "visit", "parsing"] }
-rustdoc-types     = "0.27"
+rustdoc-types     = "0.57"
 
 [build-dependencies]
 cc      = "1.0"
