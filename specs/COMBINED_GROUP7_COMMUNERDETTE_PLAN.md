@@ -837,9 +837,11 @@ A channel becomes usable for application messages only after it is `FullyBound`.
 - [x] Unit test: `verify_dual_key` rejects wrong slow-key signature. (2026-05-27)
 - [x] Unit test: `verify_dual_key` rejects nonce mismatch. (2026-05-27)
 - [x] Unit test: `verify_dual_key` rejects TBID mismatch. (2026-05-27)
-- [ ] Integration test: two real servers, source initiates channel bind → mirror
+- [x] Integration test: two real servers, source initiates channel bind → mirror
       responds → source reaches `FullyBound`.
-- [ ] Integration test: second independent channel can be bound simultaneously.
+      (2026-05-31 23:50)
+- [x] Integration test: second independent channel can be bound simultaneously.
+      (2026-05-31 23:50)
 
 ### 12.1 Level 1 — Network Stack Alive
 
@@ -1393,8 +1395,10 @@ work (Phase 17) — it focuses on missing tests and production code hygiene.
       (2026-05-31 23:30)
 - [x] L3 unit test: task records failure when gate_foretis rejects response.
       (2026-05-31 23:30)
-- [ ] Integration test: two real servers, channel bind succeeds.
-- [ ] Integration test: two real servers, second independent channel binds.
+- [x] Integration test: two real servers, channel bind succeeds.
+      (2026-05-31 23:50)
+- [x] Integration test: two real servers, second independent channel binds.
+      (2026-05-31 23:50)
 - [ ] Integration test: two real servers, L2 succeeds and binding is `Verified`.
 - [ ] Integration test: two real servers, L3 succeeds end-to-end.
 
