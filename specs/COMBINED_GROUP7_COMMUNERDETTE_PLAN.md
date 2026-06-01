@@ -758,11 +758,21 @@ golden file for all signing and verification call sites (Spec §11.6, §15 crite
 
 ---
 
-## Phase 12 — Channel Binding + Three Liveness Levels ✅ COMPLETE (2026-05-27)
+## Phase 12 — Channel Binding + Three Liveness Levels (Production Code Complete, Tests Pending)
 
 **Goal:** Implement channel-binding establishment (§12.0) and all three
 liveness levels inside Communerdette (Spec §12).
 Deprecate `PeerPool::start_liveness_pings`.
+
+**Audit Note (2026-05-31):** Production code (spawn functions, structs, handlers, policy) is complete and compiles cleanly. However, the test suite is NOT complete. The `✅ COMPLETE` label was applied to production code only. See Phase 18 below for test remediation.
+
+**Test Gap Summary:**
+- L1 unit tests: 2 missing (success + failure paths)
+- L2 unit tests: 4 missing (promote to Verified, 3 rejection paths)
+- L3 unit tests: 2 missing (success + failure paths)
+- Integration tests: 5 missing (channel bind x2, L2, L3, l1_ping_round_trip)
+- Wiring: 1 missing (Communerd triggers `spawn_channel_bind_task`)
+- **Total: 12 unit + 5 integration + 1 wiring = 18 remaining items**
 
 **Spec refs:** §12.0–§12.4, §11.4.1, §4 invariants 16, 21–22, §15 criterion 7.
 
@@ -1068,13 +1078,20 @@ cargo test --workspace -- --include-ignored
 
 ### 13.5 Tests
 
+**Audit Note (2026-05-31):** The basic `UnverifiedSignatureEnvelope<ProbityReport>::verify()` gate is NOT a hole — it's fully implemented and tested with 3 cases in `core-engine/src/probity/report.rs:372-401` (valid signature, invalid signature, short signature). The actual gaps are FB-specific tests and the end-to-end integration.
+
 - [ ] Unit test: `emit_fb_established` builds a report with `attribute="fb"`,
       `value=1.0`, correct reporter and subject TBIDs.
 - [ ] Unit test: `emit_fb_lost` builds a report with `value=-1.0`.
 - [ ] Unit test: a signed FB report passes `Unprocessed<ProbityReport>::verify`.
+      **NOTE:** Non-FB verify is tested (`test_verify_valid_signature` uses
+      `attribute="correctness"`). This item specifically requires `attribute="fb"`
+      to exercise the `always_require_full_signature()` path.
 - [ ] Integration test (two servers, Phase 14 harness): server A reaches
       `FullyBound` with B; B's `ProbityStore` eventually contains a record
       from A with `attribute="fb"` and `value=1.0`.
+      **NOTE:** `toppoli_fb_gossip_propagation` exists as a stub (only checks
+      `running_count == 2`). Full ProbityStore inspection is pending.
 
 ---
 
@@ -1238,6 +1255,8 @@ No CancellationToken changes to `TimeFamilyServer` are needed.
 **Spec reference:** `TRUST_BOUNDARY_SEMANTIC_ANALYSIS_SPEC.md`.
 **As of 2026-05-29 rustdoc JSON is the best available type-resolved mechanism.**
 
+**Audit Note (2026-05-31):** TinmanSuite code structure is implemented and producing output (snapshot file confirms sections exist). However, `cargo rustdoc -- --json` fails with `"Option 'json' given more than once"` — the test is skipped, not passing. The StrawmanSuite renames (17.1) are also not done. The `rustdoc-types` dev-dependency is present (`Cargo.toml:45`). Two specific items are missing: (1) `format_version` assertion, (2) documentation note about rustdoc JSON schema versioning.
+
 ### 17.1 StrawmanSuite (AST / `syn`) — extends the existing snapshot test
 
 - [ ] Rename existing functions per spec §8: `collect_all_type_usages` →
@@ -1274,6 +1293,80 @@ No CancellationToken changes to `TimeFamilyServer` are needed.
 
 - [ ] StrawmanSuite and TinmanSuite functions do not cross-call; only the
       top-level `test_trust_boundary_snapshot` invokes both.
+
+---
+
+## Phase 18 — Test Remediation & Code Quality Cleanup
+
+**Date added:** 2026-05-31.
+**Purpose:** Close test gaps identified in code audit, and address code quality
+items found during review. This phase does NOT duplicate TinmanSuite/StrawmanSuite
+work (Phase 17) — it focuses on missing tests and production code hygiene.
+
+### 18.1 Phase 12 Test Completion
+
+**Blocked on:** Phase 12.0 wiring (Communerd triggers `spawn_channel_bind_task`).
+
+- [ ] L1 unit test: task records success when ping returns pong.
+- [ ] L1 unit test: task records failure when ping times out or returns error.
+- [ ] L2 unit test: task promotes `ClaimedByDht` to `Verified` on valid response.
+- [ ] L2 unit test: task sets `Rejected` on wrong TBID in response.
+- [ ] L2 unit test: task sets `Rejected` on wrong challenge echo.
+- [ ] L2 unit test: task sets `Rejected` on invalid fast-key signature.
+- [ ] L3 unit test: task records success when stamp returns valid Foretis.
+- [ ] L3 unit test: task records failure when gate_foretis rejects response.
+- [ ] Integration test: two real servers, channel bind succeeds.
+- [ ] Integration test: two real servers, second independent channel binds.
+- [ ] Integration test: two real servers, L2 succeeds and binding is `Verified`.
+- [ ] Integration test: two real servers, L3 succeeds end-to-end.
+
+### 18.2 Phase 13.5 Test Completion
+
+- [ ] Unit test: `emit_fb_established` builds FB report (attribute="fb", value=1.0).
+- [ ] Unit test: `emit_fb_lost` builds FB report (value=-1.0).
+- [ ] Unit test: signed FB report passes `Unprocessed<ProbityReport>::verify`
+      (exercises `always_require_full_signature()` path).
+- [ ] Integration test: two servers, A FullyBound with B, B's ProbityStore
+      contains FB record from A (flesh out `toppoli_fb_gossip_propagation`).
+
+### 18.3 Phase 14.5/14.6 Toppoli Test Completion
+
+- [ ] `toppoli_l1_ping_round_trip` — 2 peers, JSON-RPC ping round trip.
+- [ ] `toppoli_l2_auth_ping` — 2 peers, authenticated_ping, binding advances.
+- [ ] `toppoli_fb_gossip` — 2 peers, FullyBound, ProbityStore contains FB report.
+- [ ] `toppoli_gnf_churn` — 12 peers, churn, gossip propagates.
+
+### 18.4 Phase 14.7 Documentation
+
+- [ ] Update `AGENTS.md` with "Toppoli tests" section.
+- [ ] Update `README.md` with Toppoli summary and run commands.
+
+### 18.5 Phase 17 TinmanSuite CLI Fix
+
+**The TinmanSuite code exists but `cargo rustdoc -- --json` fails.**
+
+- [ ] Fix `invoke_rustdoc_json()` — resolve `"Option 'json' given more than once"`
+      error (likely a duplicate `--json` flag in the command args).
+- [ ] Assert `format_version` in rustdoc JSON output.
+- [ ] Document rustdoc JSON schema versioning limitation.
+- [ ] Verify TinmanSuite produces non-empty output (not "skipped" or "no usages").
+
+### 18.6 Unwrap/Expect Audit (Informational)
+
+**Audit finding (2026-05-31):** 768 `.unwrap()` / `.expect()` calls in production
+code (503 in core-engine, 265 in foretias-server). Most are in test code or
+FFI boundaries where panics are acceptable. A subset in production paths
+should be reviewed for conversion to `Result` propagation.
+
+- [ ] Run `grep -rn '\.unwrap()\|\.expect(' p2p/*/src/` and categorize:
+  - Test code (acceptable)
+  - FFI boundary (review case-by-case)
+  - Production protocol code (convert to Result where feasible)
+- [ ] Identify top 10 highest-risk unwrap/expect calls in production code.
+- [ ] Document findings in `docs/security/unwrap-audit.md`.
+
+**NOTE:** This is an audit task, not a fix task. Actual conversions to Result
+are separate work items scoped per-file.
 
 ---
 
