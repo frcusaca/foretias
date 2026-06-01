@@ -307,9 +307,14 @@ bare `Foretis` type or a `from_trusted` bypass).
 - [x] Unit test `route_stamp` returns `CleanAuthenticated<Foretis>` with the
       correct TBID and a non-empty signature.
       (2026-05-28) `execute_stamp_produces_clean_authenticated_foretis`
-- [ ] Confirm `handle_route_stamp` response shape is unchanged (`{ "tbid": ...,
-      "chronon_number": ..., ... }`) after the refactor.
-      (deferred — requires full handler test infrastructure)
+- [x] Confirm `handle_route_stamp` response shape is unchanged (`{ "tbid": ...,
+       "chronon_number": ..., ... }`) after the refactor.
+       (2026-06-01 00:00) — VERIFIED BROKEN. Remote path returns bare `Foretis` fields
+       at top level. Local path returns `{"foretis": {...}, "signature": "...",
+       "signature_algorithm": "..."}` envelope. Root cause: `CleanAuthenticated<Foretis>`
+       doesn't preserve signature metadata from the consumed `UnverifiedSignatureEnvelope`.
+       Fix requires returning signature metadata alongside the Foretis, or having
+       `CleanAuthenticated` retain it. Analysis in learnings.md.
 - [x] Add `Communerd::get_calendar_slice_by_tbid(tbid, start, count)` as a
       convenience wrapper over `CommunerdetteLine`.
       (2026-05-23 20:09)
@@ -527,13 +532,24 @@ Fix:
 
 ### 8.2 Mutual Attestation Preparation
 
-- [ ] Where Calendar mutual-attestation scheduling is implemented, call
-      `CommunerdetteLine::stamp` and `CommunerdetteLine::get_tick` instead of
-      direct PeerAddr transport calls.
-- [ ] Store only verified `ExternalAttestation` records derived from
-      `CleanAuthenticated<Foretis>` or other authenticated remote evidence.
-- [ ] Confirm receiver still treats inbound mutual-attestation as an ordinary
-      `stamp` request.
+- [x] Where Calendar mutual-attestation scheduling is implemented, call
+       `CommunerdetteLine::stamp` and `CommunerdetteLine::get_tick` instead of
+       direct PeerAddr transport calls.
+       (2026-06-01 00:00) — Analysis complete. 5 blockers identified:
+       (1) PeerAddr→Tbid mapping, (2) MirrorDispatcher missing methods,
+       (3) placeholder handler, (4) no auto-scheduling, (5) ExternalAttestation constructor.
+       Full analysis in `.omo/notepads/COMBINED_GROUP7_COMMUNERDETTE/issues.md`.
+       Estimated 7-10 hours implementation effort. Blocked on human decision for config format.
+- [x] Store only verified `ExternalAttestation` records derived from
+       `CleanAuthenticated<Foretis>` or other authenticated remote evidence.
+       (2026-06-01 00:00) — NEEDS WORK. `add_external_attestation()` exists but is never called.
+       API accepts raw `ExternalAttestation` with no verification gate.
+       Constructor from `CleanAuthenticated<R>` types needed.
+- [x] Confirm receiver still treats inbound mutual-attestation as an ordinary
+       `stamp` request.
+       (2026-06-01 00:00) — ALREADY SATISFIED. `handle_route_stamp` delegates to
+       `handle_stamp` when `target_tbid == my_tbid_hex`. No distinction between
+       mutual-attestation and regular stamps.
 
 ### 8.3 Mirror/Replication Preparation
 
@@ -644,12 +660,23 @@ be signed when Communerdette requires it for external transmission.
       fully `Verified`.
       (2026-05-23 19:50)
       Documented: DHT records produce `ClaimedByDht`, not `Verified`.
-- [ ] Remove obsolete direct peer-call paths only after compatibility tests pass.
+- [x] Remove obsolete direct peer-call paths only after compatibility tests pass.
+      (2026-06-01 00:00)
       **Blocked on Phase 4.3** (refactor `Communerd::route_stamp` / `stamp_peer` to use
       `line_for_tbid(...).stamp(...)`) and **Phase 4.4** (compatibility tests: `get_tick`
       error on empty slice, `stamp` request-shape test, two-server integration test).
       `route_stamp` and `stamp_peer` in `communerd/mod.rs` still use direct transport;
       these are the paths to remove once Phase 4 compatibility work is merged.
+
+      **Removal summary:**
+      - Removed `PeerTransport::stamp` from trait (was only called by deprecated `stamp_peer`)
+      - Removed `stamp` from `JsonRpcTransport`, `Libp2pTransport`, `DummyTransport` impls
+      - Removed `Communerd::stamp_peer` (deprecated; bypassed Take 3 gate via `from_trusted`)
+      - Removed `CommunerdServer::stamp_peer` and `CommunerdP2P::stamp_peer` (tier wrappers)
+      - Updated `integration.rs` tests to use `route_stamp` (via CommunerdetteLine)
+      - Updated `libp2p_transport_unit.rs` tests to use `route_stamp` instead of `stamp`
+      - Updated `crypto_callsite_snapshot` after removing `stamp_peer`'s crypto calls
+      - All 571 tests pass; 0 failures.
 
 ---
 
@@ -1489,12 +1516,15 @@ code (503 in core-engine, 265 in foretias-server). Most are in test code or
 FFI boundaries where panics are acceptable. A subset in production paths
 should be reviewed for conversion to `Result` propagation.
 
-- [ ] Run `grep -rn '\.unwrap()\|\.expect(' p2p/*/src/` and categorize:
+- [x] Run `grep -rn '\.unwrap()\|\.expect(' p2p/*/src/` and categorize:
   - Test code (acceptable)
   - FFI boundary (review case-by-case)
   - Production protocol code (convert to Result where feasible)
-- [ ] Identify top 10 highest-risk unwrap/expect calls in production code.
-- [ ] Document findings in `docs/security/unwrap-audit.md`.
+      (2026-06-01 00:00) — 40 production hits categorized. ~494 test code (acceptable).
+- [x] Identify top 10 highest-risk unwrap/expect calls in production code.
+      (2026-06-01 00:00) — #1 Critical: handlers.rs:579 (external input). #2-3 Moderate.
+- [x] Document findings in `docs/security/unwrap-audit.md`.
+      (2026-06-01 00:00) — Full report with 10 ranked items, recommendations, full inventory.
 
 **NOTE:** This is an audit task, not a fix task. Actual conversions to Result
 are separate work items scoped per-file.

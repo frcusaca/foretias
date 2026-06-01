@@ -23,20 +23,6 @@ impl JsonRpcTransport {
 
 #[async_trait]
 impl PeerTransport for JsonRpcTransport {
-    async fn stamp(
-        &self,
-        peer: &PeerAddr,
-        content_hex: &str,
-        echo: &str,
-    ) -> Result<serde_json::Value, TransportError> {
-        let params = serde_json::json!({
-            "content": content_hex,
-            "echo": echo,
-        });
-        let result = self.json_rpc_call(peer, "stamp", params).await?;
-        Ok(result)
-    }
-
     async fn route_stamp(
         &self,
         peer: &PeerAddr,

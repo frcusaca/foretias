@@ -101,9 +101,10 @@ mod tests {
 
     #[async_trait]
     impl PeerTransport for DummyTransport {
-        async fn stamp(
+        async fn route_stamp(
             &self,
             _peer: &PeerAddr,
+            _target_tbid: &str,
             _content_hex: &str,
             _echo: &str,
         ) -> Result<serde_json::Value, crate::communerd::transport::TransportError> {
@@ -121,16 +122,6 @@ mod tests {
 
         async fn ping(&self, _peer: &PeerAddr) -> Result<(), crate::communerd::transport::TransportError> {
             Ok(())
-        }
-
-        async fn route_stamp(
-            &self,
-            _peer: &PeerAddr,
-            _target_tbid: &str,
-            _content_hex: &str,
-            _echo: &str,
-        ) -> Result<serde_json::Value, crate::communerd::transport::TransportError> {
-            Ok(serde_json::json!({}))
         }
 
         async fn channel_bind_challenge(

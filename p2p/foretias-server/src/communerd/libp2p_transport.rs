@@ -79,19 +79,6 @@ impl Libp2pTransport {
 
 #[async_trait]
 impl PeerTransport for Libp2pTransport {
-    async fn stamp(
-        &self,
-        peer: &PeerAddr,
-        content_hex: &str,
-        echo: &str,
-    ) -> Result<serde_json::Value, TransportError> {
-        let params = serde_json::json!({
-            "content": content_hex,
-            "echo": echo,
-        });
-        self.rpc_call(peer, "stamp", params).await
-    }
-
     async fn route_stamp(
         &self,
         peer: &PeerAddr,

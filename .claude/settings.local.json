@@ -1,0 +1,27 @@
+{
+  "env": {
+    "TMPDIR": "/home/hcbusy/tmp/claude_tmp"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(cargo build *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git worktree *)",
+      "Bash(curl -sL \"https://bitcoin.org/en/how-it-works\")",
+      "Bash(python3 -c ' *)",
+      "Bash(curl -sL \"https://ethereum.org/en/what-is-ethereum/\")",
+      "Bash(curl -sL \"https://docs.ipfs.tech/concepts/what-is-ipfs/\")",
+      "Bash(curl -sL \"https://solana.com/\")",
+      "Bash(curl -sL \"https://www.arweave.org/\")",
+      "Bash(curl -sL \"https://cardano.org/\")",
+      "Bash(curl -sL \"https://matrix.org/\")",
+      "Bash(git *)",
+      "Bash(cargo test *)",
+      "Bash(xargs ls -la)",
+      "Bash(mv COMBINED_GROUP6_TYPE_BASED_SAFETY_ENFORCEMENT_TAKE_3_SPEC.md COMBINED_GROUP1_TYPE_BASED_SAFETY_ENFORCEMENT_TAKE_3_SPEC.md)",
+      "Bash(mv COMBINED_GROUP6_TYPE_BASED_SAFETY_ENFORCEMENT_TAKE_3_PLAN.md COMBINED_GROUP1_TYPE_BASED_SAFETY_ENFORCEMENT_TAKE_3_PLAN.md)",
+      "Bash(sort -t'-' -k1,5)"
+    ]
+  }
+}

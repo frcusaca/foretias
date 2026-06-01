@@ -56,15 +56,12 @@ pub fn select_transport(peer: &PeerAddr) -> TransportKind {
 }
 
 /// PeerTransport — abstract P2P communication.
+///
+/// NOTE: The legacy `stamp` method was removed in Phase 10.
+/// All stamp requests now go through `route_stamp`, which is routed
+/// via CommunerdetteLine for proper Take 3 inbound gate enforcement.
 #[async_trait]
 pub trait PeerTransport: Send + Sync {
-    async fn stamp(
-        &self,
-        peer: &PeerAddr,
-        content_hex: &str,
-        echo: &str,
-    ) -> Result<serde_json::Value, TransportError>;
-
     async fn route_stamp(
         &self,
         peer: &PeerAddr,

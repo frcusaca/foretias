@@ -301,34 +301,6 @@ impl Communerd {
         }
     }
 
-    #[deprecated(note = "Use CommunerdetteLine::stamp via line_for_tbid. stamp_peer bypasses the Take 3 inbound gate.")]
-    pub async fn stamp_peer(
-        &self,
-        peer: &PeerAddr,
-        content_hex: &str,
-        echo: &str,
-    ) -> Result<Foretis, TransportError> {
-        let result = if peer.peer_id.is_some() && self.p2p_cmd_tx.get().is_some() {
-            match self.libp2p_transport.stamp(peer, content_hex, echo).await {
-                Ok(r) => r,
-                Err(e) => {
-                    tracing::debug!(peer = %peer, ?e, "communerd: stamp via libp2p failed, falling back");
-                    self.transport.stamp(peer, content_hex, echo).await?
-                }
-            }
-        } else {
-            self.transport.stamp(peer, content_hex, echo).await?
-        };
-        let unprocessed = UnverifiedSignatureEnvelope::<Foretis>::from_json_value(result)
-            .map_err(|e| TransportError::Decode(e.to_string()))?;
-        let f = unprocessed.inner();
-        if f.chronon_number == 0 {
-            return Err(TransportError::Decode("structurally invalid Foretis: chronon_number == 0".into()));
-        }
-        #[allow(deprecated)]
-        Ok(CleanAuthenticated::<Foretis>::from_trusted(unprocessed.into_inner()).into_inner())
-    }
-
     /// Route a stamp request through Communerdette for the target TBID.
     ///
     /// Returns `CleanAuthenticated<Foretis>` — fully gated through the Take 3

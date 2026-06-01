@@ -245,12 +245,8 @@ async fn test_two_nodes_mutual_attest() {
     tokio::time::sleep(Duration::from_millis(200)).await;
 
     if let Some(com) = server_a.communerd() {
-        let result = com.stamp_peer(
-            &foretias_server::communerd::transport::PeerAddr {
-                json_rpc: addr_b.clone(),
-                peer_id: None,
-                last_seen_ns: 0,
-            },
+        let result = com.route_stamp(
+            &server_b.get_tbid().to_hex(),
             &hex::encode(b"auto attest test"),
             "ma-test",
         ).await;
@@ -295,12 +291,9 @@ async fn test_peer_unreachable_does_not_crash() {
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     if let Some(com) = server.communerd() {
-        let result = com.stamp_peer(
-            &foretias_server::communerd::transport::PeerAddr {
-                json_rpc: "127.0.0.1:59999".to_string(),
-                peer_id: None,
-                last_seen_ns: 0,
-            },
+        // Use a dummy TBID; the call will fail at transport layer before TBID validation
+        let result = com.route_stamp(
+            "0000000000000000000000000000000000000000000000000000000000000000",
             &hex::encode(b"test"),
             "test",
         ).await;

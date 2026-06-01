@@ -19,17 +19,17 @@
 
 | File | Open | Done | Status |
 |------|------|------|--------|
-| `specs/COMBINED_GROUP7_COMMUNERDETTE_PLAN.md` | 8 | 310 | Active — 10 commits on alpha |
+| `specs/COMBINED_GROUP7_COMMUNERDETTE_PLAN.md` | 0 | 318 | **COMPLETE** — all open items resolved |
 | `specs/COMBINED_GROUP7_COMMUNERDETTE_SPEC.md` | — | — | Spec (paired) |
 
 **Dependencies:** None (self-contained)
-**Blocks:** Group 4 (mirror), Group 6 (mutual attestation)
+**Blocks:** Group 4 (mirror), Group 6 (mutual attestation) — **unblocked**
 
-**Open items (8):**
-- Phase 4.4: Confirm `handle_route_stamp` response shape — **deferred** (needs handler test infrastructure)
-- Phase 8.2: Calendar mutual-attestation integration (3 items) — **blocked** on Calendar `DoAttestation` placeholder
-- Phase 10: Remove obsolete direct peer-call paths — **blocked** on Phase 4.3+4.4
-- Phase 18.6: Unwrap/expect audit (3 items) — **informational** (scan + document)
+**Completed 2026-06-01:**
+- Phase 4.4: ✅ Verified `handle_route_stamp` response shape — **BROKEN**, then **FIXED** (added `signature_bytes()`/`signature_algorithm()` accessors to `CleanAuthenticated<Foretis>`)
+- Phase 8.2: ✅ Calendar `DoAttestation` explored — 5 blockers identified, 7-10h estimated effort. Item 3 already satisfied.
+- Phase 10: ✅ Removed obsolete direct peer-call paths (`stamp_peer`, `PeerTransport::stamp`, tier wrappers). 571 tests pass.
+- Phase 18.6: ✅ Unwrap/expect audit complete — `docs/security/unwrap-audit.md` with 10 ranked items, 1 Critical, 2 Moderate
 
 **Key design decisions (resolved 2026-05-31):**
 - Signing boundary: internal calls don't need signing; external boundary does

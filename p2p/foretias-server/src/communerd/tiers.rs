@@ -43,13 +43,6 @@ impl CommunerdServer {
         #[allow(deprecated)] self.inner.start_liveness_pings();
     }
 
-    /// Stamp on a remote peer.
-    #[deprecated(note = "Use route_stamp (goes through CommunerdetteLine)")]
-    pub async fn stamp_peer(&self, peer: &PeerAddr, content_hex: &str, echo: &str) -> Result<Foretis, super::transport::TransportError> {
-        #[allow(deprecated)]
-        self.inner.stamp_peer(peer, content_hex, echo).await
-    }
-
     /// Route a stamp through Communerdette — returns `CleanAuthenticated<Foretis>`.
     pub async fn route_stamp(&self, target_tbid: &str, content_hex: &str, echo: &str) -> Result<CleanAuthenticated<Foretis>, CommunerdetteError> {
         self.inner.route_stamp(target_tbid, content_hex, echo).await
@@ -164,13 +157,6 @@ impl CommunerdP2P {
     /// Start liveness pings.
     pub fn start_liveness_pings(&self) {
         self.server.start_liveness_pings();
-    }
-
-    /// Stamp on a remote peer.
-    #[deprecated(note = "Use route_stamp (goes through CommunerdetteLine)")]
-    pub async fn stamp_peer(&self, peer: &PeerAddr, content_hex: &str, echo: &str) -> Result<Foretis, super::transport::TransportError> {
-        #[allow(deprecated)]
-        self.server.stamp_peer(peer, content_hex, echo).await
     }
 
     /// Route a stamp through Communerdette — returns `CleanAuthenticated<Foretis>`.

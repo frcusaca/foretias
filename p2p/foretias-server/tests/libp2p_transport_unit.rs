@@ -23,7 +23,7 @@ fn make_peer() -> PeerAddr {
 /// Test 2a.1: Request serialization writes a valid JSON-RPC 2.0 envelope.
 ///
 /// Construct a Libp2pTransport, inject a fake cmd_tx channel, invoke
-/// `stamp()`, and assert the `SwarmCommand::RequestResponse` request
+/// `route_stamp()`, and assert the `SwarmCommand::RequestResponse` request
 /// field parses as a JSON-RPC 2.0 envelope with the expected method,
 /// params, and id.
 #[tokio::test]
@@ -33,6 +33,7 @@ async fn request_serialization_writes_jsonrpc_envelope() {
     assert!(transport.set_cmd_tx(cmd_tx));
 
     let peer = make_peer();
+    let target_tbid = "0000000000000000000000000000000000000000000000000000000000000000";
     let content_hex = "abcd";
     let echo = "echo";
 
@@ -41,10 +42,10 @@ async fn request_serialization_writes_jsonrpc_envelope() {
         cmd_rx.recv().await
     });
 
-    // Call stamp — this sends on cmd_tx but will timeout waiting for
+    // Call route_stamp — this sends on cmd_tx but will timeout waiting for
     // the oneshot reply (no one is driving the swarm). We ignore the
     // result here; we only care about what was sent on cmd_tx.
-    let _result = transport.stamp(&peer, content_hex, echo).await;
+    let _result = transport.route_stamp(&peer, target_tbid, content_hex, echo).await;
 
     // Retrieve the command that was sent
     let Some(SwarmCommand::RequestResponse { request, .. }) = (match
@@ -58,7 +59,8 @@ async fn request_serialization_writes_jsonrpc_envelope() {
 
     // Assert JSON-RPC 2.0 envelope structure
     assert_eq!(request["jsonrpc"], "2.0", "must be JSON-RPC 2.0");
-    assert_eq!(request["method"], "stamp", "method must be 'stamp'");
+    assert_eq!(request["method"], "route_stamp", "method must be 'route_stamp'");
+    assert_eq!(request["params"]["target_tbid"], target_tbid);
     assert_eq!(request["params"]["content"], content_hex);
     assert_eq!(request["params"]["echo"], echo);
     assert!(request["id"].is_number(), "id must be a JSON number");
@@ -67,7 +69,7 @@ async fn request_serialization_writes_jsonrpc_envelope() {
 /// Test 2a.2: Closed cmd channel returns a transport error.
 ///
 /// Construct Libp2pTransport, inject cmd_tx, then immediately drop
-/// the receiver side. Assert that calling `stamp()` returns
+/// the receiver side. Assert that calling `route_stamp()` returns
 /// `TransportError::Connect` (the error mapped from a closed channel).
 #[tokio::test]
 async fn closed_cmd_channel_returns_transport_error() {
@@ -75,13 +77,13 @@ async fn closed_cmd_channel_returns_transport_error() {
     let (cmd_tx, cmd_rx) = tokio::sync::mpsc::unbounded_channel::<SwarmCommand>();
     assert!(transport.set_cmd_tx(cmd_tx));
 
-    // Drop the receiver side BEFORE calling stamp — this causes
+    // Drop the receiver side BEFORE calling route_stamp — this causes
     // `cmd_tx.send(...)` to fail inside `rpc_call()`, returning
     // `TransportError::Connect("swarm channel closed")`.
     drop(cmd_rx);
 
     let peer = make_peer();
-    let result = transport.stamp(&peer, "abcd", "echo").await;
+    let result = transport.route_stamp(&peer, "0000000000000000000000000000000000000000000000000000000000000000", "abcd", "echo").await;
 
     match result {
         Err(TransportError::Connect(msg)) => {

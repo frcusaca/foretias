@@ -98,17 +98,8 @@ foretias-server | UnverifiedSignatureEnvelope | u8 | 1
 
 === TinmanSuite ===
 
-  builder_from_authenticated | CleanAuthenticated | param auth: CleanAuthenticated
-  clone | CleanAuthenticated | output: CleanAuthenticated
-  clone | Externalized | output: Externalized
-  clone | Externalized | output: ExternalizedBuilder
-  clone | UnverifiedSignatureEnvelope | output: UnverifiedSignatureEnvelope
-  externalize | Externalized | output: Externalized
-  externalize | Externalized | output: Externalized
-  externalize | Externalized | output: Externalized
-  externalize | Externalized | output: Externalized
-  from | CleanAuthenticated | output: CleanAuthenticated
-  verify_unprocessed | UnverifiedSignatureEnvelope | param unprocessed: crate::foretias::clean_auth::UnverifiedSignatureEnvelope
+  (skipped: cargo rustdoc exited with error: error: toolchain 'nightly-x86_64-unknown-linux-gnu' is not installed
+)
 
 
 === TinmanSuite Cross-Tabulation ===
@@ -121,8 +112,6 @@ CleanAuthenticated | EpochSnapshot | 3
 CleanAuthenticated | Foretis | 12
 CleanAuthenticated | ProbityReport | 3
 CleanAuthenticated | T | 6
-CleanAuthenticated | output: CleanAuthenticated | 2
-CleanAuthenticated | param auth: CleanAuthenticated | 1
 CleanAuthenticated | u32 | 2
 CleanAuthenticated | u8 | 1
 Externalized | ChrononRecord | 5
@@ -130,8 +119,6 @@ Externalized | EpochSnapshot | 1
 Externalized | Foretis | 1
 Externalized | ProbityReport | 1
 Externalized | T | 3
-Externalized | output: Externalized | 5
-Externalized | output: ExternalizedBuilder | 1
 Externalized | u8 | 1
 UnverifiedSignatureEnvelope | ChrononRecord | 4
 UnverifiedSignatureEnvelope | EpochSnapshot | 1
@@ -139,6 +126,4 @@ UnverifiedSignatureEnvelope | FamilyRecord | 1
 UnverifiedSignatureEnvelope | Foretis | 3
 UnverifiedSignatureEnvelope | ProbityReport | 1
 UnverifiedSignatureEnvelope | T | 5
-UnverifiedSignatureEnvelope | output: UnverifiedSignatureEnvelope | 1
-UnverifiedSignatureEnvelope | param unprocessed: crate::foretias::clean_auth::UnverifiedSignatureEnvelope | 1
 UnverifiedSignatureEnvelope | u8 | 1

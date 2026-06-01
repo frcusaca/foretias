@@ -124,8 +124,19 @@ pub fn handle_route_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcRe
             if let Err(e) = server.save() {
                 tracing::warn!("failed to persist calendar after routed stamp: {}", e);
             }
-            // Unwrap the wrapper for the wire response — CleanAuthenticated<Foretis> is internal
-            resp_success(server, id, serde_json::to_value(ca_foretis.into_inner()).unwrap_or(Value::Null))
+            // Extract signature metadata before consuming the wrapper, then return the
+            // same envelope shape as handle_stamp for response-shape consistency.
+            let sig_hex = ca_foretis.signature_bytes()
+                .map(|b| hex::encode(b))
+                .unwrap_or_default();
+            let sig_alg = ca_foretis.signature_algorithm()
+                .unwrap_or("Ed25519")
+                .to_string();
+            resp_success(server, id, serde_json::json!({
+                "foretis": ca_foretis.into_inner(),
+                "signature": sig_hex,
+                "signature_algorithm": sig_alg,
+            }))
         }
         Err(e) => resp_error(server, id, jsonrpc::INTERNAL_ERROR,
             format!("route stamp failed: {}", e)),
@@ -1450,5 +1461,30 @@ mod tests {
         let resp = handle_mirror_health_check(&server, serde_json::json!({}));
         let err = resp.error.expect("missing tbid must error");
         assert_eq!(err.code, jsonrpc::INVALID_PARAMS);
+    }
+
+    /// Regression: handle_route_stamp must return the same envelope shape as handle_stamp.
+    ///
+    /// When target_tbid matches the server's own TBID, handle_route_stamp delegates
+    /// to handle_stamp, so the response must include foretis, signature, and
+    /// signature_algorithm fields — not a bare Foretis object.
+    #[test]
+    fn handle_route_stamp_self_route_returns_envelope_shape() {
+        let server = make_server();
+        let my_tbid = server.get_tbid().to_hex();
+        let params = serde_json::json!({
+            "target_tbid": my_tbid,
+            "content": hex::encode(b"route-test"),
+            "echo": "route-shape-check"
+        });
+        let resp = handle_route_stamp(&server, params);
+        assert!(resp.error.is_none(), "self-route should succeed: {:?}", resp.error);
+        let result = resp.result.expect("expected result");
+        assert!(result.get("foretis").is_some(), "must have foretis field");
+        assert!(result.get("signature").is_some(), "must have signature field");
+        assert!(result.get("signature_algorithm").is_some(), "must have signature_algorithm field");
+        let foretis = result.get("foretis").unwrap();
+        assert!(foretis.get("chronon_number").is_some());
+        assert!(foretis.get("content_hash").is_some());
     }
 }

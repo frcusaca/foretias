@@ -827,6 +827,24 @@ impl CleanAuthenticated<Foretis> {
         &self.inner.time_being_reference_time
     }
 
+    /// Return the signature bytes from the first entry in the ordered signature chain.
+    ///
+    /// This is the signature that was verified during the Take 3 inbound gate
+    /// (typically the Chronomatter fast-key Ed25519 signature).
+    pub fn signature_bytes(&self) -> Option<&[u8]> {
+        self.signatures.first().map(|e| e.sig.as_slice())
+    }
+
+    /// Return the algorithm name for the first signature entry.
+    ///
+    /// Returns `"Ed25519"` or `"SLH-DSA"` depending on the `SigAlgorithm` variant.
+    pub fn signature_algorithm(&self) -> Option<&str> {
+        Some(match self.signatures.first()?.algorithm {
+            SigAlgorithm::Ed25519 => "Ed25519",
+            SigAlgorithm::DualKey => "SLH-DSA",
+        })
+    }
+
     /// Outbound gate: wrap the domain type for wire/disk.
     pub fn externalize(self) -> Externalized<Foretis> {
         Externalized::from_trusted(self.inner)
