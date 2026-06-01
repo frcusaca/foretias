@@ -1,0 +1,10 @@
+{
+  "id": "T-c5cdedc4-2c5d-4cc5-b385-7dc591d34e2d",
+  "subject": "Write Phase 12 integration tests (toppoli_channel_bind, toppoli_channel_bind_two_channels)",
+  "description": "Write two new toppoli tests for channel bind scenarios",
+  "status": "completed",
+  "activeForm": "Writing Phase 12 integration tests",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_17ccfbed7ffe5rupIzJP9BVLB7"
+}
