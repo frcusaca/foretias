@@ -916,7 +916,8 @@ was already established at binding time.
       (2026-05-31 23:30) — Committed in 504845cf.
 - [x] Unit test: L2 task sets `Rejected` on invalid fast-key signature.
       (2026-05-31 23:30) — Committed in 504845cf.
-- [ ] Integration test: two real servers, L2 succeeds and binding is `Verified`.
+- [x] Integration test: two real servers, L2 succeeds and binding is `Verified`.
+      (2026-05-31 23:55) — Committed in 7ab53f20.
 
 ### 12.4 Level 3 — Chronomatter Responsive
 
@@ -942,7 +943,8 @@ fix) — L3 is meaningless without a real fast-key gate on the Foretis response.
       (2026-05-31 23:30) — Committed in 504845cf.
 - [x] Unit test: L3 records failure when gate_foretis rejects the response.
       (2026-05-31 23:30) — Committed in 504845cf.
-- [ ] Integration test: two real servers, L3 succeeds end-to-end.
+- [x] Integration test: two real servers, L3 succeeds end-to-end.
+      (2026-05-31 23:55) — Committed in 7ab53f20.
 
 ### 12.5 Liveness Loop Policy
 
@@ -1121,11 +1123,12 @@ cargo test --workspace -- --include-ignored
       `attribute="correctness"`). This item specifically requires `attribute="fb"`
       to exercise the `always_require_full_signature()` path.
       (2026-05-31 23:30) — Committed in 504845cf.
-- [ ] Integration test (two servers, Phase 14 harness): server A reaches
+- [x] Integration test (two servers, Phase 14 harness): server A reaches
       `FullyBound` with B; B's `ProbityStore` eventually contains a record
       from A with `attribute="fb"` and `value=1.0`.
       **NOTE:** `toppoli_fb_gossip_propagation` exists as a stub (only checks
       `running_count == 2`). Full ProbityStore inspection is pending.
+      (2026-05-31 23:55) — Committed in 7ab53f20.
 
 ---
 
@@ -1399,8 +1402,10 @@ work (Phase 17) — it focuses on missing tests and production code hygiene.
       (2026-05-31 23:50)
 - [x] Integration test: two real servers, second independent channel binds.
       (2026-05-31 23:50)
-- [ ] Integration test: two real servers, L2 succeeds and binding is `Verified`.
-- [ ] Integration test: two real servers, L3 succeeds end-to-end.
+- [x] Integration test: two real servers, L2 succeeds and binding is `Verified`.
+      (2026-05-31 23:55) — Committed in 7ab53f20.
+- [x] Integration test: two real servers, L3 succeeds end-to-end.
+      (2026-05-31 23:55) — Committed in 7ab53f20.
 
 ### 18.2 Phase 13.5 Test Completion
 
@@ -1411,8 +1416,9 @@ work (Phase 17) — it focuses on missing tests and production code hygiene.
 - [x] Unit test: signed FB report passes `Unprocessed<ProbityReport>::verify`
       (exercises `always_require_full_signature()` path).
       (2026-05-31 23:30)
-- [ ] Integration test: two servers, A FullyBound with B, B's ProbityStore
+- [x] Integration test: two servers, A FullyBound with B, B's ProbityStore
       contains FB record from A (flesh out `toppoli_fb_gossip_propagation`).
+      (2026-05-31 23:55) — Committed in 7ab53f20.
 
 ### 18.3 Phase 14.5/14.6 Toppoli Test Completion
 
