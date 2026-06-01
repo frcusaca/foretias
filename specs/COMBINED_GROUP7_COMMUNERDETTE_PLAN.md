@@ -570,6 +570,12 @@ time being (component) that has the corresponding TBID.
 - Example: Chronomatter produces a ChrononRecord → Chronomatter signs with
   Chronomatter's key before handing to CommunerdetteLine.
 
+**Signing initiation (2026-05-31):** Signing is performed by Calendar/Chronomatter
+at Communerdette's request/requirement. When Communerdette needs to transmit a
+record externally, it requests the producing component to sign it. The component
+signs with its own key. Records from Calendar/Chronomatter to Communerdette may
+be signed when Communerdette requires it for external transmission.
+
 - [x] Calendar signs its own responses (Calendar's key, not Chronomatter's).
       (2026-05-31 — design resolved, implementation deferred to Calendar module)
 - [x] Chronomatter signs its own responses (Chronomatter's key).
@@ -581,6 +587,9 @@ time being (component) that has the corresponding TBID.
       (2026-05-31 — design resolved, deprecation deferred)
 - [x] Internal calls between components don't need signing — only external
       boundary calls to CommunerdetteLine trigger signing.
+      (2026-05-31 — design resolved)
+- [x] Communerdette requests signing when external transmission is needed —
+      Calendar/Chronomatter sign at Communerdette's request, not by default.
       (2026-05-31 — design resolved)
 
 ---
