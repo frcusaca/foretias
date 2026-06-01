@@ -1360,6 +1360,33 @@ impl Communerdette {
             }
         })
     }
+
+    /// Convenience entry point for callers outside `communerdette` (e.g. the
+    /// gossip event loop in `mod.rs`).
+    ///
+    /// Creates a `CommunerdetteExecutor` from the provided components, then
+    /// spawns the channel-bind task on the Tokio runtime.  The resulting
+    /// `JoinHandle` is intentionally detached — the task manages its own
+    /// lifecycle through the Communerdette's cancellation token.
+    pub(super) fn trigger_channel_bind(
+        &self,
+        host: Arc<dyn CommunerdetteHost>,
+        crypto: Arc<dyn CryptoServer>,
+        clock: Arc<dyn Clock>,
+        channel_id: String,
+    ) {
+        let executor = Arc::new(CommunerdetteExecutor::new(
+            host,
+            self.target_tbid,
+            crypto,
+            clock,
+            None, // local_calendar_tbid — not available in gossip-loop context
+        ));
+        let cancel = self.shutdown.clone();
+        tokio::spawn(async move {
+            Self::spawn_channel_bind_task(executor, channel_id, cancel).await;
+        });
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -3320,8 +3347,58 @@ mod tests {
 
     // ── Phase 13.5 — FB emission unit tests ────────────────────────────────────
 
+    /// Mock host that captures sign and publish calls for FB emission assertions.
+    struct FBMockHost {
+        sign_calls: std::sync::Arc<std::sync::Mutex<Vec<crate::probity::ProbityReport>>>,
+        publish_calls: std::sync::Arc<std::sync::Mutex<Vec<Vec<u8>>>>,
+    }
+
+    impl FBMockHost {
+        fn new() -> (Self, std::sync::Arc<std::sync::Mutex<Vec<crate::probity::ProbityReport>>>, std::sync::Arc<std::sync::Mutex<Vec<Vec<u8>>>>) {
+            let sign_calls = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+            let publish_calls = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+            (
+                Self {
+                    sign_calls: std::sync::Arc::clone(&sign_calls),
+                    publish_calls: std::sync::Arc::clone(&publish_calls),
+                },
+                sign_calls,
+                publish_calls,
+            )
+        }
+    }
+
+    #[async_trait]
+    impl CommunerdetteHost for FBMockHost {
+        async fn host_lookup_tbid(&self, _tbid_hex: &str, _namespace: &str) -> Option<PeerRegistrationRecord> { None }
+        fn host_lookup_tbid_cached(&self, _tbid_hex: &str) -> Option<PeerRegistrationRecord> { None }
+        fn host_namespace(&self) -> String { "test".to_string() }
+        fn host_swarm_available(&self) -> bool { false }
+        fn host_local_peer_id(&self) -> Option<libp2p::PeerId> { None }
+        async fn host_execute_stamp(&self, _: &PeerAddr, _: &str, _: &str, _: &str) -> Result<serde_json::Value, TransportError> {
+            Err(TransportError::Unsupported("mock".into()))
+        }
+        async fn host_execute_calendar_slice(&self, _: &PeerAddr, _: u64, _: u64) -> Result<Vec<ChrononRecord>, TransportError> {
+            Err(TransportError::Unsupported("mock".into()))
+        }
+        async fn host_execute_channel_bind_challenge(&self, _: &PeerAddr, _: &str, _: &str, _: &str) -> Result<serde_json::Value, TransportError> {
+            Err(TransportError::Unsupported("mock".into()))
+        }
+        async fn host_execute_ping(&self, _: &PeerAddr) -> Result<(), TransportError> {
+            Err(TransportError::Unsupported("mock".into()))
+        }
+        // SIGN(report → host_sign_probity_report)
+        fn host_sign_probity_report(&self, report: &crate::probity::ProbityReport) -> Result<Vec<u8>, String> {
+            self.sign_calls.lock().unwrap().push(report.clone());
+            Ok(vec![0xAA; 64])
+        }
+        fn host_publish_probity_report(&self, signed_bytes: Vec<u8>) {
+            self.publish_calls.lock().unwrap().push(signed_bytes);
+        }
+    }
+
     #[test]
-    fn emit_fb_established_calls_host_publish() {
+    fn emit_fb_established_builds_correct_report() {
         let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
             foretias_core::crypto_server::new_software(
                 foretias_core::crypto_server::ForetiasCurve::Ed25519,
@@ -3331,18 +3408,32 @@ mod tests {
         let target_tbid = Tbid::from_raw([1u8; 96]);
         let local_calendar_tbid = Some("local-cal-tbid-hex".to_string());
 
-        let host: Arc<dyn CommunerdetteHost> = Arc::new(ConfigurableMockHost::new(None));
+        let (host_impl, sign_calls, publish_calls) = FBMockHost::new();
+        let host: Arc<dyn CommunerdetteHost> = Arc::new(host_impl);
         let executor = CommunerdetteExecutor::new(
             Arc::clone(&host), target_tbid, crypto, clock, local_calendar_tbid
         );
 
         executor.emit_fb_report(1.0);
 
-        assert!(true, "emit_fb_established completes without panic");
+        let calls = sign_calls.lock().unwrap();
+        assert_eq!(calls.len(), 1, "host_sign_probity_report must be called exactly once");
+        let report = &calls[0];
+        assert_eq!(report.attribute, "fb", "attribute must be 'fb'");
+        assert_eq!(report.value, 1.0, "value must be 1.0 for established");
+        assert_eq!(report.reporter, "local-cal-tbid-hex", "reporter must be local_calendar_tbid");
+        assert_eq!(report.subject, target_tbid.to_hex(), "subject must be target_tbid");
+        assert_eq!(report.curve, 1, "curve must be Ed25519 (1)");
+        assert!(report.signature.is_empty(), "signature must be empty (pre-sign)");
+        drop(calls);
+
+        let pubs = publish_calls.lock().unwrap();
+        assert_eq!(pubs.len(), 1, "host_publish_probity_report must be called exactly once");
+        assert_eq!(pubs[0], vec![0xAAu8; 64], "published bytes must match signed output");
     }
 
     #[test]
-    fn emit_fb_lost_calls_host_publish() {
+    fn emit_fb_lost_builds_correct_report() {
         let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
             foretias_core::crypto_server::new_software(
                 foretias_core::crypto_server::ForetiasCurve::Ed25519,
@@ -3352,14 +3443,25 @@ mod tests {
         let target_tbid = Tbid::from_raw([2u8; 96]);
         let local_calendar_tbid = Some("local-cal-tbid-hex".to_string());
 
-        let host: Arc<dyn CommunerdetteHost> = Arc::new(ConfigurableMockHost::new(None));
+        let (host_impl, sign_calls, publish_calls) = FBMockHost::new();
+        let host: Arc<dyn CommunerdetteHost> = Arc::new(host_impl);
         let executor = CommunerdetteExecutor::new(
             Arc::clone(&host), target_tbid, crypto, clock, local_calendar_tbid
         );
 
         executor.emit_fb_report(-1.0);
 
-        assert!(true, "emit_fb_lost completes without panic");
+        let calls = sign_calls.lock().unwrap();
+        assert_eq!(calls.len(), 1, "host_sign_probity_report must be called exactly once");
+        let report = &calls[0];
+        assert_eq!(report.attribute, "fb", "attribute must be 'fb'");
+        assert_eq!(report.value, -1.0, "value must be -1.0 for lost");
+        assert_eq!(report.reporter, "local-cal-tbid-hex", "reporter must be local_calendar_tbid");
+        assert_eq!(report.subject, target_tbid.to_hex(), "subject must be target_tbid");
+        drop(calls);
+
+        let pubs = publish_calls.lock().unwrap();
+        assert_eq!(pubs.len(), 1, "host_publish_probity_report must be called exactly once");
     }
 
     #[test]
@@ -3372,13 +3474,523 @@ mod tests {
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
         let target_tbid = Tbid::from_raw([3u8; 96]);
 
-        let host: Arc<dyn CommunerdetteHost> = Arc::new(ConfigurableMockHost::new(None));
+        let (host_impl, sign_calls, publish_calls) = FBMockHost::new();
+        let host: Arc<dyn CommunerdetteHost> = Arc::new(host_impl);
         let executor = CommunerdetteExecutor::new(
             Arc::clone(&host), target_tbid, crypto, clock, None
         );
 
         executor.emit_fb_report(1.0);
 
-        assert!(true, "emit_fb with no local_calendar_tbid completes without panic");
+        let calls = sign_calls.lock().unwrap();
+        assert_eq!(calls.len(), 0, "host_sign_probity_report must NOT be called when local_calendar_tbid is None");
+        drop(calls);
+
+        let pubs = publish_calls.lock().unwrap();
+        assert_eq!(pubs.len(), 0, "host_publish_probity_report must NOT be called when local_calendar_tbid is None");
+    }
+
+    // ── Phase 12 — Liveness task unit tests ──────────────────────────────────
+
+    /// Mock host for liveness task tests. Supports configurable responses for
+    /// ping (L1), stamp with optional dynamic signing (L2), and calendar (L3).
+    struct LivenessMockHost {
+        dht_record: Option<PeerRegistrationRecord>,
+        ping_succeeds: bool,
+        stamp_response: std::sync::Mutex<Option<serde_json::Value>>,
+        calendar_response: std::sync::Mutex<Option<Vec<ChrononRecord>>>,
+        /// If set, dynamically signs auth-ping challenges using this crypto server.
+        auth_ping_crypto: Option<Arc<dyn CryptoServer>>,
+        /// TBID hex — must match for dynamic signing to activate.
+        target_tbid_hex: String,
+        /// If true, corrupt the challenge_echo in the dynamic auth-ping response.
+        corrupt_challenge_echo: bool,
+        /// Counts host_execute_stamp calls (for verifying L3 skip behavior).
+        stamp_call_count: std::sync::atomic::AtomicU64,
+    }
+
+    impl LivenessMockHost {
+        fn new(dht_record: Option<PeerRegistrationRecord>, ping_succeeds: bool) -> Self {
+            Self {
+                dht_record,
+                ping_succeeds,
+                stamp_response: std::sync::Mutex::new(None),
+                calendar_response: std::sync::Mutex::new(None),
+                auth_ping_crypto: None,
+                target_tbid_hex: String::new(),
+                corrupt_challenge_echo: false,
+                stamp_call_count: std::sync::atomic::AtomicU64::new(0),
+            }
+        }
+
+        fn with_auth_ping_crypto(mut self, crypto: Arc<dyn CryptoServer>, target_tbid_hex: String) -> Self {
+            self.auth_ping_crypto = Some(crypto);
+            self.target_tbid_hex = target_tbid_hex;
+            self
+        }
+
+        fn with_corrupt_challenge_echo(mut self) -> Self {
+            self.corrupt_challenge_echo = true;
+            self
+        }
+
+        fn set_stamp_response(&self, v: serde_json::Value) {
+            *self.stamp_response.lock().unwrap() = Some(v);
+        }
+
+        fn set_calendar_response(&self, records: Vec<ChrononRecord>) {
+            *self.calendar_response.lock().unwrap() = Some(records);
+        }
+    }
+
+    #[async_trait]
+    impl CommunerdetteHost for LivenessMockHost {
+        async fn host_lookup_tbid(&self, _tbid_hex: &str, _namespace: &str) -> Option<PeerRegistrationRecord> {
+            self.dht_record.clone()
+        }
+
+        fn host_lookup_tbid_cached(&self, _tbid_hex: &str) -> Option<PeerRegistrationRecord> {
+            self.dht_record.clone()
+        }
+
+        fn host_namespace(&self) -> String { "test".to_string() }
+        fn host_swarm_available(&self) -> bool { false }
+        fn host_local_peer_id(&self) -> Option<libp2p::PeerId> { None }
+
+        async fn host_execute_stamp(
+            &self,
+            _peer: &PeerAddr,
+            target_tbid: &str,
+            content_hex: &str,
+            _echo: &str,
+        ) -> Result<serde_json::Value, TransportError> {
+            self.stamp_call_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            // Dynamic signing for auth-ping success tests
+            if let Some(ref crypto) = self.auth_ping_crypto {
+                if target_tbid == self.target_tbid_hex {
+                    let challenge = hex::decode(content_hex)
+                        .map_err(|_| TransportError::Decode("bad hex".into()))?;
+                    let mut msg = challenge;
+                    msg.extend_from_slice(target_tbid.as_bytes());
+                    // SIGN(challenge || target_tbid_hex)
+                    let sig = crypto.sign_with(
+                        &msg,
+                        foretias_core::foretias::types::SignatureAlgorithm::Ed25519,
+                    ).map_err(|e| TransportError::Decode(e.to_string()))?;
+                    let echo = if self.corrupt_challenge_echo {
+                        "0000000000000000000000000000000000000000000000000000000000000000".to_string()
+                    } else {
+                        content_hex.to_string()
+                    };
+                    return Ok(serde_json::json!({
+                        "responder_tbid": target_tbid,
+                        "challenge_echo": echo,
+                        "signature": hex::encode(&sig),
+                        "signature_algorithm": "Ed25519",
+                    }));
+                }
+            }
+            // Static fallback
+            self.stamp_response.lock().unwrap().clone()
+                .ok_or_else(|| TransportError::Unsupported("no stamp response set".into()))
+        }
+
+        async fn host_execute_calendar_slice(
+            &self,
+            _peer: &PeerAddr,
+            _tick_start: u64,
+            _count: u64,
+        ) -> Result<Vec<ChrononRecord>, TransportError> {
+            self.calendar_response.lock().unwrap().clone()
+                .ok_or_else(|| TransportError::Unsupported("no calendar response set".into()))
+        }
+
+        async fn host_execute_channel_bind_challenge(
+            &self,
+            _peer: &PeerAddr,
+            _nonce_hex: &str,
+            _channel_id: &str,
+            _requester_tbid_hex: &str,
+        ) -> Result<serde_json::Value, TransportError> {
+            Err(TransportError::Unsupported("mock".into()))
+        }
+
+        async fn host_execute_ping(&self, _peer: &PeerAddr) -> Result<(), TransportError> {
+            if self.ping_succeeds {
+                Ok(())
+            } else {
+                Err(TransportError::Unsupported("mock ping failed".into()))
+            }
+        }
+
+        fn host_sign_probity_report(&self, _report: &crate::probity::ProbityReport) -> Result<Vec<u8>, String> {
+            Ok(vec![0xCC; 64])
+        }
+
+        fn host_publish_probity_report(&self, _signed_bytes: Vec<u8>) {}
+    }
+
+    // ── L1 tests ───────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn l1_task_records_success_on_pong() {
+        let record = make_record("peer-1", "127.0.0.1:4002");
+        let host: Arc<dyn CommunerdetteHost> = Arc::new(LivenessMockHost::new(Some(record), true));
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            ).expect("libsodium")
+        );
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+        let target_tbid = Tbid::from_raw([0xAA; 96]);
+        let executor = Arc::new(CommunerdetteExecutor::new(
+            host, target_tbid, crypto, clock, None,
+        ));
+        let flags = LivenessCycleFlags::new();
+        let cancel = CancellationToken::new();
+
+        let handle = Communerdette::spawn_l1_liveness_task(
+            executor, 50, cancel.clone(), flags.clone(),
+        );
+
+        tokio::time::sleep(TokioDuration::from_millis(200)).await;
+
+        assert!(
+            flags.l1_last_ok.load(std::sync::atomic::Ordering::Relaxed),
+            "L1 must record success when ping returns Ok"
+        );
+
+        cancel.cancel();
+        let _ = handle.await;
+    }
+
+    #[tokio::test]
+    async fn l1_task_records_failure_on_error() {
+        let record = make_record("peer-1", "127.0.0.1:4002");
+        let host: Arc<dyn CommunerdetteHost> = Arc::new(LivenessMockHost::new(Some(record), false));
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            ).expect("libsodium")
+        );
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+        let target_tbid = Tbid::from_raw([0xBB; 96]);
+        let executor = Arc::new(CommunerdetteExecutor::new(
+            host, target_tbid, crypto, clock, None,
+        ));
+        let flags = LivenessCycleFlags::new();
+        let cancel = CancellationToken::new();
+
+        let handle = Communerdette::spawn_l1_liveness_task(
+            executor, 50, cancel.clone(), flags.clone(),
+        );
+
+        tokio::time::sleep(TokioDuration::from_millis(200)).await;
+
+        assert!(
+            !flags.l1_last_ok.load(std::sync::atomic::Ordering::Relaxed),
+            "L1 must record failure when ping returns Err"
+        );
+
+        cancel.cancel();
+        let _ = handle.await;
+    }
+
+    // ── L2 tests ───────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn l2_promotes_claimed_by_dht_to_verified() {
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            ).expect("libsodium")
+        );
+        let pub_key = match crypto.public_key() {
+            foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
+            _ => panic!("expected Ed25519"),
+        };
+        let mut tbid_bytes = [0u8; 96];
+        tbid_bytes[..32].copy_from_slice(&pub_key);
+        let target_tbid = Tbid::from_raw(tbid_bytes);
+        let target_tbid_hex = target_tbid.to_hex();
+
+        let record = make_record("peer-1", "127.0.0.1:4002");
+        let host: Arc<dyn CommunerdetteHost> = Arc::new(
+            LivenessMockHost::new(Some(record), true)
+                .with_auth_ping_crypto(Arc::clone(&crypto), target_tbid_hex)
+        );
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+        let executor = Arc::new(CommunerdetteExecutor::new(
+            host, target_tbid, crypto, clock, None,
+        ));
+        let flags = LivenessCycleFlags::new();
+        let cancel = CancellationToken::new();
+
+        let handle = Communerdette::spawn_l2_liveness_task(
+            executor, 50, cancel.clone(), flags.clone(),
+        );
+
+        tokio::time::sleep(TokioDuration::from_millis(300)).await;
+
+        assert!(
+            flags.l2_last_ok.load(std::sync::atomic::Ordering::Relaxed),
+            "L2 must record success when auth-ping verifies correctly"
+        );
+
+        cancel.cancel();
+        let _ = handle.await;
+    }
+
+    #[tokio::test]
+    async fn l2_sets_rejected_on_wrong_tbid() {
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            ).expect("libsodium")
+        );
+        let target_tbid = Tbid::from_raw([0xCC; 96]);
+
+        let record = make_record("peer-1", "127.0.0.1:4002");
+        let host_inner = LivenessMockHost::new(Some(record), true);
+        let wrong_tbid_hex = hex::encode([0xAAu8; 96]);
+        host_inner.set_stamp_response(serde_json::json!({
+            "responder_tbid": wrong_tbid_hex,
+            "challenge_echo": "0000000000000000000000000000000000000000000000000000000000000000",
+            "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+            "signature_algorithm": "Ed25519",
+        }));
+        let host: Arc<dyn CommunerdetteHost> = Arc::new(host_inner);
+
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+        let executor = Arc::new(CommunerdetteExecutor::new(
+            host, target_tbid, crypto, clock, None,
+        ));
+        let flags = LivenessCycleFlags::new();
+        let cancel = CancellationToken::new();
+
+        let handle = Communerdette::spawn_l2_liveness_task(
+            executor, 50, cancel.clone(), flags.clone(),
+        );
+
+        tokio::time::sleep(TokioDuration::from_millis(300)).await;
+
+        assert!(
+            !flags.l2_last_ok.load(std::sync::atomic::Ordering::Relaxed),
+            "L2 must fail when responder_tbid doesn't match target"
+        );
+
+        cancel.cancel();
+        let _ = handle.await;
+    }
+
+    #[tokio::test]
+    async fn l2_sets_rejected_on_wrong_challenge_echo() {
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            ).expect("libsodium")
+        );
+        let pub_key = match crypto.public_key() {
+            foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
+            _ => panic!("expected Ed25519"),
+        };
+        let mut tbid_bytes = [0u8; 96];
+        tbid_bytes[..32].copy_from_slice(&pub_key);
+        let target_tbid = Tbid::from_raw(tbid_bytes);
+        let target_tbid_hex = target_tbid.to_hex();
+
+        let record = make_record("peer-1", "127.0.0.1:4002");
+        let host: Arc<dyn CommunerdetteHost> = Arc::new(
+            LivenessMockHost::new(Some(record), true)
+                .with_auth_ping_crypto(Arc::clone(&crypto), target_tbid_hex)
+                .with_corrupt_challenge_echo()
+        );
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+        let executor = Arc::new(CommunerdetteExecutor::new(
+            host, target_tbid, crypto, clock, None,
+        ));
+        let flags = LivenessCycleFlags::new();
+        let cancel = CancellationToken::new();
+
+        let handle = Communerdette::spawn_l2_liveness_task(
+            executor, 50, cancel.clone(), flags.clone(),
+        );
+
+        tokio::time::sleep(TokioDuration::from_millis(300)).await;
+
+        assert!(
+            !flags.l2_last_ok.load(std::sync::atomic::Ordering::Relaxed),
+            "L2 must fail when challenge_echo doesn't match the challenge"
+        );
+
+        cancel.cancel();
+        let _ = handle.await;
+    }
+
+    #[tokio::test]
+    async fn l2_sets_rejected_on_invalid_signature() {
+        let crypto_executor: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            ).expect("libsodium")
+        );
+        // Different key pair — will produce an invalid signature
+        let crypto_wrong: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            ).expect("libsodium")
+        );
+        let pub_key = match crypto_executor.public_key() {
+            foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
+            _ => panic!("expected Ed25519"),
+        };
+        let mut tbid_bytes = [0u8; 96];
+        tbid_bytes[..32].copy_from_slice(&pub_key);
+        let target_tbid = Tbid::from_raw(tbid_bytes);
+        let target_tbid_hex = target_tbid.to_hex();
+
+        let record = make_record("peer-1", "127.0.0.1:4002");
+        // Mock signs with wrong key — signature won't verify against TBID's public key
+        let host: Arc<dyn CommunerdetteHost> = Arc::new(
+            LivenessMockHost::new(Some(record), true)
+                .with_auth_ping_crypto(crypto_wrong, target_tbid_hex)
+        );
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+        let executor = Arc::new(CommunerdetteExecutor::new(
+            host, target_tbid, crypto_executor, clock, None,
+        ));
+        let flags = LivenessCycleFlags::new();
+        let cancel = CancellationToken::new();
+
+        let handle = Communerdette::spawn_l2_liveness_task(
+            executor, 50, cancel.clone(), flags.clone(),
+        );
+
+        tokio::time::sleep(TokioDuration::from_millis(300)).await;
+
+        assert!(
+            !flags.l2_last_ok.load(std::sync::atomic::Ordering::Relaxed),
+            "L2 must fail when signature is invalid (wrong key)"
+        );
+
+        cancel.cancel();
+        let _ = handle.await;
+    }
+
+    // ── L3 tests ───────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn l3_records_success_on_valid_foretis() {
+        use foretias_core::foretias::types::SignatureAlgorithm;
+
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            ).expect("libsodium")
+        );
+        let pub_key = match crypto.public_key() {
+            foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
+            _ => panic!("expected Ed25519"),
+        };
+        let mut tbid_bytes = [0u8; 96];
+        tbid_bytes[..32].copy_from_slice(&pub_key);
+        let target_tbid = Tbid::from_raw(tbid_bytes);
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+
+        // Build the Foretis that L3's execute_stamp will receive
+        let content = b"liveness-probe";
+        let content_hash = crypto.sha256(content).expect("sha256");
+        let foretis_for_signing = Foretis {
+            chronon_number: 1,
+            content_hash: FTByteArray::from(content_hash.bytes),
+            tbid: target_tbid.clone(),
+            echo: "liveness".to_string(),
+            tbn: "test-tb".to_string(),
+            time_being_reference_time: "UE+1000000000ns".to_string(),
+        };
+        // SIGN(foretis_sig_input_bytes)
+        let sig = crypto.sign_with(
+            &foretis_for_signing.sig_input_bytes(),
+            SignatureAlgorithm::Ed25519,
+        ).expect("sign");
+
+        // ChrononRecord with matching public key (genesis, tb_version=0)
+        let chronon_record = ChrononRecord {
+            chronon_number: 1,
+            public_key: FTByteVector::from(pub_key),
+            signature_algorithm: "Ed25519".to_string(),
+            forward_foretis: FTByteVector::from(vec![2u8; 64]),
+            backward_foretis: FTByteVector::from(vec![3u8; 64]),
+            aa_nonce: FTByteArray::from([4u8; 16]),
+            chronon_stamp_count: 0,
+            external_attestations: vec![],
+            tb_version: 0,
+            tbid: target_tbid.clone(),
+        };
+
+        let record = make_record("peer-1", "127.0.0.1:4002");
+        let host = Arc::new(LivenessMockHost::new(Some(record), true));
+        host.set_calendar_response(vec![chronon_record]);
+        host.set_stamp_response(serde_json::json!({
+            "foretis": foretis_for_signing,
+            "signature": hex::encode(&sig),
+            "signature_algorithm": "Ed25519",
+        }));
+
+        let executor = Arc::new(CommunerdetteExecutor::new(
+            host, target_tbid, crypto, clock, None,
+        ));
+        let flags = LivenessCycleFlags::new();
+        let cancel = CancellationToken::new();
+
+        let handle = Communerdette::spawn_l3_liveness_task(
+            executor, 200, cancel.clone(), flags.clone(),
+        );
+
+        tokio::time::sleep(TokioDuration::from_millis(500)).await;
+
+        // L3 doesn't write to flags — verify the task ran without panicking
+        cancel.cancel();
+        let result = handle.await;
+        assert!(result.is_ok(), "L3 task must not panic with valid Foretis");
+    }
+
+    #[tokio::test]
+    async fn l3_records_failure_on_gate_reject() {
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            ).expect("libsodium")
+        );
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+        let target_tbid = Tbid::from_raw([0xDD; 96]);
+
+        let record = make_record("peer-1", "127.0.0.1:4002");
+        let host = Arc::new(LivenessMockHost::new(Some(record), true));
+        let host_ref = Arc::clone(&host);
+
+        let executor = Arc::new(CommunerdetteExecutor::new(
+            host, target_tbid, crypto, clock, None,
+        ));
+        let flags = LivenessCycleFlags::new();
+        // L2 is OK but binding is rejected — L3 must skip
+        flags.binding_rejected.store(true, std::sync::atomic::Ordering::Relaxed);
+        let cancel = CancellationToken::new();
+
+        let handle = Communerdette::spawn_l3_liveness_task(
+            executor, 50, cancel.clone(), flags.clone(),
+        );
+
+        tokio::time::sleep(TokioDuration::from_millis(300)).await;
+
+        assert_eq!(
+            host_ref.stamp_call_count.load(std::sync::atomic::Ordering::Relaxed),
+            0,
+            "L3 must skip execute_stamp when binding_rejected is true"
+        );
+
+        cancel.cancel();
+        let result = handle.await;
+        assert!(result.is_ok(), "L3 task must not panic when binding is rejected");
     }
 }

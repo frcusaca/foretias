@@ -1165,6 +1165,46 @@ Use property tests or fuzz tests where useful, especially for parsers, decoders,
 
 A bug fix should usually begin with writing of a a regression test that reporduces the error condition, repair, and commit of code passing new regression test.
 
+### Toppoli Tests
+
+Toppoli (**T**est **O**f **P**2P **P**oint-to-**P**oint **O**n **L**ocal **I**ntegration) is the multi-peer in-process integration test harness. It runs up to ~24 `TimeFamilyServer` instances in a single tokio runtime, with all state directly inspectable — no mocks or external probes.
+
+**When to write a toppoli test vs a unit test:**
+
+| Scenario | Use |
+|----------|-----|
+| Verifying a single function's logic with mocked dependencies | Unit test |
+| Testing inter-peer behavior: attestation, gossip propagation, liveness, churn | Toppoli |
+| More than one server instance interacting over real TCP | Toppoli |
+
+**Test scale:** 2–24 peers, seconds to ~30 s per test. Significantly slower than unit tests; intentionally separated.
+
+**Fixture classes:**
+
+| Fixture | Purpose | Topology |
+|---------|---------|----------|
+| `ToppliBasicTest` | Peer lifecycle (start/stop/restart), no P2P | No mesh |
+| `ToppoliFBProbityTest` | FullyBound transition, ProbityReport gossip | Full mesh + communerd |
+| `ToppliLivenessTest` | L1/L2/L3 round-trips over real TCP | Full mesh + communerd |
+| `ToppliGNFTest` | Gossip and Node Failure — churn, partial connectivity | Ring + communerd |
+
+**How to run:**
+
+```bash
+# All toppoli tests (omitted from default CI run)
+cargo test -p foretias-server --test toppoli -- --include-ignored
+
+# One specific toppoli test
+cargo test -p foretias-server --test toppoli toppoli_peer_restart -- --include-ignored
+
+# All non-toppoli tests (default, fast)
+cargo test -p foretias-server
+```
+
+All toppoli tests are marked `#[ignore = "toppoli: ..."]` and are omitted from the default CI run (`cargo test --workspace`). They must be explicitly opted in with `--include-ignored`.
+
+Source: `p2p/foretias-server/tests/toppoli.rs`
+
 ### Performance
 
 Write efficient Rust, but measure before making code obscure.

@@ -16,6 +16,7 @@ use tokio::task::JoinHandle;
 
 use foretias_server::server::TimeFamilyServer;
 use foretias_core::config::{CommunerdConfig, MutualAttestConfig};
+use foretias_server::communerd::transport::PeerTransport;
 
 // ── Port allocation ───────────────────────────────────────────────────────────
 
@@ -524,29 +525,81 @@ async fn toppoli_basic_fixture_setup_teardown() {
     f.teardown().await;
 }
 
-/// FB gossip: 2 peers, A FullyBound with B, B's ProbityStore contains FB from A.
-/// This is the Phase 13.5 integration test (toppoli).
+/// FB gossip: 2 peers, communerd wired, ProbityStore accessible.
+///
+/// Verifies: both peers start with communerd, ProbityStore is reachable,
+/// TBID hexes are obtainable, and report_count is inspectable.
+///
+/// Known limitation: `trigger_channel_bind` passes `local_calendar_tbid: None`
+/// (communerdette.rs:1383), so `emit_fb_report` early-returns. Full end-to-end
+/// FB gossip propagation requires `local_calendar_tbid` to be plumbed through
+/// the gossip-loop context. This test documents the expected integration
+/// surface until that production code gap is addressed.
 #[tokio::test]
 #[ignore = "toppoli: FB gossip integration test; run with --include-ignored"]
 async fn toppoli_fb_gossip_propagation() {
     let f = ToppoliFBProbityTest::setup(2).await;
 
-    // Wait for peers to establish channel binding
-    let ok = f.harness.wait_until(|h| {
-        // Check if communerd has established binding
-        h.running_count() == 2
-    }, 5_000).await;
+    let ok = f.harness.wait_until(|h| h.running_count() == 2, 5_000).await;
     assert!(ok, "peers should be running");
 
-    // Give time for channel binding and FB emission to occur
+    let peer0_tbid_hex = f.harness.peer(0).server.chronomatter().get_tbid().to_hex();
+    let peer1_tbid_hex = f.harness.peer(1).server.chronomatter().get_tbid().to_hex();
+
+    assert_ne!(peer0_tbid_hex, peer1_tbid_hex, "peers must have distinct TBIDs");
+    assert_eq!(peer0_tbid_hex.len(), 192, "TBID hex must be 192 chars (96 bytes)");
+    assert_eq!(peer1_tbid_hex.len(), 192, "TBID hex must be 192 chars (96 bytes)");
+
+    assert!(f.harness.peer(0).server.communerd().is_some(), "peer 0 must have communerd");
+    assert!(f.harness.peer(1).server.communerd().is_some(), "peer 1 must have communerd");
+
+    let store_0 = f.harness.peer(0).server.communerd().unwrap().probity_store();
+    let store_1 = f.harness.peer(1).server.communerd().unwrap().probity_store();
+
+    assert_eq!(store_0.score(&peer0_tbid_hex), 0.0, "peer 0 score defaults to 0.0");
+    assert_eq!(store_1.score(&peer1_tbid_hex), 0.0, "peer 1 score defaults to 0.0");
+
+    // Give time for channel binding attempts (even though FB emission is skipped
+    // due to local_calendar_tbid=None in trigger_channel_bind).
     tokio::time::sleep(Duration::from_secs(3)).await;
 
-    // At this point, if FullyBound was established,
-    // an FB report should have been emitted via gossip.
-    // The test verifies the infrastructure is in place.
-    // Full end-to-end verification will be added when the
-    // ProbityStore inspection API is exposed.
+    let count_0 = store_0.report_count(&peer0_tbid_hex);
+    let count_1 = store_1.report_count(&peer1_tbid_hex);
 
-    assert_eq!(f.harness.running_count(), 2);
+    tracing::info!(
+        peer0_tbid = %peer0_tbid_hex,
+        peer1_tbid = %peer1_tbid_hex,
+        store_0_count = count_0,
+        store_1_count = count_1,
+        "FB gossip propagation test: report counts after 3 s"
+    );
+
+    f.teardown().await;
+}
+
+/// L1 liveness: peer 0 sends a JSON-RPC `ping` to peer 1 over Noise_XX TCP
+/// and asserts `{"pong": true}` within 2 seconds.
+#[tokio::test]
+#[ignore = "toppoli: L1 ping round trip; run with --include-ignored"]
+async fn toppoli_l1_ping_round_trip() {
+    let f = ToppliBasicTest::setup(2).await;
+
+    let peer1_addr = f.harness.peer(1).addr.clone();
+    let transport = foretias_server::communerd::json_rpc_transport::JsonRpcTransport::new(2);
+    let peer = foretias_server::communerd::transport::PeerAddr {
+        json_rpc:  peer1_addr,
+        peer_id:   None,
+        last_seen_ns: 0,
+    };
+
+    let result = tokio::time::timeout(
+        Duration::from_secs(2),
+        transport.ping(&peer),
+    )
+    .await;
+
+    assert!(result.is_ok(), "ping timed out after 2 s");
+    assert!(result.unwrap().is_ok(), "ping returned transport error");
+
     f.teardown().await;
 }

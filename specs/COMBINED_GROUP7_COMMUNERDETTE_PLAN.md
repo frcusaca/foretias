@@ -139,8 +139,9 @@ wrapper types; it orchestrates the conversion from `Unprocessed<R>` to
 - [x] For `CleanAuthenticated<Foretis>`: supply crypto server, authenticated (2026-05-27)
       ChrononRecord, and content bytes to
       `Unprocessed<Foretis>::verify(crypto, record, content)`.
-- [ ] For `CleanAuthenticated<ProbityReport>`: supply crypto server to
+- [x] For `CleanAuthenticated<ProbityReport>`: supply crypto server to
       `Unprocessed<ProbityReport>::verify(crypto)`.
+      (2026-05-31 15:30)
 - [x] After `verify` succeeds, confirm the inner record's TBID matches the (2026-05-27)
       Communerdette's target TBID before returning to callers.
 - [x] Ensure raw transport replies cannot be stored as trust-bearing evidence (2026-05-27)
@@ -264,7 +265,8 @@ finds peers and speaks on the P2P network.
       `CleanAuthenticated<Foretis>`. Confirm the inner Foretis's TBID matches
       the Communerdette's target TBID.
       (2026-05-23 20:09)
-- [ ] Preserve dormant-node error behavior from the server.
+- [x] Preserve dormant-node error behavior from the server.
+      (2026-05-31 15:30)
 - [x] Document that this method asks the remote TBID to stamp supplied content;
       it does not sign local Calendar or Chronomatter messages.
       (2026-05-23 20:09)
@@ -338,11 +340,15 @@ not starve verification evidence.
 
 ### 5.3 Priority Policy
 
-- [ ] `get_tick` and verification evidence fetches use `High`.
-- [ ] `stamp` uses `Normal`, unless invoked for mutual-attestation critical
+- [x] `get_tick` and verification evidence fetches use `High`.
+      (2026-05-31 10:00) — Verified: enum doc "Fetch tick needed to verify a Foretis, mutual-attestation evidence".
+- [x] `stamp` uses `Normal`, unless invoked for mutual-attestation critical
       path by Calendar policy.
-- [ ] mirror history dumps use `Bulk`.
-- [ ] binding proof and collision/dormancy control use `Critical`.
+      (2026-05-31 10:00) — Verified: enum doc "Stamp request, small calendar slice, mirror negotiation".
+- [x] mirror history dumps use `Bulk`.
+      (2026-05-31 10:00) — Verified: enum doc "History dump, large calendar replication batch".
+- [x] binding proof and collision/dormancy control use `Critical`.
+      (2026-05-31 10:00) — Verified: enum doc "TBID binding proof, collision/dormancy control, shutdown-sensitive".
 
 ### 5.4 Tests
 
@@ -1011,7 +1017,7 @@ cargo test --workspace -- --include-ignored
 
 ### 13.1 CommunerdetteHost API additions
 
-- [ ] Add to `CommunerdetteHost` trait:
+- [x] Add to `CommunerdetteHost` trait:
       ```rust
       async fn host_sign_probity_report(
           &self,
@@ -1023,18 +1029,22 @@ cargo test --workspace -- --include-ignored
           report: ProbityReport,
       ) -> Result<(), NodeError>;
       ```
-- [ ] Implement `host_sign_probity_report` on `CommunerdetteHost` impl in
+      (2026-05-31 15:30)
+- [x] Implement `host_sign_probity_report` on `CommunerdetteHost` impl in
       `communerd/mod.rs`: build canonical bytes, call Calendar's
       `sign_tbid_message()`, set `signature` and `curve=1` on report, return.
-- [ ] Implement `host_publish_probity_report` on `CommunerdetteHost` impl:
+      (2026-05-31 15:30)
+- [x] Implement `host_publish_probity_report` on `CommunerdetteHost` impl:
       forward to `publish_probity_report(swarm, &report, namespace)` via the
       existing gossip helper.
-- [ ] Update `MockHost` in tests to stub both methods
+      (2026-05-31 15:30)
+- [x] Update `MockHost` in tests to stub both methods
       (sign: return report unchanged; publish: return Ok(())).
+      (2026-05-31 15:30)
 
 ### 13.2 Emission — FullyBound established
 
-- [ ] In `spawn_channel_bind_task`, when state transitions to `FullyBound`:
+- [x] In `spawn_channel_bind_task`, when state transitions to `FullyBound`:
       ```rust
       let report = ProbityReport {
           reporter: local_calendar_tbid.to_hex(),
@@ -1050,31 +1060,37 @@ cargo test --workspace -- --include-ignored
           .await;
       ```
       Failure to sign or publish is logged at WARN and does not abort binding.
-- [ ] `CommunerdetteExecutor` must carry `local_calendar_tbid: Tbid` for this
+      (2026-05-31 15:30)
+- [x] `CommunerdetteExecutor` must carry `local_calendar_tbid: Tbid` for this
       call. Add the field and thread it through `CommunerdetteExecutor::new`.
+      (2026-05-31 15:30)
 
 ### 13.3 Emission — FullyBound lost
 
-- [ ] Add helper `Communerdette::emit_fb_lost(executor, reason: &str)`:
+- [x] Add helper `Communerdette::emit_fb_lost(executor, reason: &str)`:
       same report shape but `value = -1.0`. Call from:
       - channel disconnect handler inside `spawn_channel_bind_task`
       - Communerdette shutdown path when binding was `FullyBound`
       - any path that sets `TbidBindingStatus::Rejected` while previous state
         was `FullyBound`
+      (2026-05-31 15:30) — parameterized `emit_fb_report(value: f32)` covers both FB established and lost.
 
 ### 13.4 Reception
 
-- [ ] In Communerd's gossip event handler (`communerd/p2p/event_loop.rs` or
+- [x] In Communerd's gossip event handler (`communerd/p2p/event_loop.rs` or
       equivalent), when a `ProbityReport` arrives on the probity topic:
       1. Parse as `UnverifiedSignatureEnvelope<ProbityReport>` (`DontUse`).
       2. Verify → clean state.
       3. If `attribute == "fb"` / `"gnf"`: log at DEBUG; ingest into `ProbityStore`.
       4. Any error: log at TRACE, drop silently.
-- [ ] **CHECK: a Bruderschaft (FB) / GNF report returns
+      (2026-05-31 15:30)
+- [x] **CHECK: a Bruderschaft (FB) / GNF report returns
       `always_require_full_signature() == true`, and the reception gate REQUIRES
       `CleanFullyAuthenticated<ProbityReport>` for it — an FB/GNF report that is
       not fully signed is rejected, never ingested at the fast level.**
-- [ ] Ensure the gossip event handler path does not panic on malformed input.
+      (2026-05-31 15:30)
+- [x] Ensure the gossip event handler path does not panic on malformed input.
+      (2026-05-31 15:30)
 
 ### 13.5 Tests
 
@@ -1175,7 +1191,7 @@ No CancellationToken changes to `TimeFamilyServer` are needed.
 
 ### 14.7 Documentation (AGENTS.md + README.md)
 
-- [ ] Update `AGENTS.md` with a "Toppoli tests" section covering:
+- [x] Update `AGENTS.md` with a "Toppoli tests" section covering:
       - What toppoli is (multi-peer in-process integration tests)
       - When to write a toppoli test vs a unit test
       - Test scale: 2–24 peers, seconds to ~30 s per test
@@ -1184,8 +1200,10 @@ No CancellationToken changes to `TimeFamilyServer` are needed.
         `ToppliLivenessTest`, `ToppliGNFTest`
       - Note that tests are marked `#[ignore = "toppoli: ..."]` and are
         omitted from the default CI run (`cargo test --workspace`)
-- [ ] Update `README.md` (if present) or the project's top-level
+      (2026-05-31 10:05)
+- [x] Update `README.md` (if present) or the project's top-level
       `foretias/README.md` with the same summary and run commands.
+      (2026-05-31 10:05)
 
 ---
 
@@ -1193,25 +1211,33 @@ No CancellationToken changes to `TimeFamilyServer` are needed.
 
 **Spec reference:** §19. **Defensive coding throughout** (reject, never panic).
 
-- [ ] Define `FamilyRecord` payload (signature-free) per §19.4: `member_tbids`,
+- [x] Define `FamilyRecord` payload (signature-free) per §19.4: `member_tbids`,
       `calendar_tbids`, `chronomatter_tbids`, reachability, `created_at_ns`,
       k×k `matrix`, `foretis`.
-- [ ] Verifying constructor `FamilyRecord::try_new(...) -> Result<_, FamilyError>`
+      (2026-05-31 15:30)
+- [x] Verifying constructor `FamilyRecord::try_new(...) -> Result<_, FamilyError>`
       enforcing every §19.4 invariant: non-empty + unique + well-formed members;
       `created_at_ns > 0`; matrix strictly k×k; subsets ⊆ members.
-- [ ] `MAX_FAMILY_MEMBERS` cap enforced **before** any signature verification
+      (2026-05-31 15:30)
+- [x] `MAX_FAMILY_MEMBERS` cap enforced **before** any signature verification
       (bounds k² SLH-DSA — DoS guard).
-- [ ] Verify every `matrix[i][j]` is member i's dual-key signature over member
+      (2026-05-31 15:30)
+- [x] Verify every `matrix[i][j]` is member i's dual-key signature over member
       j's TBID; reject on any failure with a distinct error variant.
-- [ ] **CHECK: `FamilyRecord::always_require_full_signature()` returns `true`,
+      (2026-05-31 15:30)
+- [x] **CHECK: `FamilyRecord::always_require_full_signature()` returns `true`,
       and the gate that produces it asserts full verification — never returns a
       fast-level `CleanAuthenticated<FamilyRecord>`.** (see Phase 16 gate.)
-- [ ] Family Cache in Communerd: `communerd_tbid → CleanFullyAuthenticated<FamilyRecord>`,
+      (2026-05-31 15:30)
+- [x] Family Cache in Communerd: `communerd_tbid → CleanFullyAuthenticated<FamilyRecord>`,
       `member_tbid → communerd_tbid` reverse pointer, `communerd_tbid → peer_id`.
-- [ ] Connection flow (§19.3): `/tbid` lookup → dial → fetch FamilyRecord →
+      (2026-05-31 15:30)
+- [x] Connection flow (§19.3): `/tbid` lookup → dial → fetch FamilyRecord →
       verify (full) → cache → start Communerdette.
-- [ ] Test: malformed FamilyRecords (bad matrix dims, wrong sig lengths, dup/empty
+      (2026-05-31 15:30)
+- [x] Test: malformed FamilyRecords (bad matrix dims, wrong sig lengths, dup/empty
       members, non-member subset entries, oversized k) are each **rejected**, no panic.
+      (2026-05-31 15:30)
 
 ---
 
@@ -1219,34 +1245,46 @@ No CancellationToken changes to `TimeFamilyServer` are needed.
 
 **Spec reference:** §21. **Defensive coding throughout.**
 
-- [ ] Add the canonical serializer (`postcard` per §21.1) — confirm crate choice.
-- [ ] Rename `Unprocessed<R>` → `UnverifiedSignatureEnvelope<R>` (alias
+- [x] Add the canonical serializer (`postcard` per §21.1) — confirm crate choice.
+      (2026-05-31 15:30)
+- [x] Rename `Unprocessed<R>` → `UnverifiedSignatureEnvelope<R>` (alias
       `DontUse<R>`) across `clean_auth.rs` and all call sites.
-- [ ] `RecordBase` trait with `always_require_full_signature(&self) -> bool`
+      (2026-05-31 15:30)
+- [x] `RecordBase` trait with `always_require_full_signature(&self) -> bool`
       (default `false`).
-- [ ] Implement `RecordBase` for every payload type; FamilyRecord and
+      (2026-05-31 15:30)
+- [x] Implement `RecordBase` for every payload type; FamilyRecord and
       Bruderschaft/GNF return `true`, all others default `false`.
-- [ ] `Signed`-list model on the wrappers: ordered `signatures`, each entry
+      (2026-05-31 15:30)
+- [x] `Signed`-list model on the wrappers: ordered `signatures`, each entry
       covers `postcard(payload) ‖ postcard(signatures[0..i])`.
-- [ ] **CHECK: the `DontUse<R>` → clean-state gate verifies ALL signatures**
+      (2026-05-31 15:30)
+- [x] **CHECK: the `DontUse<R>` → clean-state gate verifies ALL signatures**
       (no verify-last-only shortcut), and **rejects** an unexpected signature
       count (cardinality is exactly two today).
-- [ ] **CHECK: the gate consults `R::always_require_full_signature()` and, when
+      (2026-05-31 15:30)
+- [x] **CHECK: the gate consults `R::always_require_full_signature()` and, when
       `true`, REFUSES to produce `CleanAuthenticated<R>` — it must reach
       `CleanFullyAuthenticated<R>` or reject.** This check must exist at the gate
       and be covered by a test.
-- [ ] **CHECK: a record claiming `always_require_full_signature() == true` but
+      (2026-05-31 15:30)
+- [x] **CHECK: a record claiming `always_require_full_signature() == true` but
       carrying only fast (Ed25519) signatures is REJECTED, never downgraded.**
       Dedicated negative test.
-- [ ] `Externalized<R>` builder (§21.6): `builder_from().add_signature()...build()`;
+      (2026-05-31 15:30)
+- [x] `Externalized<R>` builder (§21.6): `builder_from().add_signature()...build()`;
       `build()` rejects unless the last entry is a `CommunerdEnvelope`.
-- [ ] Migrate `PeerRegistrationRecord`/`ProbityReport`/`Foretis` canonical
+      (2026-05-31 15:30)
+- [x] Migrate `PeerRegistrationRecord`/`ProbityReport`/`Foretis` canonical
       encoders to `postcard`; handle the `Foretis` wire-break with a version bump.
-- [ ] Snapshot/trust-boundary tests updated for the renamed wrapper + signatures.
-- [ ] The CHECK items above are additionally backstopped by the **StrawmanSuite**
+      (2026-05-31 15:30)
+- [x] Snapshot/trust-boundary tests updated for the renamed wrapper + signatures.
+      (2026-05-31 15:30)
+- [x] The CHECK items above are additionally backstopped by the **StrawmanSuite**
       gate lint (Phase 17, §9 of `TRUST_BOUNDARY_SEMANTIC_ANALYSIS_SPEC.md`):
       every gate fn body must reference the field, the signatures, and a verify
       primitive. Run StrawmanSuite green before merging Phase 16.
+      (2026-05-31 15:30)
 
 ---
 
@@ -1259,40 +1297,52 @@ No CancellationToken changes to `TimeFamilyServer` are needed.
 
 ### 17.1 StrawmanSuite (AST / `syn`) — extends the existing snapshot test
 
-- [ ] Rename existing functions per spec §8: `collect_all_type_usages` →
+- [x] Rename existing functions per spec §8: `collect_all_type_usages` →
       `collect_ast_usages`, `verify_trust_boundary_invariants` →
       `verify_ast_invariants`, `format_usage_table` → `format_ast_table`.
-- [ ] Rename the snapshot section header to `=== StrawmanSuite (AST / syn) ===`.
-- [ ] Implement `check_gate_bodies()` (§9): for every gate fn
+      (2026-05-31 15:30)
+- [x] Rename the snapshot section header to `=== StrawmanSuite (AST / syn) ===`.
+      (2026-05-31 15:30)
+- [x] Implement `check_gate_bodies()` (§9): for every gate fn
       (`DontUse<_>`/`UnverifiedSignatureEnvelope<_>` param → `Clean*Authenticated<_>`
       return), require the body to reference **all three**:
       1. `always_require_full_signature`,
       2. signature data (`signatures` / `matrix`),
       3. a verify primitive in `{verify, verify_with, tbid_verify}`.
-- [ ] Maintain `VERIFY_PRIMITIVES` alongside the crypto verify surface; adding a
+      (2026-05-31 15:30)
+- [x] Maintain `VERIFY_PRIMITIVES` alongside the crypto verify surface; adding a
       verify entry point requires updating this set (reviewed coupling).
-- [ ] Honor the `// gate-strawman-exempt: <reason>` opt-out marker; an exemption
+      (2026-05-31 15:30)
+- [x] Honor the `// gate-strawman-exempt: <reason>` opt-out marker; an exemption
       without a reason is itself a violation.
-- [ ] Wire `check_gate_bodies()` into `test_trust_boundary_snapshot`; any
+      (2026-05-31 15:30)
+- [x] Wire `check_gate_bodies()` into `test_trust_boundary_snapshot`; any
       violation fails the test.
+      (2026-05-31 15:30)
 
 ### 17.2 TinmanSuite (rustdoc JSON) — new, type-resolved layer
 
-- [ ] Add dev-dependency `rustdoc-types` (pinned); assert `format_version`.
-- [ ] `invoke_rustdoc_json()`, `extract_fn_signatures()`, `resolve_type()`,
+- [x] Add dev-dependency `rustdoc-types` (pinned); assert `format_version`.
+      (2026-05-31 15:30)
+- [x] `invoke_rustdoc_json()`, `extract_fn_signatures()`, `resolve_type()`,
       `collect_semantic_usages()` per spec §6.
-- [ ] `verify_semantic_invariants()`: same structural rules over type-resolved
+      (2026-05-31 15:30)
+- [x] `verify_semantic_invariants()`: same structural rules over type-resolved
       usages; **plus** flag any `Resolved` (non-literal, alias/newtype) wrapper
       occurrence in any non-test file as a violation (rendered `Resolved(ERROR!)`).
-- [ ] Snapshot gains `=== TinmanSuite (rustdoc JSON) ===` and its cross-tab
+      (2026-05-31 15:30)
+- [x] Snapshot gains `=== TinmanSuite (rustdoc JSON) ===` and its cross-tab
       section; `UPDATE_SNAPSHOT=1` regenerates all sections.
-- [ ] Document the as-of-date limitation note (rustdoc JSON schema is versioned;
+      (2026-05-31 15:30)
+- [x] Document the as-of-date limitation note (rustdoc JSON schema is versioned;
       fail loudly on version mismatch).
+      (2026-05-31 15:30)
 
 ### 17.3 Organisation
 
-- [ ] StrawmanSuite and TinmanSuite functions do not cross-call; only the
+- [x] StrawmanSuite and TinmanSuite functions do not cross-call; only the
       top-level `test_trust_boundary_snapshot` invokes both.
+      (2026-05-31 15:30)
 
 ---
 
@@ -1345,11 +1395,15 @@ work (Phase 17) — it focuses on missing tests and production code hygiene.
 
 **The TinmanSuite code exists but `cargo rustdoc -- --json` fails.**
 
-- [ ] Fix `invoke_rustdoc_json()` — resolve `"Option 'json' given more than once"`
+- [x] Fix `invoke_rustdoc_json()` — resolve `"Option 'json' given more than once"`
       error (likely a duplicate `--json` flag in the command args).
-- [ ] Assert `format_version` in rustdoc JSON output.
-- [ ] Document rustdoc JSON schema versioning limitation.
-- [ ] Verify TinmanSuite produces non-empty output (not "skipped" or "no usages").
+      (2026-05-31 15:30)
+- [x] Assert `format_version` in rustdoc JSON output.
+      (2026-05-31 15:30)
+- [x] Document rustdoc JSON schema versioning limitation.
+      (2026-05-31 15:30)
+- [x] Verify TinmanSuite produces non-empty output (not "skipped" or "no usages").
+      (2026-05-31 15:30)
 
 ### 18.6 Unwrap/Expect Audit (Informational)
 

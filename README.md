@@ -208,6 +208,20 @@ cd p2p/core/build && ctest --output-on-failure
 cd p2p && cargo test --workspace
 ```
 
+### Toppoli (Integration Tests)
+
+Multi-peer in-process integration tests (2–24 peers over real TCP). Tests are marked `#[ignore]` and omitted from default CI runs.
+
+```bash
+# Run all toppoli tests
+cd p2p && cargo test -p foretias-server --test toppoli -- --include-ignored
+
+# Run one specific toppoli test
+cd p2p && cargo test -p foretias-server --test toppoli toppoli_peer_restart -- --include-ignored
+```
+
+Fixture classes: `ToppliBasicTest`, `ToppoliFBProbityTest`, `ToppliLivenessTest`, `ToppliGNFTest`.
+
 > **Note:** Python (`foretias-python`) and Java (`foretias-java`) bindings are removed from active scope. See `foretias/specs/SCOPE_REDUCTION_SPEC.md` for rationale and future reintroduction plan.
 
 The project uses the `alpha` branch as the center of development.

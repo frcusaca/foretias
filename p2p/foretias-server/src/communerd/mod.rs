@@ -484,8 +484,10 @@ impl Communerd {
         let tbid_index = Arc::clone(&self.tbid_index);
         let pending_lookups = Arc::clone(&self.pending_lookups);
         let pending_family_lookups = Arc::clone(&self.pending_family_lookups);
+        let communerdettes = Arc::clone(&self.communerdettes);
+        let host: Arc<dyn communerdette::CommunerdetteHost> = Arc::new(self.clone());
         let task = tokio::spawn(async move {
-            Self::gossip_event_loop(events, cmd_tx, probity_store, crypto, clock_gossip, Some(det), peer_pool, tbid_index, pending_lookups, pending_family_lookups).await;
+            Self::gossip_event_loop(events, cmd_tx, probity_store, crypto, clock_gossip, Some(det), peer_pool, tbid_index, pending_lookups, pending_family_lookups, communerdettes, host).await;
         });
         let _ = self.gossip_task.set(task);
 
@@ -568,6 +570,8 @@ impl Communerd {
         tbid_index: Arc<std::sync::RwLock<HashMap<String, PeerRegistrationRecord>>>,
         pending_lookups: Arc<std::sync::Mutex<HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<PeerRegistrationRecord>>>>>,
         pending_family_lookups: Arc<std::sync::Mutex<HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<Vec<u8>>>>>>,
+        communerdettes: Arc<DashMap<Tbid, Arc<communerdette::Communerdette>>>,
+        host: Arc<dyn communerdette::CommunerdetteHost>,
     ) {
         while let Some(event) = events.recv().await {
             match event {
@@ -646,6 +650,20 @@ impl Communerd {
                                     let tbid_hex = peer_record.tbid.clone();
                                     tbid_index.write().unwrap().insert(tbid_hex.clone(), peer_record.clone());
                                     tracing::debug!(tbid = %tbid_hex, "TBID index record cached");
+
+                                    if let Ok(tbid) = Tbid::from_hex(&tbid_hex) {
+                                        let communerdette = communerdettes
+                                            .entry(tbid)
+                                            .or_insert_with(|| Arc::new(communerdette::Communerdette::new(tbid)));
+                                        let channel_id = peer_record.peer_id.clone();
+                                        tracing::info!(tbid = %tbid_hex, channel_id = %channel_id, "triggering channel bind for newly discovered TBID peer");
+                                        communerdette.trigger_channel_bind(
+                                            Arc::clone(&host),
+                                            Arc::clone(&crypto),
+                                            Arc::clone(&clock),
+                                            channel_id,
+                                        );
+                                    }
                                 }
                             }
                             if let Some(sender) = pending_lookups.lock().unwrap().remove(&key) {
