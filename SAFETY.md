@@ -48,7 +48,16 @@ pub struct PrivKeyHandle(ManuallyDrop<NonNull<ForetiasPrivKey>>);
 
 ### Zeroization
 
-- **C11:** `sodium_memzero()` on cleanup
+**Long-lived secrets:** Encrypted under KEK, zeroized on cleanup via `sodium_memzero()`.
+
+**Transient keys (ephemeral):** Zeroized immediately after use — before the producing function returns or the enclosing scope exits. This includes:
+- Decrypted seed copies used for a single signing operation
+- Per-connection ephemeral Diffie-Hellman private keys
+- Noise ephemeral keys (generated per-handshake)
+- DH intermediate values
+- Any temporary buffer holding secret material
+
+- **C11:** `sodium_memzero()` on cleanup or scope exit
 - **Rust:** `zeroize::Zeroizing<T>` for owned secrets; explicit `fill(0)` for caller-owned buffers
 
 ### No Linguistic or Programmatic Access
