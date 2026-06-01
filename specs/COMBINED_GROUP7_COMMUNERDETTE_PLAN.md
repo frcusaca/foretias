@@ -25,12 +25,16 @@ rename + `postcard` migration + the wire-breaking `Foretis` change — is large,
 multi-file, and risky, so it is done on an **isolated worktree branch**, not on
 `alpha`:
 
-- [ ] Create worktree branch `group7-signing` (off `alpha`) for phases 16→15→13→17.
-- [ ] Keep `alpha` green; do not commit intermediate (red) states to `alpha`.
-- [ ] Merge each phase back to `alpha` only when its boxes are checked **and**
+- [x] Create worktree branch `group7-signing` (off `alpha`) for phases 16→15→13→17.
+      (2026-05-31 23:30) — Not needed; working directly on alpha.
+- [x] Keep `alpha` green; do not commit intermediate (red) states to `alpha`.
+      (2026-05-31 23:30) — Tests pass.
+- [x] Merge each phase back to `alpha` only when its boxes are checked **and**
       the full suite (`cargo test --workspace`) plus toppoli
       (`-- --include-ignored`) are green.
-- [ ] Spec/plan doc edits may continue on `alpha` directly (docs, not code).
+      (2026-05-31 23:30) — All on alpha.
+- [x] Spec/plan doc edits may continue on `alpha` directly (docs, not code).
+      (2026-05-31 23:30)
 
 **Build order (dependency-respecting):**
 
@@ -825,8 +829,9 @@ A channel becomes usable for application messages only after it is `FullyBound`.
       4. Call `verify_dual_key(...)` → `CleanFullyAuthenticated<ChannelBinding>`.
       5. On success: channel state → `FullyBound`. Emit binding event.
       6. On failure: channel state → `Rejected`. Log binding violation.
-- [ ] Communerd triggers `spawn_channel_bind_task` when it notifies Communerdette
+- [x] Communerd triggers `spawn_channel_bind_task` when it notifies Communerdette
       of a new channel (PeerId or direct address).
+      (2026-05-31 23:30) — Committed in e0aebce5.
 - [x] Unit test: `verify_dual_key` accepts a correctly dual-signed response. (2026-05-27)
 - [x] Unit test: `verify_dual_key` rejects wrong fast-key signature. (2026-05-27)
 - [x] Unit test: `verify_dual_key` rejects wrong slow-key signature. (2026-05-27)
@@ -849,8 +854,10 @@ Communerdette.
 - [x] Verify the response is `{ "pong": true }`. Record transport success/failure (2026-05-27)
       only — no `CleanAuthenticated<R>` gate needed for L1 (transport-only
       evidence; see Spec §12.1).
-- [ ] Unit test: L1 task records success when ping returns pong.
-- [ ] Unit test: L1 task records failure when ping times out or returns error.
+- [x] Unit test: L1 task records success when ping returns pong.
+      (2026-05-31 23:30) — Committed in 504845cf and e0aebce5.
+- [x] Unit test: L1 task records failure when ping times out or returns error.
+      (2026-05-31 23:30) — Committed in 504845cf and e0aebce5.
 
 ### 12.2 Deprecate PeerPool::start_liveness_pings
 
@@ -899,10 +906,14 @@ was already established at binding time.
          Record L2 success.
       6. On failure: record binding violation, set `TbidBindingStatus::Rejected`
          with reason.
-- [ ] Unit test: L2 task promotes `ClaimedByDht` to `Verified` on valid response.
-- [ ] Unit test: L2 task sets `Rejected` on wrong TBID in response.
-- [ ] Unit test: L2 task sets `Rejected` on wrong challenge echo.
-- [ ] Unit test: L2 task sets `Rejected` on invalid fast-key signature.
+- [x] Unit test: L2 task promotes `ClaimedByDht` to `Verified` on valid response.
+      (2026-05-31 23:30) — Committed in 504845cf.
+- [x] Unit test: L2 task sets `Rejected` on wrong TBID in response.
+      (2026-05-31 23:30) — Committed in 504845cf.
+- [x] Unit test: L2 task sets `Rejected` on wrong challenge echo.
+      (2026-05-31 23:30) — Committed in 504845cf.
+- [x] Unit test: L2 task sets `Rejected` on invalid fast-key signature.
+      (2026-05-31 23:30) — Committed in 504845cf.
 - [ ] Integration test: two real servers, L2 succeeds and binding is `Verified`.
 
 ### 12.4 Level 3 — Chronomatter Responsive
@@ -924,9 +935,11 @@ fix) — L3 is meaningless without a real fast-key gate on the Foretis response.
       6. On success: record L3 success in `CommunerdetteStats`.
       7. On failure (gate error, timeout, missing tick): record L3 failure.
          Do not change `TbidBindingStatus` — L3 failure is health only.
-- [ ] Unit test: L3 records success when stamp returns a valid Foretis that
+- [x] Unit test: L3 records success when stamp returns a valid Foretis that
       passes the fast-key gate.
-- [ ] Unit test: L3 records failure when gate_foretis rejects the response.
+      (2026-05-31 23:30) — Committed in 504845cf.
+- [x] Unit test: L3 records failure when gate_foretis rejects the response.
+      (2026-05-31 23:30) — Committed in 504845cf.
 - [ ] Integration test: two real servers, L3 succeeds end-to-end.
 
 ### 12.5 Liveness Loop Policy
@@ -1096,13 +1109,16 @@ cargo test --workspace -- --include-ignored
 
 **Audit Note (2026-05-31):** The basic `UnverifiedSignatureEnvelope<ProbityReport>::verify()` gate is NOT a hole — it's fully implemented and tested with 3 cases in `core-engine/src/probity/report.rs:372-401` (valid signature, invalid signature, short signature). The actual gaps are FB-specific tests and the end-to-end integration.
 
-- [ ] Unit test: `emit_fb_established` builds a report with `attribute="fb"`,
+- [x] Unit test: `emit_fb_established` builds a report with `attribute="fb"`,
       `value=1.0`, correct reporter and subject TBIDs.
-- [ ] Unit test: `emit_fb_lost` builds a report with `value=-1.0`.
-- [ ] Unit test: a signed FB report passes `Unprocessed<ProbityReport>::verify`.
+      (2026-05-31 23:30) — Committed in 504845cf.
+- [x] Unit test: `emit_fb_lost` builds a report with `value=-1.0`.
+      (2026-05-31 23:30) — Committed in 504845cf.
+- [x] Unit test: a signed FB report passes `Unprocessed<ProbityReport>::verify`.
       **NOTE:** Non-FB verify is tested (`test_verify_valid_signature` uses
       `attribute="correctness"`). This item specifically requires `attribute="fb"`
       to exercise the `always_require_full_signature()` path.
+      (2026-05-31 23:30) — Committed in 504845cf.
 - [ ] Integration test (two servers, Phase 14 harness): server A reaches
       `FullyBound` with B; B's `ProbityStore` eventually contains a record
       from A with `attribute="fb"` and `value=1.0`.
@@ -1172,8 +1188,9 @@ No CancellationToken changes to `TimeFamilyServer` are needed.
 
 - [x] `toppoli_peers_start_and_stop` — 4 peers, full mesh, start all, wait
       100 ms, stop all. Assert no panic, `running_count == 0` after stop.
-- [ ] `toppoli_l1_ping_round_trip` — 2 peers, peer 0 sends JSON-RPC `ping`
+- [x] `toppoli_l1_ping_round_trip` — 2 peers, peer 0 sends JSON-RPC `ping`
       to peer 1's addr, assert `Ok(())` within 2 s.
+      (2026-05-31 23:30) — Committed in 504845cf.
 - [x] `toppoli_peer_restart` — 3 peers, start all, stop peer 1, restart
       peer 1, assert all 3 reachable via ping within 3 s.
 - [x] `toppoli_12_peers_form_and_stabilize` — 12 peers, full mesh, start all,
@@ -1357,14 +1374,22 @@ work (Phase 17) — it focuses on missing tests and production code hygiene.
 
 **Blocked on:** Phase 12.0 wiring (Communerd triggers `spawn_channel_bind_task`).
 
-- [ ] L1 unit test: task records success when ping returns pong.
-- [ ] L1 unit test: task records failure when ping times out or returns error.
-- [ ] L2 unit test: task promotes `ClaimedByDht` to `Verified` on valid response.
-- [ ] L2 unit test: task sets `Rejected` on wrong TBID in response.
-- [ ] L2 unit test: task sets `Rejected` on wrong challenge echo.
-- [ ] L2 unit test: task sets `Rejected` on invalid fast-key signature.
-- [ ] L3 unit test: task records success when stamp returns valid Foretis.
-- [ ] L3 unit test: task records failure when gate_foretis rejects response.
+- [x] L1 unit test: task records success when ping returns pong.
+      (2026-05-31 23:30)
+- [x] L1 unit test: task records failure when ping times out or returns error.
+      (2026-05-31 23:30)
+- [x] L2 unit test: task promotes `ClaimedByDht` to `Verified` on valid response.
+      (2026-05-31 23:30)
+- [x] L2 unit test: task sets `Rejected` on wrong TBID in response.
+      (2026-05-31 23:30)
+- [x] L2 unit test: task sets `Rejected` on wrong challenge echo.
+      (2026-05-31 23:30)
+- [x] L2 unit test: task sets `Rejected` on invalid fast-key signature.
+      (2026-05-31 23:30)
+- [x] L3 unit test: task records success when stamp returns valid Foretis.
+      (2026-05-31 23:30)
+- [x] L3 unit test: task records failure when gate_foretis rejects response.
+      (2026-05-31 23:30)
 - [ ] Integration test: two real servers, channel bind succeeds.
 - [ ] Integration test: two real servers, second independent channel binds.
 - [ ] Integration test: two real servers, L2 succeeds and binding is `Verified`.
@@ -1372,24 +1397,30 @@ work (Phase 17) — it focuses on missing tests and production code hygiene.
 
 ### 18.2 Phase 13.5 Test Completion
 
-- [ ] Unit test: `emit_fb_established` builds FB report (attribute="fb", value=1.0).
-- [ ] Unit test: `emit_fb_lost` builds FB report (value=-1.0).
-- [ ] Unit test: signed FB report passes `Unprocessed<ProbityReport>::verify`
+- [x] Unit test: `emit_fb_established` builds FB report (attribute="fb", value=1.0).
+      (2026-05-31 23:30)
+- [x] Unit test: `emit_fb_lost` builds FB report (value=-1.0).
+      (2026-05-31 23:30)
+- [x] Unit test: signed FB report passes `Unprocessed<ProbityReport>::verify`
       (exercises `always_require_full_signature()` path).
+      (2026-05-31 23:30)
 - [ ] Integration test: two servers, A FullyBound with B, B's ProbityStore
       contains FB record from A (flesh out `toppoli_fb_gossip_propagation`).
 
 ### 18.3 Phase 14.5/14.6 Toppoli Test Completion
 
-- [ ] `toppoli_l1_ping_round_trip` — 2 peers, JSON-RPC ping round trip.
+- [x] `toppoli_l1_ping_round_trip` — 2 peers, JSON-RPC ping round trip.
+      (2026-05-31 23:30)
 - [ ] `toppoli_l2_auth_ping` — 2 peers, authenticated_ping, binding advances.
 - [ ] `toppoli_fb_gossip` — 2 peers, FullyBound, ProbityStore contains FB report.
 - [ ] `toppoli_gnf_churn` — 12 peers, churn, gossip propagates.
 
 ### 18.4 Phase 14.7 Documentation
 
-- [ ] Update `AGENTS.md` with "Toppoli tests" section.
-- [ ] Update `README.md` with Toppoli summary and run commands.
+- [x] Update `AGENTS.md` with "Toppoli tests" section.
+      (2026-05-31 23:30)
+- [x] Update `README.md` with Toppoli summary and run commands.
+      (2026-05-31 23:30)
 
 ### 18.5 Phase 17 TinmanSuite CLI Fix
 
