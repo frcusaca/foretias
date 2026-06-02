@@ -1,7 +1,7 @@
 //! Safe wrappers for RNG and secure memory operations.
 
 use crate::core::bindings::*;
-use crate::error::{CryptoError, c_result_to_error};
+use crate::error::{c_result_to_error, CryptoError};
 
 /// Fill buffer with cryptographically secure random bytes.
 pub fn random_bytes(buf: &mut [u8]) -> Result<(), CryptoError> {
@@ -14,9 +14,7 @@ pub fn random_bytes(buf: &mut [u8]) -> Result<(), CryptoError> {
 /// Securely zero memory via C11 foretias_memzero (libsodium sodium_memzero).
 pub fn memzero(buf: &mut [u8]) {
     // SAFETY: buf is valid for its length; memzero handles zero-length safely.
-    unsafe {
-        foretias_memzero(buf.as_mut_ptr() as *mut std::ffi::c_void, buf.len())
-    }
+    unsafe { foretias_memzero(buf.as_mut_ptr() as *mut std::ffi::c_void, buf.len()) }
 }
 
 #[cfg(test)]

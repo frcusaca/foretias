@@ -91,6 +91,12 @@ pub enum CryptoError {
     /// An I/O read operation failed on the noise transport channel.
     #[error("noise read error: {0}")]
     IoRead(String),
+    /// The range proof was requested for an empty leaf set.
+    #[error("range proof: empty leaf set")]
+    ProofRangeEmpty,
+    /// The requested range exceeds the number of leaves in the tree.
+    #[error("range proof: range exceeds leaf count")]
+    ProofRangeExceeds,
 }
 
 /// Convert C11 ForetiasResult code to CryptoError.
@@ -101,6 +107,8 @@ pub fn c_result_to_error(code: i32) -> Result<(), CryptoError> {
         -3 => Err(CryptoError::BadKey),
         -6 => Err(CryptoError::BadInput("invalid input")),
         -8 => Err(CryptoError::Unsupported("not implemented")),
+        -9 => Err(CryptoError::ProofRangeEmpty),
+        -10 => Err(CryptoError::ProofRangeExceeds),
         other => Err(CryptoError::Internal(other)),
     }
 }

@@ -1,7 +1,7 @@
 //! Safe wrappers for hashing operations.
 
 use crate::core::bindings::*;
-use crate::error::{CryptoError, c_result_to_error};
+use crate::error::{c_result_to_error, CryptoError};
 
 /// SHA-256 hash.
 pub fn sha256(data: &[u8]) -> Result<ForetiasHash32, CryptoError> {
@@ -18,9 +18,8 @@ pub fn sha256_concat(a: &[u8], b: &[u8]) -> Result<ForetiasHash32, CryptoError> 
     // SAFETY: zeroing known-good #[repr(C)] struct from bindings.
     let mut out = unsafe { std::mem::zeroed() };
     // SAFETY: a, b, out buffers are valid for their lengths.
-    let rc = unsafe {
-        foretias_hash_sha256_concat(a.as_ptr(), a.len(), b.as_ptr(), b.len(), &mut out)
-    };
+    let rc =
+        unsafe { foretias_hash_sha256_concat(a.as_ptr(), a.len(), b.as_ptr(), b.len(), &mut out) };
     c_result_to_error(rc)?;
     Ok(out)
 }
@@ -40,9 +39,7 @@ pub fn legacy_insecure_md5(data: &[u8]) -> Result<ForetiasHash16, CryptoError> {
     // SAFETY: zeroing known-good #[repr(C)] struct from bindings.
     let mut out = unsafe { std::mem::zeroed() };
     // SAFETY: data and out buffers are valid for their lengths.
-    let rc = unsafe {
-        foretias_hash_legacy_insecure_md5(data.as_ptr(), data.len(), &mut out)
-    };
+    let rc = unsafe { foretias_hash_legacy_insecure_md5(data.as_ptr(), data.len(), &mut out) };
     c_result_to_error(rc)?;
     Ok(out)
 }
@@ -52,9 +49,7 @@ pub fn legacy_insecure_sha1(data: &[u8]) -> Result<ForetiasHash20, CryptoError> 
     // SAFETY: zeroing known-good #[repr(C)] struct from bindings.
     let mut out = unsafe { std::mem::zeroed() };
     // SAFETY: data and out buffers are valid for their lengths.
-    let rc = unsafe {
-        foretias_hash_legacy_insecure_sha1(data.as_ptr(), data.len(), &mut out)
-    };
+    let rc = unsafe { foretias_hash_legacy_insecure_sha1(data.as_ptr(), data.len(), &mut out) };
     c_result_to_error(rc)?;
     Ok(out)
 }
@@ -66,9 +61,11 @@ mod tests {
     #[test]
     fn sha256_empty_string_matches_nist_vector() {
         let hash = sha256(b"").unwrap();
-        let expected: [u8; 32] = hex::decode(
-            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-        ).unwrap().try_into().unwrap();
+        let expected: [u8; 32] =
+            hex::decode("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+                .unwrap()
+                .try_into()
+                .unwrap();
         assert_eq!(hash.bytes, expected);
     }
 
@@ -125,9 +122,11 @@ mod tests {
     #[test]
     fn sha256_known_vector() {
         let hash = sha256(b"abc").unwrap();
-        let expected: [u8; 32] = hex::decode(
-            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
-        ).unwrap().try_into().unwrap();
+        let expected: [u8; 32] =
+            hex::decode("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+                .unwrap()
+                .try_into()
+                .unwrap();
         assert_eq!(hash.bytes, expected);
     }
 }

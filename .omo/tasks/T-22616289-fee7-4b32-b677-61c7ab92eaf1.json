@@ -1,0 +1,10 @@
+{
+  "id": "T-22616289-fee7-4b32-b677-61c7ab92eaf1",
+  "subject": "Add new error variants for merkle range proof errors",
+  "description": "Add ProofRangeEmpty (-9) and ProofRangeExceeds (-10) variants to CryptoError and update c_result_to_error.",
+  "status": "completed",
+  "activeForm": "Adding merkle error variants",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_17641fa4affeK5mu5ClXcQlo3M"
+}

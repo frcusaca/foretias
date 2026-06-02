@@ -1,10 +1,10 @@
 //! Safe wrappers for Ed25519 identity operations.
 
-use std::ptr::NonNull;
 use std::mem::ManuallyDrop;
+use std::ptr::NonNull;
 
 use crate::core::bindings::*;
-use crate::error::{CryptoError, c_result_to_error};
+use crate::error::{c_result_to_error, CryptoError};
 
 /// Opaque private key handle — private key bytes never leave C memory.
 ///
@@ -48,7 +48,9 @@ impl PrivKeyHandle {
             return Err(CryptoError::Internal(-99));
         }
         // SAFETY: ptr is non-null (checked above), so NonNull::new_unchecked is valid.
-        Ok(Self(ManuallyDrop::new(unsafe { NonNull::new_unchecked(ptr) })))
+        Ok(Self(ManuallyDrop::new(unsafe {
+            NonNull::new_unchecked(ptr)
+        })))
     }
 
     /// Create a handle from an existing 32-byte seed.
@@ -62,7 +64,9 @@ impl PrivKeyHandle {
             return Err(CryptoError::Internal(-99));
         }
         // SAFETY: ptr is non-null (checked above), so NonNull::new_unchecked is valid.
-        Ok(Self(ManuallyDrop::new(unsafe { NonNull::new_unchecked(ptr) })))
+        Ok(Self(ManuallyDrop::new(unsafe {
+            NonNull::new_unchecked(ptr)
+        })))
     }
 
     /// Expose the raw C pointer for FFI callers (e.g., Noise handshake).

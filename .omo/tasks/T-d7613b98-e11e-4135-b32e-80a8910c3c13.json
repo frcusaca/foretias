@@ -1,0 +1,10 @@
+{
+  "id": "T-d7613b98-e11e-4135-b32e-80a8910c3c13",
+  "subject": "Regenerate FFI bindings to include new merkle range proof types/functions",
+  "description": "Build C11 core and foretias-core to regenerate bindings.rs with the new ForetiasMerkleRangeProof type and three new functions.",
+  "status": "completed",
+  "activeForm": "Regenerating FFI bindings",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_17641fa4affeK5mu5ClXcQlo3M"
+}

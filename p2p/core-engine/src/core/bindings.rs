@@ -31,6 +31,7 @@ pub const FORETIAS_TBID_V1_SIG_BYTES: u32 = 49920;
 pub const FORETIAS_TBID_V1_VERSION: u32 = 1;
 pub const FORETIAS_NOISE_MAX_MSG: u32 = 65535;
 pub const FORETIAS_MERKLE_MAX_DEPTH: u32 = 32;
+pub const FORETIAS_MERKLE_MAX_RANGE_PROOF: u32 = 64;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct ForetiasCoreVersion {
@@ -62,6 +63,8 @@ pub const ForetiasResult_FORETIAS_ERR_REPLAY: ForetiasResult = -5;
 pub const ForetiasResult_FORETIAS_ERR_BAD_INPUT: ForetiasResult = -6;
 pub const ForetiasResult_FORETIAS_ERR_OVERFLOW: ForetiasResult = -7;
 pub const ForetiasResult_FORETIAS_ERR_UNSUPPORTED: ForetiasResult = -8;
+pub const ForetiasResult_FORETIAS_ERR_PROOF_RANGE_EMPTY: ForetiasResult = -9;
+pub const ForetiasResult_FORETIAS_ERR_PROOF_RANGE_EXCEEDS: ForetiasResult = -10;
 pub const ForetiasResult_FORETIAS_ERR_INTERNAL: ForetiasResult = -99;
 pub type ForetiasResult = ::std::os::raw::c_int;
 pub const ForetiasCurve_FORETIAS_CURVE_ED25519: ForetiasCurve = 1;
@@ -544,6 +547,44 @@ extern "C" {
 extern "C" {
     #[link_name = "foretias_merkle_verify"]
     pub fn foretias_merkle_verify(        root: *const ForetiasHash32,        leaf: *const ForetiasHash32,        proof: *const ForetiasMerkleProof,    ) -> ForetiasResult;
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ForetiasMerkleRangeProof {
+    pub leaves: [ForetiasHash32; 64usize],
+    pub siblings: [ForetiasHash32; 32usize],
+    pub leaf_count: i32,
+    pub sibling_count: i32,
+    pub n: i32,
+}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of ForetiasMerkleRangeProof"]
+        [::std::mem::size_of::<ForetiasMerkleRangeProof>() - 3084usize];
+    ["Alignment of ForetiasMerkleRangeProof"]
+        [::std::mem::align_of::<ForetiasMerkleRangeProof>() - 4usize];
+    ["Offset of field: ForetiasMerkleRangeProof::leaves"]
+        [::std::mem::offset_of!(ForetiasMerkleRangeProof, leaves) - 0usize];
+    ["Offset of field: ForetiasMerkleRangeProof::siblings"]
+        [::std::mem::offset_of!(ForetiasMerkleRangeProof, siblings) - 2048usize];
+    ["Offset of field: ForetiasMerkleRangeProof::leaf_count"]
+        [::std::mem::offset_of!(ForetiasMerkleRangeProof, leaf_count) - 3072usize];
+    ["Offset of field: ForetiasMerkleRangeProof::sibling_count"]
+        [::std::mem::offset_of!(ForetiasMerkleRangeProof, sibling_count) - 3076usize];
+    ["Offset of field: ForetiasMerkleRangeProof::n"]
+        [::std::mem::offset_of!(ForetiasMerkleRangeProof, n) - 3080usize];
+};
+extern "C" {
+    #[link_name = "foretias_merkle_root_from_leaves"]
+    pub fn foretias_merkle_root_from_leaves(        leaves: *const ForetiasHash32,        n: usize,        root_out: *mut ForetiasHash32,    ) -> ForetiasResult;
+}
+extern "C" {
+    #[link_name = "foretias_merkle_range_proof"]
+    pub fn foretias_merkle_range_proof(        leaves: *const ForetiasHash32,        n: usize,        start: usize,        end: usize,        proof_out: *mut ForetiasMerkleRangeProof,    ) -> ForetiasResult;
+}
+extern "C" {
+    #[link_name = "foretias_merkle_verify_range_proof"]
+    pub fn foretias_merkle_verify_range_proof(        root: *const ForetiasHash32,        proof: *const ForetiasMerkleRangeProof,        start: usize,        end: usize,        result_out: *mut ForetiasResult,    ) -> ForetiasResult;
 }
 #[repr(C)]
 #[derive(Copy, Clone)]

@@ -1,0 +1,10 @@
+{
+  "id": "T-e6465237-f9cc-46e9-a164-eef9115c8fa4",
+  "subject": "Create merkle.rs with safe FFI wrappers and tests",
+  "description": "Create p2p/core-engine/src/core/merkle.rs with safe Rust wrappers for merkle_leaf, merkle_verify, merkle_root_from_leaves, merkle_range_proof, and merkle_verify_range_proof. Include unit tests.",
+  "status": "completed",
+  "activeForm": "Creating merkle.rs safe wrappers",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_17641fa4affeK5mu5ClXcQlo3M"
+}

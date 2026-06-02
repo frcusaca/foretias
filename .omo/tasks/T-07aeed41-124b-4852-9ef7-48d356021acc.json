@@ -1,0 +1,10 @@
+{
+  "id": "T-07aeed41-124b-4852-9ef7-48d356021acc",
+  "subject": "Register merkle module in core/mod.rs",
+  "description": "Add pub mod merkle to core/mod.rs",
+  "status": "completed",
+  "activeForm": "Registering merkle module",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_17641fa4affeK5mu5ClXcQlo3M"
+}
