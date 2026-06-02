@@ -6,17 +6,20 @@
 
 use std::path::PathBuf;
 
-use foretias_core::snapshot_suite::{Evaluator, SnapshotSuite, build_snapshot};
+use foretias_core::snapshot_suite::{build_snapshot, Evaluator, SnapshotSuite};
 
 /// Evaluator that creates a TimeFamilyServer, stamps messages, and verifies them.
 pub struct ServerStampEvaluator {
     chronon_ns: u64,
-    messages:   Vec<String>,
+    messages: Vec<String>,
 }
 
 impl ServerStampEvaluator {
     pub fn new(chronon_ns: u64, messages: Vec<String>) -> Self {
-        Self { chronon_ns, messages }
+        Self {
+            chronon_ns,
+            messages,
+        }
     }
 }
 
@@ -41,7 +44,8 @@ impl Evaluator for ServerStampEvaluator {
         // Stamp each message
         let mut stamps = Vec::new();
         for msg in &self.messages {
-            let stamped = server.chronomatter()
+            let stamped = server
+                .chronomatter()
                 .stamp(msg.as_bytes().to_vec(), msg.clone())
                 .map_err(|e| format!("Stamp failed for '{}': {}", msg, e))?;
             stamps.push((
@@ -57,14 +61,22 @@ impl Evaluator for ServerStampEvaluator {
         // Verify each stamp
         let mut verifications = Vec::new();
         for (msg, (foretis_val, sig_val, alg_val)) in self.messages.iter().zip(stamps.iter()) {
-            let foretis: foretias_core::foretias::tick::Foretis = serde_json::from_value(foretis_val.clone())
-                .map_err(|e| format!("Failed to deserialize Foretis for verify: {}", e))?;
+            let foretis: foretias_core::foretias::tick::Foretis =
+                serde_json::from_value(foretis_val.clone())
+                    .map_err(|e| format!("Failed to deserialize Foretis for verify: {}", e))?;
             let sig: Vec<u8> = serde_json::from_value(sig_val.clone())
                 .map_err(|e| format!("Failed to deserialize signature: {}", e))?;
             let alg: String = serde_json::from_value(alg_val.clone())
                 .map_err(|e| format!("Failed to deserialize algorithm: {}", e))?;
-            let result = server.chronomatter()
-                .verify(&foretis, &sig, &alg, &msg.as_bytes().to_vec(), server.calendar())
+            let result = server
+                .chronomatter()
+                .verify(
+                    &foretis,
+                    &sig,
+                    &alg,
+                    &msg.as_bytes().to_vec(),
+                    server.calendar(),
+                )
                 .map_err(|e| format!("Verify failed for '{}': {}", msg, e))?;
             verifications.push(serde_json::json!({
                 "message": msg,
@@ -93,7 +105,7 @@ impl Evaluator for ServerStampEvaluator {
         let result_str = serde_json::to_string_pretty(&result)
             .map_err(|e| format!("Failed to serialize result: {}", e))?;
 
-        Ok(build_snapshot("", &input_str, &[result_str], test_name))
+        Ok(build_snapshot("", &input_str, &[result_str], test_name).map_err(|e| e.to_string())?)
     }
 }
 
@@ -101,10 +113,7 @@ impl Evaluator for ServerStampEvaluator {
 
 fn suite() -> SnapshotSuite {
     let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    SnapshotSuite::new(
-        base.join("snapshot_tests").join("approved"),
-        "",
-    )
+    SnapshotSuite::new(base.join("snapshot_tests").join("approved"), "")
 }
 
 /// First snapshot test: stamp and verify with a server.
@@ -123,8 +132,7 @@ fn server_stamp_verify_fixed_seed() {
     );
 
     let test_name = "server_stamp_verify_fixed_seed";
-    let actual = eval.evaluate(test_name)
-        .expect("Evaluator must succeed");
+    let actual = eval.evaluate(test_name).expect("Evaluator must succeed");
 
     let suite = suite();
     match suite.compare(test_name, &actual) {
@@ -137,7 +145,11 @@ fn server_stamp_verify_fixed_seed() {
             eprintln!("{}", failure);
             // Verify the SIGNATURES footer is valid even though values differ
             if let Some(verification) = suite.verify_signatures(&actual) {
-                assert!(verification.all_ok(), "SIGNATURES footer must verify: {:?}", verification);
+                assert!(
+                    verification.all_ok(),
+                    "SIGNATURES footer must verify: {:?}",
+                    verification
+                );
             } else {
                 panic!("SIGNATURES footer must be parseable");
             }

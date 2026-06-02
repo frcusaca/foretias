@@ -6,7 +6,10 @@
 use std::fs;
 use std::path::PathBuf;
 
-use crate::snapshot_signature::{sign_snapshot, verify_snapshot, parse_snapshot_footer, SnapshotVerification};
+use crate::snapshot_signature::{
+    parse_snapshot_footer, sign_snapshot, verify_snapshot, SnapshotSignatureError,
+    SnapshotVerification,
+};
 
 /// Trait for test scenarios that produce a signed snapshot output.
 ///
@@ -72,7 +75,11 @@ impl std::fmt::Display for TestFailure {
                 }
                 Ok(())
             }
-            TestFailure::Mismatch { name, expected, actual } => {
+            TestFailure::Mismatch {
+                name,
+                expected,
+                actual,
+            } => {
                 write!(
                     f,
                     "MISMATCH: {} \u{2014} output differs from approved snapshot\n  expected: {}\n  actual:   {}",
@@ -92,7 +99,7 @@ impl std::fmt::Display for TestFailure {
 /// Supports cryptographic verification of the SIGNATURES footer.
 pub struct SnapshotSuite {
     approved_dir: PathBuf,
-    passphrase:   String,
+    passphrase: String,
 }
 
 impl SnapshotSuite {
@@ -100,7 +107,7 @@ impl SnapshotSuite {
     pub fn new(approved_dir: impl Into<PathBuf>, passphrase: &str) -> Self {
         Self {
             approved_dir: approved_dir.into(),
-            passphrase:   passphrase.to_string(),
+            passphrase: passphrase.to_string(),
         }
     }
 
@@ -123,11 +130,10 @@ impl SnapshotSuite {
             });
         }
 
-        let expected = fs::read_to_string(&path)
-            .map_err(|e| TestFailure::Error {
-                name: test_name.to_string(),
-                message: format!("Failed to read {}: {}", path.display(), e),
-            })?;
+        let expected = fs::read_to_string(&path).map_err(|e| TestFailure::Error {
+            name: test_name.to_string(),
+            message: format!("Failed to read {}: {}", path.display(), e),
+        })?;
 
         if expected.trim_end() != actual.trim_end() {
             return Err(TestFailure::Mismatch {
@@ -166,11 +172,13 @@ impl SnapshotSuite {
         let input_fence_start = lines[input_start + 1..]
             .iter()
             .position(|l| l.trim().starts_with("```"))?
-            + input_start + 1;
+            + input_start
+            + 1;
         let input_fence_end = lines[input_fence_start + 1..]
             .iter()
             .position(|l| l.trim().starts_with("```"))?
-            + input_fence_start + 1;
+            + input_fence_start
+            + 1;
         let input = lines[input_fence_start + 1..input_fence_end]
             .iter()
             .copied()
@@ -178,18 +186,21 @@ impl SnapshotSuite {
             .join("\n");
 
         // Find RESULT: block(s)
-        let result_start = lines.iter()
+        let result_start = lines
+            .iter()
             .skip(input_fence_end)
             .position(|l| l.trim().ends_with("RESULT:"))?
             + input_fence_end;
         let result_fence_start = lines[result_start + 1..]
             .iter()
             .position(|l| l.trim().starts_with("```"))?
-            + result_start + 1;
+            + result_start
+            + 1;
         let result_fence_end = lines[result_fence_start + 1..]
             .iter()
             .position(|l| l.trim().starts_with("```"))?
-            + result_fence_start + 1;
+            + result_fence_start
+            + 1;
         let result = lines[result_fence_start + 1..result_fence_end]
             .iter()
             .copied()
@@ -197,18 +208,21 @@ impl SnapshotSuite {
             .join("\n");
 
         // Find COMMENTS: block
-        let comments_start = lines.iter()
+        let comments_start = lines
+            .iter()
             .skip(result_fence_end)
             .position(|l| l.trim() == "COMMENTS:")?
             + result_fence_end;
         let comments_fence_start = lines[comments_start + 1..]
             .iter()
             .position(|l| l.trim().starts_with("```"))?
-            + comments_start + 1;
+            + comments_start
+            + 1;
         let comments_fence_end = lines[comments_fence_start + 1..]
             .iter()
             .position(|l| l.trim().starts_with("```"))?
-            + comments_fence_start + 1;
+            + comments_fence_start
+            + 1;
         let comments = lines[comments_fence_start + 1..comments_fence_end]
             .iter()
             .copied()
@@ -254,8 +268,8 @@ pub fn build_snapshot(
     input: &str,
     results: &[String],
     comments: &str,
-) -> String {
-    let sig = sign_snapshot(passphrase, input, results, comments);
+) -> Result<String, SnapshotSignatureError> {
+    let sig = sign_snapshot(passphrase, input, results, comments)?;
 
     let mut lines = Vec::new();
     lines.push("INPUT:".to_string());
@@ -276,7 +290,7 @@ pub fn build_snapshot(
     lines.push("```".to_string());
     lines.push(sig.format_footer());
 
-    lines.join("\n")
+    Ok(lines.join("\n"))
 }
 
 #[cfg(test)]
@@ -289,7 +303,7 @@ mod tests {
         let results = vec![r#"{"chronon_number":1}"#.to_string()];
         let comments = "roundtrip";
 
-        let snapshot = build_snapshot("", input, &results, comments);
+        let snapshot = build_snapshot("", input, &results, comments).unwrap();
 
         // Verify the SIGNATURES footer is present
         assert!(snapshot.contains("SIGNATURES:"));

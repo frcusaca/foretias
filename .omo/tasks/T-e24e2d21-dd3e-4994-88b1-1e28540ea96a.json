@@ -1,0 +1,9 @@
+{
+  "id": "T-e24e2d21-dd3e-4994-88b1-1e28540ea96a",
+  "subject": "Change derive_keypair to return Result",
+  "description": "In snapshot_signature.rs: add SnapshotSignatureError, change derive_keypair to return Result, update all callers including sign_snapshot, verify_snapshot, build_snapshot, and tests.",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_1766ad6fcffedcC3jwrScy0JTv"
+}

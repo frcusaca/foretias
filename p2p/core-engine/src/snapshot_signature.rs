@@ -32,10 +32,33 @@
 //! Canonical blocks already end with `\n`, so concatenation is unambiguous.
 //! This means tampering with any earlier block invalidates all later signatures.
 
-use ed25519_dalek::{Signer, SigningKey, VerifyingKey, Signature};
 use argon2::Argon2;
 use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine;
+use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
+
+/// Errors from snapshot signature operations.
+#[derive(Debug)]
+pub enum SnapshotSignatureError {
+    /// Argon2id key derivation failed.
+    Argon2Failure(argon2::Error),
+}
+
+impl From<argon2::Error> for SnapshotSignatureError {
+    fn from(e: argon2::Error) -> Self {
+        SnapshotSignatureError::Argon2Failure(e)
+    }
+}
+
+impl std::fmt::Display for SnapshotSignatureError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SnapshotSignatureError::Argon2Failure(e) => {
+                write!(f, "Argon2id key derivation failed: {}", e)
+            }
+        }
+    }
+}
 
 /// Fixed salt for deterministic key derivation.
 const SALT: &[u8] = b"foretias:snapsuite-sig:v1";
@@ -58,18 +81,19 @@ const SALT: &[u8] = b"foretias:snapsuite-sig:v1";
 /// # Returns
 ///
 /// A `(SigningKey, VerifyingKey)` tuple ready for signing and verification.
-pub fn derive_keypair(passphrase: &str) -> (SigningKey, VerifyingKey) {
+pub fn derive_keypair(
+    passphrase: &str,
+) -> Result<(SigningKey, VerifyingKey), SnapshotSignatureError> {
     let argon2 = Argon2::default();
 
-    // Produce a 32-byte hash suitable as an Ed25519 seed.
     let mut hash_output = [0u8; 32];
     argon2
         .hash_password_into(passphrase.as_bytes(), SALT, &mut hash_output)
-        .expect("Argon2id hash should not fail with valid inputs");
+        .map_err(SnapshotSignatureError::Argon2Failure)?;
 
     let signing_key = SigningKey::from(&hash_output.into());
     let verifying_key = signing_key.verifying_key();
-    (signing_key, verifying_key)
+    Ok((signing_key, verifying_key))
 }
 
 /// Sign content bytes with the given signing key.
@@ -83,10 +107,7 @@ pub fn derive_keypair(passphrase: &str) -> (SigningKey, VerifyingKey) {
 ///
 /// A tuple of `(VerifyingKey, Vec<u8>)` where the second element is the
 /// 64-byte Ed25519 signature.
-pub fn sign_content(
-    signing_key: &SigningKey,
-    content: &str,
-) -> (VerifyingKey, Vec<u8>) {
+pub fn sign_content(signing_key: &SigningKey, content: &str) -> (VerifyingKey, Vec<u8>) {
     let signature: Signature = signing_key.sign(content.as_bytes());
     (signing_key.verifying_key(), signature.to_bytes().to_vec())
 }
@@ -103,16 +124,14 @@ pub fn sign_content(
 ///
 /// `true` if the signature is valid; `false` otherwise.
 /// Returns `false` for malformed signatures rather than panicking.
-pub fn verify_signature(
-    verifying_key: &VerifyingKey,
-    content: &str,
-    signature: &[u8],
-) -> bool {
+pub fn verify_signature(verifying_key: &VerifyingKey, content: &str, signature: &[u8]) -> bool {
     let sig = match Signature::from_slice(signature) {
         Ok(s) => s,
         Err(_) => return false,
     };
-    verifying_key.verify_strict(content.as_bytes(), &sig).is_ok()
+    verifying_key
+        .verify_strict(content.as_bytes(), &sig)
+        .is_ok()
 }
 
 // ============================================================================
@@ -138,7 +157,8 @@ pub fn canonicalize_all_results(results: &[String]) -> String {
     if results.is_empty() {
         return "\n".to_string();
     }
-    results.iter()
+    results
+        .iter()
         .map(|r| canonicalize_block(r))
         .collect::<Vec<_>>()
         .join("\n")
@@ -198,10 +218,10 @@ impl SnapshotVerification {
 
     /// Short status string for CLI output.
     pub fn status_line(&self) -> String {
-        let key      = if self.key_match    { "match" } else { "no_match" };
-        let input    = if self.input_ok     { "ok" } else { "fail" };
-        let result   = if self.result_ok    { "ok" } else { "fail" };
-        let comments = if self.comments_ok  { "ok" } else { "fail" };
+        let key = if self.key_match { "match" } else { "no_match" };
+        let input = if self.input_ok { "ok" } else { "fail" };
+        let result = if self.result_ok { "ok" } else { "fail" };
+        let comments = if self.comments_ok { "ok" } else { "fail" };
         format!("key={key} input={input} result={result} comments={comments}")
     }
 }
@@ -219,22 +239,22 @@ pub fn sign_snapshot(
     input: &str,
     results: &[String],
     comments: &str,
-) -> SnapshotSignature {
-    let canon_input    = canonicalize_block(input);
-    let canon_result   = canonicalize_all_results(results);
+) -> Result<SnapshotSignature, SnapshotSignatureError> {
+    let canon_input = canonicalize_block(input);
+    let canon_result = canonicalize_all_results(results);
     let canon_comments = canonicalize_block(comments);
-    let (sk, vk) = derive_keypair(passphrase);
-    let result_content   = format!("{canon_input}{canon_result}");
+    let (sk, vk) = derive_keypair(passphrase)?;
+    let result_content = format!("{canon_input}{canon_result}");
     let comments_content = format!("{canon_input}{canon_result}{canon_comments}");
-    let (_, input_sig_bytes)    = sign_content(&sk, &canon_input);
-    let (_, result_sig_bytes)   = sign_content(&sk, &result_content);
+    let (_, input_sig_bytes) = sign_content(&sk, &canon_input);
+    let (_, result_sig_bytes) = sign_content(&sk, &result_content);
     let (_, comments_sig_bytes) = sign_content(&sk, &comments_content);
-    SnapshotSignature {
-        public_key_hex:   hex::encode(vk.to_bytes()),
-        input_sig_b64:    B64.encode(&input_sig_bytes),
-        result_sig_b64:   B64.encode(&result_sig_bytes),
+    Ok(SnapshotSignature {
+        public_key_hex: hex::encode(vk.to_bytes()),
+        input_sig_b64: B64.encode(&input_sig_bytes),
+        result_sig_b64: B64.encode(&result_sig_bytes),
         comments_sig_b64: B64.encode(&comments_sig_bytes),
-    }
+    })
 }
 
 /// Verify a snapshot's three progressive signatures.
@@ -249,7 +269,10 @@ pub fn verify_snapshot(
     sig: &SnapshotSignature,
 ) -> SnapshotVerification {
     let fail = |key_match| SnapshotVerification {
-        key_match, input_ok: false, result_ok: false, comments_ok: false
+        key_match,
+        input_ok: false,
+        result_ok: false,
+        comments_ok: false,
     };
     let vk_bytes: [u8; 32] = match hex::decode(&sig.public_key_hex)
         .ok()
@@ -262,24 +285,41 @@ pub fn verify_snapshot(
         Ok(k) => k,
         Err(_) => return fail(false),
     };
-    let (_, derived_vk) = derive_keypair(passphrase);
+    let (_, derived_vk) = match derive_keypair(passphrase) {
+        Ok((_, vk)) => ((), vk),
+        Err(_) => return fail(false),
+    };
     let key_match = derived_vk.to_bytes() == vk.to_bytes();
 
-    let canon_input    = canonicalize_block(input);
-    let canon_result   = canonicalize_all_results(results);
+    let canon_input = canonicalize_block(input);
+    let canon_result = canonicalize_all_results(results);
     let canon_comments = canonicalize_block(comments);
-    let result_content   = format!("{canon_input}{canon_result}");
+    let result_content = format!("{canon_input}{canon_result}");
     let comments_content = format!("{canon_input}{canon_result}{canon_comments}");
 
     let decode = |b64: &str| B64.decode(b64).ok();
-    let input_sig_bytes    = match decode(&sig.input_sig_b64)    { Some(b) => b, None => return fail(key_match) };
-    let result_sig_bytes   = match decode(&sig.result_sig_b64)   { Some(b) => b, None => return fail(key_match) };
-    let comments_sig_bytes = match decode(&sig.comments_sig_b64) { Some(b) => b, None => return fail(key_match) };
+    let input_sig_bytes = match decode(&sig.input_sig_b64) {
+        Some(b) => b,
+        None => return fail(key_match),
+    };
+    let result_sig_bytes = match decode(&sig.result_sig_b64) {
+        Some(b) => b,
+        None => return fail(key_match),
+    };
+    let comments_sig_bytes = match decode(&sig.comments_sig_b64) {
+        Some(b) => b,
+        None => return fail(key_match),
+    };
 
-    let input_ok    = verify_signature(&vk, &canon_input,     &input_sig_bytes);
-    let result_ok   = verify_signature(&vk, &result_content,  &result_sig_bytes);
+    let input_ok = verify_signature(&vk, &canon_input, &input_sig_bytes);
+    let result_ok = verify_signature(&vk, &result_content, &result_sig_bytes);
     let comments_ok = verify_signature(&vk, &comments_content, &comments_sig_bytes);
-    SnapshotVerification { key_match, input_ok, result_ok, comments_ok }
+    SnapshotVerification {
+        key_match,
+        input_ok,
+        result_ok,
+        comments_ok,
+    }
 }
 
 /// Extract a [`SnapshotSignature`] from the SIGNATURES section of a snapshot file.
@@ -297,16 +337,32 @@ pub fn parse_snapshot_footer(snapshot_text: &str) -> Option<SnapshotSignature> {
     if after.len() < 4 {
         return None;
     }
-    let public_key_hex   = after[0].strip_prefix("Public key: ")?.trim().to_string();
-    let input_sig_b64    = after[1].strip_prefix("Input signature: ")?.trim().to_string();
-    let result_sig_b64   = after[2].strip_prefix("Result signature: ")?.trim().to_string();
-    let comments_sig_b64 = after[3].strip_prefix("Comments signature: ")?.trim().to_string();
-    if public_key_hex.is_empty() || input_sig_b64.is_empty()
-        || result_sig_b64.is_empty() || comments_sig_b64.is_empty()
+    let public_key_hex = after[0].strip_prefix("Public key: ")?.trim().to_string();
+    let input_sig_b64 = after[1]
+        .strip_prefix("Input signature: ")?
+        .trim()
+        .to_string();
+    let result_sig_b64 = after[2]
+        .strip_prefix("Result signature: ")?
+        .trim()
+        .to_string();
+    let comments_sig_b64 = after[3]
+        .strip_prefix("Comments signature: ")?
+        .trim()
+        .to_string();
+    if public_key_hex.is_empty()
+        || input_sig_b64.is_empty()
+        || result_sig_b64.is_empty()
+        || comments_sig_b64.is_empty()
     {
         return None;
     }
-    Some(SnapshotSignature { public_key_hex, input_sig_b64, result_sig_b64, comments_sig_b64 })
+    Some(SnapshotSignature {
+        public_key_hex,
+        input_sig_b64,
+        result_sig_b64,
+        comments_sig_b64,
+    })
 }
 
 // ============================================================================
@@ -319,8 +375,8 @@ mod tests {
 
     #[test]
     fn derive_keypair_empty_is_deterministic() {
-        let (sk1, vk1) = derive_keypair("");
-        let (sk2, vk2) = derive_keypair("");
+        let (sk1, vk1) = derive_keypair("").unwrap();
+        let (sk2, vk2) = derive_keypair("").unwrap();
 
         assert_eq!(
             vk1.to_bytes(),
@@ -336,8 +392,8 @@ mod tests {
 
     #[test]
     fn derive_keypair_different_passphrases_produce_different_keys() {
-        let (_, vk_empty) = derive_keypair("");
-        let (_, vk_human) = derive_keypair("human");
+        let (_, vk_empty) = derive_keypair("").unwrap();
+        let (_, vk_human) = derive_keypair("human").unwrap();
 
         assert_ne!(
             vk_empty.to_bytes(),
@@ -348,11 +404,15 @@ mod tests {
 
     #[test]
     fn sign_and_verify_roundtrip() {
-        let (sk, vk) = derive_keypair("test-passphrase");
+        let (sk, vk) = derive_keypair("test-passphrase").unwrap();
         let content = "snapshot content to sign";
 
         let (returned_vk, sig_bytes) = sign_content(&sk, content);
-        assert_eq!(vk.to_bytes(), returned_vk.to_bytes(), "Returned verifying key must match");
+        assert_eq!(
+            vk.to_bytes(),
+            returned_vk.to_bytes(),
+            "Returned verifying key must match"
+        );
         assert_eq!(sig_bytes.len(), 64, "Ed25519 signature must be 64 bytes");
 
         assert!(
@@ -363,8 +423,8 @@ mod tests {
 
     #[test]
     fn verify_fails_with_wrong_key() {
-        let (sk_a, _) = derive_keypair("key-a");
-        let (_, vk_b) = derive_keypair("key-b");
+        let (sk_a, _) = derive_keypair("key-a").unwrap();
+        let (_, vk_b) = derive_keypair("key-b").unwrap();
         let content = "signed with key-a";
 
         let (_, sig_bytes) = sign_content(&sk_a, content);
@@ -377,11 +437,11 @@ mod tests {
 
     #[test]
     fn verify_fails_with_tampered_content() {
-        let (_, vk) = derive_keypair("test");
+        let (_, vk) = derive_keypair("test").unwrap();
         let original = "original content";
         let tampered = "tampered content";
 
-        let (_, sig_bytes) = sign_content(&derive_keypair("test").0, original);
+        let (_, sig_bytes) = sign_content(&derive_keypair("test").unwrap().0, original);
 
         assert!(
             !verify_signature(&vk, tampered, &sig_bytes),
@@ -391,9 +451,9 @@ mod tests {
 
     #[test]
     fn verify_fails_with_truncated_signature() {
-        let (_, vk) = derive_keypair("test");
+        let (_, vk) = derive_keypair("test").unwrap();
         let content = "some content";
-        let (_, full_sig) = sign_content(&derive_keypair("test").0, content);
+        let (_, full_sig) = sign_content(&derive_keypair("test").unwrap().0, content);
 
         // Truncate signature to 32 bytes (half of valid 64)
         let truncated: Vec<u8> = full_sig[..32].to_vec();
@@ -406,7 +466,7 @@ mod tests {
 
     #[test]
     fn verify_fails_with_empty_signature() {
-        let (_, vk) = derive_keypair("test");
+        let (_, vk) = derive_keypair("test").unwrap();
         let content = "content";
         let empty_sig: Vec<u8> = vec![];
 
@@ -418,7 +478,7 @@ mod tests {
 
     #[test]
     fn empty_passphrase_signing_roundtrip() {
-        let (sk, vk) = derive_keypair("");
+        let (sk, vk) = derive_keypair("").unwrap();
         let content = "{}";
         let (_, sig) = sign_content(&sk, content);
         assert!(verify_signature(&vk, content, &sig));
@@ -468,7 +528,7 @@ mod tests {
         let input = "stamp hello world";
         let results = vec!["{\"chronon_number\":1}".to_string()];
         let comments = "test_name";
-        let sig = sign_snapshot("", input, &results, comments);
+        let sig = sign_snapshot("", input, &results, comments).unwrap();
         assert!(!sig.public_key_hex.is_empty());
         let v = verify_snapshot("", input, &results, comments, &sig);
         assert!(v.all_ok(), "Round-trip must pass: {:?}", v);
@@ -479,11 +539,17 @@ mod tests {
         let input = "stamp hello world";
         let results = vec!["{\"chronon_number\":1}".to_string()];
         let comments = "test_name";
-        let sig = sign_snapshot("", input, &results, comments);
+        let sig = sign_snapshot("", input, &results, comments).unwrap();
         let v = verify_snapshot("", "stamp wrong content", &results, comments, &sig);
-        assert!(!v.input_ok,    "Tampered input must fail input_ok");
-        assert!(!v.result_ok,   "Tampered input must also fail result_ok (progressive)");
-        assert!(!v.comments_ok, "Tampered input must also fail comments_ok (progressive)");
+        assert!(!v.input_ok, "Tampered input must fail input_ok");
+        assert!(
+            !v.result_ok,
+            "Tampered input must also fail result_ok (progressive)"
+        );
+        assert!(
+            !v.comments_ok,
+            "Tampered input must also fail comments_ok (progressive)"
+        );
     }
 
     #[test]
@@ -491,22 +557,25 @@ mod tests {
         let input = "stamp hello world";
         let results = vec!["{\"chronon_number\":1}".to_string()];
         let comments = "test_name";
-        let sig = sign_snapshot("", input, &results, comments);
+        let sig = sign_snapshot("", input, &results, comments).unwrap();
         let tampered = vec!["{\"chronon_number\":99}".to_string()];
         let v = verify_snapshot("", input, &tampered, comments, &sig);
-        assert!( v.input_ok,    "Untouched input must still pass input_ok");
-        assert!(!v.result_ok,   "Tampered results must fail result_ok");
-        assert!(!v.comments_ok, "Tampered results must also fail comments_ok (progressive)");
+        assert!(v.input_ok, "Untouched input must still pass input_ok");
+        assert!(!v.result_ok, "Tampered results must fail result_ok");
+        assert!(
+            !v.comments_ok,
+            "Tampered results must also fail comments_ok (progressive)"
+        );
     }
 
     #[test]
     fn verify_snapshot_fails_tampered_comments() {
         let input = "stamp hello world";
         let results = vec!["{\"chronon_number\":1}".to_string()];
-        let sig = sign_snapshot("", input, &results, "test_name");
+        let sig = sign_snapshot("", input, &results, "test_name").unwrap();
         let v = verify_snapshot("", input, &results, "test_name\ntampered", &sig);
-        assert!( v.input_ok,    "Untouched input must still pass input_ok");
-        assert!( v.result_ok,   "Untouched results must still pass result_ok");
+        assert!(v.input_ok, "Untouched input must still pass input_ok");
+        assert!(v.result_ok, "Untouched results must still pass result_ok");
         assert!(!v.comments_ok, "Tampered comments must fail comments_ok");
     }
 
@@ -515,7 +584,7 @@ mod tests {
         let input = "stamp hello world";
         let results = vec!["{\"chronon_number\":1}".to_string()];
         let comments = "test_name";
-        let sig = sign_snapshot("human-secret", input, &results, comments);
+        let sig = sign_snapshot("human-secret", input, &results, comments).unwrap();
         let v = verify_snapshot("", input, &results, comments, &sig);
         assert!(!v.key_match, "Wrong passphrase must not match key");
         assert!(v.input_ok);
@@ -527,7 +596,7 @@ mod tests {
 
     #[test]
     fn parse_snapshot_footer_well_formed() {
-        let sig = sign_snapshot("", "stamp hello", &["result".to_string()], "test_name");
+        let sig = sign_snapshot("", "stamp hello", &["result".to_string()], "test_name").unwrap();
         let footer = sig.format_footer();
         let snapshot = format!("---\nsome content\n---\nINPUT:\n...\n{footer}\n");
         let parsed = parse_snapshot_footer(&snapshot).expect("should parse footer");

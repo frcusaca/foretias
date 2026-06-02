@@ -265,7 +265,7 @@ impl Foretias {
     pub async fn with_config(config: ForetiasConfig) -> Result<Self, ForetiasError> {
         match config {
             ForetiasConfig::Standalone(cfg) => Self::with_config_standalone(cfg),
-            ForetiasConfig::Ptp(cfg) => Ok(Self::with_config_ptp(cfg)),
+            ForetiasConfig::Ptp(cfg) => Self::with_config_ptp(cfg),
             ForetiasConfig::P2p(cfg) => Self::with_config_p2p(cfg).await,
         }
     }
@@ -274,14 +274,13 @@ impl Foretias {
         Self::new(cfg.tbn, cfg.persist_path)
     }
 
-    fn with_config_ptp(cfg: PtpConfig) -> Self {
+    fn with_config_ptp(cfg: PtpConfig) -> Result<Self, ForetiasError> {
         Self::connect(
             cfg.standalone.tbn,
             cfg.peers,
             cfg.timeout_secs,
             cfg.standalone.persist_path,
         )
-        .expect("PtpConfig construction failed")
     }
 
     async fn with_config_p2p(cfg: P2pConfig) -> Result<Self, ForetiasError> {

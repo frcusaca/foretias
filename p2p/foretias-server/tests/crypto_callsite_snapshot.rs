@@ -9,8 +9,8 @@
 //! scan differs from the committed snapshot, forcing a deliberate review of
 //! any new or removed crypto call site.
 
+use foretias_core::snapshot_suite::{build_snapshot, SnapshotSuite};
 use std::path::{Path, PathBuf};
-use foretias_core::snapshot_suite::{SnapshotSuite, build_snapshot};
 
 // ── patterns ─────────────────────────────────────────────────────────────────
 
@@ -46,9 +46,9 @@ const GATE_PATTERNS: &[&str] = &[
 
 struct CallSite {
     rel_path: String,
-    line:     usize,
-    kind:     &'static str,
-    snippet:  String,
+    line: usize,
+    kind: &'static str,
+    snippet: String,
 }
 
 fn scan_dir(root: &Path) -> Vec<CallSite> {
@@ -59,12 +59,16 @@ fn scan_dir(root: &Path) -> Vec<CallSite> {
 }
 
 fn scan_recursive(root: &Path, dir: &Path, hits: &mut Vec<CallSite>) {
-    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
             let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-            if name == "target" || name.starts_with('.') { continue; }
+            if name == "target" || name.starts_with('.') {
+                continue;
+            }
             scan_recursive(root, &path, hits);
         } else if path.extension().and_then(|e| e.to_str()) == Some("rs") {
             scan_file(root, &path, hits);
@@ -73,13 +77,22 @@ fn scan_recursive(root: &Path, dir: &Path, hits: &mut Vec<CallSite>) {
 }
 
 fn scan_file(root: &Path, path: &Path, hits: &mut Vec<CallSite>) {
-    let Ok(text) = std::fs::read_to_string(path) else { return };
-    let rel = path.strip_prefix(root).unwrap_or(path).to_string_lossy().into_owned();
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return;
+    };
+    let rel = path
+        .strip_prefix(root)
+        .unwrap_or(path)
+        .to_string_lossy()
+        .into_owned();
 
     for (lineno, line) in text.lines().enumerate() {
         let trimmed = line.trim();
         // Skip pure comment lines that aren't annotation comments
-        if trimmed.starts_with("//") && !trimmed.contains("// SIGN(") && !trimmed.contains("// VERIFY(") {
+        if trimmed.starts_with("//")
+            && !trimmed.contains("// SIGN(")
+            && !trimmed.contains("// VERIFY(")
+        {
             continue;
         }
 
@@ -87,9 +100,9 @@ fn scan_file(root: &Path, path: &Path, hits: &mut Vec<CallSite>) {
         if let Some(k) = kind {
             hits.push(CallSite {
                 rel_path: rel.clone(),
-                line:     lineno + 1,
-                kind:     k,
-                snippet:  trimmed.chars().take(80).collect(),
+                line: lineno + 1,
+                kind: k,
+                snippet: trimmed.chars().take(80).collect(),
             });
         }
     }
@@ -97,13 +110,19 @@ fn scan_file(root: &Path, path: &Path, hits: &mut Vec<CallSite>) {
 
 fn classify(line: &str) -> Option<&'static str> {
     for p in SIGN_PATTERNS {
-        if line.contains(p) { return Some("sign"); }
+        if line.contains(p) {
+            return Some("sign");
+        }
     }
     for p in VERIFY_PATTERNS {
-        if line.contains(p) { return Some("verify"); }
+        if line.contains(p) {
+            return Some("verify");
+        }
     }
     for p in GATE_PATTERNS {
-        if line.contains(p) { return Some("gate"); }
+        if line.contains(p) {
+            return Some("gate");
+        }
     }
     None
 }
@@ -128,9 +147,15 @@ fn crypto_callsite_snapshot() {
     let hits = scan_dir(&ws_root);
 
     // Build formatted result
-    let rows: Vec<String> = hits.iter().map(|h| {
-        format!("{:60}  {:6}  {:6}  {}", h.rel_path, h.line, h.kind, h.snippet)
-    }).collect();
+    let rows: Vec<String> = hits
+        .iter()
+        .map(|h| {
+            format!(
+                "{:60}  {:6}  {:6}  {}",
+                h.rel_path, h.line, h.kind, h.snippet
+            )
+        })
+        .collect();
     let result = rows.join("\n");
 
     let input = serde_json::json!({
@@ -141,27 +166,33 @@ fn crypto_callsite_snapshot() {
     let input_str = serde_json::to_string_pretty(&input).unwrap();
     let comments = "crypto_callsite_snapshot — update with UPDATE_SNAPSHOT=1 when adding new crypto call sites";
 
-    let actual = build_snapshot("", &input_str, &[result], comments);
+    let actual = build_snapshot("", &input_str, &[result], comments).unwrap();
 
     let suite = suite();
 
     if std::env::var("UPDATE_SNAPSHOT").is_ok() {
         let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("snapshot_tests").join("approved");
+            .join("snapshot_tests")
+            .join("approved");
         std::fs::create_dir_all(&dir).expect("create approved dir");
-        std::fs::write(dir.join("crypto_callsite_snapshot.snap"), &actual)
-            .expect("write snapshot");
-        println!("Snapshot updated: crypto_callsite_snapshot.snap ({} call sites)", hits.len());
+        std::fs::write(dir.join("crypto_callsite_snapshot.snap"), &actual).expect("write snapshot");
+        println!(
+            "Snapshot updated: crypto_callsite_snapshot.snap ({} call sites)",
+            hits.len()
+        );
         return;
     }
 
     match suite.compare("crypto_callsite_snapshot", &actual) {
-        Ok(()) => {},
+        Ok(()) => {}
         Err(failure) => {
             if let Some(v) = suite.verify_signatures(&actual) {
                 assert!(v.all_ok(), "SIGNATURES footer must verify: {:?}", v);
             }
-            panic!("{}\n\nSet UPDATE_SNAPSHOT=1 to approve new call sites after review.", failure);
+            panic!(
+                "{}\n\nSet UPDATE_SNAPSHOT=1 to approve new call sites after review.",
+                failure
+            );
         }
     }
 }

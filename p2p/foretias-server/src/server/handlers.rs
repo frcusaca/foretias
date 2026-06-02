@@ -587,7 +587,10 @@ pub fn handle_ship_ack(server: &TimeFamilyServer, params: Value) -> JsonRpcRespo
                     "batch first record is not genesis (chronon_number != 1)".into());
             }
         } else {
-            let prev = verified.last().unwrap();
+            let prev = match verified.last() {
+                Some(p) => p,
+                None => return resp_error(server, id, jsonrpc::INVALID_PARAMS, "chain verification: missing previous record (internal invariant violation)".into()),
+            };
             unproc.into_clean_authenticated(crypto.as_ref(), prev)
         };
         match clean {

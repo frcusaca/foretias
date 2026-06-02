@@ -2,7 +2,7 @@
   "id": "T-503c2e33-b80b-4eda-9ee4-d330defd305a",
   "subject": "Fix TinmanSuite rustdoc JSON \"Option json given more than once\" bug",
   "description": "Fix invoke_rustdoc_json() in trust_boundary_type_usage.rs",
-  "status": "pending",
+  "status": "completed",
   "blocks": [],
   "blockedBy": [],
   "threadID": "ses_17f3c058cffefj2YIprGIWeetB"

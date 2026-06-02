@@ -108,10 +108,10 @@ core-engine/src/probity/report.rs                                167  verify  se
 core-engine/src/probity/report.rs                                201  verify  .verify_with(&public_key, "Ed25519", &canonical, &report.signature)
 core-engine/src/probity/report.rs                                221  gate    Ok(CleanFullyAuthenticated::from_dual_verified(
 core-engine/src/probity/report.rs                                295  sign    let sig = crypto.sign(&canonical).unwrap();
-core-engine/src/snapshot_signature.rs                             90  sign    let signature: Signature = signing_key.sign(content.as_bytes());
-foretias-client/src/foretias.rs                                  342  verify  let result = cm.verify(foretis, signature, signature_algorithm, &content.to_vec(
-foretias-client/src/foretias.rs                                  617  verify  let verified = client.verify(content, &foretis, &sig, &alg).await.unwrap();
-foretias-client/src/foretias.rs                                  628  verify  let verified = client.verify(b"tampered", &foretis, &sig, &alg).await.unwrap();
+core-engine/src/snapshot_signature.rs                            111  sign    let signature: Signature = signing_key.sign(content.as_bytes());
+foretias-client/src/foretias.rs                                  341  verify  let result = cm.verify(foretis, signature, signature_algorithm, &content.to_vec(
+foretias-client/src/foretias.rs                                  616  verify  let verified = client.verify(content, &foretis, &sig, &alg).await.unwrap();
+foretias-client/src/foretias.rs                                  627  verify  let verified = client.verify(b"tampered", &foretis, &sig, &alg).await.unwrap();
 foretias-server/src/communerd/communerdette.rs                   285  gate    pub type UnverifiedSignatureEnvelopeChannelBinding = foretias_core::foretias::cl
 foretias-server/src/communerd/communerdette.rs                   294  verify  /// // VERIFY(remote-tbid, fast-key)
 foretias-server/src/communerd/communerdette.rs                   304  verify  /// // VERIFY(remote-tbid, slow-key)
@@ -181,7 +181,7 @@ foretias-server/src/server/handlers.rs                           347  sign    le
 foretias-server/src/server/handlers.rs                           372  sign    /// // SIGN(local-tbid, fast-key)
 foretias-server/src/server/handlers.rs                           389  sign    let combined_sig = match server.sign_tbid_message(&msg) {
 foretias-server/src/server/handlers.rs                           560  gate    let unprocessed: Result<Vec<UnverifiedSignatureEnvelope<ChrononRecord>>, _> = ra
-foretias-server/src/server/handlers.rs                           923  gate    let unprocessed: Result<Vec<UnverifiedSignatureEnvelope<ChrononRecord>>, _> = ra
+foretias-server/src/server/handlers.rs                           926  gate    let unprocessed: Result<Vec<UnverifiedSignatureEnvelope<ChrononRecord>>, _> = ra
 foretias-server/src/server/mod.rs                                162  sign    /// // SIGN(local-tbid, fast-key+slow-key)
 foretias-server/src/server/mod.rs                                163  sign    pub fn sign_tbid_message(&self, msg: &[u8]) -> Result<foretias_core::foretias::t
 foretias-server/src/server/mod.rs                                164  sign    self.chronomatter.sign_tbid_message(msg)
@@ -204,12 +204,13 @@ foretias-server/tests/crypto_callsite_snapshot.rs                 39  gate    "U
 foretias-server/tests/crypto_callsite_snapshot.rs                 40  gate    "gate_foretis(",
 foretias-server/tests/crypto_callsite_snapshot.rs                 41  gate    "gate_chronon_records(",
 foretias-server/tests/crypto_callsite_snapshot.rs                 42  gate    "from_dual_verified(",
-foretias-server/tests/crypto_callsite_snapshot.rs                 82  sign    if trimmed.starts_with("//") && !trimmed.contains("// SIGN(") && !trimmed.contai
+foretias-server/tests/crypto_callsite_snapshot.rs                 93  sign    && !trimmed.contains("// SIGN(")
+foretias-server/tests/crypto_callsite_snapshot.rs                 94  verify  && !trimmed.contains("// VERIFY(")
 foretias-server/tests/dht_record_signature.rs                     73  sign    let sig = crypto.sign(&canonical).expect("sign canonical payload");
 foretias-server/tests/dht_record_signature.rs                     94  sign    let sig = crypto.sign(&canonical).expect("sign canonical payload");
 foretias-server/tests/dht_record_signature.rs                    124  sign    let sig = crypto_a.sign(&canonical).expect("sign with key A");
 foretias-server/tests/e2e_verification.rs                         85  gate    let _up: UnverifiedSignatureEnvelope<ChrononRecord> = UnverifiedSignatureEnvelop
-foretias-server/tests/snapshot_tests.rs                           67  verify  .verify(&foretis, &sig, &alg, &msg.as_bytes().to_vec(), server.calendar())
+foretias-server/tests/snapshot_tests.rs                           73  verify  .verify(
 ```
 COMMENTS:
 ```markdown
@@ -218,5 +219,5 @@ crypto_callsite_snapshot — update with UPDATE_SNAPSHOT=1 when adding new crypt
 SIGNATURES:
 Public key: 4193efbf702cde19fbae087ea53189f67e7768ebe888e0816e24a27282a5b030
 Input signature: XjHNYkZ6L7a87pFmkmHyBj39ofhWg0Gh2EmeGLitRFPtupEN6ZFsd0Nl+Sx3sbFTcEuWuPCDF+duRzvKVNFzAQ==
-Result signature: WKaoRti+fC79c20saTiUD98k0PwmPCwou2j6kWSQjnlNNyw1QuWd4EgzNPlOBua/WAGYIVEBMMerC7rNkdGkBQ==
-Comments signature: PfidyzK6R/S0U6Z1OHaJ7+IsFZdHpPSdaQUcimsBQusWDyTXbxchnDoRIyi3P4GRRhojRHaNp75jiBV1wTG6Cw==
+Result signature: ePJbLEi+FEylI8fT74ZrMaeEl3sjaBFK62RH47NMQO0cGwe//Fd5OGg3UsFtEQ2ha+YMTZ9txzQHdczkMxIOAg==
+Comments signature: Jzeg/dF4XsnLvVKWRvDiep51FBF52UVw2IaNCbVuVTomDPTDHq8hyfMDonDdVN0lZIMInELgVA9WYOKbq0OdBw==

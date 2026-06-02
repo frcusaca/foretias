@@ -2,7 +2,7 @@
   "id": "T-ceae255e-437c-4263-ac3e-1a795981a7f1",
   "subject": "Implement stamp_chronon API on Communerd",
   "description": "New stamp_chronon method on Communerd and CommunerdetteLine with serialization algorithm control",
-  "status": "in_progress",
+  "status": "completed",
   "activeForm": "Implementing stamp_chronon API",
   "blocks": [],
   "blockedBy": [],

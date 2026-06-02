@@ -2,7 +2,7 @@
   "id": "T-ba6526f3-4824-463a-884a-aec6dee47856",
   "subject": "Refactor Communerdette liveness system with application RPC as primary signal",
   "description": "Refactor L1/L2/L3 liveness hierarchy: L1=application RPC recency, L2=transport ping fallback, L3=JSON-RPC ping ~daily",
-  "status": "in_progress",
+  "status": "completed",
   "activeForm": "Refactoring Communerdette liveness hierarchy",
   "blocks": [],
   "blockedBy": [],

@@ -2,7 +2,7 @@
   "id": "T-76679f20-db72-48bc-8122-359e5e19f3d8",
   "subject": "Remove concrete Externalized* structs, replace with generic Externalized<T>",
   "description": "Remove ExternalizedChrononRecord, ExternalizedForetis, ExternalizedEpochSnapshot, ExternalizedAttestation, ExternalizedProbityReport and replace all usages with generic Externalized<T>",
-  "status": "in_progress",
+  "status": "completed",
   "activeForm": "Replacing concrete Externalized* with generic Externalized<T>",
   "blocks": [],
   "blockedBy": [],
