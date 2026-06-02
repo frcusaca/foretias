@@ -17,6 +17,8 @@ use foretias_core::error::NodeError;
 use foretias_core::noise;
 
 use super::calendar::{Calendar, MirrorStore};
+use super::calendar_store::CalendarStore;
+use super::calendar_store::encrypted_jsonl::EncryptedJsonlCalendarStore;
 use super::communerd::Communerd;
 use super::communerd::p2p::swarm::CommunerdRpcHandler;
 use super::communerd::transport::TransportError;
@@ -38,6 +40,7 @@ pub struct TimeFamilyServer {
     chronomatter: Arc<Chronomatter>,
     calendar: Arc<Calendar>,
     mirror_store: MirrorStore,
+    calendar_store: Option<CalendarStore>,
     communerd: Option<Arc<Communerd>>,
     listen_addr: String,
     persist_path: Option<std::path::PathBuf>,
@@ -67,8 +70,8 @@ impl TimeFamilyServer {
     ) -> Result<Self, NodeError> {
         let metrics = Arc::new(NodeMetrics::new());
         let calendar = Arc::new(Calendar::new(Tbid::default(), "init"));
-        let crypto = Arc::from(crypto_server::new_software(ForetiasCurve::Ed25519)?);
-        let mut cm = Chronomatter::new(chronon_ns, Arc::clone(&calendar) as Arc<dyn TickObserver>, crypto)?;
+        let crypto: Arc<dyn crypto_server::CryptoServer> = Arc::from(crypto_server::new_software(ForetiasCurve::Ed25519)?);
+        let mut cm = Chronomatter::new(chronon_ns, Arc::clone(&calendar) as Arc<dyn TickObserver>, crypto.clone())?;
         cm.set_mutual_attest_observer(Arc::clone(&metrics) as Arc<dyn MutualAttestObserver>);
         let (tbid, tbn) = (cm.get_tbid(), cm.get_tbn().to_string());
         let binding = calendar.inner();
@@ -83,10 +86,18 @@ impl TimeFamilyServer {
         let (pub_key, mut priv_key) = generate_ed25519_keypair()?;
         let noise_static_priv = Zeroizing::new(priv_key.bytes);
         priv_key.bytes.fill(0);
+
+        let calendar_store = persist_path.as_ref().map(|p| {
+            let store_path = p.join("calendar_store.jsonl");
+            let encrypted = EncryptedJsonlCalendarStore::new(store_path, crypto.clone());
+            CalendarStore::new(Arc::new(encrypted))
+        });
+
         Ok(Self {
             chronomatter: Arc::new(cm),
             calendar,
             mirror_store: MirrorStore::new("/tmp/foretias-mirrors", 64),
+            calendar_store,
             communerd,
             listen_addr: listen_addr.to_string(),
             persist_path,
@@ -102,20 +113,28 @@ impl TimeFamilyServer {
     ) -> Result<Self, NodeError> {
         use std::sync::Arc as StdArc;
         use foretias_core::crypto_server;
-        let crypto = StdArc::from(crypto_server::new_software(
+        let crypto: StdArc<dyn crypto_server::CryptoServer> = StdArc::from(crypto_server::new_software(
             crypto_server::ForetiasCurve::Ed25519,
         )?);
-        let mut cm = Chronomatter::from_calendar(path, crypto, Arc::new(NoOpObserver))?;
+        let mut cm = Chronomatter::from_calendar(path, crypto.clone(), Arc::new(NoOpObserver))?;
         let metrics = Arc::new(NodeMetrics::new());
         cm.set_mutual_attest_observer(Arc::clone(&metrics) as Arc<dyn MutualAttestObserver>);
         let calendar = Arc::new(Calendar::from_persisted(path)?);
         let (pub_key, mut priv_key) = generate_ed25519_keypair()?;
         let noise_static_priv = Zeroizing::new(priv_key.bytes);
         priv_key.bytes.fill(0);
+
+        let calendar_store = {
+            let store_path = std::path::PathBuf::from(path).join("calendar_store.jsonl");
+            let encrypted = EncryptedJsonlCalendarStore::new(store_path, crypto.clone());
+            CalendarStore::new(Arc::new(encrypted))
+        };
+
         Ok(Self {
             chronomatter: Arc::new(cm),
             calendar,
             mirror_store: MirrorStore::new("/tmp/foretias-mirrors", 64),
+            calendar_store: Some(calendar_store),
             communerd: None,
             listen_addr: listen_addr.to_string(),
             persist_path: None,
@@ -182,6 +201,10 @@ impl TimeFamilyServer {
 
     pub fn mirror_store(&self) -> &MirrorStore {
         &self.mirror_store
+    }
+
+    pub fn calendar_store(&self) -> Option<&CalendarStore> {
+        self.calendar_store.as_ref()
     }
 
     pub fn communerd(&self) -> Option<&Arc<Communerd>> {
@@ -498,6 +521,8 @@ pub(crate) fn process_request_from_value(server: &TimeFamilyServer, req: serde_j
         "history_dump_chunk" => Ok(handlers::handle_history_dump_chunk(server, params)),
         "history_dump_complete" => Ok(handlers::handle_history_dump_complete(server, params)),
         "mirror_health_check" => Ok(handlers::handle_mirror_health_check(server, params)),
+        "storage_proof_request" => Ok(handlers::handle_storage_proof_request(server, params)),
+        "storage_proof_verify" => Ok(handlers::handle_storage_proof_verify(server, params)),
         _ => Ok(jsonrpc::JsonRpcResponse::error(
             id.cloned(),
             jsonrpc::METHOD_NOT_FOUND,

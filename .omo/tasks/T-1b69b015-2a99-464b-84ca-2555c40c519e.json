@@ -1,0 +1,10 @@
+{
+  "id": "T-1b69b015-2a99-464b-84ca-2555c40c519e",
+  "subject": "Add CalendarStore field to TimeFamilyServer and wire dispatch",
+  "description": "Add Option<CalendarStore> field to TimeFamilyServer, accessor method, construction in new_with_config, and register both new handlers in the dispatch match block in mod.rs.",
+  "status": "completed",
+  "activeForm": "Wiring CalendarStore and dispatch",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_1762c80ccffemz44UHDaq2nr95"
+}

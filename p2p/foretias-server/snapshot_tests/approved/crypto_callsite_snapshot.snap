@@ -18,7 +18,7 @@ core-engine/src/chronomatter/mod.rs                              580  verify  le
 core-engine/src/chronomatter/mod.rs                              588  verify  let valid = cm.verify(&foretis.foretis, &foretis.signature_bytes, &foretis.signa
 core-engine/src/collision/detector.rs                             58  verify  let valid = crypto.verify_ed25519(&self.my_pub_key, &hb.canonical(), &sig).ok()?
 core-engine/src/collision/detector.rs                             86  sign    let sig = server.sign(&hb.canonical()).unwrap();
-core-engine/src/core/signing.rs                                   21  sign    handle.sign(msg)
+core-engine/src/core/signing.rs                                   27  sign    handle.sign(msg)
 core-engine/src/crypto_server/mod.rs                              88  sign    fn sign_with(&self, msg: &[u8], alg: SignatureAlgorithm)
 core-engine/src/crypto_server/mod.rs                              95  verify  fn verify_ed25519(&self, pub_key: &ForetiasPubKey32, msg: &[u8], sig: &ForetiasS
 core-engine/src/crypto_server/mod.rs                              99  verify  fn verify_p256(&self, pub_key: &ForetiasPubKey33, msg: &[u8], sig: &ForetiasSig6
@@ -182,9 +182,9 @@ foretias-server/src/server/handlers.rs                           372  sign    //
 foretias-server/src/server/handlers.rs                           389  sign    let combined_sig = match server.sign_tbid_message(&msg) {
 foretias-server/src/server/handlers.rs                           560  gate    let unprocessed: Result<Vec<UnverifiedSignatureEnvelope<ChrononRecord>>, _> = ra
 foretias-server/src/server/handlers.rs                           926  gate    let unprocessed: Result<Vec<UnverifiedSignatureEnvelope<ChrononRecord>>, _> = ra
-foretias-server/src/server/mod.rs                                162  sign    /// // SIGN(local-tbid, fast-key+slow-key)
-foretias-server/src/server/mod.rs                                163  sign    pub fn sign_tbid_message(&self, msg: &[u8]) -> Result<foretias_core::foretias::t
-foretias-server/src/server/mod.rs                                164  sign    self.chronomatter.sign_tbid_message(msg)
+foretias-server/src/server/mod.rs                                181  sign    /// // SIGN(local-tbid, fast-key+slow-key)
+foretias-server/src/server/mod.rs                                182  sign    pub fn sign_tbid_message(&self, msg: &[u8]) -> Result<foretias_core::foretias::t
+foretias-server/src/server/mod.rs                                183  sign    self.chronomatter.sign_tbid_message(msg)
 foretias-server/tests/client_ptp.rs                               64  verify  .verify(b"hello world", &foretis, &sig, &alg)
 foretias-server/tests/client_ptp.rs                               88  verify  .verify(content, &foretis, &sig, &alg)
 foretias-server/tests/client_ptp.rs                               94  verify  .verify(b"tampered content", &foretis, &sig, &alg)
@@ -219,5 +219,5 @@ crypto_callsite_snapshot — update with UPDATE_SNAPSHOT=1 when adding new crypt
 SIGNATURES:
 Public key: 4193efbf702cde19fbae087ea53189f67e7768ebe888e0816e24a27282a5b030
 Input signature: XjHNYkZ6L7a87pFmkmHyBj39ofhWg0Gh2EmeGLitRFPtupEN6ZFsd0Nl+Sx3sbFTcEuWuPCDF+duRzvKVNFzAQ==
-Result signature: hXz9VwtC945Z0sDcmYSGl1DBYFe3t/+KuEeCA7GvrsJal6ShmLcgZHViVhwjvOYSVfhWT8oQhPY0O/0skJO9Dg==
-Comments signature: m30wjB52fs3Hip7Kh/GcDBl34oygnj/yEZI8sqT+LGziu+qM8WJeM9YVeZd00598dAP6CaX2JidjsaF1HDVJAA==
+Result signature: gkXajw4VtehiMqrMCoNoHnVtF53V1SxVJ6iIfOWnvwP6JoHD1XQWarAKzBnNCgFcoGLZ2zhCUH7iLr7CCSoiCA==
+Comments signature: 2HyikmdP5Qd0ps7lh+0OOb8vtfEL+1fznKBsHy661ZmhOVBUnkIKzOOfW8CQp/PX9EgFsY9qREuI3PqqhRDJBQ==

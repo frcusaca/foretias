@@ -1,0 +1,10 @@
+{
+  "id": "T-351190b5-4a06-45ac-9de7-b36b45b8c330",
+  "subject": "Add handle_storage_proof_request and handle_storage_proof_verify to handlers.rs",
+  "description": "Add two new JSON-RPC handlers in handlers.rs following existing patterns. Parse params manually, call CalendarStore::prove_storage() and verify_storage_proof(), return JSON responses. Add unit tests for both handlers.",
+  "status": "completed",
+  "activeForm": "Adding storage proof handlers",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_1762c80ccffemz44UHDaq2nr95"
+}

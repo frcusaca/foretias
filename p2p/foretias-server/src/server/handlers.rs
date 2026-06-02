@@ -1038,6 +1038,202 @@ pub fn handle_mirror_health_check(server: &TimeFamilyServer, params: Value) -> J
     }))
 }
 
+// ── Storage proof handlers ─────────────────────────────────────────────────
+
+/// `storage_proof_request` — generate a Merkle storage proof covering a
+/// chronon range. Returns per-block proofs with Merkle range evidence, or
+/// an error if no CalendarStore is configured or no data covers the range.
+pub fn handle_storage_proof_request(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    use crate::calendar_store::{StorageProofRequest as Req};
+
+    let id = params.get("id").cloned();
+
+    let tbid = match params.get("tbid").and_then(|v| v.as_str()) {
+        Some(t) if !t.is_empty() => t.to_string(),
+        _ => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            "missing or empty 'tbid'".into()),
+    };
+
+    let chronon_start = match params.get("chronon_start").and_then(|v| v.as_u64()) {
+        Some(v) => v,
+        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            "missing or invalid 'chronon_start' (u64)".into()),
+    };
+
+    let chronon_end = match params.get("chronon_end").and_then(|v| v.as_u64()) {
+        Some(v) => v,
+        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            "missing or invalid 'chronon_end' (u64)".into()),
+    };
+
+    let Some(store) = server.calendar_store() else {
+        return resp_error(server, id, jsonrpc::INTERNAL_ERROR,
+            "no calendar store configured (requires --persist-path)".into());
+    };
+
+    let req = Req { tbid, chronon_start, chronon_end };
+
+    match store.prove_storage(&req) {
+        Some(resp) => {
+            let blocks_json: Vec<Value> = resp.blocks.iter().map(|bp| {
+                serde_json::json!({
+                    "block_id": bp.block_id,
+                    "merkle_root": hex::encode(bp.merkle_root),
+                    "leaves": bp.leaves.iter().take(bp.leaf_count)
+                        .map(|l| hex::encode(l)).collect::<Vec<_>>(),
+                    "siblings": bp.siblings.iter().take(bp.sibling_count)
+                        .map(|s| hex::encode(s)).collect::<Vec<_>>(),
+                    "leaf_count": bp.leaf_count,
+                    "sibling_count": bp.sibling_count,
+                    "n": bp.n,
+                })
+            }).collect();
+
+            resp_success(server, id, serde_json::json!({
+                "blocks": blocks_json,
+                "coverage_ratio": resp.coverage_ratio,
+            }))
+        }
+        None => resp_error(server, id, jsonrpc::INTERNAL_ERROR,
+            "no storage proof available for the requested range".into()),
+    }
+}
+
+/// `storage_proof_verify` — verify a storage proof against the original
+/// request and optional known Merkle roots. Returns whether all block
+/// proofs verified and the coverage ratio.
+pub fn handle_storage_proof_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    use crate::calendar_store::{StorageProofRequest as Req, StorageProofResponse as Resp, verify_storage_proof};
+
+    let id = params.get("id").cloned();
+
+    let req_val = match params.get("request") {
+        Some(v) => v,
+        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            "missing 'request'".into()),
+    };
+    let req_tbid = match req_val.get("tbid").and_then(|v| v.as_str()) {
+        Some(t) if !t.is_empty() => t.to_string(),
+        _ => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            "missing or empty 'request.tbid'".into()),
+    };
+    let req_start = match req_val.get("chronon_start").and_then(|v| v.as_u64()) {
+        Some(v) => v,
+        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            "missing or invalid 'request.chronon_start'".into()),
+    };
+    let req_end = match req_val.get("chronon_end").and_then(|v| v.as_u64()) {
+        Some(v) => v,
+        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            "missing or invalid 'request.chronon_end'".into()),
+    };
+
+    let req = Req {
+        tbid: req_tbid,
+        chronon_start: req_start,
+        chronon_end: req_end,
+    };
+
+    let resp_val = match params.get("response") {
+        Some(v) => v,
+        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            "missing 'response'".into()),
+    };
+    let coverage_ratio = resp_val.get("coverage_ratio")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+    let blocks_val = match resp_val.get("blocks").and_then(|v| v.as_array()) {
+        Some(a) => a,
+        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            "missing or invalid 'response.blocks'".into()),
+    };
+
+    let mut blocks = Vec::new();
+    for (i, bv) in blocks_val.iter().enumerate() {
+        let block_id = bv.get("block_id").and_then(|v| v.as_u64()).unwrap_or(0);
+
+        let merkle_root = match bv.get("merkle_root").and_then(|v| v.as_str()) {
+            Some(h) => {
+                let bytes = hex::decode(h).unwrap_or_default();
+                if bytes.len() != 32 {
+                    return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+                        format!("blocks[{i}].merkle_root must be 64-char hex"));
+                }
+                let mut arr = [0u8; 32];
+                arr.copy_from_slice(&bytes);
+                arr
+            }
+            None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+                format!("missing blocks[{i}].merkle_root")),
+        };
+
+        let leaves_default: Vec<Value> = vec![];
+        let leaves_val = bv.get("leaves").and_then(|v| v.as_array()).unwrap_or(&leaves_default);
+        let leaf_count = bv.get("leaf_count").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+        let mut leaves = [[0u8; 32]; 64];
+        for (j, lv) in leaves_val.iter().take(leaf_count.min(64)).enumerate() {
+            if let Some(h) = lv.as_str() {
+                let bytes = hex::decode(h).unwrap_or_default();
+                if bytes.len() == 32 {
+                    leaves[j].copy_from_slice(&bytes);
+                }
+            }
+        }
+
+        let siblings_default: Vec<Value> = vec![];
+        let siblings_val = bv.get("siblings").and_then(|v| v.as_array()).unwrap_or(&siblings_default);
+        let sibling_count = bv.get("sibling_count").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+        let mut siblings = [[0u8; 32]; 32];
+        for (j, sv) in siblings_val.iter().take(sibling_count.min(32)).enumerate() {
+            if let Some(h) = sv.as_str() {
+                let bytes = hex::decode(h).unwrap_or_default();
+                if bytes.len() == 32 {
+                    siblings[j].copy_from_slice(&bytes);
+                }
+            }
+        }
+
+        let n = bv.get("n").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+
+        blocks.push(crate::calendar_store::BlockProof {
+            block_id,
+            merkle_root,
+            leaves,
+            siblings,
+            leaf_count,
+            sibling_count,
+            n,
+        });
+    }
+
+    let resp = Resp { blocks, coverage_ratio };
+
+    let known_roots_val = params.get("known_roots")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let mut known_roots: Vec<[u8; 32]> = Vec::new();
+    for (i, rv) in known_roots_val.iter().enumerate() {
+        if let Some(h) = rv.as_str() {
+            let bytes = hex::decode(h).unwrap_or_default();
+            if bytes.len() != 32 {
+                return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+                    format!("known_roots[{i}] must be 64-char hex"));
+            }
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&bytes);
+            known_roots.push(arr);
+        }
+    }
+
+    let result = verify_storage_proof(&req, &resp, &known_roots);
+
+    resp_success(server, id, serde_json::json!({
+        "verified": result.verified,
+        "coverage_ratio": result.coverage_ratio,
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1489,5 +1685,125 @@ mod tests {
         let foretis = result.get("foretis").unwrap();
         assert!(foretis.get("chronon_number").is_some());
         assert!(foretis.get("content_hash").is_some());
+    }
+
+    #[test]
+    fn handle_storage_proof_request_missing_tbid_returns_error() {
+        let server = make_server();
+        let params = serde_json::json!({"chronon_start": 0, "chronon_end": 10});
+        let resp = handle_storage_proof_request(&server, params);
+        let err = resp.error.expect("missing tbid must error");
+        assert_eq!(err.code, jsonrpc::INVALID_PARAMS);
+    }
+
+    #[test]
+    fn handle_storage_proof_request_missing_chronon_start_returns_error() {
+        let server = make_server();
+        let params = serde_json::json!({"tbid": "abc", "chronon_end": 10});
+        let resp = handle_storage_proof_request(&server, params);
+        let err = resp.error.expect("missing chronon_start must error");
+        assert_eq!(err.code, jsonrpc::INVALID_PARAMS);
+    }
+
+    #[test]
+    fn handle_storage_proof_request_no_calendar_store_returns_error() {
+        let server = make_server();
+        let params = serde_json::json!({
+            "tbid": sample_tbid_hex(),
+            "chronon_start": 0,
+            "chronon_end": 10,
+        });
+        let resp = handle_storage_proof_request(&server, params);
+        let err = resp.error.expect("no calendar store must error");
+        assert_eq!(err.code, jsonrpc::INTERNAL_ERROR);
+        assert!(err.message.contains("calendar store"));
+    }
+
+    #[test]
+    fn handle_storage_proof_verify_missing_request_returns_error() {
+        let server = make_server();
+        let params = serde_json::json!({"response": {}});
+        let resp = handle_storage_proof_verify(&server, params);
+        let err = resp.error.expect("missing request must error");
+        assert_eq!(err.code, jsonrpc::INVALID_PARAMS);
+    }
+
+    #[test]
+    fn handle_storage_proof_verify_missing_response_returns_error() {
+        let server = make_server();
+        let params = serde_json::json!({"request": {"tbid": "abc", "chronon_start": 0, "chronon_end": 5}});
+        let resp = handle_storage_proof_verify(&server, params);
+        let err = resp.error.expect("missing response must error");
+        assert_eq!(err.code, jsonrpc::INVALID_PARAMS);
+    }
+
+    #[test]
+    fn handle_storage_proof_verify_empty_proof_returns_verified_true() {
+        let server = make_server();
+        let params = serde_json::json!({
+            "request": {
+                "tbid": sample_tbid_hex(),
+                "chronon_start": 0,
+                "chronon_end": 5,
+            },
+            "response": {
+                "blocks": [],
+                "coverage_ratio": 0.0,
+            },
+            "known_roots": [],
+        });
+        let resp = handle_storage_proof_verify(&server, params);
+        assert!(resp.error.is_none(), "empty proof should succeed: {:?}", resp.error);
+        let result = resp.result.unwrap();
+        assert_eq!(result.get("verified").and_then(|v| v.as_bool()), Some(true));
+    }
+
+    #[test]
+    fn handle_storage_proof_verify_invalid_known_root_hex_returns_error() {
+        let server = make_server();
+        let params = serde_json::json!({
+            "request": {
+                "tbid": sample_tbid_hex(),
+                "chronon_start": 0,
+                "chronon_end": 5,
+            },
+            "response": {
+                "blocks": [],
+                "coverage_ratio": 0.0,
+            },
+            "known_roots": ["zzzz"],
+        });
+        let resp = handle_storage_proof_verify(&server, params);
+        let err = resp.error.expect("invalid hex must error");
+        assert_eq!(err.code, jsonrpc::INVALID_PARAMS);
+    }
+
+    #[test]
+    fn handle_storage_proof_verify_invalid_merkle_root_length_returns_error() {
+        let server = make_server();
+        let params = serde_json::json!({
+            "request": {
+                "tbid": sample_tbid_hex(),
+                "chronon_start": 0,
+                "chronon_end": 5,
+            },
+            "response": {
+                "blocks": [{
+                    "block_id": 0,
+                    "merkle_root": "abcd",
+                    "leaves": [],
+                    "siblings": [],
+                    "leaf_count": 0,
+                    "sibling_count": 0,
+                    "n": 0,
+                }],
+                "coverage_ratio": 0.0,
+            },
+            "known_roots": [],
+        });
+        let resp = handle_storage_proof_verify(&server, params);
+        let err = resp.error.expect("short merkle_root must error");
+        assert_eq!(err.code, jsonrpc::INVALID_PARAMS);
+        assert!(err.message.contains("merkle_root"));
     }
 }
