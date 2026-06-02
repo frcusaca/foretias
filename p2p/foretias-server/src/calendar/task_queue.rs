@@ -15,6 +15,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use foretias_core::foretias::callbacks::PeerAddr;
 use foretias_core::foretias::tick::ChrononRecord;
+use foretias_core::foretias::types::Tbid;
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
@@ -184,6 +185,9 @@ pub struct WorkerPool {
 
 /// Per-worker context: dispatcher, mirror state, and a self-reference to the
 /// task sender so handlers can enqueue follow-up work.
+///
+/// `communerd` and `chronomatter` are optional: production wiring sets them
+/// via the `TimeFamilyServer`; test/placeholder mode leaves them `None`.
 #[derive(Clone)]
 pub struct WorkerContext {
     pub dispatcher: Option<Arc<dyn MirrorDispatcher>>,
@@ -191,6 +195,13 @@ pub struct WorkerContext {
     pub task_tx: CalendarTaskSender,
     pub calendar_lookup:
         Arc<parking_lot::RwLock<foretias_core::foretias::Calendar>>,
+    /// Communerd reference — needed by `DoChrononAttestation` to obtain a
+    /// `CommunerdetteLine` for a target TBID. `None` in placeholder mode.
+    pub communerd: Option<Arc<crate::communerd::Communerd>>,
+    /// Chronomatter reference — needed by `DoChrononAttestation` to produce
+    /// an internal Foretis (stamp-free, within trust boundary). `None` in
+    /// placeholder mode.
+    pub chronomatter: Option<Arc<foretias_core::chronomatter::Chronomatter>>,
 }
 
 /// Spawn `worker_count` worker tasks that pull from `rx`, dispatch via the
@@ -257,10 +268,122 @@ async fn handle_task(worker_id: usize, task: CalendarTask, ctx: &WorkerContext) 
             handle_expire_mirror(worker_id, mirror, ctx).await
         }
         CalendarTask::DoChrononAttestation { target_tbid } => {
-            debug!(worker_id, target_tbid = %target_tbid, "do_chronon_attestation stub");
+            handle_do_chronon_attestation(worker_id, &target_tbid, ctx).await
         }
         CalendarTask::DoEpochAttestation { target_tbid } => {
             debug!(worker_id, target_tbid = %target_tbid, "do_epoch_attestation stub");
+        }
+    }
+}
+
+/// Chronon-level mutual attestation with a specific TBID.
+///
+/// Full flow:
+/// 1. Obtain a `CommunerdetteLine` for `target_tbid` via Communerd
+/// 2. Fetch the target's latest chronon via `line.get_tick(u64::MAX)`
+/// 3. Internally stamp via Chronomatter (stamp-free, within trust boundary)
+/// 4. Sign the Foretis with Calendar's key (TODO: Calendar key not yet wired)
+/// 5. Transmit the stamped content to the target via `line.stamp()`
+///
+/// Gracefully degrades when Communerd or Chronomatter are not wired into the
+/// `WorkerContext` (placeholder mode).
+async fn handle_do_chronon_attestation(
+    worker_id: usize,
+    target_tbid: &str,
+    ctx: &WorkerContext,
+) {
+    // ── Resource gate ────────────────────────────────────────────────────
+    let Some(ref communerd) = ctx.communerd else {
+        warn!(
+            worker_id,
+            target_tbid, "do_chronon_attestation: no Communerd in WorkerContext; skipping"
+        );
+        return;
+    };
+    let Some(ref chronomatter) = ctx.chronomatter else {
+        warn!(
+            worker_id,
+            target_tbid, "do_chronon_attestation: no Chronomatter in WorkerContext; skipping"
+        );
+        return;
+    };
+
+    let tbid = match Tbid::from_hex(target_tbid) {
+        Ok(t) => t,
+        Err(e) => {
+            warn!(
+                worker_id,
+                target_tbid, error = %e, "do_chronon_attestation: invalid target TBID hex"
+            );
+            return;
+        }
+    };
+
+    // ── Step 2: Request target's latest chronon ──────────────────────────
+    let line = communerd.line_for_tbid(tbid);
+    let target_record = match line.get_tick(u64::MAX).await {
+        Ok(record) => record,
+        Err(e) => {
+            warn!(
+                worker_id,
+                target_tbid, error = %e, "do_chronon_attestation: get_tick failed"
+            );
+            return;
+        }
+    };
+
+    let target_chronon = target_record.inner().chronon_number;
+    info!(
+        worker_id,
+        target_tbid, target_chronon, "do_chronon_attestation: fetched target's latest chronon"
+    );
+
+    // ── Step 3: Internally stamp via Chronomatter ────────────────────────
+    let stamp_content = format!("chronon-attest-{}", target_tbid);
+    let stamped = match chronomatter.stamp(
+        stamp_content.into_bytes(),
+        "chronon-attestation".to_string(),
+    ) {
+        Ok(s) => s,
+        Err(e) => {
+            warn!(
+                worker_id,
+                target_tbid, error = %e, "do_chronon_attestation: Chronomatter stamp failed"
+            );
+            return;
+        }
+    };
+
+    debug!(
+        worker_id,
+        target_tbid,
+        local_chronon = stamped.foretis.chronon_number,
+        "do_chronon_attestation: local Foretis produced"
+    );
+
+    // ── Step 4: Sign with Calendar's key ─────────────────────────────────
+    // Calendar does not yet own a signing key. The StampedForetis from
+    // Chronomatter already carries a per-tick Ed25519 signature. Calendar-
+    // level signing will be added when Calendar's TBID key management ships.
+    // For now the Chronomatter-signed Foretis is forwarded as-is.
+
+    // ── Step 5: Transmit via line.stamp() ────────────────────────────────
+    let foretis_bytes = stamped.foretis.sig_input_bytes();
+    let echo = format!("attest-{}", stamped.foretis.chronon_number);
+    match line.stamp(foretis_bytes, echo).await {
+        Ok(remote_foretis) => {
+            info!(
+                worker_id,
+                target_tbid,
+                remote_chronon = remote_foretis.inner().chronon_number,
+                "do_chronon_attestation: mutual attestation complete"
+            );
+        }
+        Err(e) => {
+            warn!(
+                worker_id,
+                target_tbid, error = %e, "do_chronon_attestation: line.stamp() failed"
+            );
         }
     }
 }
@@ -452,6 +575,18 @@ pub fn start_default_pool_with_dispatcher(
     calendar_lookup: Arc<parking_lot::RwLock<foretias_core::foretias::Calendar>>,
     dispatcher: Option<Arc<dyn MirrorDispatcher>>,
 ) -> (CalendarTaskSender, WorkerPool, Arc<MirrorState>) {
+    start_pool(calendar_lookup, dispatcher, None, None)
+}
+
+/// Full-context pool constructor. Production callers (e.g. `TimeFamilyServer`)
+/// pass `Communerd` and `Chronomatter` so task handlers can access P2P and
+/// internal-stamping capabilities. Test/placeholder callers pass `None`.
+pub fn start_pool(
+    calendar_lookup: Arc<parking_lot::RwLock<foretias_core::foretias::Calendar>>,
+    dispatcher: Option<Arc<dyn MirrorDispatcher>>,
+    communerd: Option<Arc<crate::communerd::Communerd>>,
+    chronomatter: Option<Arc<foretias_core::chronomatter::Chronomatter>>,
+) -> (CalendarTaskSender, WorkerPool, Arc<MirrorState>) {
     let (tx, rx) = mpsc::unbounded_channel();
     let mirror_state = Arc::new(MirrorState::default());
     *mirror_state.min_mirrors.write() = DEFAULT_MIN_MIRRORS;
@@ -461,6 +596,8 @@ pub fn start_default_pool_with_dispatcher(
         mirror_state: Arc::clone(&mirror_state),
         task_tx: tx.clone(),
         calendar_lookup,
+        communerd,
+        chronomatter,
     };
     let pool = spawn_workers(rx, DEFAULT_WORKER_COUNT, ctx);
     (tx, pool, mirror_state)

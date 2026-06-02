@@ -35,7 +35,7 @@ pub use foretias_core::foretias::callbacks::PeerChangeCallback;
 pub use mirror::{MirrorStore, compute_hash_sanity};
 pub use task_queue::{
     CalendarTask, CalendarTaskSender, MirrorDispatcher, MirrorState, WorkerPool,
-    DEFAULT_WORKER_COUNT,
+    DEFAULT_WORKER_COUNT, start_pool,
 };
 
 pub struct Calendar {

@@ -215,3 +215,96 @@ Secrets must never be emitted to any log, trace, stdout/stderr, error message, p
 ```
 
 Each level builds on the one below. The C11 core protects the raw keys. Component signing ensures authenticity. Type-guarded records prevent trust bypass. Component boundaries prevent unauthorized network access. Secret lifecycle rules prevent accidental exposure.
+
+---
+
+## Exception Handling and Unwrap Patterns
+
+This section documents the project's rules for error handling, panics, and unwrap usage across all Rust code.
+
+### The Unwrap/Expect Hierarchy
+
+| Code Context | `.unwrap()` / `.expect()` | Rationale |
+|---|---|---|
+| **Test code** | `.unwrap()` acceptable | Panics are test failures, not production crashes |
+| **Startup / init** | `.expect()` acceptable | Fail-fast on misconfiguration; startup should not continue with invalid state |
+| **Production protocol code** | **FORBIDDEN** | Always use `Result` propagation with `?` or explicit match |
+| **FFI boundaries** | Case-by-case review | See AGENTS.md "FFI and C11 Core Boundaries" for validation rules |
+
+The rule is simple: if external input could reach the code path, panics are bugs. A malformed packet is not a reason to panic.
+
+### Handler Error Pattern (JSON-RPC)
+
+All JSON-RPC handlers in `foretias-server/src/server/handlers.rs` follow a consistent error pattern:
+
+```
+Parameter extraction   →  match on Option/Result  →  resp_error(INVALID_PARAMS, ...)
+Domain operations      →  Result<T, E>            →  resp_error(INTERNAL_ERROR, ...)
+```
+
+Concrete shape:
+
+```rust
+fn handle_stamp(server: &TimeFamilyServer, id: Option<Value>, params: Value) -> JsonRpcResponse {
+    // 1. Extract parameters — invalid params return early
+    let message = match params.get("message").and_then(|v| v.as_str()) {
+        Some(m) => m,
+        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+                                  "missing 'message' parameter".into()),
+    };
+
+    // 2. Call domain logic — errors become INTERNAL_ERROR
+    match server.stamp(message.as_bytes()) {
+        Ok(foretis) => /* build success response */,
+        Err(e) => resp_error(server, id, jsonrpc::INTERNAL_ERROR, format!("{}", e)),
+    }
+}
+```
+
+Never panic on external input. Never use `.unwrap()` on data that came from the network, disk, or a client.
+
+### Mutex and Lock Handling
+
+The project uses `parking_lot` for all synchronization primitives:
+
+- **`parking_lot::Mutex<T>`** and **`parking_lot::RwLock<T>`** in all new code
+- **Never** use `std::sync::Mutex` — `parking_lot` has no poison state, so `.lock()` returns the guard directly without a `Result`
+- No `.unwrap()` needed on `parking_lot::Mutex::lock()` or `parking_lot::RwLock::read()` / `.write()`
+
+```rust
+// parking_lot — guard returned directly
+let mut state = self.state.lock();
+state.mark_pending(id);
+
+// std::sync — FORBIDDEN in new code (poison state requires .unwrap())
+let mut state = self.state.lock().unwrap();  // BAD
+```
+
+If a `parking_lot` lock is held across an `.await` point, that is a separate concurrency bug. Locks must be released before `.await`. See AGENTS.md "Concurrency and Async" for the split-lock pattern.
+
+### POST7 Audit Status
+
+The POST7 security audit reviewed all unwrap/expect usage in production code. Findings:
+
+| Severity | Location | Status |
+|---|---|---|
+| P0 | `handlers.rs:590` — unwrap on external input | Fixed (match pattern with `resp_error`) |
+| P1 | `snapshot_signature.rs:68` — unwrap on fallible operation | Fixed (Result propagation) |
+| P1 | `foretias.rs:284` — unwrap in client path | Fixed (Result propagation) |
+| P2–P3 | 7 informational items | Documented, confirmed acceptable with human review |
+
+All P0 and P1 findings are resolved. The informational items were reviewed and confirmed as acceptable (test code, startup paths, or internal invariants that cannot fail).
+
+### Error Type Catalog
+
+These are the primary error types used across the codebase. Each serves a specific layer.
+
+| Error Type | Crate | Purpose |
+|---|---|---|
+| `NodeError` | core-engine | Top-level P2P and server errors (transport, config, protocol) |
+| `CryptoError` | core-engine | Cryptographic backend errors (signing, verification, key ops) |
+| `CleanAuthError` | core-engine (`clean_auth.rs`) | Trust boundary verification failures (Take 3 inbound gate) |
+| `TransportError` | foretias-server (`communerd/transport.rs`) | Peer transport errors (connection refused, timeout, decode) |
+| `ForetiasError` | foretias-client | Client-level errors (server unreachable, invalid response) |
+
+**Design principle:** Error types are narrow and domain-specific. Handlers map these into JSON-RPC error codes (`INVALID_PARAMS`, `INTERNAL_ERROR`) at the boundary. Domain logic never knows about JSON-RPC.

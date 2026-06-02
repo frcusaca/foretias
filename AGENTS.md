@@ -848,6 +848,8 @@ Avoid stringly-typed errors for core logic.
 
 Error messages may be human-readable, but program logic should not depend on parsing error strings.
 
+For detailed exception handling patterns, unwrap/expect rules, mutex handling, and the POST7 audit status, see `SAFETY.md` § Exception Handling and Unwrap Patterns.
+
 ### Enum Dispatch
 
 Matching on enums is acceptable and often preferred.
