@@ -15,7 +15,27 @@
 
 ## TIER 1 — URGENT (active work, immediate blockers)
 
-### 1. Group 7 — Communerdette (SIGNING ARCHITECTURE + REMNANTS)
+### 1. POST7 Audit & Cleanup
+
+| File | Open | Done | Status |
+|------|------|------|--------|
+| `specs/POST7_AUDIT_CLEANUP_PLAN.md` | 45 | 0 | **PENDING** — blocked on Group 7 completion |
+| `specs/POST7_AUDIT_CLEANUP_SPEC.md` | — | — | Spec (paired) |
+
+**Dependencies:** Group 7 (Communerdette) must be COMPLETE before this begins
+**Blocks:** Nothing (cleanup work)
+
+**Scope:** 4 phases, ~45 tasks:
+- Phase 1: 3 actionable unwrap/expect fixes (P0-P1)
+- Phase 2: ~50 mutex poison migration calls (std → parking_lot)
+- Phase 3: 15 dead code stubs (per-stub human decisions)
+- Phase 4: 1 pre-P2P finding (corrupt .tmp test)
+
+**NOTE:** Phase 8.2 Calendar DoAttestation blockers (7-10h effort) stay as Group 7 OPEN items — HIGHER priority than this cleanup.
+
+---
+
+### 2. Group 7 — Communerdette (SIGNING ARCHITECTURE + REMNANTS)
 
 | File | Open | Done | Status |
 |------|------|------|--------|
@@ -43,26 +63,33 @@
 
 ## TIER 2 — HIGH PRIORITY (blocked on Group 7 completion)
 
-### 2. Group 4 — Calendar Active Mirroring + Proof of Storage
+### 2. Group 4 — Calendar Active Mirroring + Proof of Storage + GNF/FB
 
 | File | Open | Done | Status |
 |------|------|------|--------|
-| `specs/COMBINED_GROUP4_PLAN.md` | 68 | 0 | **PAUSED** — blocked on Group 7 + Group 6 |
-| `specs/COMBINED_GROUP4_SPEC.md` | — | — | Spec (paired) |
+| `specs/COMBINED_GROUP4_PLAN.md` | 68 | 0 | **REVISED** — spec updated 2026-06-01 with Streams 4d (GNF/FB) + 4e (Chronon Retrieval + FB Verification) |
+| `specs/COMBINED_GROUP4_SPEC.md` | — | — | Spec (paired, revised) |
 | `specs/CALENDAR_ACTIVE_MIRRORING_PLAN.md` | 18 | 0 | **DEPRECATED** → superseded by Group 4 |
 | `specs/CALENDAR_PROOF_OF_STORAGE_PLAN.md` | 26 | 0 | **DEPRECATED** → superseded by Group 4 |
 
+**Streams (5 total):**
+- **4a:** Libp2p unit tests (Phase 1, independent)
+- **4b:** Calendar Active Mirroring (Phase 3, merged through 4b.5)
+- **4c:** Calendar Proof of Storage (Phase 3, independent of 4b)
+- **4d:** GNF/FB Mutual Attestation (Phase 4, new — added 2026-06-01)
+- **4e:** Chronon Retrieval APIs + FB Verification (Phase 4, new — added 2026-06-01)
+
 **Dependencies:**
-1. Group 7 (Communerdette) reaches feature completion ← **current blocker**
+1. Group 7 (Communerdette) reaches feature completion ← **RESOLVED** ✅
 2. Group 6 (Mutual Attestation) spec approved and interfaces stable
-3. Plan rewritten to use Communerdette as mirror-traffic carrier
+3. Plan rewritten to use Communerdette as mirror-traffic carrier ← **RESOLVED** ✅ (Streams 4d/4e use CommunerdetteLine)
 
 **Blocks:** Stream 4c (Proof of Storage), calendar replication
 
 **Resumption preconditions (all must be true):**
-1. Group 7 spec reaches feature completion
-2. Group 6 spec approved and interfaces stable
-3. Plan rewritten to reflect Communerdette architecture
+1. Group 7 spec reaches feature completion ← **RESOLVED** ✅
+2. Group 6 spec approved and interfaces stable ← superseded by Group 4 Stream 4d
+3. Plan rewritten to reflect Communerdette architecture ← **RESOLVED** ✅ (Streams 4d/4e)
 
 ---
 
@@ -70,12 +97,12 @@
 
 | File | Open | Done | Status |
 |------|------|------|--------|
-| `specs/COMBINED_GROUP6_MUTUAL_ATTESTATION_SPEC.md` | — | — | **BACKBURNERED** — not yet started |
+| `specs/COMBINED_GROUP6_MUTUAL_ATTESTATION_SPEC.md` | — | — | **SUPERSEDED** — mutual attestation now specified in Group 4 Stream 4d |
 
-**Dependencies:** Group 7 (Communerdette) completion
-**Blocks:** Group 4 resumption
+**Dependencies:** N/A — superseded
+**Blocks:** Nothing
 
-**Note:** This spec is backburnered. No plan file exists yet. The spec needs to be reviewed and a plan created before work can begin.
+**Note:** The mutual attestation protocol (GNF/FB) is now specified in `COMBINED_GROUP4_SPEC.md` §5 (Stream 4d) and planned in `COMBINED_GROUP4_PLAN.md` (Phases 4d.1–4d.8). This Group 6 spec is superseded and can be archived.
 
 ---
 
@@ -258,13 +285,14 @@ Group 2 (pre-flight)
   └── Group 1 (Take 3 types) ──────────────────┐
        └── Group 5 (arch foundations) ──────────┤
             └── Group 3 (P2P features) ─────────┤
-                 └── Group 7 (Communerdette) ◄──┘
+                 └── Group 7 (Communerdette) ◄──┘  [COMPLETE ✅]
                       │
-                      ├──► Group 6 (Mutual Attestation) [BACKBURNERED]
-                      │
-                      └──► Group 4 (Mirror + Proof of Storage) [PAUSED]
-                           ├── Stream 4b: Active Mirroring
-                           └── Stream 4c: Proof of Storage
+                      └──► Group 4 (Mirror + PoS + GNF/FB) [REVISED]
+                           ├── Stream 4a: Libp2p unit tests
+                           ├── Stream 4b: Active Mirroring (merged 4b.1-4b.5)
+                           ├── Stream 4c: Proof of Storage
+                           ├── Stream 4d: GNF/FB Mutual Attestation [NEW]
+                           └── Stream 4e: Chronon Retrieval + FB Verification [NEW]
 ```
 
 ---
@@ -273,10 +301,10 @@ Group 2 (pre-flight)
 
 | Priority | Item | Action |
 |----------|------|--------|
-| **1** | Group 7 Phase 18.6 | Run unwrap/expect audit (informational) |
-| **2** | Group 7 Phase 8.2 | Implement Calendar `DoAttestation` with CommunerdetteLine |
-| **3** | Group 6 | Review spec, create plan, implement mutual attestation |
-| **4** | Group 4 | Rewrite plan for Communerdette architecture, resume mirror work |
+| **1** | POST7 Audit & Cleanup | Implement unwrap fixes, mutex migration, dead code cleanup |
+| **2** | Group 4 Stream 4d | Implement GNF/FB mutual attestation (DoChronon/EpochAttestation) |
+| **3** | Group 4 Stream 4e | Implement chronon retrieval APIs + FB verification |
+| **4** | Group 4 Stream 4c | Implement Proof of Storage (independent of 4d/4e) |
 | **5** | Group 1 | Verify which of 66 open items are stale vs genuine |
 | **6** | Group 3 | Review 45 open items for relevance |
 | **7** | Group 5 g5-c | Human decision on JSON-RPC auth (mTLS) |

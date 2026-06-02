@@ -301,10 +301,525 @@ merges, it must:
 
 ---
 
-## 5. Out of Scope for Group 4
+## 5. Stream 4d — GNF/FB Mutual Attestation Protocol
 
-- FROST epoch snapshots
-- Cross-mirror chained replication
-- Storage proof aggregation across multiple TBIDs
-- Mirror reputation scoring algorithms
-- Encrypted dump streams (existing transport encryption is reused)
+**Severity:** MAJOR feature
+**Status:** NEW — added 2026-06-01 after Group 7 completion clarified the attestation flow
+**Prerequisites:** Group 7 (Communerdette) feature complete; Calendar task queue scaffold (Phase 4b.2)
+**Estimated effort:** 4-6 days
+
+### 5.1 Summary
+
+Mutual attestation is a **proactive** protocol where our Calendar reaches out to a remote TBID, requests their most recent chronon record, stamps it locally, and sends the stamped result back. This establishes a cryptographic attestation relationship between two time beings. The protocol operates at two granularity levels:
+
+- **Chronon-level** (`DoChrononAttestation`): Attest a single chronon (tick)
+- **Epoch-level** (`DoEpochAttestation`): Attest an entire epoch block
+
+Both are initiated by our Calendar, routed through CommunerdetteLine to the recipient's Communerd, and processed by the recipient's Calendar.
+
+### 5.2 The Attestation Flow (Outbound — Proactive)
+
+```
+Our Calendar                          Remote TBID
+    │                                      │
+    │  1. Enqueue DoChrononAttestation     │
+    │     { target_tbid }                  │
+    │────► CommunerdetteLine               │
+    │     .get_tick(latest)                │
+    │                                      │
+    │     ◄── CleanAuthenticated<          │
+    │         ChrononRecord>               │
+    │                                      │
+    │  2. Internal: Chronomatter.stamp()   │
+    │     (stamp-free, internal call)      │
+    │     → Foretis                        │
+    │                                      │
+    │  3. Calendar signs Foretis           │
+    │     with Calendar's own key          │
+    │     → signed bytes                   │
+    │                                      │
+    │  4. CommunerdetteLine.stamp()        │
+    │     (async, fire-and-forget)         │
+    │────►                                 │
+    │                                      │
+    │                                      │  5. handle_route_stamp
+    │                                      │     → handle_stamp
+    │                                      │     → Chronomatter.stamp()
+    │                                      │
+```
+
+**Key invariants:**
+
+1. **Initiation is local.** Our Calendar decides when to attest. No external trigger required (though inbound requests via §5.4 can enqueue the same tasks).
+2. **Targeting is by TBID.** `DoChrononAttestation { target_tbid }` carries the recipient's Calendar TBID. Communerdette resolves routing.
+3. **Internal stamping is stamp-free.** Chronomatter's `stamp()` is called internally (within the same trust boundary) — no signing needed.
+4. **Calendar signs at the external boundary.** The `Foretis` result is signed by Calendar with Calendar's own key before transmission.
+5. **Transmission is async.** `CommunerdetteLine.stamp()` is fire-and-forget. The attestation is sent; the response (if any) is handled independently.
+
+### 5.3 Task Queue Extensions
+
+Replace the placeholder `DoAttestation { peer: PeerAddr }` with two new variants:
+
+```rust
+pub enum CalendarTask {
+    // ... existing variants ...
+
+    /// Chronon-level mutual attestation (GNF protocol).
+    /// We request the target's latest chronon, stamp it, send it back.
+    DoChrononAttestation { target_tbid: String },
+
+    /// Epoch-level mutual attestation (FB protocol).
+    /// We request the target's latest epoch block, stamp it, send it back.
+    DoEpochAttestation { target_tbid: String },
+}
+```
+
+**Priority:** Both are priority 3 (Medium-High — Mutual attestation with peers).
+
+**Scheduling:** Calendar enqueues these tasks based on:
+- `MutualAttestConfig.every_n_chronons` for chronon-level
+- Epoch transition for epoch-level
+- Inbound `stamp_my_chronon` / `stamp_my_chronon_block` requests (§5.4)
+
+### 5.4 Inbound Request Methods (Reactive)
+
+Two new JSON-RPC methods allow a remote peer to **request** that we attest their chronon or epoch block. These are received by our Calendar, prioritized, and processed using the same `DoChrononAttestation` / `DoEpochAttestation` task types.
+
+#### `stamp_my_chronon`
+
+A remote peer asks us to stamp their latest chronon.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "stamp_my_chronon",
+  "params": {
+    "requester_tbid": "<hex>",
+    "chronon_number": 42
+  },
+  "id": 1
+}
+```
+
+**Handler flow:**
+1. Validate `requester_tbid` matches the connection's authenticated TBID (Take 3 gate)
+2. Enqueue `DoChrononAttestation { target_tbid: requester_tbid }`
+3. Return immediately: `{ "status": "queued" }`
+4. Task executes asynchronously per priority 3 scheduling
+
+#### `stamp_my_chronon_block`
+
+A remote peer asks us to stamp their latest epoch block.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "stamp_my_chronon_block",
+  "params": {
+    "requester_tbid": "<hex>",
+    "epoch_number": 3
+  },
+  "id": 2
+}
+```
+
+**Handler flow:**
+1. Validate `requester_tbid` matches the connection's authenticated TBID
+2. Enqueue `DoEpochAttestation { target_tbid: requester_tbid }`
+3. Return immediately: `{ "status": "queued" }`
+4. Task executes asynchronously per priority 3 scheduling
+
+**Why async?** Attestation is priority 3 — it must not block priorities 1-2 (record ticks, support local verify). Queuing ensures proper scheduling.
+
+### 5.5 DoChrononAttestation Handler (Implementation)
+
+```rust
+async fn handle_do_chronon_attestation(
+    target_tbid: &str,
+    calendar: &Calendar,
+    communerd: &Communerd,
+) -> Result<(), CalendarError> {
+    // 1. Get CommunerdetteLine for target TBID
+    let line = communerd.line_for_tbid(target_tbid)
+        .ok_or(CalendarError::UnknownTbid(target_tbid.to_string()))?;
+
+    // 2. Request target's latest chronon
+    let latest_tick = line.get_tick(u64::MAX).await
+        .map_err(|e| CalendarError::TransportError(e))?;
+
+    // 3. Internal stamp (stamp-free — within trust boundary)
+    let foretis = calendar.chronomatter().stamp(
+        latest_tick.content.clone(),
+        &latest_tick.tbid,
+    )?;
+
+    // 4. Calendar signs the Foretis with Calendar's own key
+    let signed = calendar.sign_foretis(foretis)?;
+
+    // 5. Transmit async (fire-and-forget)
+    let _ = line.stamp(signed.content, &signed.echo).await;
+
+    Ok(())
+}
+```
+
+### 5.6 DoEpochAttestation Handler (Implementation)
+
+Same pattern as §5.5, but operates on epoch blocks:
+
+```rust
+async fn handle_do_epoch_attestation(
+    target_tbid: &str,
+    calendar: &Calendar,
+    communerd: &Communerd,
+) -> Result<(), CalendarError> {
+    let line = communerd.line_for_tbid(target_tbid)
+        .ok_or(CalendarError::UnknownTbid(target_tbid.to_string()))?;
+
+    // Request target's latest epoch block
+    let epoch_block = line.get_calendar_slice(latest_epoch, 1).await
+        .map_err(|e| CalendarError::TransportError(e))?;
+
+    // Internal stamp, Calendar sign, async transmit
+    // ... (same pattern as chronon-level)
+}
+```
+
+### 5.7 External Attestation Storage
+
+When a stamped result is received from a remote peer, the recipient's Calendar stores it as a `CleanAuthenticated<Foretis>`. **No separate `ExternalAttestation` struct is needed** — the `CleanAuthenticated<R>` wrapper already carries:
+
+- The verified `Foretis` payload (`.inner()`)
+- The signature bytes (`.signature_bytes()`)
+- The signature algorithm (`.signature_algorithm()`)
+- The verification guarantee (type-enforced trust boundary)
+
+The `ChrononRecord.external_attestations` field should store `Vec<CleanAuthenticated<Foretis>>` instead of `Vec<ExternalAttestation>`. The existing `ExternalAttestation` struct becomes deprecated and can be removed once all callers migrate.
+
+**Invariant:** Only `CleanAuthenticated<Foretis>` enters the calendar. Raw `Foretis` cannot be stored as an attestation — the compiler enforces this.
+
+### 5.8 MirrorDispatcher Extension
+
+Add two methods to `MirrorDispatcher` for attestation traffic:
+
+```rust
+#[async_trait]
+pub trait MirrorDispatcher: Send + Sync {
+    // ... existing mirror methods ...
+
+    /// Request mutual attestation at chronon level.
+    async fn mutual_attest_chronon(
+        &self,
+        target_tbid: &str,
+    ) -> Result<CleanAuthenticated<Foretis>, String>;
+
+    /// Request mutual attestation at epoch level.
+    async fn mutual_attest_epoch(
+        &self,
+        target_tbid: &str,
+    ) -> Result<CleanAuthenticated<Foretis>, String>;
+}
+```
+
+`Communerd` implements these by delegating to `self.line_for_tbid(tbid).stamp(...)`.
+
+### 5.9 Acceptance Criteria
+
+- [ ] `DoChrononAttestation` and `DoEpochAttestation` task variants defined and handled
+- [ ] `stamp_my_chronon` and `stamp_my_chronon_block` JSON-RPC methods registered
+- [ ] Outbound attestation flow: get_tick → internal stamp → Calendar sign → async transmit
+- [ ] `ChrononRecord.external_attestations` stores `Vec<CleanAuthenticated<Foretis>>` (no separate `ExternalAttestation` struct)
+- [ ] MirrorDispatcher extended with `mutual_attest_chronon` and `mutual_attest_epoch`
+- [ ] Integration test: two-node mutual attestation (chronon-level)
+- [ ] Integration test: two-node mutual attestation (epoch-level)
+- [ ] Integration test: inbound `stamp_my_chronon` request → queued → executed
+- [ ] `cargo test --workspace` passes
+
+---
+
+## 6. Stream 4e — Chronon Retrieval APIs + FB Verification
+
+**Severity:** MAJOR feature
+**Status:** NEW — added 2026-06-01
+**Prerequisites:** Group 7 (Communerdette) feature complete; Stream 4d (GNF/FB attestation)
+**Estimated effort:** 3-5 days
+
+### 6.1 Summary
+
+Two PtP retrieval APIs allow any peer to request chronon records from our Calendar. The Calendar responds with whatever it has: all of it, some of it, or none. Both APIs support an optional flag to include attestations alongside the records.
+
+Additionally, after sending an attestation to our Fast Buddy (FB), we periodically verify that the FB actually recorded it — either immediately after sending or at randomized intervals.
+
+### 6.2 ChrononRecord Retrieval API
+
+A peer requests a single chronon record from our Calendar.
+
+#### JSON-RPC: `get_chronon`
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "get_chronon",
+  "params": {
+    "tbid": "<hex>",
+    "chronon_number": 42,
+    "include_attestations": true
+  },
+  "id": 1
+}
+```
+
+**Parameters:**
+- `tbid`: The TBID whose chronon is requested (must match our Calendar's TBID or a mirrored TBID)
+- `chronon_number`: Which chronon to retrieve
+- `include_attestations` (optional, default `false`): If `true`, include `external_attestations` in the returned `ChrononRecord`
+
+**Response — "I have it":**
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "status": "found",
+    "record": { /* CleanAuthenticated<ChrononRecord> */ },
+    "attestations": [ /* optional, only if include_attestations=true */ ]
+  },
+  "id": 1
+}
+```
+
+**Response — "I don't have it":**
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "status": "not_found",
+    "reason": "chronon_number out of range"
+  },
+  "id": 1
+}
+```
+
+**Handler:** `handle_get_chronon` in `server/handlers.rs`. Forwards to `Calendar::get_chronon(tbid, chronon_number, include_attestations)`.
+
+### 6.3 ChrononChain Retrieval API
+
+A peer requests a range of chronon records from our Calendar.
+
+#### JSON-RPC: `get_chronon_chain`
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "get_chronon_chain",
+  "params": {
+    "tbid": "<hex>",
+    "chronon_start": 10,
+    "chronon_end": 50,
+    "include_attestations": true
+  },
+  "id": 2
+}
+```
+
+**Parameters:**
+- `tbid`: The TBID whose chain is requested
+- `chronon_start`: Inclusive start
+- `chronon_end`: Inclusive end
+- `include_attestations` (optional, default `false`): If `true`, include attestations
+
+**Response — "I have all of it":**
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "status": "complete",
+    "records": [ /* Vec<CleanAuthenticated<ChrononRecord>> */ ],
+    "attestations": [ /* optional */ ],
+    "coverage": { "requested": 41, "returned": 41 }
+  },
+  "id": 2
+}
+```
+
+**Response — "I have some of it":**
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "status": "partial",
+    "records": [ /* subset we have */ ],
+    "attestations": [ /* optional */ ],
+    "coverage": { "requested": 41, "returned": 23 },
+    "gaps": [ { "start": 30, "end": 45 } ]
+  },
+  "id": 2
+}
+```
+
+**Response — "I have none":**
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "status": "none",
+    "coverage": { "requested": 41, "returned": 0 }
+  },
+  "id": 2
+}
+```
+
+**Handler:** `handle_get_chronon_chain` in `server/handlers.rs`. Forwards to `Calendar::get_chronon_chain(tbid, start, end, include_attestations)`.
+
+### 6.4 Calendar Implementation
+
+```rust
+impl Calendar {
+    /// Retrieve a single chronon record.
+    pub fn get_chronon(
+        &self,
+        tbid: &str,
+        chronon_number: u64,
+        include_attestations: bool,
+    ) -> Option<CleanAuthenticated<ChrononRecord>> {
+        // Look up in local calendar or mirror store
+        // If include_attestations, populate external_attestations field
+    }
+
+    /// Retrieve a chain of chronon records.
+    pub fn get_chronon_chain(
+        &self,
+        tbid: &str,
+        chronon_start: u64,
+        chronon_end: u64,
+        include_attestations: bool,
+    ) -> ChrononChainResult {
+        // Return complete/partial/none with coverage info
+    }
+}
+
+pub enum ChrononChainResult {
+    Complete {
+        records: Vec<CleanAuthenticated<ChrononRecord>>,
+        attestations: Option<Vec<CleanAuthenticated<Foretis>>>,
+        coverage: CoverageInfo,
+    },
+    Partial {
+        records: Vec<CleanAuthenticated<ChrononRecord>>,
+        attestations: Option<Vec<CleanAuthenticated<Foretis>>>,
+        coverage: CoverageInfo,
+        gaps: Vec<Range<u64>>,
+    },
+    None {
+        coverage: CoverageInfo,
+    },
+}
+
+pub struct CoverageInfo {
+    pub requested: u64,
+    pub returned: u64,
+}
+```
+
+### 6.5 FB Verification Protocol
+
+After sending an attestation to our Fast Buddy, we verify that the FB actually recorded it. Two modes:
+
+#### Mode 1: Immediate Verification (Post-Send Check)
+
+Right after `DoChrononAttestation` transmits a stamp to our FB:
+
+```
+1. We send attestation to FB (via CommunerdetteLine.stamp)
+2. Wait for transmission confirmation
+3. Immediately query FB: get_chronon(tbid, chronon_number, include_attestations=true)
+4. Check: does the returned ChrononRecord.external_attestations include our stamp?
+5. If YES → FB recorded it. Mark relationship healthy.
+6. If NO → FB did not record it. Log warning, enqueue retry.
+```
+
+**Implementation:** Add to `DoChrononAttestation` handler after step 5 (transmit):
+```rust
+// 6. Verify FB recorded our attestation
+let response = line.get_chronon_with_attestations(target_tbid, chronon_number).await?;
+let recorded = response.external_attestations
+    .iter()
+    .any(|att| att.echo == our_echo && att.content_hash == our_content_hash);
+
+if !recorded {
+    warn!("FB did not record our attestation at chronon {}", chronon_number);
+    // Enqueue retry or mark relationship degraded
+}
+```
+
+#### Mode 2: Randomized Verification (Periodic Check)
+
+At randomized intervals (configurable, default: every 10-30 chronons with jitter), verify a random historical chronon:
+
+```
+1. Pick a random chronon_number from [1, latest_chronon - 10]
+2. Query FB: get_chronon_chain(tbid, random_start, random_end, include_attestations=true)
+3. Check: do the returned records include our attestation stamps?
+4. If coverage is complete and attestations match → relationship healthy
+5. If gaps or missing attestations → log warning, may trigger mirror repair
+```
+
+**Implementation:** New task variant `VerifyFbRecorded`:
+```rust
+/// Verify that our FB recorded our attestation stamps.
+/// Runs at randomized intervals.
+VerifyFbRecorded { target_tbid: String },
+```
+
+**Scheduling:** Enqueued by Calendar's `TickObserver.on_tick_advance()` with randomized jitter:
+```rust
+fn on_tick_advance(&self, chronon_number: u64) {
+    // Randomized: 1 in N chance, where N is configurable with jitter
+    if rng.gen_bool(1.0 / self.fb_verify_interval) {
+        self.enqueue_task(CalendarTask::VerifyFbRecorded {
+            target_tbid: self.fb_tbid.clone(),
+        });
+    }
+}
+```
+
+### 6.6 MirrorDispatcher Extension
+
+Add retrieval methods to `MirrorDispatcher`:
+
+```rust
+#[async_trait]
+pub trait MirrorDispatcher: Send + Sync {
+    // ... existing methods ...
+
+    /// Retrieve a single chronon record.
+    async fn get_chronon(
+        &self,
+        target_tbid: &str,
+        chronon_number: u64,
+        include_attestations: bool,
+    ) -> Result<CleanAuthenticated<ChrononRecord>, String>;
+
+    /// Retrieve a chain of chronon records.
+    async fn get_chronon_chain(
+        &self,
+        target_tbid: &str,
+        chronon_start: u64,
+        chronon_end: u64,
+        include_attestations: bool,
+    ) -> Result<ChrononChainResult, String>;
+}
+```
+
+### 6.7 Acceptance Criteria
+
+- [ ] `get_chronon` JSON-RPC method registered and working
+- [ ] `get_chronon_chain` JSON-RPC method registered and working
+- [ ] Three response statuses: `complete`, `partial`, `none` — all tested
+- [ ] `include_attestations` flag works for both APIs
+- [ ] `Calendar::get_chronon()` and `Calendar::get_chronon_chain()` implemented
+- [ ] Immediate FB verification (Mode 1) after `DoChrononAttestation`
+- [ ] Randomized FB verification (Mode 2) via `VerifyFbRecorded` task
+- [ ] Integration test: chronon retrieval (found/not_found)
+- [ ] Integration test: chain retrieval (complete/partial/none)
+- [ ] Integration test: FB verification (recorded/not recorded)
+- [ ] `cargo test --workspace` passes

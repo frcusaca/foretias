@@ -250,10 +250,166 @@ coordinator before resolving.
 
 ---
 
+## Branch g4-d-gnf-fb — GNF/FB Mutual Attestation (Phase 4)
+
+**Spec:** `COMBINED_GROUP4_SPEC.md` §5
+**Prerequisites:** Group 7 (Communerdette) feature complete; Phase 4b.2 (task queue scaffold)
+**Worktree:** `${HOME}/tmp/foretias-worktrees/g4-d-gnf-fb-$(date +%s)`
+
+### Phase 4d.1 — Task variant definitions
+
+- [ ] Replace `DoAttestation { peer: PeerAddr }` with `DoChrononAttestation { target_tbid: String }` and `DoEpochAttestation { target_tbid: String }` in `calendar/task_queue.rs`
+- [ ] Update all enum match arms, test fixtures, and documentation
+- [ ] `cargo build -p foretias-server` passes
+
+### Phase 4d.2 — External attestation storage migration
+
+- [ ] Change `ChrononRecord.external_attestations` from `Vec<ExternalAttestation>` to `Vec<CleanAuthenticated<Foretis>>`
+- [ ] Deprecate `ExternalAttestation` struct (mark `#[deprecated]`)
+- [ ] Update all callers to store `CleanAuthenticated<Foretis>` directly
+- [ ] Unit test: store and retrieve `CleanAuthenticated<Foretis>` as attestation
+- [ ] `cargo test -p foretias-core` passes
+
+### Phase 4d.3 — DoChrononAttestation handler
+
+- [ ] Implement handler in `calendar/task_queue.rs`:
+  - Get `CommunerdetteLine` for `target_tbid`
+  - `line.get_tick(latest)` → `CleanAuthenticated<ChrononRecord>`
+  - Internal `chronomatter.stamp()` (stamp-free)
+  - Calendar signs `Foretis` with Calendar's key
+  - `line.stamp()` async (fire-and-forget)
+- [ ] Unit test: mock CommunerdetteLine, verify stamp flow
+- [ ] `cargo test -p foretias-server --lib` passes
+
+### Phase 4d.4 — DoEpochAttestation handler
+
+- [ ] Implement handler (same pattern as 4d.3, epoch-level)
+- [ ] Unit test: mock CommunerdetteLine, verify epoch stamp flow
+- [ ] `cargo test -p foretias-server --lib` passes
+
+### Phase 4d.5 — Inbound RPC methods
+
+- [ ] Add `handle_stamp_my_chronon` in `server/handlers.rs`:
+  - Validate `requester_tbid` matches authenticated connection
+  - Enqueue `DoChrononAttestation { target_tbid }`
+  - Return `{ "status": "queued" }`
+- [ ] Add `handle_stamp_my_chronon_block` in `server/handlers.rs`:
+  - Same pattern, enqueues `DoEpochAttestation`
+- [ ] Register both in `server/jsonrpc.rs` dispatch table
+- [ ] Unit tests: valid request → queued; invalid TBID → error
+- [ ] `cargo test -p foretias-server --lib` passes
+
+### Phase 4d.6 — MirrorDispatcher extension
+
+- [ ] Add `mutual_attest_chronon` and `mutual_attest_epoch` to `MirrorDispatcher` trait
+- [ ] Implement on `Communerd` (delegate to `line_for_tbid`)
+- [ ] `cargo build -p foretias-server` passes
+
+### Phase 4d.7 — Integration tests
+
+- [ ] Create `p2p/foretias-server/tests/mutual_attestation_integration.rs`:
+  - Two `TimeFamilyServer` instances
+  - Node A enqueues `DoChrononAttestation { target_tbid: B }`
+  - Verify: B receives stamp, stores as `ExternalAttestation`
+  - Node A calls `stamp_my_chronon` on B
+  - Verify: B enqueues `DoChrononAttestation { target_tbid: A }`
+  - Epoch-level: same tests with `DoEpochAttestation`
+- [ ] `cargo test -p foretias-server --test mutual_attestation_integration` passes
+- [ ] Full workspace tests pass
+
+### Phase 4d.8 — Commit + merge
+
+- [ ] Commit:
+      ```
+      Major: P2P Features (Group 4), Stream 4d — GNF/FB Mutual Attestation
+      opencode 1.14.28; vllm/qwen-3.6 27b
+      ```
+- [ ] Merge to alpha; remove worktree
+
+---
+
+## Branch g4-e-chronon-retrieval — Chronon Retrieval APIs + FB Verification (Phase 4)
+
+**Spec:** `COMBINED_GROUP4_SPEC.md` §6
+**Prerequisites:** Group 7 (Communerdette) feature complete; Stream 4d (GNF/FB attestation)
+**Worktree:** `${HOME}/tmp/foretias-worktrees/g4-e-chronon-retrieval-$(date +%s)`
+
+### Phase 4e.1 — Calendar retrieval methods
+
+- [ ] Implement `Calendar::get_chronon(tbid, chronon_number, include_attestations)` in `calendar/mod.rs`
+- [ ] Implement `Calendar::get_chronon_chain(tbid, start, end, include_attestations)` in `calendar/mod.rs`
+- [ ] Define `ChrononChainResult` enum (Complete/Partial/None) with `CoverageInfo`
+- [ ] Unit tests: found, not_found, complete, partial, none
+- [ ] `cargo test -p foretias-server --lib` passes
+
+### Phase 4e.2 — JSON-RPC handlers
+
+- [ ] Add `handle_get_chronon` in `server/handlers.rs`:
+  - Parse params (tbid, chronon_number, include_attestations)
+  - Forward to `Calendar::get_chronon()`
+  - Return `found`/`not_found` response
+- [ ] Add `handle_get_chronon_chain` in `server/handlers.rs`:
+  - Parse params (tbid, chronon_start, chronon_end, include_attestations)
+  - Forward to `Calendar::get_chronon_chain()`
+  - Return `complete`/`partial`/`none` response with coverage info
+- [ ] Register both in `server/jsonrpc.rs` dispatch table
+- [ ] Unit tests: valid requests, invalid TBID, out-of-range chronon
+- [ ] `cargo test -p foretias-server --lib` passes
+
+### Phase 4e.3 — MirrorDispatcher extension
+
+- [ ] Add `get_chronon` and `get_chronon_chain` to `MirrorDispatcher` trait
+- [ ] Implement on `Communerd` (delegate to `line_for_tbid`)
+- [ ] `cargo build -p foretias-server` passes
+
+### Phase 4e.4 — Immediate FB verification (Mode 1)
+
+- [ ] Add post-send verification to `DoChrononAttestation` handler:
+  - After `line.stamp()` transmits, call `line.get_chronon_with_attestations()`
+  - Check if our stamp appears in `external_attestations`
+  - If not recorded: log warning, enqueue retry
+- [ ] Unit test: mock CommunerdetteLine, verify check runs after send
+- [ ] `cargo test -p foretias-server --lib` passes
+
+### Phase 4e.5 — Randomized FB verification (Mode 2)
+
+- [ ] Add `VerifyFbRecorded { target_tbid: String }` task variant to `CalendarTask`
+- [ ] Implement handler:
+  - Pick random chronon range from `[1, latest - 10]`
+  - Query FB via `get_chronon_chain(include_attestations=true)`
+  - Check coverage and attestation presence
+  - Log results, may trigger mirror repair
+- [ ] Add scheduling in `TickObserver.on_tick_advance()`:
+  - Randomized: 1 in N chance with configurable jitter
+  - Enqueue `VerifyFbRecorded` task
+- [ ] Unit tests: handler logic, scheduling probability
+- [ ] `cargo test -p foretias-server --lib` passes
+
+### Phase 4e.6 — Integration tests
+
+- [ ] Create `p2p/foretias-server/tests/chronon_retrieval_integration.rs`:
+  - Two `TimeFamilyServer` instances
+  - Test `get_chronon`: found, not_found, with/without attestations
+  - Test `get_chronon_chain`: complete, partial, none
+  - Test FB verification: recorded, not recorded
+- [ ] `cargo test -p foretias-server --test chronon_retrieval_integration` passes
+- [ ] Full workspace tests pass
+
+### Phase 4e.7 — Commit + merge
+
+- [ ] Commit:
+      ```
+      Major: P2P Features (Group 4), Stream 4e — Chronon Retrieval + FB Verification
+      opencode 1.14.28; vllm/qwen-3.6 27b
+      ```
+- [ ] Merge to alpha; remove worktree
+
+---
+
 ## Group-Level Completion Criteria
 
-- [ ] Three new merged branches: `g4-a-libp2p-tests`, `g4-b-cal-mirror`, `g4-c-cal-proof`
-- [ ] All integration tests pass (libp2p unit, mirror, proof-of-storage)
+- [ ] Five new merged branches: `g4-a-libp2p-tests`, `g4-b-cal-mirror`, `g4-c-cal-proof`, `g4-d-gnf-fb`, `g4-e-chronon-retrieval`
+- [ ] All integration tests pass (libp2p unit, mirror, proof-of-storage, mutual attestation, chronon retrieval)
 - [ ] No regression in existing tests
 - [ ] `cargo build --workspace` zero warnings
 - [ ] `ctest --output-on-failure` passes after `cmake --build`
