@@ -1,0 +1,10 @@
+{
+  "id": "T-aa5dab4c-3b24-44ed-872a-57aea259bda1",
+  "subject": "Add VerifyFbRecorded task variant and handler to CalendarTask",
+  "description": "Add CalendarTask::VerifyFbRecorded { target_tbid: String } variant and implement handle_verify_fb_recorded handler in task_queue.rs",
+  "status": "completed",
+  "activeForm": "Adding VerifyFbRecorded task variant and handler",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_17544951dffeNDEKlrdvUb5shU"
+}

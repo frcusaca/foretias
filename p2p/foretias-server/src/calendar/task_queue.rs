@@ -16,6 +16,7 @@ use async_trait::async_trait;
 use foretias_core::foretias::callbacks::PeerAddr;
 use foretias_core::foretias::tick::ChrononRecord;
 use foretias_core::foretias::types::Tbid;
+use rand::Rng;
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
@@ -66,6 +67,12 @@ pub enum CalendarTask {
     /// drops below the configured minimum, the worker enqueues
     /// `FindNewMirror`.
     ExpireMirror { mirror: PeerAddr },
+
+    /// Verify that a remote TBID's calendar records (including external
+    /// attestations) are healthy. Picks a random chronon range, fetches
+    /// it via `get_calendar_slice`, and logs coverage / attestation
+    /// presence.
+    VerifyFbRecorded { target_tbid: String },
 }
 
 impl CalendarTask {
@@ -79,6 +86,7 @@ impl CalendarTask {
             CalendarTask::StartStream { .. } => "start_stream",
             CalendarTask::ExploreMirror { .. } => "explore_mirror",
             CalendarTask::ExpireMirror { .. } => "expire_mirror",
+            CalendarTask::VerifyFbRecorded { .. } => "verify_fb_recorded",
         }
     }
 }
@@ -272,6 +280,9 @@ async fn handle_task(worker_id: usize, task: CalendarTask, ctx: &WorkerContext) 
         }
         CalendarTask::DoEpochAttestation { target_tbid } => {
             handle_do_epoch_attestation(worker_id, &target_tbid, ctx).await
+        }
+        CalendarTask::VerifyFbRecorded { target_tbid } => {
+            handle_verify_fb_recorded(worker_id, &target_tbid, ctx).await
         }
     }
 }
@@ -720,6 +731,148 @@ async fn handle_expire_mirror(worker_id: usize, mirror: PeerAddr, ctx: &WorkerCo
     }
 }
 
+/// Verify that a remote TBID's calendar records are healthy.
+///
+/// 1. Obtain a `CommunerdetteLine` for `target_tbid`
+/// 2. Fetch the target's latest chronon to determine the available range
+/// 3. Pick a random chronon range (chronon 1 to latest, capped at 100 records)
+/// 4. Call `get_calendar_slice` (with attestations) for that range
+/// 5. Log coverage results; warn if coverage is poor or attestations are missing
+async fn handle_verify_fb_recorded(
+    worker_id: usize,
+    target_tbid: &str,
+    ctx: &WorkerContext,
+) {
+    let Some(ref communerd) = ctx.communerd else {
+        warn!(
+            worker_id,
+            target_tbid,
+            "verify_fb_recorded: no Communerd in WorkerContext; skipping"
+        );
+        return;
+    };
+
+    let tbid = match Tbid::from_hex(target_tbid) {
+        Ok(t) => t,
+        Err(e) => {
+            warn!(
+                worker_id,
+                target_tbid,
+                error = %e,
+                "verify_fb_recorded: invalid target TBID hex"
+            );
+            return;
+        }
+    };
+
+    let line = communerd.line_for_tbid(tbid);
+
+    // Step 2: Fetch target's latest chronon to determine the available range.
+    let latest_record = match line.get_tick(u64::MAX).await {
+        Ok(record) => record,
+        Err(e) => {
+            warn!(
+                worker_id,
+                target_tbid,
+                error = %e,
+                "verify_fb_recorded: get_tick(u64::MAX) failed"
+            );
+            return;
+        }
+    };
+    let latest_chronon = latest_record.inner().chronon_number;
+    if latest_chronon == 0 {
+        info!(
+            worker_id,
+            target_tbid,
+            "verify_fb_recorded: target has no ticks; nothing to verify"
+        );
+        return;
+    }
+
+    // Step 3: Pick a random chronon range. We pick a random start within
+    // [1, latest_chronon] and request up to 100 records.
+    let max_records: u64 = 100;
+    let start = if latest_chronon <= 1 {
+        1
+    } else {
+        rand::thread_rng().gen_range(1..=latest_chronon)
+    };
+    let count = std::cmp::min(max_records, latest_chronon.saturating_sub(start) + 1);
+
+    info!(
+        worker_id,
+        target_tbid,
+        latest_chronon,
+        start,
+        count,
+        "verify_fb_recorded: fetching chronon range from target"
+    );
+
+    // Step 4: Fetch the chronon slice (includes attestations by default).
+    let records = match line.get_calendar_slice(start, count).await {
+        Ok(records) => records,
+        Err(e) => {
+            warn!(
+                worker_id,
+                target_tbid,
+                start,
+                count,
+                error = %e,
+                "verify_fb_recorded: get_calendar_slice failed"
+            );
+            return;
+        }
+    };
+
+    // Step 5: Log coverage results.
+    let requested = count;
+    let returned = records.len() as u64;
+    let coverage_ratio = if requested > 0 {
+        returned as f64 / requested as f64
+    } else {
+        1.0
+    };
+
+    let records_with_attestations = records
+        .iter()
+        .filter(|r| !r.inner().external_attestations.is_empty())
+        .count();
+
+    info!(
+        worker_id,
+        target_tbid,
+        start,
+        requested,
+        returned,
+        coverage_ratio,
+        records_with_attestations,
+        "verify_fb_recorded: coverage results"
+    );
+
+    if coverage_ratio < 0.5 {
+        warn!(
+            worker_id,
+            target_tbid,
+            start,
+            requested,
+            returned,
+            coverage_ratio,
+            "verify_fb_recorded: poor coverage (< 50%)"
+        );
+    }
+
+    if returned > 0 && records_with_attestations == 0 {
+        warn!(
+            worker_id,
+            target_tbid,
+            start,
+            returned,
+            "verify_fb_recorded: no attestations found in any returned records"
+        );
+    }
+}
+
 /// Convenience: build the channel + spawn the default-sized worker pool with
 /// no dispatcher (placeholder mode — used by Phase 4b.2 tests that don't
 /// exercise the network path).
@@ -822,6 +975,13 @@ mod tests {
             }
             .kind(),
             "expire_mirror"
+        );
+        assert_eq!(
+            CalendarTask::VerifyFbRecorded {
+                target_tbid: "abc123".into()
+            }
+            .kind(),
+            "verify_fb_recorded"
         );
     }
 

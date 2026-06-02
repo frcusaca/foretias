@@ -1,0 +1,10 @@
+{
+  "id": "T-17147cd4-dfe0-484c-b808-d602eed8c254",
+  "subject": "Create chronon_retrieval_integration.rs test file",
+  "description": "Create integration tests for chronon retrieval and FB verification with get_chronon_found, get_chronon_not_found, get_chronon_chain_complete, get_chronon_chain_partial tests",
+  "status": "completed",
+  "activeForm": "Creating chronon retrieval integration tests",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_175448096fferNWanYpW9pmJqi"
+}
