@@ -1,0 +1,12 @@
+{
+  "id": "T-59548838-41ce-41d6-844c-bbdd314e033c",
+  "subject": "Implement three merkle range proof functions in merkle.c",
+  "description": "Implement foretias_merkle_root_from_leaves, foretias_merkle_range_proof, foretias_merkle_verify_range_proof",
+  "status": "completed",
+  "activeForm": "Implementing merkle range proof functions",
+  "blocks": [],
+  "blockedBy": [
+    "T-f2373dfe-0feb-41b1-ade8-451e4351994f"
+  ],
+  "threadID": "ses_1764b1148ffesfwFftCXE2JJPk"
+}

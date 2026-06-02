@@ -1,0 +1,12 @@
+{
+  "id": "T-a812cece-187a-4e64-bc1a-e8336faa19bb",
+  "subject": "Create test_merkle_range.c and wire into build",
+  "description": "Create test file with 6 test cases, update CMakeLists.txt and test_all.c",
+  "status": "completed",
+  "activeForm": "Creating range proof tests",
+  "blocks": [],
+  "blockedBy": [
+    "T-f2373dfe-0feb-41b1-ade8-451e4351994f"
+  ],
+  "threadID": "ses_1764b1148ffesfwFftCXE2JJPk"
+}

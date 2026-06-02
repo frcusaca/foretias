@@ -9,6 +9,7 @@ set(TEST_SOURCES
     test_ed25519.c
     test_sha256.c
     test_merkle.c
+    test_merkle_range.c
     test_nullifier.c
     test_p256_stub.c
     test_blake3_stub.c

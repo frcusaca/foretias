@@ -37,6 +37,8 @@ typedef enum {
     FORETIAS_ERR_BAD_INPUT      = -6,
     FORETIAS_ERR_OVERFLOW       = -7,
     FORETIAS_ERR_UNSUPPORTED    = -8,
+    FORETIAS_ERR_PROOF_RANGE_EMPTY   = -9,
+    FORETIAS_ERR_PROOF_RANGE_EXCEEDS = -10,
     FORETIAS_ERR_INTERNAL       = -99,
 } ForetiasResult;
 
@@ -349,6 +351,39 @@ ForetiasResult foretias_merkle_verify(
     const ForetiasHash32*      root,
     const ForetiasHash32*      leaf,
     const ForetiasMerkleProof* proof
+);
+
+/* ── Merkle range proofs ─────────────────────────── */
+#define FORETIAS_MERKLE_MAX_RANGE_PROOF 64
+
+typedef struct {
+    ForetiasHash32 leaves[FORETIAS_MERKLE_MAX_RANGE_PROOF];
+    ForetiasHash32 siblings[FORETIAS_MERKLE_MAX_DEPTH];
+    int32_t        leaf_count;
+    int32_t        sibling_count;
+    int32_t        n;
+} ForetiasMerkleRangeProof;
+
+ForetiasResult foretias_merkle_root_from_leaves(
+    const ForetiasHash32* leaves,
+    size_t                n,
+    ForetiasHash32*       root_out
+);
+
+ForetiasResult foretias_merkle_range_proof(
+    const ForetiasHash32*    leaves,
+    size_t                   n,
+    size_t                   start,
+    size_t                   end,
+    ForetiasMerkleRangeProof* proof_out
+);
+
+ForetiasResult foretias_merkle_verify_range_proof(
+    const ForetiasHash32*       root,
+    const ForetiasMerkleRangeProof* proof,
+    size_t                   start,
+    size_t                   end,
+    ForetiasResult*          result_out
 );
 
 /* ── FROST (Ed25519 base) ───────────────────────── */

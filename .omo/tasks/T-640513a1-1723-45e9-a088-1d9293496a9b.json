@@ -1,0 +1,13 @@
+{
+  "id": "T-640513a1-1723-45e9-a088-1d9293496a9b",
+  "subject": "Build and verify all C11 tests pass",
+  "description": "cmake -B build && cmake --build build && ctest --output-on-failure",
+  "status": "completed",
+  "activeForm": "Building and running tests",
+  "blocks": [],
+  "blockedBy": [
+    "T-59548838-41ce-41d6-844c-bbdd314e033c",
+    "T-a812cece-187a-4e64-bc1a-e8336faa19bb"
+  ],
+  "threadID": "ses_1764b1148ffesfwFftCXE2JJPk"
+}

@@ -6,6 +6,7 @@ int test_version_main(void);
 int test_ed25519_main(void);
 int test_sha256_main(void);
 int test_merkle_main(void);
+int test_merkle_range_main(void);
 int test_nullifier_main(void);
 int test_p256_stub_main(void);
 int test_blake3_stub_main(void);
@@ -30,6 +31,7 @@ int main(void) {
     failures += test_ed25519_main();
     failures += test_sha256_main();
     failures += test_merkle_main();
+    failures += test_merkle_range_main();
     failures += test_nullifier_main();
     failures += test_p256_stub_main();
     failures += test_blake3_stub_main();

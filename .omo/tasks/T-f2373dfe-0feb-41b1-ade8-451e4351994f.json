@@ -1,0 +1,10 @@
+{
+  "id": "T-f2373dfe-0feb-41b1-ade8-451e4351994f",
+  "subject": "Add error codes and range proof types to foretias_core.h",
+  "description": "Add FORETIAS_ERR_PROOF_RANGE_EMPTY (-9), FORETIAS_ERR_PROOF_RANGE_EXCEEDS (-10), ForetiasMerkleRangeProof struct, and three new function declarations",
+  "status": "completed",
+  "activeForm": "Adding error codes and types to header",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_1764b1148ffesfwFftCXE2JJPk"
+}
