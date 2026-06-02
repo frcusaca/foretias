@@ -1,0 +1,10 @@
+{
+  "id": "T-6337ffb8-4e13-4b09-b253-883443298c05",
+  "subject": "Add merkle_root to CalendarBlock",
+  "description": "Add `merkle_root: [u8; 32]` field to CalendarBlock, implement compute_merkle_root(), call it in append_block(), add unit tests.",
+  "status": "completed",
+  "activeForm": "Adding merkle_root to CalendarBlock",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_17638161effemG44MjrupHAmui"
+}

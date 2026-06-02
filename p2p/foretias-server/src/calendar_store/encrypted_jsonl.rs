@@ -14,6 +14,7 @@ use std::sync::Arc;
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use foretias_core::clock::{Clock, SystemClock};
+use foretias_core::core::merkle::{merkle_leaf, merkle_root_from_leaves};
 use foretias_core::crypto_server::{CryptoServer, SealedBlob};
 use foretias_core::error::NodeError;
 use foretias_core::foretias::clean_auth::{CleanAuthenticated, Externalized};
@@ -29,6 +30,41 @@ pub struct CalendarBlock {
     pub written_at_ns: u64,
     /// Tick records contained in this block.
     pub ticks: Vec<Externalized<ChrononRecord>>,
+    /// Merkle root over the tick records in this block.
+    ///
+    /// Computed by hashing each tick's canonical JSON serialization as a
+    /// Merkle leaf (SHA-256(0x00 || json_bytes)), then calling
+    /// [`merkle_root_from_leaves`].
+    ///
+    /// Defaults to `[0; 32]` for blocks written before this field was added.
+    #[serde(default)]
+    pub merkle_root: [u8; 32],
+}
+
+impl CalendarBlock {
+    /// Compute the Merkle root over this block's tick records.
+    ///
+    /// Each tick is serialized to canonical JSON bytes, hashed as a Merkle
+    /// leaf (SHA-256(0x00 || json_bytes)), and the resulting leaf hashes
+    /// are combined into a Merkle root via the C11 FFI.
+    ///
+    /// Returns `[0; 32]` if the block has no ticks.
+    pub fn compute_merkle_root(&self) -> Result<[u8; 32], NodeError> {
+        if self.ticks.is_empty() {
+            return Ok([0u8; 32]);
+        }
+
+        let mut leaves = Vec::with_capacity(self.ticks.len());
+        for tick in &self.ticks {
+            let canonical = serde_json::to_vec(tick.inner())
+                .map_err(|e| NodeError::Internal(format!("tick serialize error: {e}")))?;
+            let leaf = merkle_leaf(&canonical)?;
+            leaves.push(leaf);
+        }
+
+        let root = merkle_root_from_leaves(&leaves)?;
+        Ok(root.bytes)
+    }
 }
 
 /// Encrypted append-only calendar store backed by a JSONL file.
@@ -74,11 +110,13 @@ impl EncryptedJsonlCalendarStore {
             .now_ns()
             .map_err(|e| NodeError::Internal(format!("clock error: {}", e)))?;
 
-        let block = CalendarBlock {
+        let mut block = CalendarBlock {
             block_id,
             written_at_ns,
             ticks,
+            merkle_root: [0u8; 32],
         };
+        block.merkle_root = block.compute_merkle_root()?;
 
         // Serialize block to JSON
         let json_bytes = serde_json::to_vec(&block)?;
@@ -405,6 +443,113 @@ mod tests {
 
         std::fs::remove_file(&json_path).ok();
         std::fs::remove_file(&bin_path).ok();
+        std::fs::remove_dir(&tmp_dir).ok();
+    }
+
+    #[test]
+    fn merkle_root_single_tick() {
+        let server = make_server();
+        let tmp_dir = std::env::temp_dir().join(format!("foretias-merkle1-{}", std::process::id()));
+        let path = tmp_dir.join("calendar.jsonl");
+        const FIXED_NS: u64 = 1_700_000_000_000_000_000;
+        let clock: Arc<dyn Clock> = Arc::new(FixedClock::new(FIXED_NS));
+        let store = EncryptedJsonlCalendarStore::with_clock(path.clone(), server, clock);
+
+        let ticks = vec![make_tick(1)];
+        store.append_block(ticks).unwrap();
+
+        let blocks = store.read_all().unwrap();
+        assert_eq!(blocks.len(), 1);
+        assert_ne!(blocks[0].merkle_root, [0u8; 32]);
+
+        std::fs::remove_file(&path).ok();
+        std::fs::remove_dir(&tmp_dir).ok();
+    }
+
+    #[test]
+    fn merkle_root_two_ticks() {
+        let server = make_server();
+        let tmp_dir = std::env::temp_dir().join(format!("foretias-merkle2-{}", std::process::id()));
+        let path = tmp_dir.join("calendar.jsonl");
+        const FIXED_NS: u64 = 1_700_000_000_000_000_000;
+        let clock: Arc<dyn Clock> = Arc::new(FixedClock::new(FIXED_NS));
+        let store = EncryptedJsonlCalendarStore::with_clock(path.clone(), server, clock);
+
+        let ticks = vec![make_tick(1), make_tick(2)];
+        store.append_block(ticks).unwrap();
+
+        let blocks = store.read_all().unwrap();
+        assert_eq!(blocks.len(), 1);
+        assert_ne!(blocks[0].merkle_root, [0u8; 32]);
+
+        std::fs::remove_file(&path).ok();
+        std::fs::remove_dir(&tmp_dir).ok();
+    }
+
+    #[test]
+    fn merkle_root_sixty_four_ticks() {
+        let server = make_server();
+        let tmp_dir =
+            std::env::temp_dir().join(format!("foretias-merkle64-{}", std::process::id()));
+        let path = tmp_dir.join("calendar.jsonl");
+        const FIXED_NS: u64 = 1_700_000_000_000_000_000;
+        let clock: Arc<dyn Clock> = Arc::new(FixedClock::new(FIXED_NS));
+        let store = EncryptedJsonlCalendarStore::with_clock(path.clone(), server, clock);
+
+        let ticks: Vec<Externalized<ChrononRecord>> = (1..=64u64).map(make_tick).collect();
+        store.append_block(ticks).unwrap();
+
+        let blocks = store.read_all().unwrap();
+        assert_eq!(blocks.len(), 1);
+        assert_ne!(blocks[0].merkle_root, [0u8; 32]);
+
+        std::fs::remove_file(&path).ok();
+        std::fs::remove_dir(&tmp_dir).ok();
+    }
+
+    #[test]
+    fn merkle_root_deterministic() {
+        let server = make_server();
+        let tmp_dir =
+            std::env::temp_dir().join(format!("foretias-merkle-det-{}", std::process::id()));
+        let path1 = tmp_dir.join("cal1.jsonl");
+        let path2 = tmp_dir.join("cal2.jsonl");
+        const FIXED_NS: u64 = 1_700_000_000_000_000_000;
+        let clock1: Arc<dyn Clock> = Arc::new(FixedClock::new(FIXED_NS));
+        let clock2: Arc<dyn Clock> = Arc::new(FixedClock::new(FIXED_NS));
+        let store1 = EncryptedJsonlCalendarStore::with_clock(path1.clone(), server.clone(), clock1);
+        let store2 = EncryptedJsonlCalendarStore::with_clock(path2.clone(), server, clock2);
+
+        let ticks = vec![make_tick(1), make_tick(2), make_tick(3)];
+        store1.append_block(ticks.clone()).unwrap();
+        store2.append_block(ticks).unwrap();
+
+        let blocks1 = store1.read_all().unwrap();
+        let blocks2 = store2.read_all().unwrap();
+        assert_eq!(blocks1[0].merkle_root, blocks2[0].merkle_root);
+
+        std::fs::remove_file(&path1).ok();
+        std::fs::remove_file(&path2).ok();
+        std::fs::remove_dir(&tmp_dir).ok();
+    }
+
+    #[test]
+    fn empty_block_defaults_merkle_root_to_zero() {
+        let tmp_dir =
+            std::env::temp_dir().join(format!("foretias-merkle-empty-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp_dir).unwrap();
+        let path = tmp_dir.join("calendar.jsonl");
+
+        let server = make_server();
+        let store = EncryptedJsonlCalendarStore::new(path.clone(), server);
+
+        store.append_block(vec![]).unwrap();
+
+        let blocks = store.read_all().unwrap();
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0].merkle_root, [0u8; 32]);
+
+        std::fs::remove_file(&path).ok();
         std::fs::remove_dir(&tmp_dir).ok();
     }
 }

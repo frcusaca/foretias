@@ -37,6 +37,7 @@ core-engine/src/probity/report.rs | ProbityReport | impl::UnverifiedSignatureEnv
 core-engine/src/probity/report.rs | ProbityReport | impl::UnverifiedSignatureEnvelope::fn::into_clean_authenticated | - | Y | -
 core-engine/src/probity/report.rs | ProbityReport | impl::UnverifiedSignatureEnvelope::fn::verify | - | Y | -
 foretias-server/src/calendar_store/encrypted_jsonl.rs | ChrononRecord | fn::make_tick | - | - | Y
+foretias-server/src/calendar_store/encrypted_jsonl.rs | ChrononRecord | fn::merkle_root_sixty_four_ticks | - | - | Y
 foretias-server/src/calendar_store/encrypted_jsonl.rs | ChrononRecord | fn::migrate_plaintext | - | - | Y
 foretias-server/src/calendar_store/encrypted_jsonl.rs | ChrononRecord | impl::EncryptedJsonlCalendarStore::fn::append_block | - | - | Y
 foretias-server/src/calendar_store/encrypted_jsonl.rs | ChrononRecord | struct::CalendarBlock | - | - | Y
@@ -89,7 +90,7 @@ foretias-server | CleanAuthenticated | AuthenticatedPong | 1
 foretias-server | CleanAuthenticated | ChrononRecord | 10
 foretias-server | CleanAuthenticated | Foretis | 9
 foretias-server | CleanAuthenticated | u8 | 1
-foretias-server | Externalized | ChrononRecord | 4
+foretias-server | Externalized | ChrononRecord | 5
 foretias-server | Externalized | u8 | 1
 foretias-server | UnverifiedSignatureEnvelope | ChrononRecord | 2
 foretias-server | UnverifiedSignatureEnvelope | Foretis | 2
@@ -114,7 +115,7 @@ CleanAuthenticated | ProbityReport | 3
 CleanAuthenticated | T | 6
 CleanAuthenticated | u32 | 2
 CleanAuthenticated | u8 | 1
-Externalized | ChrononRecord | 5
+Externalized | ChrononRecord | 6
 Externalized | EpochSnapshot | 1
 Externalized | Foretis | 1
 Externalized | ProbityReport | 1
