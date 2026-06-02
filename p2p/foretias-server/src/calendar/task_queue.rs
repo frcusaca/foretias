@@ -271,7 +271,7 @@ async fn handle_task(worker_id: usize, task: CalendarTask, ctx: &WorkerContext) 
             handle_do_chronon_attestation(worker_id, &target_tbid, ctx).await
         }
         CalendarTask::DoEpochAttestation { target_tbid } => {
-            debug!(worker_id, target_tbid = %target_tbid, "do_epoch_attestation stub");
+            handle_do_epoch_attestation(worker_id, &target_tbid, ctx).await
         }
     }
 }
@@ -383,6 +383,126 @@ async fn handle_do_chronon_attestation(
             warn!(
                 worker_id,
                 target_tbid, error = %e, "do_chronon_attestation: line.stamp() failed"
+            );
+        }
+    }
+}
+
+/// Epoch-level mutual attestation with a specific TBID.
+///
+/// Full flow:
+/// 1. Obtain a `CommunerdetteLine` for `target_tbid` via Communerd
+/// 2. Fetch the target's latest epoch via `line.get_calendar_slice(u64::MAX, 1)`
+/// 3. Internally stamp via Chronomatter (stamp-free, within trust boundary)
+/// 4. Sign the Foretis with Calendar's key (TODO: Calendar key not yet wired)
+/// 5. Transmit the stamped content to the target via `line.stamp()`
+///
+/// Gracefully degrades when Communerd or Chronomatter are not wired into the
+/// `WorkerContext` (placeholder mode).
+async fn handle_do_epoch_attestation(
+    worker_id: usize,
+    target_tbid: &str,
+    ctx: &WorkerContext,
+) {
+    // ── Resource gate ────────────────────────────────────────────────────
+    let Some(ref communerd) = ctx.communerd else {
+        warn!(
+            worker_id,
+            target_tbid, "do_epoch_attestation: no Communerd in WorkerContext; skipping"
+        );
+        return;
+    };
+    let Some(ref chronomatter) = ctx.chronomatter else {
+        warn!(
+            worker_id,
+            target_tbid, "do_epoch_attestation: no Chronomatter in WorkerContext; skipping"
+        );
+        return;
+    };
+
+    let tbid = match Tbid::from_hex(target_tbid) {
+        Ok(t) => t,
+        Err(e) => {
+            warn!(
+                worker_id,
+                target_tbid, error = %e, "do_epoch_attestation: invalid target TBID hex"
+            );
+            return;
+        }
+    };
+
+    // ── Step 2: Fetch target's latest epoch via get_calendar_slice ───────
+    let line = communerd.line_for_tbid(tbid);
+    let slice = match line.get_calendar_slice(u64::MAX, 1).await {
+        Ok(records) => records,
+        Err(e) => {
+            warn!(
+                worker_id,
+                target_tbid, error = %e, "do_epoch_attestation: get_calendar_slice failed"
+            );
+            return;
+        }
+    };
+
+    let Some(target_record) = slice.into_iter().next() else {
+        warn!(
+            worker_id,
+            target_tbid, "do_epoch_attestation: target returned empty calendar slice"
+        );
+        return;
+    };
+
+    let target_chronon = target_record.inner().chronon_number;
+    info!(
+        worker_id,
+        target_tbid, target_chronon, "do_epoch_attestation: fetched target's latest epoch"
+    );
+
+    // ── Step 3: Internally stamp via Chronomatter ────────────────────────
+    let stamp_content = format!("epoch-attest-{}", target_tbid);
+    let stamped = match chronomatter.stamp(
+        stamp_content.into_bytes(),
+        "epoch-attestation".to_string(),
+    ) {
+        Ok(s) => s,
+        Err(e) => {
+            warn!(
+                worker_id,
+                target_tbid, error = %e, "do_epoch_attestation: Chronomatter stamp failed"
+            );
+            return;
+        }
+    };
+
+    debug!(
+        worker_id,
+        target_tbid,
+        local_chronon = stamped.foretis.chronon_number,
+        "do_epoch_attestation: local Foretis produced"
+    );
+
+    // ── Step 4: Sign with Calendar's key ─────────────────────────────────
+    // Calendar does not yet own a signing key. The StampedForetis from
+    // Chronomatter already carries a per-tick Ed25519 signature. Calendar-
+    // level signing will be added when Calendar's TBID key management ships.
+    // For now the Chronomatter-signed Foretis is forwarded as-is.
+
+    // ── Step 5: Transmit via line.stamp() ────────────────────────────────
+    let foretis_bytes = stamped.foretis.sig_input_bytes();
+    let echo = format!("epoch-attest-{}", stamped.foretis.chronon_number);
+    match line.stamp(foretis_bytes, echo).await {
+        Ok(remote_foretis) => {
+            info!(
+                worker_id,
+                target_tbid,
+                remote_chronon = remote_foretis.inner().chronon_number,
+                "do_epoch_attestation: mutual attestation complete"
+            );
+        }
+        Err(e) => {
+            warn!(
+                worker_id,
+                target_tbid, error = %e, "do_epoch_attestation: line.stamp() failed"
             );
         }
     }

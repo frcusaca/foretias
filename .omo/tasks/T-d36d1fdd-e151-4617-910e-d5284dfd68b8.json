@@ -1,0 +1,10 @@
+{
+  "id": "T-d36d1fdd-e151-4617-910e-d5284dfd68b8",
+  "subject": "Add stamp_my_chronon and stamp_my_chronon_block handlers",
+  "description": "Add two new JSON-RPC handlers in handlers.rs and register in jsonrpc.rs dispatch table",
+  "status": "completed",
+  "activeForm": "Adding stamp_my_chronon handlers",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_1758533b4ffeI0Xs1COoPe1QeS"
+}

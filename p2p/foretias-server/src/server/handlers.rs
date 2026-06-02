@@ -1038,6 +1038,78 @@ pub fn handle_mirror_health_check(server: &TimeFamilyServer, params: Value) -> J
     }))
 }
 
+// ── Chronon attestation handlers ───────────────────────────────────────────
+
+/// `stamp_my_chronon` — enqueue a chronon-level mutual attestation with a
+/// specific TBID. The requester provides its TBID hex and the chronon number.
+/// The handler enqueues `DoChrononAttestation` to Calendar's task queue and
+/// returns immediately with `{ "status": "queued" }`.
+pub fn handle_stamp_my_chronon(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    let id = params.get("id").cloned();
+
+    let requester_tbid = match params.get("requester_tbid").and_then(|v| v.as_str()) {
+        Some(h) if !h.is_empty() => h.to_string(),
+        _ => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            "missing or empty 'requester_tbid' (hex string)".into()),
+    };
+
+    if hex::decode(&requester_tbid).is_err() {
+        return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            "invalid hex in 'requester_tbid'".into());
+    }
+
+    let _chronon_number = match params.get("chronon_number").and_then(|v| v.as_u64()) {
+        Some(n) => n,
+        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            "missing or invalid 'chronon_number' (u64)".into()),
+    };
+
+    let task = crate::calendar::CalendarTask::DoChrononAttestation {
+        target_tbid: requester_tbid,
+    };
+
+    match server.calendar().enqueue_task(task) {
+        Ok(()) => resp_success(server, id, serde_json::json!({"status": "queued"})),
+        Err(_) => resp_error(server, id, jsonrpc::INTERNAL_ERROR,
+            "task queue not started or closed".into()),
+    }
+}
+
+/// `stamp_my_chronon_block` — enqueue an epoch-level mutual attestation with a
+/// specific TBID. The requester provides its TBID hex and the epoch number.
+/// The handler enqueues `DoEpochAttestation` to Calendar's task queue and
+/// returns immediately with `{ "status": "queued" }`.
+pub fn handle_stamp_my_chronon_block(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    let id = params.get("id").cloned();
+
+    let requester_tbid = match params.get("requester_tbid").and_then(|v| v.as_str()) {
+        Some(h) if !h.is_empty() => h.to_string(),
+        _ => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            "missing or empty 'requester_tbid' (hex string)".into()),
+    };
+
+    if hex::decode(&requester_tbid).is_err() {
+        return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            "invalid hex in 'requester_tbid'".into());
+    }
+
+    let _epoch_number = match params.get("epoch_number").and_then(|v| v.as_u64()) {
+        Some(n) => n,
+        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            "missing or invalid 'epoch_number' (u64)".into()),
+    };
+
+    let task = crate::calendar::CalendarTask::DoEpochAttestation {
+        target_tbid: requester_tbid,
+    };
+
+    match server.calendar().enqueue_task(task) {
+        Ok(()) => resp_success(server, id, serde_json::json!({"status": "queued"})),
+        Err(_) => resp_error(server, id, jsonrpc::INTERNAL_ERROR,
+            "task queue not started or closed".into()),
+    }
+}
+
 // ── Storage proof handlers ─────────────────────────────────────────────────
 
 /// `storage_proof_request` — generate a Merkle storage proof covering a
@@ -1805,5 +1877,87 @@ mod tests {
         let err = resp.error.expect("short merkle_root must error");
         assert_eq!(err.code, jsonrpc::INVALID_PARAMS);
         assert!(err.message.contains("merkle_root"));
+    }
+
+    // ── stamp_my_chronon / stamp_my_chronon_block tests ──────────────────
+
+    #[test]
+    fn handle_stamp_my_chronon_missing_requester_tbid_returns_error() {
+        let server = make_server();
+        let params = serde_json::json!({"chronon_number": 1});
+        let resp = handle_stamp_my_chronon(&server, params);
+        let err = resp.error.expect("missing requester_tbid must error");
+        assert_eq!(err.code, jsonrpc::INVALID_PARAMS);
+    }
+
+    #[test]
+    fn handle_stamp_my_chronon_invalid_hex_returns_error() {
+        let server = make_server();
+        let params = serde_json::json!({"requester_tbid": "zzzz", "chronon_number": 1});
+        let resp = handle_stamp_my_chronon(&server, params);
+        let err = resp.error.expect("invalid hex must error");
+        assert_eq!(err.code, jsonrpc::INVALID_PARAMS);
+    }
+
+    #[test]
+    fn handle_stamp_my_chronon_missing_chronon_number_returns_error() {
+        let server = make_server();
+        let params = serde_json::json!({"requester_tbid": "abcd"});
+        let resp = handle_stamp_my_chronon(&server, params);
+        let err = resp.error.expect("missing chronon_number must error");
+        assert_eq!(err.code, jsonrpc::INVALID_PARAMS);
+    }
+
+    #[test]
+    fn handle_stamp_my_chronon_queue_not_started_returns_error() {
+        let server = make_server();
+        let params = serde_json::json!({
+            "requester_tbid": sample_tbid_hex(),
+            "chronon_number": 42,
+        });
+        let resp = handle_stamp_my_chronon(&server, params);
+        let err = resp.error.expect("queue not started must error");
+        assert_eq!(err.code, jsonrpc::INTERNAL_ERROR);
+        assert!(err.message.contains("task queue not started"));
+    }
+
+    #[test]
+    fn handle_stamp_my_chronon_block_missing_requester_tbid_returns_error() {
+        let server = make_server();
+        let params = serde_json::json!({"epoch_number": 3});
+        let resp = handle_stamp_my_chronon_block(&server, params);
+        let err = resp.error.expect("missing requester_tbid must error");
+        assert_eq!(err.code, jsonrpc::INVALID_PARAMS);
+    }
+
+    #[test]
+    fn handle_stamp_my_chronon_block_invalid_hex_returns_error() {
+        let server = make_server();
+        let params = serde_json::json!({"requester_tbid": "zzzz", "epoch_number": 3});
+        let resp = handle_stamp_my_chronon_block(&server, params);
+        let err = resp.error.expect("invalid hex must error");
+        assert_eq!(err.code, jsonrpc::INVALID_PARAMS);
+    }
+
+    #[test]
+    fn handle_stamp_my_chronon_block_missing_epoch_number_returns_error() {
+        let server = make_server();
+        let params = serde_json::json!({"requester_tbid": "abcd"});
+        let resp = handle_stamp_my_chronon_block(&server, params);
+        let err = resp.error.expect("missing epoch_number must error");
+        assert_eq!(err.code, jsonrpc::INVALID_PARAMS);
+    }
+
+    #[test]
+    fn handle_stamp_my_chronon_block_queue_not_started_returns_error() {
+        let server = make_server();
+        let params = serde_json::json!({
+            "requester_tbid": sample_tbid_hex(),
+            "epoch_number": 3,
+        });
+        let resp = handle_stamp_my_chronon_block(&server, params);
+        let err = resp.error.expect("queue not started must error");
+        assert_eq!(err.code, jsonrpc::INTERNAL_ERROR);
+        assert!(err.message.contains("task queue not started"));
     }
 }
