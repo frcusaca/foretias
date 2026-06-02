@@ -362,7 +362,8 @@ mod tests {
             json_rpc: "127.0.0.1:6001".to_string(),
         };
         let variants = vec![
-            CalendarTask::DoAttestation { peer: peer.clone() },
+            CalendarTask::DoChrononAttestation { target_tbid: "tbid-abc".into() },
+            CalendarTask::DoEpochAttestation { target_tbid: "tbid-abc".into() },
             CalendarTask::FindNewMirror,
             CalendarTask::InitiateDump { mirror: peer.clone() },
             CalendarTask::StartStream { mirror: peer.clone() },

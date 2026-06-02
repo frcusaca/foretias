@@ -30,13 +30,17 @@ pub const DEFAULT_WORKER_COUNT: usize = 4;
 /// across `.await` — they take snapshots via short critical sections.
 #[derive(Debug, Clone)]
 pub enum CalendarTask {
-    /// Trigger a mutual-attestation stamp exchange with `peer`.
+    /// Chronon-level mutual attestation with a specific TBID.
     ///
-    /// Currently this just records the request and logs; Phase 4b.4 will
-    /// move the existing mutual-attestation logic out of Chronomatter and
-    /// route it through this task type so attestation cadence becomes
-    /// visible to the priority system.
-    DoAttestation { peer: PeerAddr },
+    /// Requests a chronon-level attestation stamp exchange. The target TBID
+    /// identifies the remote TimeFamily to attest with.
+    DoChrononAttestation { target_tbid: String },
+
+    /// Epoch-level mutual attestation with a specific TBID.
+    ///
+    /// Requests an epoch-level attestation stamp exchange. The target TBID
+    /// identifies the remote TimeFamily to attest with.
+    DoEpochAttestation { target_tbid: String },
 
     /// Look for a new mirror because mirror count is below the configured
     /// target. Phase 4b.4 will call `query_community` and then issue a
@@ -67,7 +71,8 @@ impl CalendarTask {
     /// Short stable name for logging and metrics.
     pub fn kind(&self) -> &'static str {
         match self {
-            CalendarTask::DoAttestation { .. } => "do_attestation",
+            CalendarTask::DoChrononAttestation { .. } => "do_chronon_attestation",
+            CalendarTask::DoEpochAttestation { .. } => "do_epoch_attestation",
             CalendarTask::FindNewMirror => "find_new_mirror",
             CalendarTask::InitiateDump { .. } => "initiate_dump",
             CalendarTask::StartStream { .. } => "start_stream",
@@ -251,12 +256,11 @@ async fn handle_task(worker_id: usize, task: CalendarTask, ctx: &WorkerContext) 
         CalendarTask::ExpireMirror { mirror } => {
             handle_expire_mirror(worker_id, mirror, ctx).await
         }
-        CalendarTask::DoAttestation { peer } => {
-            // Phase 4b.4d: move existing mutual-attestation into this task.
-            // Existing path in Chronomatter remains the source of truth until
-            // we refactor it; this handler is a structural placeholder so the
-            // task variant is wired end-to-end.
-            debug!(worker_id, peer = %peer.json_rpc, "do_attestation placeholder (Phase 4b.4d follow-up)");
+        CalendarTask::DoChrononAttestation { target_tbid } => {
+            debug!(worker_id, target_tbid = %target_tbid, "do_chronon_attestation stub");
+        }
+        CalendarTask::DoEpochAttestation { target_tbid } => {
+            debug!(worker_id, target_tbid = %target_tbid, "do_epoch_attestation stub");
         }
     }
 }
@@ -478,11 +482,18 @@ mod tests {
     #[test]
     fn calendar_task_kind_is_stable_for_each_variant() {
         assert_eq!(
-            CalendarTask::DoAttestation {
-                peer: PeerAddr { json_rpc: "x".into() }
+            CalendarTask::DoChrononAttestation {
+                target_tbid: "abc123".into()
             }
             .kind(),
-            "do_attestation"
+            "do_chronon_attestation"
+        );
+        assert_eq!(
+            CalendarTask::DoEpochAttestation {
+                target_tbid: "abc123".into()
+            }
+            .kind(),
+            "do_epoch_attestation"
         );
         assert_eq!(CalendarTask::FindNewMirror.kind(), "find_new_mirror");
         assert_eq!(
@@ -522,13 +533,18 @@ mod tests {
             foretias_core::foretias::Calendar::new(Tbid::default(), "queue-test"),
         ));
         let (tx, _pool, _state) = start_default_pool(cal);
-        for i in 0..10 {
+        for i in 0..5 {
             enqueue(
                 &tx,
-                CalendarTask::DoAttestation {
-                    peer: PeerAddr {
-                        json_rpc: format!("127.0.0.1:{i}"),
-                    },
+                CalendarTask::DoChrononAttestation {
+                    target_tbid: format!("tbid-{i}"),
+                },
+            )
+            .expect("enqueue");
+            enqueue(
+                &tx,
+                CalendarTask::DoEpochAttestation {
+                    target_tbid: format!("tbid-{i}"),
                 },
             )
             .expect("enqueue");
