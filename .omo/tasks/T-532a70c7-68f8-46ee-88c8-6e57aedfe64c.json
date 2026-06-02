@@ -1,0 +1,10 @@
+{
+  "id": "T-532a70c7-68f8-46ee-88c8-6e57aedfe64c",
+  "subject": "Add get_chronon and get_chronon_chain methods to CalendarStore",
+  "description": "Add CoverageInfo, ChrononChainResult types, and two new methods to CalendarStore in calendar_store/mod.rs. Includes unit tests.",
+  "status": "completed",
+  "activeForm": "Implementing get_chronon and get_chronon_chain",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_17551d3bcffe1EnW4Ky7ZQHITd"
+}

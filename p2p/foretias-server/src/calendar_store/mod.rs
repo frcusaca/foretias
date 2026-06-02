@@ -5,6 +5,8 @@ use std::sync::Arc;
 
 use foretias_core::core::merkle::{merkle_leaf, merkle_range_proof, merkle_verify_range_proof};
 use foretias_core::core::{ForetiasHash32, ForetiasMerkleRangeProof};
+use foretias_core::foretias::clean_auth::CleanAuthenticated;
+use foretias_core::foretias::ChrononRecord;
 
 use encrypted_jsonl::EncryptedJsonlCalendarStore;
 
@@ -61,7 +63,38 @@ pub struct StorageProofResult {
 }
 
 // ---------------------------------------------------------------------------
-// CalendarStore — thin wrapper exposing prove_storage
+// Chronon lookup types
+// ---------------------------------------------------------------------------
+
+/// Coverage information for a chronon range query.
+#[derive(Debug, Clone)]
+pub struct CoverageInfo {
+    /// Number of chronons in the requested range.
+    pub requested: u64,
+    /// Number of chronons actually returned.
+    pub returned: u64,
+}
+
+/// Result of a chronon chain lookup over a range.
+#[derive(Debug)]
+pub enum ChrononChainResult {
+    /// All requested chronons were found.
+    Complete {
+        records: Vec<CleanAuthenticated<ChrononRecord>>,
+        coverage: CoverageInfo,
+    },
+    /// Some chronons found, some missing.
+    Partial {
+        records: Vec<CleanAuthenticated<ChrononRecord>>,
+        coverage: CoverageInfo,
+        gaps: Vec<std::ops::Range<u64>>,
+    },
+    /// No chronons found in the requested range.
+    None { coverage: CoverageInfo },
+}
+
+// ---------------------------------------------------------------------------
+// CalendarStore — thin wrapper exposing prove_storage and chronon lookups
 // ---------------------------------------------------------------------------
 
 /// Calendar store providing storage proof generation.
@@ -166,6 +199,105 @@ impl CalendarStore {
             blocks: block_proofs,
             coverage_ratio: covered_ticks as f64 / requested_count as f64,
         })
+    }
+
+    /// Look up a single chronon by number across all stored blocks.
+    ///
+    /// Returns `None` if the chronon is not found or the store cannot be read.
+    pub fn get_chronon(
+        &self,
+        _tbid: &str,
+        chronon_number: u64,
+        include_attestations: bool,
+    ) -> Option<CleanAuthenticated<ChrononRecord>> {
+        let blocks = self.inner.read_all().ok()?;
+        for block in &blocks {
+            for tick in &block.ticks {
+                if tick.inner().chronon_number == chronon_number {
+                    let mut record = tick.inner().clone();
+                    if !include_attestations {
+                        record.external_attestations.clear();
+                    }
+                    return Some(CleanAuthenticated::from_trusted(record));
+                }
+            }
+        }
+        None
+    }
+
+    /// Look up a range of chronons by number across all stored blocks.
+    ///
+    /// Returns a `ChrononChainResult` indicating whether the range was
+    /// fully covered, partially covered, or empty.
+    pub fn get_chronon_chain(
+        &self,
+        _tbid: &str,
+        chronon_start: u64,
+        chronon_end: u64,
+        include_attestations: bool,
+    ) -> ChrononChainResult {
+        if chronon_start > chronon_end {
+            return ChrononChainResult::None {
+                coverage: CoverageInfo {
+                    requested: 0,
+                    returned: 0,
+                },
+            };
+        }
+
+        let requested = chronon_end - chronon_start + 1;
+
+        let blocks = match self.inner.read_all() {
+            Ok(b) => b,
+            Err(_) => {
+                return ChrononChainResult::None {
+                    coverage: CoverageInfo {
+                        requested,
+                        returned: 0,
+                    },
+                }
+            }
+        };
+
+        let mut found: Vec<(u64, CleanAuthenticated<ChrononRecord>)> = Vec::new();
+        for block in &blocks {
+            for tick in &block.ticks {
+                let cn = tick.inner().chronon_number;
+                if cn >= chronon_start && cn <= chronon_end {
+                    let mut record = tick.inner().clone();
+                    if !include_attestations {
+                        record.external_attestations.clear();
+                    }
+                    found.push((cn, CleanAuthenticated::from_trusted(record)));
+                }
+            }
+        }
+
+        found.sort_by_key(|(cn, _)| *cn);
+        found.dedup_by_key(|(cn, _)| *cn);
+
+        let returned = found.len() as u64;
+        let records: Vec<CleanAuthenticated<ChrononRecord>> =
+            found.into_iter().map(|(_, r)| r).collect();
+        let coverage = CoverageInfo {
+            requested,
+            returned,
+        };
+
+        if returned == 0 {
+            return ChrononChainResult::None { coverage };
+        }
+
+        if returned == requested {
+            return ChrononChainResult::Complete { records, coverage };
+        }
+
+        let gaps = find_gaps(&records, chronon_start, chronon_end);
+        ChrononChainResult::Partial {
+            records,
+            coverage,
+            gaps,
+        }
     }
 }
 
@@ -282,6 +414,29 @@ fn find_tick_index_after(
         .rposition(|t| t.inner().chronon_number <= target)
         .map(|i| i + 1)
         .unwrap_or(0)
+}
+
+fn find_gaps(
+    records: &[CleanAuthenticated<ChrononRecord>],
+    start: u64,
+    end: u64,
+) -> Vec<std::ops::Range<u64>> {
+    let mut gaps = Vec::new();
+    let mut expected = start;
+
+    for record in records {
+        let cn = record.inner().chronon_number;
+        if cn > expected {
+            gaps.push(expected..cn);
+        }
+        expected = cn + 1;
+    }
+
+    if expected <= end {
+        gaps.push(expected..end + 1);
+    }
+
+    gaps
 }
 
 // ---------------------------------------------------------------------------
@@ -501,6 +656,136 @@ mod tests {
         });
 
         assert!(result.is_none());
+
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn get_chronon_found() {
+        let tmp = std::env::temp_dir().join(format!("foretias-gc-found-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        // 2 blocks of 3 ticks each: chronon 0..=2 and 3..=5.
+        let store = make_store(&tmp, 2, 3);
+
+        let result = store.get_chronon("test", 4, true);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().inner().chronon_number, 4);
+
+        let result = store.get_chronon("test", 0, true);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().inner().chronon_number, 0);
+
+        let result = store.get_chronon("test", 5, true);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().inner().chronon_number, 5);
+
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn get_chronon_not_found() {
+        let tmp = std::env::temp_dir().join(format!("foretias-gc-miss-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let store = make_store(&tmp, 2, 3);
+
+        assert!(store.get_chronon("test", 100, true).is_none());
+        assert!(store.get_chronon("test", 6, true).is_none());
+
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn get_chronon_strip_attestations() {
+        let tmp = std::env::temp_dir().join(format!("foretias-gc-strip-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let store = make_store(&tmp, 1, 3);
+
+        let with_att = store.get_chronon("test", 0, true).unwrap();
+        assert!(with_att.inner().external_attestations.is_empty());
+
+        let without_att = store.get_chronon("test", 0, false).unwrap();
+        assert!(without_att.inner().external_attestations.is_empty());
+
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn get_chronon_chain_complete() {
+        let tmp = std::env::temp_dir().join(format!("foretias-gcc-comp-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        // 2 blocks of 5 ticks each: chronon 0..=4 and 5..=9.
+        let store = make_store(&tmp, 2, 5);
+
+        match store.get_chronon_chain("test", 2, 7, true) {
+            ChrononChainResult::Complete { records, coverage } => {
+                assert_eq!(records.len(), 6);
+                assert_eq!(coverage.requested, 6);
+                assert_eq!(coverage.returned, 6);
+                for (i, r) in records.iter().enumerate() {
+                    assert_eq!(r.inner().chronon_number, 2 + i as u64);
+                }
+            }
+            other => panic!("expected Complete, got {:?}", other),
+        }
+
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn get_chronon_chain_partial() {
+        let tmp = std::env::temp_dir().join(format!("foretias-gcc-part-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        // 1 block of 3 ticks: chronon 0..=2. Request 0..=5.
+        let store = make_store(&tmp, 1, 3);
+
+        match store.get_chronon_chain("test", 0, 5, true) {
+            ChrononChainResult::Partial {
+                records,
+                coverage,
+                gaps,
+            } => {
+                assert_eq!(records.len(), 3);
+                assert_eq!(coverage.requested, 6);
+                assert_eq!(coverage.returned, 3);
+                assert_eq!(gaps.len(), 1);
+                assert_eq!(gaps[0], 3..6);
+            }
+            other => panic!("expected Partial, got {:?}", other),
+        }
+
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn get_chronon_chain_none() {
+        let tmp = std::env::temp_dir().join(format!("foretias-gcc-none-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let store = make_store(&tmp, 1, 3);
+
+        match store.get_chronon_chain("test", 100, 200, true) {
+            ChrononChainResult::None { coverage } => {
+                assert_eq!(coverage.requested, 101);
+                assert_eq!(coverage.returned, 0);
+            }
+            other => panic!("expected None, got {:?}", other),
+        }
+
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn get_chronon_chain_invalid_range() {
+        let tmp = std::env::temp_dir().join(format!("foretias-gcc-inv-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let store = make_store(&tmp, 1, 3);
+
+        match store.get_chronon_chain("test", 10, 5, true) {
+            ChrononChainResult::None { coverage } => {
+                assert_eq!(coverage.requested, 0);
+                assert_eq!(coverage.returned, 0);
+            }
+            other => panic!("expected None, got {:?}", other),
+        }
 
         std::fs::remove_dir_all(&tmp).ok();
     }
