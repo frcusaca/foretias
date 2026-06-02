@@ -1,0 +1,10 @@
+{
+  "id": "T-32e22a5f-edbe-4011-8161-c75d03e3b2c2",
+  "subject": "Add FB verification to handle_do_chronon_attestation",
+  "description": "After line.stamp() succeeds, query the FB to verify attestation was recorded. Use line.get_tick(target_chronon), check external_attestations for match by content_hash and echo. Warn if not found. Best-effort only.",
+  "status": "completed",
+  "activeForm": "Adding FB verification to attestation handler",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_1754e1d79ffew4W5HPWh67ysVw"
+}

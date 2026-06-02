@@ -1306,6 +1306,133 @@ pub fn handle_storage_proof_verify(server: &TimeFamilyServer, params: Value) -> 
     }))
 }
 
+// ── Chronon query handlers ─────────────────────────────────────────────────
+
+/// `get_chronon` — look up a single chronon record by number from the
+/// persisted CalendarStore. Returns `{ "status": "found", "record": ... }`
+/// if the chronon exists, or `{ "status": "not_found" }` otherwise.
+pub fn handle_get_chronon(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    let id = params.get("id").cloned();
+
+    let tbid = match params.get("tbid").and_then(|v| v.as_str()) {
+        Some(t) if !t.is_empty() => t.to_string(),
+        _ => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            "missing or empty 'tbid'".into()),
+    };
+
+    let chronon_number = match params.get("chronon_number").and_then(|v| v.as_u64()) {
+        Some(n) => n,
+        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            "missing or invalid 'chronon_number' (u64)".into()),
+    };
+
+    let include_attestations = params.get("include_attestations")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+
+    let Some(store) = server.calendar_store() else {
+        return resp_error(server, id, jsonrpc::INTERNAL_ERROR,
+            "no calendar store configured (requires --persist-path)".into());
+    };
+
+    match store.get_chronon(&tbid, chronon_number, include_attestations) {
+        Some(record) => {
+            let record_json = serde_json::to_value(record.inner())
+                .unwrap_or(Value::Null);
+            resp_success(server, id, serde_json::json!({
+                "status": "found",
+                "record": record_json,
+            }))
+        }
+        None => {
+            resp_success(server, id, serde_json::json!({
+                "status": "not_found",
+            }))
+        }
+    }
+}
+
+/// `get_chronon_chain` — look up a range of chronon records by number from
+/// the persisted CalendarStore. Returns `{ "status": "complete"/"partial"/"none",
+/// "records": [...], "coverage": { "requested": N, "returned": M } }`.
+pub fn handle_get_chronon_chain(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    use crate::calendar_store::ChrononChainResult;
+
+    let id = params.get("id").cloned();
+
+    let tbid = match params.get("tbid").and_then(|v| v.as_str()) {
+        Some(t) if !t.is_empty() => t.to_string(),
+        _ => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            "missing or empty 'tbid'".into()),
+    };
+
+    let chronon_start = match params.get("chronon_start").and_then(|v| v.as_u64()) {
+        Some(n) => n,
+        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            "missing or invalid 'chronon_start' (u64)".into()),
+    };
+
+    let chronon_end = match params.get("chronon_end").and_then(|v| v.as_u64()) {
+        Some(n) => n,
+        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
+            "missing or invalid 'chronon_end' (u64)".into()),
+    };
+
+    let include_attestations = params.get("include_attestations")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+
+    let Some(store) = server.calendar_store() else {
+        return resp_error(server, id, jsonrpc::INTERNAL_ERROR,
+            "no calendar store configured (requires --persist-path)".into());
+    };
+
+    let result = store.get_chronon_chain(&tbid, chronon_start, chronon_end, include_attestations);
+
+    match result {
+        ChrononChainResult::Complete { records, coverage } => {
+            let records_json: Vec<Value> = records.iter()
+                .map(|r| serde_json::to_value(r.inner()).unwrap_or(Value::Null))
+                .collect();
+            resp_success(server, id, serde_json::json!({
+                "status": "complete",
+                "records": records_json,
+                "coverage": {
+                    "requested": coverage.requested,
+                    "returned": coverage.returned,
+                },
+            }))
+        }
+        ChrononChainResult::Partial { records, coverage, gaps } => {
+            let records_json: Vec<Value> = records.iter()
+                .map(|r| serde_json::to_value(r.inner()).unwrap_or(Value::Null))
+                .collect();
+            let gaps_json: Vec<Value> = gaps.iter()
+                .map(|g| serde_json::json!({"start": g.start, "end": g.end}))
+                .collect();
+            resp_success(server, id, serde_json::json!({
+                "status": "partial",
+                "records": records_json,
+                "coverage": {
+                    "requested": coverage.requested,
+                    "returned": coverage.returned,
+                },
+                "gaps": gaps_json,
+            }))
+        }
+        ChrononChainResult::None { coverage } => {
+            resp_success(server, id, serde_json::json!({
+                "status": "none",
+                "records": [],
+                "coverage": {
+                    "requested": coverage.requested,
+                    "returned": coverage.returned,
+                },
+            }))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1959,5 +2086,81 @@ mod tests {
         let err = resp.error.expect("queue not started must error");
         assert_eq!(err.code, jsonrpc::INTERNAL_ERROR);
         assert!(err.message.contains("task queue not started"));
+    }
+
+    // ── get_chronon tests ───────────────────────────────────────────────────
+
+    #[test]
+    fn handle_get_chronon_missing_tbid_returns_error() {
+        let server = make_server();
+        let params = serde_json::json!({"chronon_number": 1});
+        let resp = handle_get_chronon(&server, params);
+        let err = resp.error.expect("missing tbid must error");
+        assert_eq!(err.code, jsonrpc::INVALID_PARAMS);
+    }
+
+    #[test]
+    fn handle_get_chronon_missing_chronon_number_returns_error() {
+        let server = make_server();
+        let params = serde_json::json!({"tbid": "abc"});
+        let resp = handle_get_chronon(&server, params);
+        let err = resp.error.expect("missing chronon_number must error");
+        assert_eq!(err.code, jsonrpc::INVALID_PARAMS);
+    }
+
+    #[test]
+    fn handle_get_chronon_no_calendar_store_returns_error() {
+        let server = make_server();
+        let params = serde_json::json!({
+            "tbid": sample_tbid_hex(),
+            "chronon_number": 0,
+        });
+        let resp = handle_get_chronon(&server, params);
+        let err = resp.error.expect("no calendar store must error");
+        assert_eq!(err.code, jsonrpc::INTERNAL_ERROR);
+        assert!(err.message.contains("calendar store"));
+    }
+
+    // ── get_chronon_chain tests ─────────────────────────────────────────────
+
+    #[test]
+    fn handle_get_chronon_chain_missing_tbid_returns_error() {
+        let server = make_server();
+        let params = serde_json::json!({"chronon_start": 0, "chronon_end": 5});
+        let resp = handle_get_chronon_chain(&server, params);
+        let err = resp.error.expect("missing tbid must error");
+        assert_eq!(err.code, jsonrpc::INVALID_PARAMS);
+    }
+
+    #[test]
+    fn handle_get_chronon_chain_missing_chronon_start_returns_error() {
+        let server = make_server();
+        let params = serde_json::json!({"tbid": "abc", "chronon_end": 5});
+        let resp = handle_get_chronon_chain(&server, params);
+        let err = resp.error.expect("missing chronon_start must error");
+        assert_eq!(err.code, jsonrpc::INVALID_PARAMS);
+    }
+
+    #[test]
+    fn handle_get_chronon_chain_missing_chronon_end_returns_error() {
+        let server = make_server();
+        let params = serde_json::json!({"tbid": "abc", "chronon_start": 0});
+        let resp = handle_get_chronon_chain(&server, params);
+        let err = resp.error.expect("missing chronon_end must error");
+        assert_eq!(err.code, jsonrpc::INVALID_PARAMS);
+    }
+
+    #[test]
+    fn handle_get_chronon_chain_no_calendar_store_returns_error() {
+        let server = make_server();
+        let params = serde_json::json!({
+            "tbid": sample_tbid_hex(),
+            "chronon_start": 0,
+            "chronon_end": 5,
+        });
+        let resp = handle_get_chronon_chain(&server, params);
+        let err = resp.error.expect("no calendar store must error");
+        assert_eq!(err.code, jsonrpc::INTERNAL_ERROR);
+        assert!(err.message.contains("calendar store"));
     }
 }

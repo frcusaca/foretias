@@ -1,0 +1,10 @@
+{
+  "id": "T-65ff9880-a48a-42ef-892b-5dd1c21c7590",
+  "subject": "Add get_chronon and get_chronon_chain JSON-RPC handlers",
+  "description": "Add handle_get_chronon and handle_get_chronon_chain to handlers.rs, register in mod.rs dispatch table, add unit tests.",
+  "status": "completed",
+  "activeForm": "Implementing get_chronon and get_chronon_chain handlers",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_1754e3046ffe8RQokmlCf6BY4j"
+}

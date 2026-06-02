@@ -525,6 +525,8 @@ pub(crate) fn process_request_from_value(server: &TimeFamilyServer, req: serde_j
         "storage_proof_verify" => Ok(handlers::handle_storage_proof_verify(server, params)),
         "stamp_my_chronon" => Ok(handlers::handle_stamp_my_chronon(server, params)),
         "stamp_my_chronon_block" => Ok(handlers::handle_stamp_my_chronon_block(server, params)),
+        "get_chronon" => Ok(handlers::handle_get_chronon(server, params)),
+        "get_chronon_chain" => Ok(handlers::handle_get_chronon_chain(server, params)),
         _ => Ok(jsonrpc::JsonRpcResponse::error(
             id.cloned(),
             jsonrpc::METHOD_NOT_FOUND,

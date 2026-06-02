@@ -284,6 +284,7 @@ async fn handle_task(worker_id: usize, task: CalendarTask, ctx: &WorkerContext) 
 /// 3. Internally stamp via Chronomatter (stamp-free, within trust boundary)
 /// 4. Sign the Foretis with Calendar's key (TODO: Calendar key not yet wired)
 /// 5. Transmit the stamped content to the target via `line.stamp()`
+/// 6. Verify attestation was recorded on the target (best-effort)
 ///
 /// Gracefully degrades when Communerd or Chronomatter are not wired into the
 /// `WorkerContext` (placeholder mode).
@@ -370,7 +371,7 @@ async fn handle_do_chronon_attestation(
     // ── Step 5: Transmit via line.stamp() ────────────────────────────────
     let foretis_bytes = stamped.foretis.sig_input_bytes();
     let echo = format!("attest-{}", stamped.foretis.chronon_number);
-    match line.stamp(foretis_bytes, echo).await {
+    match line.stamp(foretis_bytes, echo.clone()).await {
         Ok(remote_foretis) => {
             info!(
                 worker_id,
@@ -378,6 +379,47 @@ async fn handle_do_chronon_attestation(
                 remote_chronon = remote_foretis.inner().chronon_number,
                 "do_chronon_attestation: mutual attestation complete"
             );
+
+            // ── Step 6: Verify attestation recorded on FB (best-effort) ──
+            // Query the target's chronon to check whether our attestation
+            // appears in external_attestations.  This is a read-after-write
+            // consistency check — the remote may not have persisted the
+            // attestation yet, so a miss is logged as a warning, not a failure.
+            match line.get_tick(target_chronon).await {
+                Ok(verified_record) => {
+                    let record = verified_record.inner();
+                    let attestation_present =
+                        record.external_attestations.iter().any(|att| {
+                            att.foretis.echo == echo
+                                && att.foretis.content_hash
+                                    == remote_foretis.inner().content_hash
+                        });
+                    if attestation_present {
+                        debug!(
+                            worker_id,
+                            target_tbid,
+                            target_chronon,
+                            "do_chronon_attestation: FB verification — attestation recorded"
+                        );
+                    } else {
+                        warn!(
+                            worker_id,
+                            target_tbid,
+                            target_chronon,
+                            "do_chronon_attestation: FB verification — attestation not yet visible in external_attestations"
+                        );
+                    }
+                }
+                Err(e) => {
+                    warn!(
+                        worker_id,
+                        target_tbid,
+                        target_chronon,
+                        error = %e,
+                        "do_chronon_attestation: FB verification query failed (best-effort)"
+                    );
+                }
+            }
         }
         Err(e) => {
             warn!(
