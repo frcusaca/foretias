@@ -1,0 +1,10 @@
+{
+  "id": "T-27cec2e4-fe84-4319-a79e-ed506691dcdc",
+  "subject": "Add #[allow(dead_code)] annotations to 12 dead code items",
+  "description": "Add #[allow(dead_code)] with doc comments to specified dead code items in communerdette.rs and mod.rs",
+  "status": "completed",
+  "activeForm": "Adding dead_code annotations",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_176591b65ffeERUJLo1XnzK9SF"
+}

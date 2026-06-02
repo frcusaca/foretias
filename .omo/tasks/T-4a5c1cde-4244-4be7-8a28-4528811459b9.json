@@ -1,0 +1,10 @@
+{
+  "id": "T-4a5c1cde-4244-4be7-8a28-4528811459b9",
+  "subject": "Three dead-code fixes in communerd/",
+  "description": "Fix A: Replace inline DHT bridge logic with bridge_dht_to_communerdette call. Fix B: Remove double-spawn in trigger_channel_bind. Fix C: Remove choose_route (no suffix) method.",
+  "status": "completed",
+  "activeForm": "Fixing dead code in communerd",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_176593d97ffebHHwbAhVk0Q5ek"
+}

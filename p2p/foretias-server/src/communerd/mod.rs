@@ -27,6 +27,7 @@ use foretias_core::core::bindings::ForetiasPubKey32;
 use foretias_core::crypto_server::{CryptoServer, new_software, ForetiasCurve};
 use foretias_core::error::NodeError;
 use foretias_core::foretias::callbacks::{CommunityQuery, CommunityResponse, PeerAddr as CorePeerAddr, PeerChangeCallback, PeerMessenger, TransportError as CoreTransportError};
+#[allow(unused_imports)]
 use foretias_core::foretias::clean_auth::{UnverifiedSignatureEnvelope, CleanAuthenticated, CleanFullyAuthenticated};
 use foretias_core::foretias::tick::{Foretis, ChrononRecord};
 use foretias_core::foretias::types::Tbid;
@@ -73,8 +74,8 @@ fn default_capabilities() -> Vec<PeerCapability> {
     vec![PeerCapability::AttestWilling]
 }
 
-/// Stable per-variant discriminant byte for canonical capability encoding.
-/// Changing this is a wire-breaking change.
+/// Phase 3.1: DHT bridge.
+#[allow(dead_code)]
 fn capability_discriminant(cap: &PeerCapability) -> u8 {
     match cap {
         PeerCapability::AttestWilling => 1,
@@ -473,10 +474,9 @@ impl Communerd {
         let tbid_index = Arc::clone(&self.tbid_index);
         let pending_lookups = Arc::clone(&self.pending_lookups);
         let pending_family_lookups = Arc::clone(&self.pending_family_lookups);
-        let communerdettes = Arc::clone(&self.communerdettes);
-        let host: Arc<dyn communerdette::CommunerdetteHost> = Arc::new(self.clone());
+        let communerd_ref = self.clone();
         let task = tokio::spawn(async move {
-            Self::gossip_event_loop(events, cmd_tx, probity_store, crypto, clock_gossip, Some(det), peer_pool, tbid_index, pending_lookups, pending_family_lookups, communerdettes, host).await;
+            Self::gossip_event_loop(events, cmd_tx, probity_store, crypto, clock_gossip, Some(det), peer_pool, tbid_index, pending_lookups, pending_family_lookups, communerd_ref).await;
         });
         let _ = self.gossip_task.set(task);
 
@@ -559,8 +559,7 @@ impl Communerd {
         tbid_index: Arc<parking_lot::RwLock<HashMap<String, PeerRegistrationRecord>>>,
         pending_lookups: Arc<parking_lot::Mutex<HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<PeerRegistrationRecord>>>>>,
         pending_family_lookups: Arc<parking_lot::Mutex<HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<Vec<u8>>>>>>,
-        communerdettes: Arc<DashMap<Tbid, Arc<communerdette::Communerdette>>>,
-        host: Arc<dyn communerdette::CommunerdetteHost>,
+        communerd: Communerd,
     ) {
         while let Some(event) = events.recv().await {
             match event {
@@ -640,19 +639,7 @@ impl Communerd {
                                     tbid_index.write().insert(tbid_hex.clone(), peer_record.clone());
                                     tracing::debug!(tbid = %tbid_hex, "TBID index record cached");
 
-                                    if let Ok(tbid) = Tbid::from_hex(&tbid_hex) {
-                                        let communerdette = communerdettes
-                                            .entry(tbid)
-                                            .or_insert_with(|| Arc::new(communerdette::Communerdette::new(tbid)));
-                                        let channel_id = peer_record.peer_id.clone();
-                                        tracing::info!(tbid = %tbid_hex, channel_id = %channel_id, "triggering channel bind for newly discovered TBID peer");
-                                        communerdette.trigger_channel_bind(
-                                            Arc::clone(&host),
-                                            Arc::clone(&crypto),
-                                            Arc::clone(&clock),
-                                            channel_id,
-                                        );
-                                    }
+                                    communerd.bridge_dht_to_communerdette(&tbid_hex, &peer_record);
                                 }
                             }
                             if let Some(sender) = pending_lookups.lock().remove(&key) {
@@ -1048,6 +1035,8 @@ impl Communerd {
     /// so that relationship-local memory stays current.
     ///
     /// This is called from the gossip event loop when a TBID record is retrieved.
+    /// Phase 3.1: DHT bridge.
+    #[allow(dead_code)]
     pub(super) fn bridge_dht_to_communerdette(&self, tbid_hex: &str, record: &PeerRegistrationRecord) {
         let tbid = match Tbid::from_hex(tbid_hex) {
             Ok(t) => t,
@@ -1056,15 +1045,16 @@ impl Communerd {
                 return;
             }
         };
-        if let Some(entry) = self.communerdettes.get(&tbid) {
-            let now_ns = self.clock.now_ns().unwrap_or(0);
-            entry.value().mark_binding_claimed_by_dht(
-                Some(record.peer_id.clone()),
-                Some(record.json_rpc.clone()),
-                now_ns,
-            );
-            entry.value().add_route_candidate(record.clone());
-        }
+        let communerdette = self.communerdettes
+            .entry(tbid)
+            .or_insert_with(|| Arc::new(communerdette::Communerdette::new(tbid)));
+        let now_ns = self.clock.now_ns().unwrap_or(0);
+        communerdette.mark_binding_claimed_by_dht(
+            Some(record.peer_id.clone()),
+            Some(record.json_rpc.clone()),
+            now_ns,
+        );
+        communerdette.add_route_candidate(record.clone());
     }
 
     /// Get calendar slice by TBID via CommunerdetteLine.

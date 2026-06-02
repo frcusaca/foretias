@@ -45,6 +45,8 @@ use super::PeerRegistrationRecord;
 /// This trait is private to the `communerd` module.  Communerdette never
 /// owns the DHT, peer pool, libp2p swarm, or transport pools — it always
 /// delegates through this trait.
+/// Phase 3.3/12: Host helpers, awaiting consumer tasks.
+#[allow(dead_code)]
 #[async_trait]
 pub(super) trait CommunerdetteHost: Send + Sync {
     /// Look up a TBID in the DHT (cache + live lookup).
@@ -168,6 +170,8 @@ impl Default for CommunerdetteStats {
 }
 
 /// Per-route stats for granular tracking (Phase 6).
+/// Phase 6: Liveness stats, awaiting queue worker (Phase 5.2).
+#[allow(dead_code)]
 #[derive(Debug, Clone, Default)]
 pub struct CommunerdetteRouteStats {
     /// Per-route success count.
@@ -188,6 +192,7 @@ pub struct CommunerdetteRouteStats {
     pub last_application_rpc_ns: Option<u64>,
 }
 
+#[allow(dead_code)]
 impl CommunerdetteRouteStats {
     /// Record a successful request with measured RTT (ms).
     pub fn record_success(&mut self, now_ns: u64, rtt_ms: f64) {
@@ -292,6 +297,8 @@ pub type UnverifiedSignatureEnvelopeChannelBinding = foretias_core::foretias::cl
 /// Extension trait rather than inherent impl because `UnverifiedSignatureEnvelope<T>` is defined
 /// in core-engine and the orphan rule prevents foreign-type inherent impls here.
 /// Import this trait to call `.verify_full()` etc. on `UnverifiedSignatureEnvelope<ChannelBinding>`.
+/// Phase 12.0: Channel binding gate methods, awaiting dual-key consumer.
+#[allow(dead_code)]
 pub trait ChannelBindingGate: Sized {
     /// Verify Ed25519 fast-key signature only.
     /// // VERIFY(remote-tbid, fast-key)
@@ -427,7 +434,8 @@ fn binding_msg(nonce: &[u8], channel_id: &str, responder_tbid_hex: &str) -> Vec<
     msg
 }
 
-/// Per-channel binding state for Communerdette.
+/// Phase 12.0: Channel binding, awaiting state field integration.
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum ChannelBindingState {
     /// Channel known but binding challenge not yet sent/verified.
@@ -460,6 +468,8 @@ pub(super) struct Communerdette {
     shutdown: CancellationToken,
 }
 
+/// Phase 3-8: Deferred methods awaiting queue worker and liveness integration.
+#[allow(dead_code)]
 impl Communerdette {
     /// Create a new Communerdette for the given TBID.
     pub(super) fn new(target_tbid: Tbid) -> Self {
@@ -561,31 +571,6 @@ impl Communerdette {
             .max(1)
             .checked_pow(2)
             .unwrap_or(32) as f64
-    }
-
-    /// Choose the best available route based on route health.
-    pub(super) fn choose_route(&self) -> ActiveRoute {
-        let state = self.state.read();
-        let mut best_route = ActiveRoute::Unavailable;
-        let mut best_score = f64::MAX;
-
-        for (route, stats) in &state.route_stats {
-            // Score: lower is better. Factors: recent failures, backoff, RTT
-            let recent_failures = stats.consecutive_failures as f64;
-            let rtt_factor = stats.smoothed_rtt_ms.unwrap_or(f64::MAX);
-            let score = recent_failures * 10.0 + rtt_factor / 1000.0;
-            if score < best_score {
-                best_score = score;
-                best_route = *route;
-            }
-        }
-
-        // If no route stats yet, fall back to active_route
-        if best_route == ActiveRoute::Unavailable {
-            state.active_route
-        } else {
-            best_route
-        }
     }
 
     /// Set the active route (called after DHT discovery or route refresh).
@@ -880,6 +865,8 @@ impl Communerdette {
 /// `Bulk < Normal < High < Critical`. This makes `Critical` the largest value,
 /// which matches both `can_preempt` (Greater = higher priority) and the
 /// `BinaryHeap` max-heap semantics used by the queue worker.
+/// Phase 5.1: Request priority, awaiting queue worker.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum CommunerdettePriority {
     /// History dump, large calendar replication batch.
@@ -896,7 +883,8 @@ pub enum CommunerdettePriority {
 // Phase 5.2 - Queue Worker (spawned on-demand per Communerdette)
 // ---------------------------------------------------------------------------
 
-/// Commands sent into the Communerdette queue worker.
+/// Phase 5.2: Queue commands, awaiting queue worker.
+#[allow(dead_code)]
 enum CommunerdetteCommand {
     /// Fetch a calendar slice.
     CalendarSlice {
@@ -937,7 +925,8 @@ pub enum CommunerdetteError {
     Node(#[from] NodeError),
 }
 
-/// Queue entry with priority + sequence for stable ordering.
+/// Phase 5.2: Queue wrapper, awaiting queue worker.
+#[allow(dead_code)]
 struct QueuedCommand {
     priority: CommunerdettePriority,
     sequence: u64,
@@ -991,8 +980,8 @@ impl CommunerdetteExecutor {
         Self { host, target_tbid, crypto, clock, local_calendar_tbid }
     }
 
-    /// Emit an FB (Bruderschaft) ProbityReport for the target TBID.
-    /// value=1.0 for established, value=-1.0 for lost.
+    /// Phase 12.0: FB emission, awaiting channel-bind integration.
+    #[allow(dead_code)]
     fn emit_fb_report(&self, value: f32) {
         let Some(reporter_tbid) = &self.local_calendar_tbid else {
             tracing::debug!(target_tbid = %self.target_tbid.to_hex(), "FB emission skipped: no local_calendar_tbid set");
@@ -1042,7 +1031,8 @@ impl CommunerdetteExecutor {
         self.host.host_execute_calendar_slice(peer, tick_start, count).await
     }
 
-    /// Execute channel_bind_challenge RPC (Phase 12.0).
+    /// Phase 12.0: Channel-bind challenge, awaiting channel-bind integration.
+    #[allow(dead_code)]
     async fn do_channel_bind_challenge(
         &self,
         peer: &PeerAddr,
@@ -1054,7 +1044,8 @@ impl CommunerdetteExecutor {
         self.host.host_execute_channel_bind_challenge(peer, nonce_hex, channel_id, requester_tbid_hex).await
     }
 
-    /// Execute a liveness ping (Phase 12.1).
+    /// Phase 12.1: Transport-level ping, awaiting L1 liveness spawn.
+    #[allow(dead_code)]
     async fn do_ping(&self, peer: &PeerAddr) -> Result<(), TransportError> {
         self.host.host_execute_ping(peer).await
     }
@@ -1249,10 +1240,8 @@ impl Communerdette {
         executor.gate_foretis(raw, &chronon_record, &content)
     }
 
-    /// Spawn queue worker (Phase 5.2).
-    ///
-    /// Each queued request carries a response oneshot and timeout.
-    /// The worker chooses route, executes request, records stats, and completes the channel.
+    /// Phase 5.2: Queue worker, awaiting integration.
+    #[allow(dead_code)]
     fn spawn_queue_task(
         executor: Arc<CommunerdetteExecutor>,
         mut rx: mpsc::Receiver<(CommunerdettePriority, CommunerdetteCommand)>,
@@ -1321,13 +1310,15 @@ impl Communerdette {
 // Phase 12.0 — Channel-Binding Task
 // ---------------------------------------------------------------------------
 
+/// Phase 12.0: Channel-binding task, awaiting integration.
+#[allow(dead_code)]
 impl Communerdette {
     /// Initiate channel-binding for a new peer address (Phase 12.0 — spec §12.0).
     ///
     /// Sends a dual-key challenge, verifies the response, and updates the
     /// binding state.  Returns the `CleanFullyAuthenticated<ChannelBinding>`
     /// on success so callers can record or log the proof.
-    pub(super) async fn spawn_channel_bind_task(
+    pub(super) fn spawn_channel_bind_task(
         executor: Arc<CommunerdetteExecutor>,
         channel_id: String,
         cancel: CancellationToken,
@@ -1412,9 +1403,9 @@ impl Communerdette {
             None, // local_calendar_tbid — not available in gossip-loop context
         ));
         let cancel = self.shutdown.clone();
-        tokio::spawn(async move {
-            Self::spawn_channel_bind_task(executor, channel_id, cancel).await;
-        });
+        // spawn_channel_bind_task already spawns internally via tokio::spawn;
+        // calling it directly avoids the double-spawn bug.
+        let _handle = Self::spawn_channel_bind_task(executor, channel_id, cancel);
     }
 }
 
@@ -1423,12 +1414,8 @@ impl Communerdette {
 // ---------------------------------------------------------------------------
 
 impl Communerdette {
-    /// Spawn the L1 liveness loop for this relationship (Phase 12.1 — spec §12.1).
-    ///
-    /// Primary liveness signal: recent successful application RPCs (stamp, get_tick,
-    /// get_calendar_slice). If a successful application RPC occurred within the last
-    /// `interval_ms`, L1 is considered healthy without a transport ping. Falls back
-    /// to libp2p transport-level ping when no recent application RPC is found.
+    /// Phase 12.1: L1 liveness, awaiting spawn.
+    #[allow(dead_code)]
     pub(super) fn spawn_l1_liveness_task(
         executor: Arc<CommunerdetteExecutor>,
         interval_ms: u64,
@@ -1496,7 +1483,8 @@ impl Communerdette {
 // Phase 12.3 — L2 TBID Identity Confirmed (authenticated ping)
 // ---------------------------------------------------------------------------
 
-/// Response to an `authenticated_ping` challenge (Phase 12.3 — spec §12.2).
+/// Phase 12.3: L2 pong, awaiting L2 task.
+#[allow(dead_code)]
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AuthenticatedPong {
     pub responder_tbid: String,
@@ -1505,11 +1493,13 @@ pub struct AuthenticatedPong {
     pub signature_algorithm: String,
 }
 
-/// Parsed-but-not-yet-verified authenticated pong (Take 3 UnverifiedSignatureEnvelope stage).
+/// Phase 12.3: L2 pong, awaiting L2 task.
+#[allow(dead_code)]
 pub struct UnverifiedSignatureEnvelopeAuthenticatedPong {
     inner: AuthenticatedPong,
 }
 
+#[allow(dead_code)]
 impl UnverifiedSignatureEnvelopeAuthenticatedPong {
     pub fn from_json_value(v: serde_json::Value) -> Result<Self, TransportError> {
         let inner: AuthenticatedPong = serde_json::from_value(v)
@@ -1554,10 +1544,8 @@ impl UnverifiedSignatureEnvelopeAuthenticatedPong {
 }
 
 impl Communerdette {
-    /// Spawn the L2 liveness loop — ongoing TBID-identity health check (Phase 12.3).
-    ///
-    /// Sends a fast-key authenticated ping on each interval. L2 must only run after
-    /// channel binding is `FullyBound` (Phase 12.0).
+    /// Phase 12.3: L2 liveness, awaiting spawn.
+    #[allow(dead_code)]
     pub(super) fn spawn_l2_liveness_task(
         executor: Arc<CommunerdetteExecutor>,
         interval_ms: u64,
@@ -1629,10 +1617,8 @@ impl Communerdette {
 // ---------------------------------------------------------------------------
 
 impl Communerdette {
-    /// Spawn the L3 liveness loop — Chronomatter responsiveness check (Phase 12.4).
-    ///
-    /// Calls `stamp` and runs the full Take 3 gate (gate_foretis). Requires
-    /// Phase 11 to be complete (PQC genesis verification needed for execute_tick).
+    /// Phase 12.4: L3 liveness, awaiting spawn.
+    #[allow(dead_code)]
     pub(super) fn spawn_l3_liveness_task(
         executor: Arc<CommunerdetteExecutor>,
         interval_ms: u64,
