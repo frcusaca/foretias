@@ -1,0 +1,10 @@
+{
+  "id": "T-ff069bea-009a-4326-951f-8874a80143f0",
+  "subject": "Create proof_of_storage_integration.rs with 3 integration tests",
+  "description": "Create p2p/foretias-server/tests/proof_of_storage_integration.rs with full_coverage_scenario, partial_coverage_scenario, and backward_compat_test integration tests for the storage proof system.",
+  "status": "completed",
+  "activeForm": "Creating proof_of_storage integration tests",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_176212fbeffe19EjWGSf1yzi7X"
+}
