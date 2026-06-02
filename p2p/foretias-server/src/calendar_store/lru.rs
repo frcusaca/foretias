@@ -12,8 +12,8 @@ use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 use foretias_core::clock::{Clock, SystemClock};
 use foretias_core::error::NodeError;
@@ -118,9 +118,7 @@ impl BinBasedLru {
         let now = self.clock.now_ns().unwrap_or_default();
         let mut guard = self.records.write();
         for rec in guard.values_mut() {
-            if matches!(rec.bin, CalendarBin::Used)
-                && (now - rec.last_touch) > stale_threshold_ns
-            {
+            if matches!(rec.bin, CalendarBin::Used) && (now - rec.last_touch) > stale_threshold_ns {
                 rec.bin = CalendarBin::Unused;
             }
         }
@@ -312,10 +310,7 @@ mod tests {
         lru.insert(make_record("me", CalendarBin::MyOwn, 40));
         lru.insert(make_record("used", CalendarBin::Used, 30));
 
-        assert!(matches!(
-            lru.evict_to_fit(10),
-            Err(NodeError::OutOfSpace)
-        ));
+        assert!(matches!(lru.evict_to_fit(10), Err(NodeError::OutOfSpace)));
     }
 
     #[test]
@@ -363,11 +358,7 @@ mod tests {
     fn eviction_is_random_not_deterministic() {
         let lru = BinBasedLru::new(500);
         for i in 0..10 {
-            lru.insert(make_record(
-                &format!("peer_{i}"),
-                CalendarBin::Unused,
-                100,
-            ));
+            lru.insert(make_record(&format!("peer_{i}"), CalendarBin::Unused, 100));
         }
         lru.evict_to_fit(0).ok();
         assert!(lru.len() < 10);

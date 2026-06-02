@@ -1,0 +1,10 @@
+{
+  "id": "T-005151c2-4ab2-4739-bae5-5adb5143639a",
+  "subject": "Implement storage proof types and prove/verify methods in calendar_store",
+  "description": "In p2p/foretias-server/src/calendar_store/mod.rs, define StorageProofRequest, BlockProof, StorageProofResponse, StorageProofResult types and implement prove_storage() and verify_storage_proof(). Add unit tests. Verify with cargo check and cargo test.",
+  "status": "completed",
+  "activeForm": "Implementing storage proof types and methods",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_176335b73ffelabki9YYYAT93g"
+}
