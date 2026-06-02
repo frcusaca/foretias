@@ -1,0 +1,10 @@
+{
+  "id": "T-441adadc-8f93-4b9b-8948-87d7af657713",
+  "subject": "Migrate std::sync Mutex/RwLock to parking_lot in communerd/mod.rs",
+  "description": "Change imports and all .lock().unwrap(), .read().unwrap(), .write().unwrap() calls to parking_lot equivalents.",
+  "status": "completed",
+  "activeForm": "Migrating mutex locks to parking_lot",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_1765f3aebffefe8JzVHVvhJH9m"
+}

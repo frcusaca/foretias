@@ -18,6 +18,9 @@ use std::collections::BinaryHeap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
+use parking_lot::RwLock;
+#[cfg(test)]
+use parking_lot::Mutex;
 use async_trait::async_trait;
 #[allow(unused_imports)]
 use foretias_core::clock::{Clock, SystemClock};
@@ -453,7 +456,7 @@ pub struct CommunerdetteStatusSummary {
 #[doc(hidden)]
 pub(super) struct Communerdette {
     target_tbid: Tbid,
-    state: std::sync::RwLock<CommunerdetteState>,
+    state: RwLock<CommunerdetteState>,
     shutdown: CancellationToken,
 }
 
@@ -462,14 +465,14 @@ impl Communerdette {
     pub(super) fn new(target_tbid: Tbid) -> Self {
         Self {
             target_tbid,
-            state: std::sync::RwLock::new(CommunerdetteState::default()),
+            state: RwLock::new(CommunerdetteState::default()),
             shutdown: CancellationToken::new(),
         }
     }
 
     /// Returns a read-only snapshot of the current status.
     fn status_summary(&self) -> CommunerdetteStatusSummary {
-        let state = self.state.read().unwrap();
+        let state = self.state.read();
         CommunerdetteStatusSummary {
             target_tbid: self.target_tbid.to_hex(),
             binding: state.binding.clone(),
@@ -489,7 +492,7 @@ impl Communerdette {
 
     /// Record a successful request on the given route.
     pub(super) fn record_route_success(&self, route: ActiveRoute, now_ns: u64, rtt_ms: f64) {
-        let mut state = self.state.write().unwrap();
+        let mut state = self.state.write();
         state.stats.libp2p_successes = match route {
             ActiveRoute::Libp2pDirect => state.stats.libp2p_successes + 1,
             _ => state.stats.libp2p_successes,
@@ -517,7 +520,7 @@ impl Communerdette {
 
     /// Record a failed request on the given route.
     pub(super) fn record_route_failure(&self, route: ActiveRoute, now_ns: u64) {
-        let mut state = self.state.write().unwrap();
+        let mut state = self.state.write();
         state.stats.libp2p_failures = match route {
             ActiveRoute::Libp2pDirect => state.stats.libp2p_failures + 1,
             _ => state.stats.libp2p_failures,
@@ -545,7 +548,7 @@ impl Communerdette {
 
     /// Check if the relationship is currently in backoff.
     pub(super) fn is_in_backoff(&self, now_ns: u64) -> bool {
-        let state = self.state.read().unwrap();
+        let state = self.state.read();
         state.backoff_until_ns
             .map(|until| now_ns < until)
             .unwrap_or(false)
@@ -553,7 +556,7 @@ impl Communerdette {
 
     /// Get backoff multiplier for adaptive timeout calculation.
     pub(super) fn backoff_multiplier(&self) -> f64 {
-        let state = self.state.read().unwrap();
+        let state = self.state.read();
         state.stats.consecutive_failures
             .max(1)
             .checked_pow(2)
@@ -562,7 +565,7 @@ impl Communerdette {
 
     /// Choose the best available route based on route health.
     pub(super) fn choose_route(&self) -> ActiveRoute {
-        let state = self.state.read().unwrap();
+        let state = self.state.read();
         let mut best_route = ActiveRoute::Unavailable;
         let mut best_score = f64::MAX;
 
@@ -587,13 +590,13 @@ impl Communerdette {
 
     /// Set the active route (called after DHT discovery or route refresh).
     pub(super) fn set_active_route(&self, route: ActiveRoute) {
-        let mut state = self.state.write().unwrap();
+        let mut state = self.state.write();
         state.active_route = route;
     }
 
     /// Add a route candidate from DHT/PeerRegistrationRecord.
     pub(super) fn add_route_candidate(&self, record: super::PeerRegistrationRecord) {
-        let mut state = self.state.write().unwrap();
+        let mut state = self.state.write();
         state.route_candidates.push(record);
         // Prefer libp2p when PeerId is available
         state.active_route = ActiveRoute::Libp2pDirect;
@@ -601,33 +604,33 @@ impl Communerdette {
 
     /// Set liveness probe interval in milliseconds.
     pub(super) fn set_liveness_interval_ms(&self, interval_ms: u64) {
-        let mut state = self.state.write().unwrap();
+        let mut state = self.state.write();
         state.liveness_interval_ms = interval_ms;
     }
 
     /// Record that a liveness probe was sent/received.
     pub(super) fn record_liveness_probe(&self, now_ns: u64) {
-        let mut state = self.state.write().unwrap();
+        let mut state = self.state.write();
         state.last_liveness_probe_ns = Some(now_ns);
     }
 
     /// Get the last liveness probe timestamp.
     pub(super) fn last_liveness_probe_ns(&self) -> Option<u64> {
-        self.state.read().unwrap().last_liveness_probe_ns
+        self.state.read().last_liveness_probe_ns
     }
 
     /// Get liveness probe interval in milliseconds.
     pub(super) fn liveness_interval_ms(&self) -> u64 {
-        self.state.read().unwrap().liveness_interval_ms
+        self.state.read().liveness_interval_ms
     }
 
     pub(super) fn liveness_flags(&self) -> Arc<LivenessCycleFlags> {
-        Arc::clone(&self.state.read().unwrap().liveness_flags)
+        Arc::clone(&self.state.read().liveness_flags)
     }
 
     /// Get per-route stats snapshot.
     pub(super) fn route_stats_snapshot(&self) -> std::collections::HashMap<ActiveRoute, CommunerdetteRouteStats> {
-        self.state.read().unwrap().route_stats.clone()
+        self.state.read().route_stats.clone()
     }
 
     // ── Phase 3.1: Initial Binding Refresh ──────────────────────────────
@@ -699,7 +702,7 @@ impl Communerdette {
     /// * `host` — Communerd host helper surface (swarm availability check)
     pub(super) fn choose_route_with_host(&self, host: &dyn CommunerdetteHost) -> ActiveRoute {
         let swarm_active = host.host_swarm_available();
-        let state = self.state.read().unwrap();
+        let state = self.state.read();
 
         // First pass: prefer healthy libp2p if swarm active
         if swarm_active {
@@ -745,7 +748,7 @@ impl Communerdette {
 
     /// Route candidates count (for diagnostics).
     pub(super) fn route_candidates_count(&self) -> usize {
-        self.state.read().unwrap().route_candidates.len()
+        self.state.read().route_candidates.len()
     }
 
     // ── Phase 7: TBID Binding Proof ─────────────────────────────────────
@@ -753,7 +756,7 @@ impl Communerdette {
     /// Request TBID binding proof from remote peer.
     /// Returns Unsupported — proof format not yet in scope.
     pub(super) fn request_tbid_binding_proof(&self) -> Result<(), foretias_core::error::NodeError> {
-        let mut state = self.state.write().unwrap();
+        let mut state = self.state.write();
         state.binding_proof_requested = true;
         Err(foretias_core::error::NodeError::Unsupported(
             "TBID binding proof not yet implemented; proof transcript format pending".into(),
@@ -773,7 +776,7 @@ impl Communerdette {
 
     /// Mark binding as verified (after successful binding proof).
     pub(super) fn mark_binding_verified(&self, peer_id: Option<String>, json_rpc: Option<String>, verified_at_ns: u64) {
-        let mut state = self.state.write().unwrap();
+        let mut state = self.state.write();
         state.binding = TbidBindingStatus::Verified {
             peer_id,
             json_rpc,
@@ -785,7 +788,7 @@ impl Communerdette {
 
     /// Mark binding as rejected.
     pub(super) fn mark_binding_rejected(&self, reason: String, observed_at_ns: u64) {
-        let mut state = self.state.write().unwrap();
+        let mut state = self.state.write();
         state.binding = TbidBindingStatus::Rejected {
             reason,
             observed_at_ns,
@@ -794,7 +797,7 @@ impl Communerdette {
 
     /// Update binding to ClaimedByDht (from DHT discovery).
     pub(super) fn mark_binding_claimed_by_dht(&self, peer_id: Option<String>, json_rpc: Option<String>, observed_at_ns: u64) {
-        let mut state = self.state.write().unwrap();
+        let mut state = self.state.write();
         state.binding = TbidBindingStatus::ClaimedByDht {
             peer_id,
             json_rpc,
@@ -804,17 +807,17 @@ impl Communerdette {
 
     /// Get binding status.
     pub(super) fn binding_status(&self) -> TbidBindingStatus {
-        self.state.read().unwrap().binding.clone()
+        self.state.read().binding.clone()
     }
 
     /// Check if binding proof has been requested.
     pub(super) fn is_binding_proof_requested(&self) -> bool {
-        self.state.read().unwrap().binding_proof_requested
+        self.state.read().binding_proof_requested
     }
 
     /// Check if binding proof has been verified.
     pub(super) fn is_binding_proof_verified(&self) -> bool {
-        self.state.read().unwrap().binding_proof_verified
+        self.state.read().binding_proof_verified
     }
 
     // ── Phase 8: Mirror RPC Stubs ───────────────────────────────────────
@@ -3258,25 +3261,25 @@ mod tests {
     /// calendar slice and stamp responses rather than always erroring.
     struct ConfigurableMockHost {
         dht_record: Option<PeerRegistrationRecord>,
-        calendar_response: std::sync::Mutex<Option<Vec<ChrononRecord>>>,
-        stamp_response: std::sync::Mutex<Option<serde_json::Value>>,
+        calendar_response: Mutex<Option<Vec<ChrononRecord>>>,
+        stamp_response: Mutex<Option<serde_json::Value>>,
     }
 
     impl ConfigurableMockHost {
         fn new(dht_record: Option<PeerRegistrationRecord>) -> Self {
             Self {
                 dht_record,
-                calendar_response: std::sync::Mutex::new(None),
-                stamp_response: std::sync::Mutex::new(None),
+                calendar_response: Mutex::new(None),
+                stamp_response: Mutex::new(None),
             }
         }
 
         fn set_calendar_response(&self, records: Vec<ChrononRecord>) {
-            *self.calendar_response.lock().unwrap() = Some(records);
+            *self.calendar_response.lock() = Some(records);
         }
 
         fn set_stamp_response(&self, v: serde_json::Value) {
-            *self.stamp_response.lock().unwrap() = Some(v);
+            *self.stamp_response.lock() = Some(v);
         }
     }
 
@@ -3299,7 +3302,7 @@ mod tests {
             _content_hex: &str,
             _echo: &str,
         ) -> Result<serde_json::Value, TransportError> {
-            self.stamp_response.lock().unwrap().clone()
+            self.stamp_response.lock().clone()
                 .ok_or_else(|| TransportError::Unsupported("no stamp response set".into()))
         }
 
@@ -3309,7 +3312,7 @@ mod tests {
             _tick_start: u64,
             _count: u64,
         ) -> Result<Vec<ChrononRecord>, TransportError> {
-            self.calendar_response.lock().unwrap().clone()
+            self.calendar_response.lock().clone()
                 .ok_or_else(|| TransportError::Unsupported("no calendar response set".into()))
         }
 
@@ -3438,14 +3441,14 @@ mod tests {
 
     /// Mock host that captures sign and publish calls for FB emission assertions.
     struct FBMockHost {
-        sign_calls: std::sync::Arc<std::sync::Mutex<Vec<crate::probity::ProbityReport>>>,
-        publish_calls: std::sync::Arc<std::sync::Mutex<Vec<Vec<u8>>>>,
+        sign_calls: std::sync::Arc<Mutex<Vec<crate::probity::ProbityReport>>>,
+        publish_calls: std::sync::Arc<Mutex<Vec<Vec<u8>>>>,
     }
 
     impl FBMockHost {
-        fn new() -> (Self, std::sync::Arc<std::sync::Mutex<Vec<crate::probity::ProbityReport>>>, std::sync::Arc<std::sync::Mutex<Vec<Vec<u8>>>>) {
-            let sign_calls = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-            let publish_calls = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        fn new() -> (Self, std::sync::Arc<Mutex<Vec<crate::probity::ProbityReport>>>, std::sync::Arc<Mutex<Vec<Vec<u8>>>>) {
+            let sign_calls = std::sync::Arc::new(Mutex::new(Vec::new()));
+            let publish_calls = std::sync::Arc::new(Mutex::new(Vec::new()));
             (
                 Self {
                     sign_calls: std::sync::Arc::clone(&sign_calls),
@@ -3478,11 +3481,11 @@ mod tests {
         }
         // SIGN(report → host_sign_probity_report)
         fn host_sign_probity_report(&self, report: &crate::probity::ProbityReport) -> Result<Vec<u8>, String> {
-            self.sign_calls.lock().unwrap().push(report.clone());
+            self.sign_calls.lock().push(report.clone());
             Ok(vec![0xAA; 64])
         }
         fn host_publish_probity_report(&self, signed_bytes: Vec<u8>) {
-            self.publish_calls.lock().unwrap().push(signed_bytes);
+            self.publish_calls.lock().push(signed_bytes);
         }
     }
 
@@ -3505,7 +3508,7 @@ mod tests {
 
         executor.emit_fb_report(1.0);
 
-        let calls = sign_calls.lock().unwrap();
+        let calls = sign_calls.lock();
         assert_eq!(calls.len(), 1, "host_sign_probity_report must be called exactly once");
         let report = &calls[0];
         assert_eq!(report.attribute, "fb", "attribute must be 'fb'");
@@ -3516,7 +3519,7 @@ mod tests {
         assert!(report.signature.is_empty(), "signature must be empty (pre-sign)");
         drop(calls);
 
-        let pubs = publish_calls.lock().unwrap();
+        let pubs = publish_calls.lock();
         assert_eq!(pubs.len(), 1, "host_publish_probity_report must be called exactly once");
         assert_eq!(pubs[0], vec![0xAAu8; 64], "published bytes must match signed output");
     }
@@ -3540,7 +3543,7 @@ mod tests {
 
         executor.emit_fb_report(-1.0);
 
-        let calls = sign_calls.lock().unwrap();
+        let calls = sign_calls.lock();
         assert_eq!(calls.len(), 1, "host_sign_probity_report must be called exactly once");
         let report = &calls[0];
         assert_eq!(report.attribute, "fb", "attribute must be 'fb'");
@@ -3549,7 +3552,7 @@ mod tests {
         assert_eq!(report.subject, target_tbid.to_hex(), "subject must be target_tbid");
         drop(calls);
 
-        let pubs = publish_calls.lock().unwrap();
+        let pubs = publish_calls.lock();
         assert_eq!(pubs.len(), 1, "host_publish_probity_report must be called exactly once");
     }
 
@@ -3571,11 +3574,11 @@ mod tests {
 
         executor.emit_fb_report(1.0);
 
-        let calls = sign_calls.lock().unwrap();
+        let calls = sign_calls.lock();
         assert_eq!(calls.len(), 0, "host_sign_probity_report must NOT be called when local_calendar_tbid is None");
         drop(calls);
 
-        let pubs = publish_calls.lock().unwrap();
+        let pubs = publish_calls.lock();
         assert_eq!(pubs.len(), 0, "host_publish_probity_report must NOT be called when local_calendar_tbid is None");
     }
 
@@ -3586,8 +3589,8 @@ mod tests {
     struct LivenessMockHost {
         dht_record: Option<PeerRegistrationRecord>,
         ping_succeeds: bool,
-        stamp_response: std::sync::Mutex<Option<serde_json::Value>>,
-        calendar_response: std::sync::Mutex<Option<Vec<ChrononRecord>>>,
+        stamp_response: Mutex<Option<serde_json::Value>>,
+        calendar_response: Mutex<Option<Vec<ChrononRecord>>>,
         /// If set, dynamically signs auth-ping challenges using this crypto server.
         auth_ping_crypto: Option<Arc<dyn CryptoServer>>,
         /// TBID hex — must match for dynamic signing to activate.
@@ -3603,8 +3606,8 @@ mod tests {
             Self {
                 dht_record,
                 ping_succeeds,
-                stamp_response: std::sync::Mutex::new(None),
-                calendar_response: std::sync::Mutex::new(None),
+                stamp_response: Mutex::new(None),
+                calendar_response: Mutex::new(None),
                 auth_ping_crypto: None,
                 target_tbid_hex: String::new(),
                 corrupt_challenge_echo: false,
@@ -3624,11 +3627,11 @@ mod tests {
         }
 
         fn set_stamp_response(&self, v: serde_json::Value) {
-            *self.stamp_response.lock().unwrap() = Some(v);
+            *self.stamp_response.lock() = Some(v);
         }
 
         fn set_calendar_response(&self, records: Vec<ChrononRecord>) {
-            *self.calendar_response.lock().unwrap() = Some(records);
+            *self.calendar_response.lock() = Some(records);
         }
     }
 
@@ -3680,7 +3683,7 @@ mod tests {
                 }
             }
             // Static fallback
-            self.stamp_response.lock().unwrap().clone()
+            self.stamp_response.lock().clone()
                 .ok_or_else(|| TransportError::Unsupported("no stamp response set".into()))
         }
 
@@ -3690,7 +3693,7 @@ mod tests {
             _tick_start: u64,
             _count: u64,
         ) -> Result<Vec<ChrononRecord>, TransportError> {
-            self.calendar_response.lock().unwrap().clone()
+            self.calendar_response.lock().clone()
                 .ok_or_else(|| TransportError::Unsupported("no calendar response set".into()))
         }
 

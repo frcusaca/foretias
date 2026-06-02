@@ -164,23 +164,23 @@ pub struct Communerd {
     probity_store: Arc<ProbityStore>,
     crypto: Arc<dyn CryptoServer>,
     clock: Arc<dyn Clock>,
-    namespace: Arc<std::sync::Mutex<String>>,
+    namespace: Arc<parking_lot::Mutex<String>>,
     gossip_task: Arc<OnceLock<tokio::task::JoinHandle<()>>>,
     recompute_task: Arc<OnceLock<tokio::task::JoinHandle<()>>>,
     collision_task: Arc<OnceLock<tokio::task::JoinHandle<()>>>,
     heartbeat_task: Arc<OnceLock<tokio::task::JoinHandle<()>>>,
-    _local_multiaddr_arc: Arc<std::sync::Mutex<Option<libp2p::Multiaddr>>>,
-    tbid_index: Arc<std::sync::RwLock<HashMap<String, PeerRegistrationRecord>>>,
-    pending_lookups: Arc<std::sync::Mutex<HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<PeerRegistrationRecord>>>>>,
-    pending_family_lookups: Arc<std::sync::Mutex<HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<Vec<u8>>>>>>,
-    calendar: Arc<std::sync::RwLock<Option<Arc<Calendar>>>>,
+    _local_multiaddr_arc: Arc<parking_lot::Mutex<Option<libp2p::Multiaddr>>>,
+    tbid_index: Arc<parking_lot::RwLock<HashMap<String, PeerRegistrationRecord>>>,
+    pending_lookups: Arc<parking_lot::Mutex<HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<PeerRegistrationRecord>>>>>,
+    pending_family_lookups: Arc<parking_lot::Mutex<HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<Vec<u8>>>>>>,
+    calendar: Arc<parking_lot::RwLock<Option<Arc<Calendar>>>>,
     communerdettes: Arc<DashMap<Tbid, Arc<communerdette::Communerdette>>>,
     /// Family Cache: TBID → CleanFullyAuthenticated<FamilyRecord>.
     /// Indexed by every member TBID for fast reverse lookup.
     family_cache: Arc<DashMap<String, Arc<CleanFullyAuthenticated<FamilyRecord>>>>,
     /// Group 4b: peer-pool change callback (typically the Calendar).
     /// Fires after every peer add/remove with the current peer-pool snapshot.
-    peer_change_cb: Arc<std::sync::Mutex<Option<Arc<dyn PeerChangeCallback>>>>,
+    peer_change_cb: Arc<parking_lot::Mutex<Option<Arc<dyn PeerChangeCallback>>>>,
 }
 
 impl Clone for Communerd {
@@ -239,19 +239,19 @@ impl Communerd {
             probity_store: Arc::new(ProbityStore::new()),
             crypto,
             clock: Arc::new(SystemClock),
-            namespace: Arc::new(std::sync::Mutex::new("mainnet".to_string())),
+            namespace: Arc::new(parking_lot::Mutex::new("mainnet".to_string())),
             gossip_task: Arc::new(OnceLock::new()),
             recompute_task: Arc::new(OnceLock::new()),
             collision_task: Arc::new(OnceLock::new()),
             heartbeat_task: Arc::new(OnceLock::new()),
-            _local_multiaddr_arc: Arc::new(std::sync::Mutex::new(None)),
-            tbid_index: Arc::new(std::sync::RwLock::new(HashMap::new())),
-            pending_lookups: Arc::new(std::sync::Mutex::new(HashMap::new())),
-            pending_family_lookups: Arc::new(std::sync::Mutex::new(HashMap::new())),
-            calendar: Arc::new(std::sync::RwLock::new(None)),
+            _local_multiaddr_arc: Arc::new(parking_lot::Mutex::new(None)),
+            tbid_index: Arc::new(parking_lot::RwLock::new(HashMap::new())),
+            pending_lookups: Arc::new(parking_lot::Mutex::new(HashMap::new())),
+            pending_family_lookups: Arc::new(parking_lot::Mutex::new(HashMap::new())),
+            calendar: Arc::new(parking_lot::RwLock::new(None)),
             communerdettes: Arc::new(DashMap::new()),
             family_cache: Arc::new(DashMap::new()),
-            peer_change_cb: Arc::new(std::sync::Mutex::new(None)),
+            peer_change_cb: Arc::new(parking_lot::Mutex::new(None)),
         }
     }
 
@@ -377,14 +377,14 @@ impl Communerd {
     /// peer-pool churn (Group 4b mirror discovery). Overwrites any prior
     /// callback; passing `None` clears it.
     pub fn set_peer_change_callback(&self, cb: Option<Arc<dyn PeerChangeCallback>>) {
-        *self.peer_change_cb.lock().unwrap() = cb;
+        *self.peer_change_cb.lock() = cb;
     }
 
     /// Fire the peer-change callback (if registered) with the current snapshot
     /// of the peer pool. The snapshot is converted to `foretias_core` PeerAddr
     /// so Calendar code does not depend on Communerd transport types.
     async fn notify_peer_change(&self) {
-        let cb = self.peer_change_cb.lock().unwrap().clone();
+        let cb = self.peer_change_cb.lock().clone();
         if let Some(cb) = cb {
             let peers = self.peer_pool.get_peers().await;
             let core_peers: Vec<CorePeerAddr> = peers
@@ -416,15 +416,15 @@ impl Communerd {
     }
 
     pub fn set_calendar(&self, calendar: Arc<Calendar>) {
-        *self.calendar.write().unwrap() = Some(calendar);
+        *self.calendar.write() = Some(calendar);
     }
 
     pub fn namespace(&self) -> String {
-        self.namespace.lock().unwrap().clone()
+        self.namespace.lock().clone()
     }
 
     pub fn local_multiaddr(&self) -> Option<libp2p::Multiaddr> {
-        self._local_multiaddr_arc.lock().unwrap().clone()
+        self._local_multiaddr_arc.lock().clone()
     }
 
     pub async fn enable_p2p(
@@ -439,7 +439,7 @@ impl Communerd {
             return Ok(());
         }
 
-        *self.namespace.lock().unwrap() = namespace.to_string();
+        *self.namespace.lock() = namespace.to_string();
 
         let handle = build_and_spawn_swarm(listen, dials, namespace, json_rpc_addr, rpc_handler).await?;
 
@@ -448,7 +448,7 @@ impl Communerd {
         let _ = self.p2p_task.set(handle.task);
         let _ = self.p2p_cmd_tx.set(handle.cmd_tx.clone());
         let _ = self.libp2p_transport.set_cmd_tx(handle.cmd_tx);
-        *self._local_multiaddr_arc.lock().unwrap() = handle.local_multiaddr.lock().unwrap().clone();
+        *self._local_multiaddr_arc.lock() = handle.local_multiaddr.lock().clone();
 
         tracing::info!(component = "communerd", peer = %peer_id, "communerd: libp2p swarm started");
 
@@ -513,7 +513,7 @@ impl Communerd {
 
     async fn heartbeat_broadcast_loop(
         cmd_tx: Option<tokio::sync::mpsc::UnboundedSender<SwarmCommand>>,
-        ns: Arc<std::sync::Mutex<String>>,
+        ns: Arc<parking_lot::Mutex<String>>,
         interval_secs: u64,
         crypto: Arc<dyn CryptoServer>,
         clock: Arc<dyn Clock>,
@@ -542,7 +542,7 @@ impl Communerd {
                 hb.signature = sig.bytes.to_vec().into();
             }
             if let Some(ref tx) = cmd_tx {
-                let n = ns.lock().unwrap().clone();
+                let n = ns.lock().clone();
                 let _ = tx.send(SwarmCommand::PublishHeartbeat { heartbeat: hb, namespace: n });
             }
         }
@@ -556,9 +556,9 @@ impl Communerd {
         clock: Arc<dyn Clock>,
         detector: Option<Arc<CollisionDetector>>,
         peer_pool: PeerPool,
-        tbid_index: Arc<std::sync::RwLock<HashMap<String, PeerRegistrationRecord>>>,
-        pending_lookups: Arc<std::sync::Mutex<HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<PeerRegistrationRecord>>>>>,
-        pending_family_lookups: Arc<std::sync::Mutex<HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<Vec<u8>>>>>>,
+        tbid_index: Arc<parking_lot::RwLock<HashMap<String, PeerRegistrationRecord>>>,
+        pending_lookups: Arc<parking_lot::Mutex<HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<PeerRegistrationRecord>>>>>,
+        pending_family_lookups: Arc<parking_lot::Mutex<HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<Vec<u8>>>>>>,
         communerdettes: Arc<DashMap<Tbid, Arc<communerdette::Communerdette>>>,
         host: Arc<dyn communerdette::CommunerdetteHost>,
     ) {
@@ -617,7 +617,7 @@ impl Communerd {
                         let key_str = String::from_utf8_lossy(&key_bytes);
                         // Handle FamilyRecord lookups (raw bytes, no deserialization)
                         if key_str.contains("/family/") {
-                            if let Some(sender) = pending_family_lookups.lock().unwrap().remove(&key) {
+                            if let Some(sender) = pending_family_lookups.lock().remove(&key) {
                                 let raw_value: Option<Vec<u8>> = records.first().map(|r| r.value.clone());
                                 let _ = sender.send(raw_value);
                             }
@@ -637,7 +637,7 @@ impl Communerd {
                                         }
                                     }
                                     let tbid_hex = peer_record.tbid.clone();
-                                    tbid_index.write().unwrap().insert(tbid_hex.clone(), peer_record.clone());
+                                    tbid_index.write().insert(tbid_hex.clone(), peer_record.clone());
                                     tracing::debug!(tbid = %tbid_hex, "TBID index record cached");
 
                                     if let Ok(tbid) = Tbid::from_hex(&tbid_hex) {
@@ -655,7 +655,7 @@ impl Communerd {
                                     }
                                 }
                             }
-                            if let Some(sender) = pending_lookups.lock().unwrap().remove(&key) {
+                            if let Some(sender) = pending_lookups.lock().remove(&key) {
                                 let result = records.iter().find_map(|r| {
                                     serde_json::from_slice::<PeerRegistrationRecord>(&r.value)
                                         .ok()
@@ -727,7 +727,7 @@ impl Communerd {
         }
         let _ = self.probity_store.ingest(report.clone());
         if let Some(cmd_tx) = self.p2p_cmd_tx.get() {
-            let ns = self.namespace.lock().unwrap().clone();
+            let ns = self.namespace.lock().clone();
             let _ = cmd_tx.send(SwarmCommand::PublishProbity { report, namespace: ns });
         }
     }
@@ -861,18 +861,18 @@ impl Communerd {
 
     async fn refresh_self_registration(
         cmd_tx: tokio::sync::mpsc::UnboundedSender<SwarmCommand>,
-        namespace: Arc<std::sync::Mutex<String>>,
+        namespace: Arc<parking_lot::Mutex<String>>,
         tbid: Tbid,
         chronon_ns: u64,
         json_rpc_addr: &str,
-        local_multiaddr: Arc<std::sync::Mutex<Option<libp2p::Multiaddr>>>,
+        local_multiaddr: Arc<parking_lot::Mutex<Option<libp2p::Multiaddr>>>,
         peer_id: libp2p::PeerId,
         clock: Arc<dyn Clock>,
         crypto: Arc<dyn CryptoServer>,
     ) {
-        let ns = namespace.lock().unwrap().clone();
+        let ns = namespace.lock().clone();
         let key = kad::RecordKey::new(&format!("/foretias/{}/peers/v1", ns));
-        let ma = match local_multiaddr.lock().unwrap().clone() {
+        let ma = match local_multiaddr.lock().clone() {
             Some(m) => m.to_string(),
             None => return,
         };
@@ -922,7 +922,7 @@ impl Communerd {
     }
 
     pub fn lookup_tbid_cached(&self, tbid_hex: &str) -> Option<PeerRegistrationRecord> {
-        self.tbid_index.read().unwrap().get(tbid_hex).cloned()
+        self.tbid_index.read().get(tbid_hex).cloned()
     }
 
     pub async fn lookup_tbid(&self, tbid_hex: &str, namespace: &str) -> Option<PeerRegistrationRecord> {
@@ -934,7 +934,7 @@ impl Communerd {
         };
         let key = kad::RecordKey::new(&format!("/foretias/{}/tbid/{}/v1", namespace, tbid_hex));
         let (tx, rx) = tokio::sync::oneshot::channel();
-        self.pending_lookups.lock().unwrap().insert(key.clone(), tx);
+        self.pending_lookups.lock().insert(key.clone(), tx);
         let _ = cmd_tx.send(SwarmCommand::GetRecord { key: key.clone() });
         match tokio::time::timeout(std::time::Duration::from_secs(5), rx).await {
             Ok(Ok(result)) => result,
@@ -944,7 +944,7 @@ impl Communerd {
             }
             Err(_) => {
                 tracing::debug!(tbid = %tbid_hex, "TBID lookup timed out");
-                self.pending_lookups.lock().unwrap().remove(&key);
+                self.pending_lookups.lock().remove(&key);
                 None
             }
         }
@@ -987,7 +987,7 @@ impl Communerd {
         let key = kad::RecordKey::new(&format!("/foretias/{}/family/{}/v1", ns, tbid_hex));
         let Some(cmd_tx) = self.p2p_cmd_tx.get() else { return None };
         let (tx, rx) = tokio::sync::oneshot::channel();
-        self.pending_family_lookups.lock().unwrap().insert(key.clone(), tx);
+        self.pending_family_lookups.lock().insert(key.clone(), tx);
         let _ = cmd_tx.send(SwarmCommand::GetRecord { key: key.clone() });
         let raw_bytes = match tokio::time::timeout(std::time::Duration::from_secs(10), rx).await {
             Ok(Ok(Some(record))) => serde_json::to_vec(&record).ok()?,
@@ -997,7 +997,7 @@ impl Communerd {
             }
             Err(_) => {
                 tracing::debug!(tbid = %tbid_hex, "FamilyRecord DHT lookup timed out");
-                self.pending_lookups.lock().unwrap().remove(&key);
+                self.pending_lookups.lock().remove(&key);
                 return None;
             }
         };
@@ -1542,18 +1542,18 @@ mod tests {
     /// Captures `on_peer_change` invocations for assertions.
     #[derive(Default)]
     struct CaptureCallback {
-        events: std::sync::Mutex<Vec<Vec<CorePeerAddr>>>,
+        events: parking_lot::Mutex<Vec<Vec<CorePeerAddr>>>,
     }
 
     impl PeerChangeCallback for CaptureCallback {
         fn on_peer_change(&self, peers: Vec<CorePeerAddr>) {
-            self.events.lock().unwrap().push(peers);
+            self.events.lock().push(peers);
         }
     }
 
     impl CaptureCallback {
         fn events(&self) -> Vec<Vec<CorePeerAddr>> {
-            self.events.lock().unwrap().clone()
+            self.events.lock().clone()
         }
     }
 

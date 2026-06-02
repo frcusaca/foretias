@@ -4,6 +4,7 @@
 //! `SystemTime::now()` directly. Per AGENTS.md: "Do not call system time deep inside
 //! protocol logic. Inject a clock."
 
+use parking_lot::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Errors from clock operations.
@@ -55,14 +56,14 @@ impl Clock for FixedClock {
 
 /// Step clock that advances by a configurable amount each call. Useful for tests.
 pub struct StepClock {
-    current: std::sync::Mutex<u64>,
+    current: Mutex<u64>,
     step: Duration,
 }
 
 impl StepClock {
     pub fn new(initial_ns: u64, step: Duration) -> Self {
         Self {
-            current: std::sync::Mutex::new(initial_ns),
+            current: Mutex::new(initial_ns),
             step,
         }
     }
@@ -70,7 +71,7 @@ impl StepClock {
 
 impl Clock for StepClock {
     fn now_ns(&self) -> Result<u64, ClockError> {
-        let mut cur = self.current.lock().unwrap();
+        let mut cur = self.current.lock();
         let now = *cur;
         *cur += self.step.as_nanos() as u64;
         Ok(now)

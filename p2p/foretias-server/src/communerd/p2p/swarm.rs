@@ -17,7 +17,8 @@ use libp2p::{
 };
 use std::collections::{HashMap, HashSet};
 use std::net::TcpListener;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 use std::time::Duration;
 use rand::seq::SliceRandom;
 use tokio::sync::mpsc;
@@ -291,7 +292,7 @@ async fn swarm_loop(
                 match event {
                     SwarmEvent::NewListenAddr { address, listener_id, .. } => {
                         listener_ids.insert(listener_id);
-                        let mut ma = local_multiaddr.lock().unwrap();
+                        let mut ma = local_multiaddr.lock();
                         if ma.is_none() {
                             *ma = Some(address.clone());
                         }
