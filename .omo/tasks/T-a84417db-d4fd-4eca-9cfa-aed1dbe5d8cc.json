@@ -1,0 +1,10 @@
+{
+  "id": "T-a84417db-d4fd-4eca-9cfa-aed1dbe5d8cc",
+  "subject": "Register storage proof probity attributes and helper function",
+  "description": "1. Add storage_verified/storage_partial/storage_failed attribute constants in probity/mod.rs\n2. Add storage_proof_to_probity helper function\n3. Add unit tests\n4. Verify cargo check and cargo test pass",
+  "status": "completed",
+  "activeForm": "Implementing storage proof probity attributes",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_17624dc5cffeYKhEc0LfcH0f5m"
+}
