@@ -621,6 +621,8 @@ Chronomatter hands result to CommunerdetteLine → Chronomatter signs with Chron
 
 **Never use `sign_tbid_message` on `TimeFamilyServer`** — each component's own signing API replaces it.
 
+**Implementation status:** Chronomatter, Calendar, and Communerd each now own their own signing key and manage their own signing lifecycle independently. See `SAFETY.md` for the full signing key ownership table and per-component key management details.
+
 ---
 
 ## COMMUNERDETTE AND PER-TBID RELATIONSHIPS (Mandatory)

@@ -96,6 +96,28 @@ When a component signs a response, it is **guaranteeing the integrity and authen
 
 Between family members (internal calls), there is implicit trust — no signature is needed because the components are within the same trust boundary.
 
+### Per-Component Key Ownership
+
+| Component | Key Type | Generated | Persisted | Signs |
+|-----------|----------|-----------|-----------|-------|
+| Chronomatter | Per-tick Ed25519 keypairs | On each tick | No (max 2 retained) | Tick records, auto-attestations |
+| Calendar | Session Ed25519 key | On Calendar creation | No (per-session) | Foretis for mutual attestation |
+| Communerd | DHT registration key | On DHT registration | Via PeerRegistrationRecord | DHT records |
+
+### Signing Rules
+
+1. Each component signs ONLY what it produced. No cross-component signing.
+2. Internal calls (Calendar -> Chronomatter, Chronomatter -> Calendar) do NOT need signing. They're within the same trust boundary.
+3. Signing happens at the external boundary: just before transmitting to `CommunerdetteLine` for external delivery.
+4. No component signs for another. Each keeps its own signing key.
+5. `sign_tbid_message` on `TimeFamilyServer` is DEPRECATED. Each component uses its own signing API.
+
+### Implementation References
+
+- Chronomatter: `p2p/core-engine/src/chronomatter/mod.rs` — `sign_tbid_message()`, `generate_and_store_keypair()`
+- Calendar: `p2p/foretias-server/src/calendar/mod.rs` — `sign_foretis()`, `calendar_public_key()`
+- Communerd: `p2p/foretias-server/src/communerd/mod.rs` — DHT registration signing via `PeerRegistrationRecord`
+
 ---
 
 ## Level 3 — Type-Guarded Records (Take 3)
