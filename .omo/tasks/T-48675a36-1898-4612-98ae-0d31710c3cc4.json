@@ -1,0 +1,10 @@
+{
+  "id": "T-48675a36-1898-4612-98ae-0d31710c3cc4",
+  "subject": "Add signing key to Calendar struct with sign_foretis and calendar_public_key methods",
+  "description": "Add PrivKeyHandle-based signing key to Calendar, generate fresh on each creation, add sign_foretis and calendar_public_key methods",
+  "status": "completed",
+  "activeForm": "Adding signing key to Calendar",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_1750cd7bfffeqGj75JuN61QA25"
+}

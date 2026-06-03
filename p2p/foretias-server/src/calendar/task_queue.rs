@@ -210,6 +210,9 @@ pub struct WorkerContext {
     /// an internal Foretis (stamp-free, within trust boundary). `None` in
     /// placeholder mode.
     pub chronomatter: Option<Arc<foretias_core::chronomatter::Chronomatter>>,
+    /// Calendar's Ed25519 signing key, shared via Arc from Calendar.
+    /// Used by attestation handlers to sign stamp payloads.
+    pub signing_key: Option<Arc<parking_lot::Mutex<Option<foretias_core::core::identity::PrivKeyHandle>>>>,
 }
 
 /// Spawn `worker_count` worker tasks that pull from `rx`, dispatch via the
@@ -293,7 +296,7 @@ async fn handle_task(worker_id: usize, task: CalendarTask, ctx: &WorkerContext) 
 /// 1. Obtain a `CommunerdetteLine` for `target_tbid` via Communerd
 /// 2. Fetch the target's latest chronon via `line.get_tick(u64::MAX)`
 /// 3. Internally stamp via Chronomatter (stamp-free, within trust boundary)
-/// 4. Sign the Foretis with Calendar's key (TODO: Calendar key not yet wired)
+/// 4. Sign the Foretis with Calendar's key
 /// 5. Transmit the stamped content to the target via `line.stamp()`
 /// 6. Verify attestation was recorded on the target (best-effort)
 ///
@@ -374,10 +377,22 @@ async fn handle_do_chronon_attestation(
     );
 
     // ── Step 4: Sign with Calendar's key ─────────────────────────────────
-    // Calendar does not yet own a signing key. The StampedForetis from
-    // Chronomatter already carries a per-tick Ed25519 signature. Calendar-
-    // level signing will be added when Calendar's TBID key management ships.
-    // For now the Chronomatter-signed Foretis is forwarded as-is.
+    let calendar_signature = match sign_with_calendar_key(ctx, &stamped.foretis.sig_input_bytes()) {
+        Some(sig) => sig,
+        None => {
+            warn!(
+                worker_id,
+                target_tbid, "do_chronon_attestation: calendar signing failed or key unavailable"
+            );
+            return;
+        }
+    };
+    debug!(
+        worker_id,
+        target_tbid,
+        sig_len = calendar_signature.len(),
+        "do_chronon_attestation: calendar signature produced"
+    );
 
     // ── Step 5: Transmit via line.stamp() ────────────────────────────────
     let foretis_bytes = stamped.foretis.sig_input_bytes();
@@ -447,7 +462,7 @@ async fn handle_do_chronon_attestation(
 /// 1. Obtain a `CommunerdetteLine` for `target_tbid` via Communerd
 /// 2. Fetch the target's latest epoch via `line.get_calendar_slice(u64::MAX, 1)`
 /// 3. Internally stamp via Chronomatter (stamp-free, within trust boundary)
-/// 4. Sign the Foretis with Calendar's key (TODO: Calendar key not yet wired)
+/// 4. Sign the Foretis with Calendar's key
 /// 5. Transmit the stamped content to the target via `line.stamp()`
 ///
 /// Gracefully degrades when Communerd or Chronomatter are not wired into the
@@ -535,10 +550,22 @@ async fn handle_do_epoch_attestation(
     );
 
     // ── Step 4: Sign with Calendar's key ─────────────────────────────────
-    // Calendar does not yet own a signing key. The StampedForetis from
-    // Chronomatter already carries a per-tick Ed25519 signature. Calendar-
-    // level signing will be added when Calendar's TBID key management ships.
-    // For now the Chronomatter-signed Foretis is forwarded as-is.
+    let calendar_signature = match sign_with_calendar_key(ctx, &stamped.foretis.sig_input_bytes()) {
+        Some(sig) => sig,
+        None => {
+            warn!(
+                worker_id,
+                target_tbid, "do_epoch_attestation: calendar signing failed or key unavailable"
+            );
+            return;
+        }
+    };
+    debug!(
+        worker_id,
+        target_tbid,
+        sig_len = calendar_signature.len(),
+        "do_epoch_attestation: calendar signature produced"
+    );
 
     // ── Step 5: Transmit via line.stamp() ────────────────────────────────
     let foretis_bytes = stamped.foretis.sig_input_bytes();
@@ -557,6 +584,19 @@ async fn handle_do_epoch_attestation(
                 worker_id,
                 target_tbid, error = %e, "do_epoch_attestation: line.stamp() failed"
             );
+        }
+    }
+}
+
+fn sign_with_calendar_key(ctx: &WorkerContext, data: &[u8]) -> Option<Vec<u8>> {
+    let signing_key = ctx.signing_key.as_ref()?;
+    let guard = signing_key.lock();
+    let key = guard.as_ref()?;
+    match key.sign(data) {
+        Ok(sig) => Some(sig.bytes.to_vec()),
+        Err(e) => {
+            warn!(error = %e, "calendar key signing failed");
+            None
         }
     }
 }
@@ -878,8 +918,9 @@ async fn handle_verify_fb_recorded(
 /// exercise the network path).
 pub fn start_default_pool(
     calendar_lookup: Arc<parking_lot::RwLock<foretias_core::foretias::Calendar>>,
+    signing_key: Option<Arc<parking_lot::Mutex<Option<foretias_core::core::identity::PrivKeyHandle>>>>,
 ) -> (CalendarTaskSender, WorkerPool, Arc<MirrorState>) {
-    start_default_pool_with_dispatcher(calendar_lookup, None)
+    start_default_pool_with_dispatcher(calendar_lookup, None, signing_key)
 }
 
 /// Build the channel + spawn the default-sized worker pool with an optional
@@ -889,8 +930,9 @@ pub fn start_default_pool(
 pub fn start_default_pool_with_dispatcher(
     calendar_lookup: Arc<parking_lot::RwLock<foretias_core::foretias::Calendar>>,
     dispatcher: Option<Arc<dyn MirrorDispatcher>>,
+    signing_key: Option<Arc<parking_lot::Mutex<Option<foretias_core::core::identity::PrivKeyHandle>>>>,
 ) -> (CalendarTaskSender, WorkerPool, Arc<MirrorState>) {
-    start_pool(calendar_lookup, dispatcher, None, None)
+    start_pool(calendar_lookup, dispatcher, None, None, signing_key)
 }
 
 /// Full-context pool constructor. Production callers (e.g. `TimeFamilyServer`)
@@ -901,6 +943,7 @@ pub fn start_pool(
     dispatcher: Option<Arc<dyn MirrorDispatcher>>,
     communerd: Option<Arc<crate::communerd::Communerd>>,
     chronomatter: Option<Arc<foretias_core::chronomatter::Chronomatter>>,
+    signing_key: Option<Arc<parking_lot::Mutex<Option<foretias_core::core::identity::PrivKeyHandle>>>>,
 ) -> (CalendarTaskSender, WorkerPool, Arc<MirrorState>) {
     let (tx, rx) = mpsc::unbounded_channel();
     let mirror_state = Arc::new(MirrorState::default());
@@ -913,6 +956,7 @@ pub fn start_pool(
         calendar_lookup,
         communerd,
         chronomatter,
+        signing_key,
     };
     let pool = spawn_workers(rx, DEFAULT_WORKER_COUNT, ctx);
     (tx, pool, mirror_state)
@@ -991,7 +1035,7 @@ mod tests {
         let cal = Arc::new(parking_lot::RwLock::new(
             foretias_core::foretias::Calendar::new(Tbid::default(), "queue-test"),
         ));
-        let (tx, _pool, _state) = start_default_pool(cal);
+        let (tx, _pool, _state) = start_default_pool(cal, None);
         for i in 0..5 {
             enqueue(
                 &tx,

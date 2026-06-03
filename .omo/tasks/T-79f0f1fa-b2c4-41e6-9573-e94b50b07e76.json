@@ -1,0 +1,10 @@
+{
+  "id": "T-79f0f1fa-b2c4-41e6-9573-e94b50b07e76",
+  "subject": "Wire Calendar signing key into attestation task handlers",
+  "description": "Add signing_key to WorkerContext, thread through pool constructors, update handle_do_chronon_attestation and handle_do_epoch_attestation to sign with Calendar's key, remove TODO comments",
+  "status": "completed",
+  "activeForm": "Updating attestation handlers to use Calendar signing key",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_1750cd7bfffeqGj75JuN61QA25"
+}

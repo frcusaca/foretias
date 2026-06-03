@@ -24,12 +24,13 @@ use std::sync::Arc;
 pub mod mirror;
 pub mod task_queue;
 
+use foretias_core::core::identity::PrivKeyHandle;
 use foretias_core::foretias::callbacks::TickObserver;
 use foretias_core::foretias::tick::CalendarLookup;
 use foretias_core::foretias::{Calendar as CoreCalendar, ChrononRecord, types::{TickNumber, Tbid}};
 use foretias_core::error::NodeError;
 use parking_lot::RwLock;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 pub use foretias_core::foretias::callbacks::PeerChangeCallback;
 pub use mirror::{MirrorStore, compute_hash_sanity};
@@ -41,6 +42,11 @@ pub use task_queue::{
 pub struct Calendar {
     inner: Arc<RwLock<CoreCalendar>>,
     tbn: String,
+    /// Calendar's Ed25519 signing key — generated fresh per session.
+    /// Wrapped in Arc so the worker pool can share it without creating a
+    /// reference cycle (Calendar → WorkerPool → spawned tasks → Calendar).
+    /// `None` only if key generation failed at construction time.
+    signing_key: Arc<parking_lot::Mutex<Option<PrivKeyHandle>>>,
     /// Group 4b: low-priority work channel sender. `None` until
     /// `start_task_queue()` is called; once set, callers may enqueue
     /// `CalendarTask`s for the worker pool to process.
@@ -57,9 +63,11 @@ pub struct Calendar {
 impl Calendar {
     pub fn new(tbid: Tbid, tbn: &str) -> Self {
         info!(component = "calendar", tbid = %tbid.to_hex(), tbn = %tbn, "calendar initialized");
+        let signing_key = generate_calendar_signing_key();
         Self {
             inner: Arc::new(RwLock::new(CoreCalendar::new(tbid, tbn))),
             tbn: tbn.to_string(),
+            signing_key: Arc::new(parking_lot::Mutex::new(signing_key)),
             task_tx: std::sync::Mutex::new(None),
             worker_pool: std::sync::Mutex::new(None),
             mirror_state: std::sync::Mutex::new(None),
@@ -71,9 +79,11 @@ impl Calendar {
         let tbid = cal.tbid();
         let tbn = cal.tbn.clone();
         info!(component = "calendar", tbid = %tbid.to_hex(), tbn = %tbn, "calendar loaded from persisted: {}", path);
+        let signing_key = generate_calendar_signing_key();
         Ok(Self {
             inner: Arc::new(RwLock::new(cal)),
             tbn,
+            signing_key: Arc::new(parking_lot::Mutex::new(signing_key)),
             task_tx: std::sync::Mutex::new(None),
             worker_pool: std::sync::Mutex::new(None),
             mirror_state: std::sync::Mutex::new(None),
@@ -84,7 +94,10 @@ impl Calendar {
     /// Useful for tests of the queue plumbing that don't exercise network
     /// behavior. Production callers should use `start_task_queue_with_dispatcher`.
     pub fn start_task_queue(&self) {
-        let (tx, pool, state) = task_queue::start_default_pool(self.inner());
+        let (tx, pool, state) = task_queue::start_default_pool(
+            self.inner(),
+            Some(self.signing_key_handle()),
+        );
         // The mirror state carries the local TBID — populate it from the
         // calendar's current TBID so worker handlers can address themselves.
         let local_tbid = self.tbid().to_hex();
@@ -109,7 +122,11 @@ impl Calendar {
         dispatcher: Arc<dyn MirrorDispatcher>,
     ) -> Arc<MirrorState> {
         let (tx, pool, state) =
-            task_queue::start_default_pool_with_dispatcher(self.inner(), Some(dispatcher));
+            task_queue::start_default_pool_with_dispatcher(
+                self.inner(),
+                Some(dispatcher),
+                Some(self.signing_key_handle()),
+            );
         let local_tbid = self.tbid().to_hex();
         *state.local_tbid_hex.write() = local_tbid;
         *self.task_tx.lock().unwrap() = Some(tx);
@@ -187,6 +204,45 @@ impl Calendar {
         std::fs::write(path, json)
             .map_err(|e| NodeError::Internal(format!("failed to write persisted calendar: {}", e)))?;
         Ok(())
+    }
+
+    /// Sign `foretis_bytes` with Calendar's Ed25519 key. Returns the 64-byte
+    /// signature. Fails if the signing key was not generated at construction.
+    pub fn sign_foretis(&self, foretis_bytes: &[u8]) -> Result<Vec<u8>, NodeError> {
+        let guard = self.signing_key.lock();
+        let key = guard.as_ref().ok_or_else(|| {
+            NodeError::Internal("calendar signing key not initialized".into())
+        })?;
+        let sig = key.sign(foretis_bytes)?;
+        Ok(sig.bytes.to_vec())
+    }
+
+    /// Return the 32-byte Ed25519 public key for Calendar's signing key.
+    pub fn calendar_public_key(&self) -> Option<[u8; 32]> {
+        let guard = self.signing_key.lock();
+        let key = guard.as_ref()?;
+        key.public_key().ok()
+    }
+
+    /// Clone the Arc holding the signing key so the worker pool can share it.
+    pub(crate) fn signing_key_handle(&self) -> Arc<parking_lot::Mutex<Option<PrivKeyHandle>>> {
+        Arc::clone(&self.signing_key)
+    }
+}
+
+/// Generate a fresh Calendar signing key. Calls `PrivKeyHandle::init()` first
+/// (idempotent) so callers don't need to worry about initialization order.
+fn generate_calendar_signing_key() -> Option<PrivKeyHandle> {
+    PrivKeyHandle::init();
+    match PrivKeyHandle::generate() {
+        Ok(key) => {
+            debug!(component = "calendar", "calendar signing key generated");
+            Some(key)
+        }
+        Err(e) => {
+            warn!(component = "calendar", error = %e, "failed to generate calendar signing key");
+            None
+        }
     }
 }
 
