@@ -30,6 +30,7 @@ use foretias_core::foretias::tick::CalendarLookup;
 use foretias_core::foretias::{Calendar as CoreCalendar, ChrononRecord, types::{TickNumber, Tbid}};
 use foretias_core::error::NodeError;
 use parking_lot::RwLock;
+use rand::Rng;
 use tracing::{debug, info, warn};
 
 pub use foretias_core::foretias::callbacks::PeerChangeCallback;
@@ -38,6 +39,11 @@ pub use task_queue::{
     CalendarTask, CalendarTaskSender, MirrorDispatcher, MirrorState, WorkerPool,
     DEFAULT_WORKER_COUNT, start_pool,
 };
+
+/// Approximate 1-in-N chance of enqueuing a `VerifyFbRecorded` task on
+/// each tick advance. Keeps FB verification spread across time rather than
+/// happening at every tick.
+const FB_VERIFY_INTERVAL: u32 = 20;
 
 pub struct Calendar {
     inner: Arc<RwLock<CoreCalendar>>,
@@ -253,6 +259,24 @@ impl TickObserver for Calendar {
             tracing::error!(component = "calendar", tbid = %cal.tbid().to_hex(), tick = chronon_number.0, "calendar: on_tick_advance failed: {}", e);
         } else {
             debug!(component = "calendar", tbid = %cal.tbid().to_hex(), tick = chronon_number.0, tick_count = cal.ticks.len(), "calendar: heartbeat");
+
+            // Randomized FB verification: on each successful tick advance,
+            // enqueue a VerifyFbRecorded task with ~1/FB_VERIFY_INTERVAL
+            // probability.
+            if rand::thread_rng().gen_ratio(1, FB_VERIFY_INTERVAL) {
+                let target_tbid = cal.tbid().to_hex();
+                drop(cal);
+                let task = CalendarTask::VerifyFbRecorded { target_tbid };
+                let guard = self.task_tx.lock().unwrap();
+                if let Some(tx) = guard.as_ref() {
+                    let _ = task_queue::enqueue(tx, task);
+                    debug!(
+                        component = "calendar",
+                        tick = chronon_number.0,
+                        "calendar: enqueued VerifyFbRecorded"
+                    );
+                }
+            }
         }
     }
 }
