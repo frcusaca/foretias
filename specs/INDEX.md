@@ -109,12 +109,13 @@
 
 | File | Open | Done | Status |
 |------|------|------|--------|
-| `specs/COMBINED_GROUP3_PLAN.md` | 45 | 0 | Needs review — may be stale |
+| `specs/COMBINED_GROUP3_PLAN.md` | 0 | 45 | **COMPLETE** — all 4 branches merged |
 
-**Dependencies:** Group 2 (pre-flight)
-**Blocks:** Group 4 (some items)
-
-**Note:** 45 open items. Needs review to determine which are still relevant vs superseded by later work.
+**Completed 2026-05-23 (checkboxes marked 2026-06-02):**
+- g3-b-noise-send: ✅ Removed `unsafe impl Send for NoiseSession` (kept `PrivKeyHandle` with justified safety comment)
+- g3-f-secretbytes: ✅ Zeroizing wrap on TBID secret_bytes
+- g3-e-unwrap-sweep: ✅ Bounded unwrap sweep (6 sites)
+- g3-d-dht-sign: ✅ DHT record sign+verify (PeerRegistrationRecord)
 
 ---
 
@@ -122,16 +123,13 @@
 
 | File | Open | Done | Status |
 |------|------|------|--------|
-| `specs/COMBINED_GROUP5_PLAN.md` | 30 | 20 | Partially complete |
-
-**Dependencies:** Group 2 (pre-flight)
-**Blocks:** Group 4 (Clock injection prerequisite)
+| `specs/COMBINED_GROUP5_PLAN.md` | 10 | 20 | Partially complete |
 
 **Status:**
-- g5-b (crash recovery): merged
-- g5-d (AGENTS.md): merged
-- g5-a (clock injection): merged
-- g5-c (JSON-RPC auth): **blocked on human decision** (Option B — mTLS, needs dedicated spec)
+- g5-b (crash recovery): ✅ merged
+- g5-d (AGENTS.md): ✅ merged
+- g5-a (clock injection): ✅ merged
+- g5-c (JSON-RPC auth): **BLOCKED** — Option B (mTLS) chosen, needs dedicated spec/plan. Cannot proceed without human decision on mTLS implementation details.
 
 ---
 
@@ -139,12 +137,9 @@
 
 | File | Open | Done | Status |
 |------|------|------|--------|
-| `specs/COMBINED_GROUP1_TYPE_BASED_SAFETY_ENFORCEMENT_TAKE_3_PLAN.md` | 66 | 22 | Needs verification |
+| `specs/COMBINED_GROUP1_TYPE_BASED_SAFETY_ENFORCEMENT_TAKE_3_PLAN.md` | 0 | 69 | **COMPLETE** — merged 2026-05-23, checkboxes marked 2026-06-02 |
 
-**Dependencies:** None (foundational)
-**Blocks:** Group 7 (depends on Take 3 types)
-
-**Note:** 66 open items. The core types (`UnverifiedSignatureEnvelope`, `CleanAuthenticated`, `Externalized`) are implemented and used throughout. Needs verification of which items are stale vs genuinely open.
+**Status:** All types (`Unprocessed<T>`, `CleanAuthenticated<T>`, `Externalized<T>`) implemented and used throughout the codebase.
 
 ---
 
@@ -300,8 +295,8 @@ Group 2 (pre-flight)
 
 | Priority | Item | Action |
 |----------|------|--------|
-| **1** | Group 1 | Verify which of 66 open items are stale vs genuine |
-| **2** | Group 3 | Review 45 open items for relevance |
-| **3** | Group 5 g5-c | Human decision on JSON-RPC auth (mTLS) |
-| **4** | Group 4 StartStream | Implement live calendar streaming to mirrors (deferred) |
-| **5** | Group 4 periodic scheduling | Randomized FB verification scheduling via TickObserver |
+| **1** | Group 5 g5-c | Human decision on JSON-RPC auth (mTLS) — blocked, needs dedicated spec |
+| **2** | Group 4 StartStream | Implement live calendar streaming to mirrors (deferred — Phase 4b.4c) |
+| **3** | Group 4 periodic scheduling | Add TickObserver callback to enqueue VerifyFbRecorded tasks |
+| **4** | Group 2 | Run 9 pre-flight verification checks |
+| **5** | Group 3 (Type-Enforced Legacy) | Verify if 58 open items are stale vs superseded by Group 1 Take 3 |

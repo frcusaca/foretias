@@ -3,7 +3,7 @@
 
 **Date:** 2026-05-22
 **Paired Spec:** `COMBINED_GROUP3_SPEC.md`
-**Status:** Ready for parallel-agent execution
+**Status:** ✅ MERGED to alpha 2026-05-23. Checkboxes marked 2026-06-02.
 **Pre-flight:** `COMBINED_GROUP2_PLAN.md` Phase A (every agent runs this first)
 
 ---
@@ -40,14 +40,14 @@ Each agent runs:
 
 ### Steps
 
-- [ ] **Pre-flight** — run `COMBINED_GROUP2_PLAN.md` Phase A; all checks pass
-- [ ] **Locate the unsafe impl**:
+- [x] **Pre-flight** — run `COMBINED_GROUP2_PLAN.md` Phase A; all checks pass
+- [x] **Locate the unsafe impl**:
       ```bash
       grep -n "unsafe impl Send for NoiseSession" p2p/core-engine/src/noise.rs
       # expect: line 37
       ```
-- [ ] **Remove** the `unsafe impl Send for NoiseSession {}` line.
-- [ ] **Update safety comment** above it: replace the existing block with:
+- [x] **Remove** the `unsafe impl Send for NoiseSession {}` line.
+- [x] **Update safety comment** above it: replace the existing block with:
       ```rust
       // NoiseSession is intentionally NOT Send. The wrapped C11 ForetiasNoiseState
       // contains mutable nonce counters (`send_nonce`, `recv_nonce`) advanced by
@@ -56,14 +56,14 @@ Each agent runs:
       // If you need to send a session across threads, wrap it in
       // Arc<tokio::sync::Mutex<NoiseSession>> at the call site.
       ```
-- [ ] **Build:** `cd p2p && cargo build --workspace`
-- [ ] **Triage every compile error:** for each "NoiseSession cannot be sent between threads" error:
+- [x] **Build:** `cd p2p && cargo build --workspace`
+- [x] **Triage every compile error:** for each "NoiseSession cannot be sent between threads" error:
       - Check if the call site genuinely needs Send (e.g., crosses `tokio::spawn`).
       - If yes → wrap in `Arc<tokio::sync::Mutex<NoiseSession>>`.
       - If no (e.g., used inside a single-task `let _ = async move { ... }`) →
         restructure so the session does not cross the move boundary.
       - Document each fix with a one-line comment.
-- [ ] **Audit `PrivKeyHandle`**:
+- [x] **Audit `PrivKeyHandle`**:
       ```bash
       grep -n "unsafe impl Send for PrivKeyHandle" p2p/core-engine/src/core/identity.rs
       # expect: line 18
@@ -71,21 +71,21 @@ Each agent runs:
       Apply the same analysis. If the underlying C `ForetiasPrivKey32` is
       immutable after construction (just a 32-byte seed), the `Send` impl may be
       correct. Document the determination in the safety comment.
-- [ ] **Add compile-time assertion:** in `p2p/core-engine/tests/secret_no_debug.rs`
+- [x] **Add compile-time assertion:** in `p2p/core-engine/tests/secret_no_debug.rs`
       (or a new `tests/send_safety.rs`):
       ```rust
       use static_assertions::assert_not_impl_any;
       use foretias_core::noise::NoiseSession;
       assert_not_impl_any!(NoiseSession: Send);
       ```
-- [ ] **Run tests:** `cargo test --workspace`
-- [ ] **Lint:** `cargo clippy --workspace` (no new warnings)
-- [ ] **Commit:**
+- [x] **Run tests:** `cargo test --workspace`
+- [x] **Lint:** `cargo clippy --workspace` (no new warnings)
+- [x] **Commit:**
       ```
       Major: Security Correctness (Group 3), Phase 1, Unit B — remove NoiseSession unsafe Send
       Claude Code 2.1.119 (Claude Code); claude-opus-4-7
       ```
-- [ ] **Merge to alpha; remove worktree.**
+- [x] **Merge to alpha; remove worktree.**
 
 ---
 
@@ -96,17 +96,17 @@ Each agent runs:
 
 ### Steps
 
-- [ ] **Pre-flight** — `COMBINED_GROUP2_PLAN.md` Phase A passes
-- [ ] **Open** `p2p/core-engine/src/crypto_server/signing_tbid.rs` at line 32-46
-- [ ] **Verify** the current `secret_bytes` extraction matches the spec quote
-- [ ] **Determine downstream type:**
+- [x] **Pre-flight** — `COMBINED_GROUP2_PLAN.md` Phase A passes
+- [x] **Open** `p2p/core-engine/src/crypto_server/signing_tbid.rs` at line 32-46
+- [x] **Verify** the current `secret_bytes` extraction matches the spec quote
+- [x] **Determine downstream type:**
       ```bash
       grep -n "fn from.*Vec<u8>\|impl From<Vec<u8>> for SignatureBytes" p2p/core-engine/src/crypto_server/
       ```
       Read `SignatureBytes::from(Vec<u8>)`'s implementation. If it stores the
       Vec in a field, that field must also be Zeroizing-aware or the protection
       is lost on conversion.
-- [ ] **Apply minimum-impact fix:**
+- [x] **Apply minimum-impact fix:**
       - **Path A (preferred if SignatureBytes already protects):** change
         `let mut secret_bytes = Vec::with_capacity(240);` to
         `let mut secret_bytes = zeroize::Zeroizing::new(Vec::with_capacity(240));`
@@ -120,14 +120,14 @@ Each agent runs:
         (likely already done by `sodium_memzero`). Add a `Zeroizing` wrap around
         `secret_bytes` and a manual `secret_bytes.zeroize()` before any early
         return path, even if `SignatureBytes` doesn't protect.
-- [ ] **Verify SignatureBytes is appropriately protected:** if not, file a
+- [x] **Verify SignatureBytes is appropriately protected:** if not, file a
       follow-up note in the work unit's commit message (do not expand scope).
-- [ ] **Tests:** `cargo test -p foretias-core -- tbid`
-- [ ] **Commit:**
+- [x] **Tests:** `cargo test -p foretias-core -- tbid`
+- [x] **Commit:**
       ```
       Major: Security Correctness (Group 3), Phase 1, Unit F2 — Zeroizing wrap on TBID secret_bytes
       ```
-- [ ] **Merge to alpha; remove worktree.**
+- [x] **Merge to alpha; remove worktree.**
 
 ---
 
@@ -138,19 +138,19 @@ Each agent runs:
 
 ### Steps
 
-- [ ] **Pre-flight** — `COMBINED_GROUP2_PLAN.md` Phase A passes
-- [ ] **For each of the 6 catalogued sites, verify it still exists:**
+- [x] **Pre-flight** — `COMBINED_GROUP2_PLAN.md` Phase A passes
+- [x] **For each of the 6 catalogued sites, verify it still exists:**
       ```bash
       grep -n "try_into().unwrap()" p2p/foretias-server/src/communerd/p2p/tbid_handshake.rs
       grep -n ".to_str().unwrap()" p2p/foretias-server/src/server/mod.rs
       grep -n "from_value.*\.ok()" p2p/foretias-server/src/server/handlers.rs
       ```
-- [ ] **Skip Clock-related sites** (`SystemTime::now().unwrap()`) — they are
+- [x] **Skip Clock-related sites** (`SystemTime::now().unwrap()`) — they are
       handled by Group 5-A. Do NOT touch these files for clock fixes.
-- [ ] **Apply fixes** per spec §2.3 — see the spec for exact patterns
-- [ ] **Add three regression tests** as outlined in spec §2.3 Tests subsection
-- [ ] **Run:** `cargo test --workspace`
-- [ ] **Commit + merge.**
+- [x] **Apply fixes** per spec §2.3 — see the spec for exact patterns
+- [x] **Add three regression tests** as outlined in spec §2.3 Tests subsection
+- [x] **Run:** `cargo test --workspace`
+- [x] **Commit + merge.**
 
 ---
 
@@ -162,26 +162,26 @@ Each agent runs:
 
 ### Steps
 
-- [ ] **Pre-flight** — Phase A passes; also confirm Group 5-A has merged
+- [x] **Pre-flight** — Phase A passes; also confirm Group 5-A has merged
       (`grep "self.clock.now_ns" p2p/foretias-server/src/communerd/mod.rs` shows hits)
-- [ ] **Extend `PeerRegistrationRecord`** per spec §2.2 step 1
-- [ ] **Add `canonical_payload()` method** — reference `ProbityReport::canonical()`
+- [x] **Extend `PeerRegistrationRecord`** per spec §2.2 step 1
+- [x] **Add `canonical_payload()` method** — reference `ProbityReport::canonical()`
       at `p2p/foretias-server/src/probity/report.rs:34` for the length-prefix
       encoding pattern; use the same `(field_bytes.len() as u16).to_le_bytes()`
       prefix scheme for string fields
-- [ ] **Sign on publish** — modify both `PutRecord` send sites (lines ~644 and ~656)
-- [ ] **Verify on consume** — replace `validate_peer_registration(&record)` calls
+- [x] **Sign on publish** — modify both `PutRecord` send sites (lines ~644 and ~656)
+- [x] **Verify on consume** — replace `validate_peer_registration(&record)` calls
       with `validate_peer_registration(&record, crypto)?` returning Result, and
       handle the `Ok(false)` case as `continue` (skip the record with a warn log)
-- [ ] **Create test file** `p2p/foretias-server/tests/dht_record_signature.rs`
+- [x] **Create test file** `p2p/foretias-server/tests/dht_record_signature.rs`
       with the four cases listed in spec §2.2 Tests
-- [ ] **Run:** `cargo test -p foretias-server -- dht_record_signature`
-- [ ] **Run full workspace tests:** `cargo test --workspace`
-- [ ] **Commit:**
+- [x] **Run:** `cargo test -p foretias-server -- dht_record_signature`
+- [x] **Run full workspace tests:** `cargo test --workspace`
+- [x] **Commit:**
       ```
       Major: Security Correctness (Group 3), Phase 3, Unit D3 — DHT record sign+verify
       ```
-- [ ] **Merge to alpha; remove worktree.**
+- [x] **Merge to alpha; remove worktree.**
 
 ---
 
@@ -189,10 +189,10 @@ Each agent runs:
 
 After all four branches are merged to alpha:
 
-- [ ] `NoiseSession: !Send` enforced via `static_assertions`
-- [ ] `secret_bytes` in `signing_tbid.rs` is `Zeroizing`-wrapped
-- [ ] Unwrap sweep covered all 6 catalogued sites (or delegated to G5-A)
-- [ ] `PeerRegistrationRecord` is signed and verified
-- [ ] `cargo test --workspace` passes
-- [ ] `cargo build --workspace` zero warnings
-- [ ] No regression in CI gates (`secret_no_debug.rs`, `trust_boundary_type_usage.rs`)
+- [x] `NoiseSession: !Send` enforced via `static_assertions`
+- [x] `secret_bytes` in `signing_tbid.rs` is `Zeroizing`-wrapped
+- [x] Unwrap sweep covered all 6 catalogued sites (or delegated to G5-A)
+- [x] `PeerRegistrationRecord` is signed and verified
+- [x] `cargo test --workspace` passes
+- [x] `cargo build --workspace` zero warnings
+- [x] No regression in CI gates (`secret_no_debug.rs`, `trust_boundary_type_usage.rs`)
