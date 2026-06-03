@@ -297,6 +297,6 @@ Group 2 (pre-flight)
 |----------|------|--------|
 | **1** | Group 5 g5-c | Human decision on JSON-RPC auth (mTLS) — blocked, needs dedicated spec |
 | **2** | Group 4 StartStream | Implement live calendar streaming to mirrors (deferred — Phase 4b.4c) |
-| **3** | Group 4 periodic scheduling | Add TickObserver callback to enqueue VerifyFbRecorded tasks |
+| **3** | ~~Group 4 periodic scheduling~~ | ✅ Done — TickObserver callback enqueues VerifyFbRecorded with 1-in-20 probability |
 | **4** | Group 2 | Run 9 pre-flight verification checks |
 | **5** | Group 3 (Type-Enforced Legacy) | Verify if 58 open items are stale vs superseded by Group 1 Take 3 |
