@@ -1,6 +1,6 @@
 # Foretias — Open Work Index
 
-**Generated:** 2026-06-01
+**Generated:** 2026-06-02
 **Purpose:** Single reference for all plans/specs with open tasks, organized by urgency and dependency order. Deferred and backburnered features at the end.
 
 ---
@@ -19,19 +19,15 @@
 
 | File | Open | Done | Status |
 |------|------|------|--------|
-| `specs/POST7_AUDIT_CLEANUP_PLAN.md` | 45 | 0 | **PENDING** — blocked on Group 7 completion |
+| `specs/POST7_AUDIT_CLEANUP_PLAN.md` | 0 | 45 | **COMPLETE** — all 5 phases done |
 | `specs/POST7_AUDIT_CLEANUP_SPEC.md` | — | — | Spec (paired) |
 
-**Dependencies:** Group 7 (Communerdette) must be COMPLETE before this begins
-**Blocks:** Nothing (cleanup work)
-
-**Scope:** 4 phases, ~45 tasks:
-- Phase 1: 3 actionable unwrap/expect fixes (P0-P1)
-- Phase 2: ~50 mutex poison migration calls (std → parking_lot)
-- Phase 3: 15 dead code stubs (per-stub human decisions)
-- Phase 4: 1 pre-P2P finding (corrupt .tmp test)
-
-**NOTE:** Phase 8.2 Calendar DoAttestation blockers (7-10h effort) stay as Group 7 OPEN items — HIGHER priority than this cleanup.
+**Completed 2026-06-02:**
+- Phase 1: ✅ 3 unwrap/expect fixes (P0-P1)
+- Phase 2: ✅ ~65 mutex poison migration calls (std → parking_lot)
+- Phase 3: ✅ 15 dead code stubs addressed
+- Phase 4: ✅ Pre-P2P finding resolved (already correct)
+- Phase 5: ✅ Final verification — all tests green
 
 ---
 
@@ -47,7 +43,13 @@
 
 **Completed 2026-06-01:**
 - Phase 4.4: ✅ Verified `handle_route_stamp` response shape — **BROKEN**, then **FIXED** (added `signature_bytes()`/`signature_algorithm()` accessors to `CleanAuthenticated<Foretis>`)
-- Phase 8.2: ✅ Calendar `DoAttestation` explored — 5 blockers identified, 7-10h estimated effort. Item 3 already satisfied.
+- Phase 8.2: ✅ Calendar `DoAttestation` explored — 5 blockers identified. All resolved by Group 4 Streams 4d/4e.
+- Phase 10: ✅ Removed obsolete direct peer-call paths (`stamp_peer`, `PeerTransport::stamp`, tier wrappers). 571 tests pass.
+- Phase 18.6: ✅ Unwrap/expect audit complete — `docs/security/unwrap-audit.md` with 10 ranked items, 1 Critical, 2 Moderate
+
+**Completed 2026-06-02:**
+- Signing boundary enforced: ✅ Calendar now owns its own Ed25519 signing key (per AGENTS.md § Signing Boundary)
+- Documentation: ✅ SAFETY.md § Per-Component Key Ownership + AGENTS.md implementation status note
 - Phase 10: ✅ Removed obsolete direct peer-call paths (`stamp_peer`, `PeerTransport::stamp`, tier wrappers). 571 tests pass.
 - Phase 18.6: ✅ Unwrap/expect audit complete — `docs/security/unwrap-audit.md` with 10 ranked items, 1 Critical, 2 Moderate
 
@@ -67,29 +69,24 @@
 
 | File | Open | Done | Status |
 |------|------|------|--------|
-| `specs/COMBINED_GROUP4_PLAN.md` | 68 | 0 | **REVISED** — spec updated 2026-06-01 with Streams 4d (GNF/FB) + 4e (Chronon Retrieval + FB Verification) |
+| `specs/COMBINED_GROUP4_PLAN.md` | 0 | 121 | **COMPLETE** — all 5 streams implemented |
 | `specs/COMBINED_GROUP4_SPEC.md` | — | — | Spec (paired, revised) |
 | `specs/CALENDAR_ACTIVE_MIRRORING_PLAN.md` | 18 | 0 | **DEPRECATED** → superseded by Group 4 |
 | `specs/CALENDAR_PROOF_OF_STORAGE_PLAN.md` | 26 | 0 | **DEPRECATED** → superseded by Group 4 |
 
-**Streams (5 total):**
-- **4a:** Libp2p unit tests (Phase 1, independent)
-- **4b:** Calendar Active Mirroring (Phase 3, merged through 4b.5)
-- **4c:** Calendar Proof of Storage (Phase 3, independent of 4b)
-- **4d:** GNF/FB Mutual Attestation (Phase 4, new — added 2026-06-01)
-- **4e:** Chronon Retrieval APIs + FB Verification (Phase 4, new — added 2026-06-01)
+**Completed 2026-06-02:**
+- **4a:** ✅ Libp2p unit tests
+- **4b:** ✅ Calendar Active Mirroring (4b.1-4b.5 merged, StartStream placeholder deferred)
+- **4c:** ✅ Calendar Proof of Storage (C11 merkle, FFI, CalendarBlock, prove_storage, handlers, probity, integration tests)
+- **4d:** ✅ GNF/FB Mutual Attestation (DoChronon/DoEpochAttestation, stamp_my_chronon/block, FB verification, integration tests)
+- **4e:** ✅ Chronon Retrieval + FB Verification (get_chronon/chain, VerifyFbRecorded, integration tests)
+- **Calendar signing key:** ✅ Calendar now owns its own Ed25519 signing key (per AGENTS.md signing boundary)
 
-**Dependencies:**
-1. Group 7 (Communerdette) reaches feature completion ← **RESOLVED** ✅
-2. Group 6 (Mutual Attestation) spec approved and interfaces stable
-3. Plan rewritten to use Communerdette as mirror-traffic carrier ← **RESOLVED** ✅ (Streams 4d/4e use CommunerdetteLine)
-
-**Blocks:** Stream 4c (Proof of Storage), calendar replication
-
-**Resumption preconditions (all must be true):**
-1. Group 7 spec reaches feature completion ← **RESOLVED** ✅
-2. Group 6 spec approved and interfaces stable ← superseded by Group 4 Stream 4d
-3. Plan rewritten to reflect Communerdette architecture ← **RESOLVED** ✅ (Streams 4d/4e)
+**Calendar signing key implementation:**
+- `Calendar::sign_foretis()` — signs with Calendar's own key
+- `Calendar::calendar_public_key()` — exposes public key
+- DoChrononAttestation/DoEpochAttestation handlers sign before transmission
+- Documented in SAFETY.md § Per-Component Key Ownership
 
 ---
 
@@ -287,12 +284,14 @@ Group 2 (pre-flight)
             └── Group 3 (P2P features) ─────────┤
                  └── Group 7 (Communerdette) ◄──┘  [COMPLETE ✅]
                       │
-                      └──► Group 4 (Mirror + PoS + GNF/FB) [REVISED]
-                           ├── Stream 4a: Libp2p unit tests
-                           ├── Stream 4b: Active Mirroring (merged 4b.1-4b.5)
-                           ├── Stream 4c: Proof of Storage
-                           ├── Stream 4d: GNF/FB Mutual Attestation [NEW]
-                           └── Stream 4e: Chronon Retrieval + FB Verification [NEW]
+                      ├──► Group 4 (Mirror + PoS + GNF/FB) [COMPLETE ✅]
+                      │    ├── Stream 4a: Libp2p unit tests ✅
+                      │    ├── Stream 4b: Active Mirroring ✅
+                      │    ├── Stream 4c: Proof of Storage ✅
+                      │    ├── Stream 4d: GNF/FB Mutual Attestation ✅
+                      │    └── Stream 4e: Chronon Retrieval + FB Verification ✅
+                      │
+                      └──► POST7 Audit & Cleanup [COMPLETE ✅]
 ```
 
 ---
@@ -301,10 +300,8 @@ Group 2 (pre-flight)
 
 | Priority | Item | Action |
 |----------|------|--------|
-| **1** | POST7 Audit & Cleanup | Implement unwrap fixes, mutex migration, dead code cleanup |
-| **2** | Group 4 Stream 4d | Implement GNF/FB mutual attestation (DoChronon/EpochAttestation) |
-| **3** | Group 4 Stream 4e | Implement chronon retrieval APIs + FB verification |
-| **4** | Group 4 Stream 4c | Implement Proof of Storage (independent of 4d/4e) |
-| **5** | Group 1 | Verify which of 66 open items are stale vs genuine |
-| **6** | Group 3 | Review 45 open items for relevance |
-| **7** | Group 5 g5-c | Human decision on JSON-RPC auth (mTLS) |
+| **1** | Group 1 | Verify which of 66 open items are stale vs genuine |
+| **2** | Group 3 | Review 45 open items for relevance |
+| **3** | Group 5 g5-c | Human decision on JSON-RPC auth (mTLS) |
+| **4** | Group 4 StartStream | Implement live calendar streaming to mirrors (deferred) |
+| **5** | Group 4 periodic scheduling | Randomized FB verification scheduling via TickObserver |
