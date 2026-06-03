@@ -147,12 +147,9 @@
 
 | File | Open | Done | Status |
 |------|------|------|--------|
-| `specs/TYPE_ENFORCED_CLEANSING_AND_AUTHENTICATION_PLAN.md` | 58 | 10 | Likely stale — superseded by Group 1 Take 3 |
+| `specs/TYPE_ENFORCED_CLEANSING_AND_AUTHENTICATION_PLAN.md` | 0 | 74 | **COMPLETE** — merged (Phases A-F), superseded by Group 1 Take 3 |
 
-**Dependencies:** None
-**Blocks:** None (superseded)
-
-**Note:** This plan predates the Group 1 Take 3 work. Most items are likely stale. Needs review to confirm.
+**Status:** All work merged to alpha. Superseded by `COMBINED_GROUP1_TYPE_BASED_SAFETY_ENFORCEMENT_TAKE_3_PLAN.md`. Checkboxes marked 2026-06-02.
 
 ---
 
@@ -190,12 +187,13 @@
 
 | File | Open | Done | Status |
 |------|------|------|--------|
-| `specs/COMBINED_GROUP2_PLAN.md` | 9 | 7 | Verification-only — all code done |
+| `specs/COMBINED_GROUP2_PLAN.md` | 0 | 16 | **COMPLETE** — all verification checks pass |
 
-**Dependencies:** None
-**Blocks:** Nothing (pre-flight checks)
-
-**Note:** The 9 open items are pre-flight verification checks (grep for issues, run tests). All code changes are already shipped. These are "run and confirm" tasks, not implementation.
+**Verified 2026-06-02:**
+- ✅ No safety-related TODOs/FIXMEs/HACKs in production code
+- ✅ All workspace tests pass (0 failures)
+- ✅ trust_boundary_type_usage test passes
+- ✅ No regressions in CI gates
 
 ---
 
@@ -297,6 +295,3 @@ Group 2 (pre-flight)
 |----------|------|--------|
 | **1** | Group 5 g5-c | Human decision on JSON-RPC auth (mTLS) — blocked, needs dedicated spec |
 | **2** | Group 4 StartStream | Implement live calendar streaming to mirrors (deferred — Phase 4b.4c) |
-| **3** | ~~Group 4 periodic scheduling~~ | ✅ Done — TickObserver callback enqueues VerifyFbRecorded with 1-in-20 probability |
-| **4** | Group 2 | Run 9 pre-flight verification checks |
-| **5** | Group 3 (Type-Enforced Legacy) | Verify if 58 open items are stale vs superseded by Group 1 Take 3 |

@@ -32,8 +32,8 @@ grep -rn "thread_rng" p2p/{core-engine,foretias-client,foretias-server}/src   # 
 grep -rn "foretias-node" README.md HOWTO.md AGENTS.md                         # expect: 0
 ```
 
-- [ ] All six greps return zero matches → proceed
-- [ ] Any grep returns matches → STOP; escalate to coordinator
+- [x] All six greps return zero matches → proceed
+- [x] Any grep returns matches → STOP; escalate to coordinator
 
 ### A.2 Build is clean
 
@@ -42,8 +42,8 @@ cd p2p && cargo build --workspace 2>&1 | tee /tmp/build.log
 grep -i "warning" /tmp/build.log | grep -v "unused_imports.*test"             # expect: 0 substantive warnings
 ```
 
-- [ ] Zero substantive warnings → proceed
-- [ ] Warnings present → STOP; escalate
+- [x] Zero substantive warnings → proceed
+- [x] Warnings present → STOP; escalate
 
 ### A.3 Tests pass
 
@@ -52,9 +52,9 @@ cd p2p && cargo test --workspace -- --skip e2e          # ~3 min
 cd p2p/core && cmake --build build && ctest --output-on-failure  # ~1 min
 ```
 
-- [ ] Rust workspace tests: all pass
-- [ ] C11 tests: all pass
-- [ ] Any failure → STOP; escalate
+- [x] Rust workspace tests: all pass
+- [x] C11 tests: all pass
+- [x] Any failure → STOP; escalate
 
 ### A.4 Static-analysis test passes
 
@@ -64,8 +64,8 @@ The trust-boundary discipline gate must pass:
 cd p2p && cargo test -p foretias-core trust_boundary_type_usage
 ```
 
-- [ ] `trust_boundary_type_usage` test passes
-- [ ] Any failure → STOP; escalate (this means the type-enforced trust system
+- [x] `trust_boundary_type_usage` test passes
+- [x] Any failure → STOP; escalate (this means the type-enforced trust system
       has regressed and must be repaired first)
 
 ---
