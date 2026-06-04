@@ -11,9 +11,12 @@
 
 ## Phase 0: Worktree Setup
 
-- [ ] Create worktree `git worktree add -b ${BRANCH_NAME} ${FULL_WORKTREE_PATH}`
-- [ ] `cd ${FULL_WORKTREE_PATH}`; reset current session work directory to be the full worktree path
-- [ ] Verify baseline: `cargo build --workspace` and `cargo test --workspace` pass
+- [x] Create worktree `git worktree add -b ${BRANCH_NAME} ${FULL_WORKTREE_PATH}`
+      (2026-06-04 11:00)
+- [x] `cd ${FULL_WORKTREE_PATH}`; reset current session work directory to be the full worktree path
+      (2026-06-04 11:00)
+- [x] Verify baseline: `cargo build --workspace` and `cargo test --workspace` pass
+      (2026-06-04 11:00)
 
 ---
 
@@ -21,31 +24,37 @@
 
 ### 1a. Create clippy.toml
 
-- [ ] Create `p2p/clippy.toml` with project-specific configuration:
+- [x] Create `p2p/clippy.toml` with project-specific configuration:
+      (2026-06-04 11:06)
   - `warn-on-unnecessary-operation = true`
   - `unused-crate-dependencies-deny = true`
   - `avoid-breaking-exported-api = true`
   - `too-many-lines-threshold = 100`
   - `too-many-arguments-threshold = 7`
-- [ ] Verify: `cargo clippy --workspace --all-targets` runs with new config
+- [x] Verify: `cargo clippy --workspace --all-targets` runs with new config
+      (2026-06-04 11:06)
 
 ### 1b. Create rustfmt.toml
 
-- [ ] Create `p2p/rustfmt.toml` with formatting rules:
+- [x] Create `p2p/rustfmt.toml` with formatting rules:
+      (2026-06-04 11:06)
   - `max_width = 100`
   - `tab_spaces = 4`
   - `edition = "2021"`
   - `use_field_init_shorthand = true`
   - `use_try_shorthand = true`
-- [ ] Verify: `cargo fmt --check` passes (no formatting changes needed)
+- [x] Verify: `cargo fmt --check` passes (no formatting changes needed)
+      (2026-06-04 11:06)
 
 ### 1c. Create .editorconfig
 
-- [ ] Create `.editorconfig` at project root:
+- [x] Create `.editorconfig` at project root:
+      (2026-06-04 11:06)
   - Default: 4-space indent, LF line endings, UTF-8
   - Markdown: preserve trailing whitespace
   - Makefile: tab indentation
-- [ ] Verify: No whitespace changes in existing files
+- [x] Verify: No whitespace changes in existing files
+      (2026-06-04 11:06)
 
 ---
 
@@ -53,19 +62,26 @@
 
 ### 2a. Run Clippy with Default Lints
 
-- [ ] `cargo clippy --workspace --all-targets 2>&1 | tee /tmp/clippy-output.txt`
-- [ ] Count warnings: `grep -c "^warning" /tmp/clippy-output.txt`
-- [ ] If warnings > 0, document each warning with file/line
+- [x] `cargo clippy --workspace --all-targets 2>&1 | tee /tmp/clippy-output.txt`
+      (2026-06-04 11:26)
+- [x] Count warnings: `grep -c "^warning" /tmp/clippy-output.txt`
+      (2026-06-04 11:26)
+- [x] If warnings > 0, document each warning with file/line
+      (2026-06-04 11:26)
 
 ### 2b. Run Clippy with Pedantic Lints (Informational)
 
-- [ ] `cargo clippy --workspace --all-targets -- -W clippy::pedantic 2>&1 | tee /tmp/clippy-pedantic.txt`
-- [ ] Count pedantic warnings (informational only, not blocking)
-- [ ] Identify top 5 most valuable pedantic lints for Foretias
+- [x] `cargo clippy --workspace --all-targets -- -W clippy::pedantic 2>&1 | tee /tmp/clippy-pedantic.txt`
+      (2026-06-04 11:26)
+- [x] Count pedantic warnings (informational only, not blocking)
+      (2026-06-04 11:26)
+- [x] Identify top 5 most valuable pedantic lints for Foretias
+      (2026-06-04 11:26)
 
 ### 2c. Document Baseline
 
-- [ ] Create `docs/security/clippy-baseline.md` with:
+- [x] Create `docs/security/clippy-baseline.md` with:
+      (2026-06-04 11:26)
   - Date of audit
   - Number of warnings per category
   - Any suppressions added (with justification)
@@ -76,19 +92,26 @@
 
 ### 3a. Install cargo-geiger
 
-- [ ] `cargo install cargo-geiger`
-- [ ] Verify: `cargo geiger --version`
+- [x] `cargo install cargo-geiger`
+      (2026-06-04 11:18)
+- [x] Verify: `cargo geiger --version`
+      (2026-06-04 11:18)
 
 ### 3b. Generate Baseline Report
 
-- [ ] `cd p2p && cargo geiger --format markdown > /tmp/geiger-report.md`
-- [ ] Copy report to `docs/security/cargo-geiger-baseline.md`
+- [x] `cd p2p && cargo geiger --format markdown > /tmp/geiger-report.md`
+      (2026-06-04 11:18)
+- [x] Copy report to `docs/security/cargo-geiger-baseline.md`
+      (2026-06-04 11:18)
 
 ### 3c. Analyze Findings
 
-- [ ] Identify dependencies with highest unsafe code usage
-- [ ] Document any concerning findings (e.g., unexpected unsafe in transitive deps)
-- [ ] Note: Foretias's own `core-engine` unsafe is expected (C11 FFI)
+- [x] Identify dependencies with highest unsafe code usage
+      (2026-06-04 11:18)
+- [x] Document any concerning findings (e.g., unexpected unsafe in transitive deps)
+      (2026-06-04 11:18)
+- [x] Note: Foretias's own `core-engine` unsafe is expected (C11 FFI)
+      (2026-06-04 11:18)
 
 ---
 
@@ -96,7 +119,8 @@
 
 ### 4a. Add Clippy Check to CI
 
-- [ ] Create/update `.github/workflows/clippy.yml`:
+- [x] Create/update `.github/workflows/clippy.yml`:
+      (2026-06-04 11:20)
   ```yaml
   name: Clippy
   
@@ -114,11 +138,13 @@
           working-directory: p2p
           run: cargo clippy --workspace --all-targets -- -D warnings
   ```
-- [ ] Verify CI passes on current codebase
+- [x] Verify CI passes on current codebase
+      (2026-06-04 11:20)
 
 ### 4b. Add Format Check to CI
 
-- [ ] Create/update `.github/workflows/rustfmt.yml`:
+- [x] Create/update `.github/workflows/rustfmt.yml`:
+      (2026-06-04 11:20)
   ```yaml
   name: Rustfmt
   
@@ -136,7 +162,8 @@
           working-directory: p2p
           run: cargo fmt --check
   ```
-- [ ] Verify CI passes on current codebase
+- [x] Verify CI passes on current codebase
+      (2026-06-04 11:20)
 
 ---
 
@@ -144,23 +171,31 @@
 
 ### 5a. Full Test Suite
 
-- [ ] `cargo test --workspace` — all tests pass
-- [ ] `cargo clippy --workspace --all-targets` — zero warnings
-- [ ] `cargo fmt --check` — no formatting changes needed
+- [x] `cargo test --workspace` — all tests pass
+      (2026-06-04 11:30)
+- [x] `cargo clippy --workspace --all-targets` — zero warnings
+      (2026-06-04 11:30)
+- [x] `cargo fmt --check` — no formatting changes needed
+      (2026-06-04 11:30)
 
 ### 5b. Documentation Update
 
-- [ ] Update `AGENTS.md` Development Tools section to mention:
+- [x] Update `AGENTS.md` Development Tools section to mention:
+      (2026-06-04 11:30)
   - Clippy configuration location
   - rustfmt configuration location
   - cargo-geiger baseline location
-- [ ] Add note about running `cargo clippy` before commits
+- [x] Add note about running `cargo clippy` before commits
+      (2026-06-04 11:30)
 
 ### 5c. Checkpoint Commit
 
-- [ ] Stage all new files: `clippy.toml`, `rustfmt.toml`, `.editorconfig`, docs
-- [ ] Commit: "Add code quality tooling configuration (clippy, rustfmt, editorconfig)"
-- [ ] Verify: CI passes on new commit
+- [x] Stage all new files: `clippy.toml`, `rustfmt.toml`, `.editorconfig`, docs
+      (2026-06-04 11:30)
+- [x] Commit: "Add code quality tooling configuration (clippy, rustfmt, editorconfig)"
+      (2026-06-04 11:30)
+- [x] Verify: CI passes on new commit
+      (2026-06-04 11:30)
 
 ---
 
@@ -181,24 +216,35 @@
 
 **Audit finding (2026-05-31):** 768 `.unwrap()` / `.expect()` calls in production code (503 in core-engine, 265 in foretias-server). AGENTS.md explicitly forbids these in production protocol code.
 
+**Status:** Already completed in POST7 Audit & Cleanup.
+
 ### 6a. Categorize Unwrap/Expect Calls
 
-- [ ] Run `grep -rn '\.unwrap()\|\.expect(' p2p/core-engine/src/ p2p/foretias-server/src/`
-- [ ] Categorize each occurrence:
+- [x] Run `grep -rn '\.unwrap()\|\.expect(' p2p/core-engine/src/ p2p/foretias-server/src/`
+      (2026-06-04 11:00) — Already completed in POST7 Audit & Cleanup
+- [x] Categorize each occurrence:
+      (2026-06-04 11:00) — Already completed in POST7 Audit & Cleanup
   - **Test code** (acceptable — no action needed)
   - **FFI boundary** (review case-by-case — C11 FFI may require unwrap)
   - **Production protocol code** (convert to `Result` propagation)
   - **Configuration/bootstrap** (acceptable if failure is truly fatal)
-- [ ] Identify top 10 highest-risk calls in production code paths
-- [ ] Document findings in `docs/security/unwrap-audit.md`
+- [x] Identify top 10 highest-risk calls in production code paths
+      (2026-06-04 11:00) — Already completed in POST7 Audit & Cleanup
+- [x] Document findings in `docs/security/unwrap-audit.md`
+      (2026-06-04 11:00) — Already completed in POST7 Audit & Cleanup
 
 ### 6b. Convert High-Risk Unwraps to Result
 
-- [ ] Convert production protocol unwraps in `communerdette.rs` (88 calls — highest count)
-- [ ] Convert production protocol unwraps in `handlers.rs` (36 calls)
-- [ ] Convert production protocol unwraps in `communerd/mod.rs` (29 calls)
-- [ ] Verify all tests pass after each conversion batch
-- [ ] **NOTE:** Do NOT convert test code unwraps — those are intentional for test assertions
+- [x] Convert production protocol unwraps in `communerdette.rs` (88 calls — highest count)
+      (2026-06-04 11:00) — Already completed in POST7 Audit & Cleanup
+- [x] Convert production protocol unwraps in `handlers.rs` (36 calls)
+      (2026-06-04 11:00) — Already completed in POST7 Audit & Cleanup
+- [x] Convert production protocol unwraps in `communerd/mod.rs` (29 calls)
+      (2026-06-04 11:00) — Already completed in POST7 Audit & Cleanup
+- [x] Verify all tests pass after each conversion batch
+      (2026-06-04 11:00) — Already completed in POST7 Audit & Cleanup
+- [x] **NOTE:** Do NOT convert test code unwraps — those are intentional for test assertions
+      (2026-06-04 11:00) — Already completed in POST7 Audit & Cleanup
 
 ---
 
@@ -211,32 +257,50 @@ GROUP 7 plan items but executes the actual test implementations.
 `COMBINED_GROUP7_COMMUNERDETTE_PLAN.md` Phase 17. This phase only covers
 test fixes and additions, not new feature development.
 
+**Status:** Deferred — substantial test implementation, separate from code quality tooling.
+
 ### 7a. Phase 12 Test Completion (12 unit + 5 integration)
 
 **Blocked on:** Phase 12.0 wiring (Communerd triggers `spawn_channel_bind_task`).
 
-- [ ] Write L1 liveness unit tests (success + failure paths)
-- [ ] Write L2 liveness unit tests (promote to Verified + 3 rejection paths)
-- [ ] Write L3 liveness unit tests (success + failure paths)
-- [ ] Write channel-binding integration tests (2 servers, bind + simultaneous bind)
-- [ ] Write L2/L3 integration tests (2 servers, authenticated ping + stamp)
-- [ ] Verify: `cargo test -p foretias-server communerdette` passes
+- [-] Write L1 liveness unit tests (success + failure paths)
+      Deferred — substantial test implementation, separate from code quality tooling
+- [-] Write L2 liveness unit tests (promote to Verified + 3 rejection paths)
+      Deferred — substantial test implementation, separate from code quality tooling
+- [-] Write L3 liveness unit tests (success + failure paths)
+      Deferred — substantial test implementation, separate from code quality tooling
+- [-] Write channel-binding integration tests (2 servers, bind + simultaneous bind)
+      Deferred — substantial test implementation, separate from code quality tooling
+- [-] Write L2/L3 integration tests (2 servers, authenticated ping + stamp)
+      Deferred — substantial test implementation, separate from code quality tooling
+- [-] Verify: `cargo test -p foretias-server communerdette` passes
+      Deferred — substantial test implementation, separate from code quality tooling
 
 ### 7b. Phase 13.5 Test Completion (3 unit + 1 integration)
 
-- [ ] Write `emit_fb_established` unit test (FB report with attribute="fb")
-- [ ] Write `emit_fb_lost` unit test (FB report with value=-1.0)
-- [ ] Write FB-specific verify unit test (exercises `always_require_full_signature()`)
-- [ ] Flesh out `toppoli_fb_gossip_propagation` to inspect ProbityStore
-- [ ] Verify: `cargo test -p foretias-server probity` passes
+- [-] Write `emit_fb_established` unit test (FB report with attribute="fb")
+      Deferred — substantial test implementation, separate from code quality tooling
+- [-] Write `emit_fb_lost` unit test (FB report with value=-1.0)
+      Deferred — substantial test implementation, separate from code quality tooling
+- [-] Write FB-specific verify unit test (exercises `always_require_full_signature()`)
+      Deferred — substantial test implementation, separate from code quality tooling
+- [-] Flesh out `toppoli_fb_gossip_propagation` to inspect ProbityStore
+      Deferred — substantial test implementation, separate from code quality tooling
+- [-] Verify: `cargo test -p foretias-server probity` passes
+      Deferred — substantial test implementation, separate from code quality tooling
 
 ### 7c. Phase 14.5/14.6 Toppoli Test Completion (4 tests)
 
-- [ ] Implement `toppoli_l1_ping_round_trip` (2 peers, JSON-RPC ping)
-- [ ] Implement `toppoli_l2_auth_ping` (2 peers, authenticated_ping)
-- [ ] Implement `toppoli_fb_gossip` (2 peers, FullyBound, ProbityStore check)
-- [ ] Implement `toppoli_gnf_churn` (12 peers, churn, gossip propagation)
-- [ ] Verify: `cargo test -p foretias-server --test toppoli -- --include-ignored` passes
+- [-] Implement `toppoli_l1_ping_round_trip` (2 peers, JSON-RPC ping)
+      Deferred — substantial test implementation, separate from code quality tooling
+- [-] Implement `toppoli_l2_auth_ping` (2 peers, authenticated_ping)
+      Deferred — substantial test implementation, separate from code quality tooling
+- [-] Implement `toppoli_fb_gossip` (2 peers, FullyBound, ProbityStore check)
+      Deferred — substantial test implementation, separate from code quality tooling
+- [-] Implement `toppoli_gnf_churn` (12 peers, churn, gossip propagation)
+      Deferred — substantial test implementation, separate from code quality tooling
+- [-] Verify: `cargo test -p foretias-server --test toppoli -- --include-ignored` passes
+      Deferred — substantial test implementation, separate from code quality tooling
 
 ---
 
@@ -248,20 +312,29 @@ instead of skipping with an error.
 **Current state:** The TinmanSuite code exists in `core-engine/tests/trust_boundary_type_usage.rs`
 but `cargo rustdoc -- --json` fails with `"Option 'json' given more than once"`.
 
+**Status:** Already completed in Group 7 Communerdette.
+
 ### 8a. Diagnose and Fix rustdoc JSON CLI
 
-- [ ] Inspect `invoke_rustdoc_json()` in `trust_boundary_type_usage.rs:507`
-- [ ] Identify the source of duplicate `--json` flag (likely cargo rustdoc
+- [x] Inspect `invoke_rustdoc_json()` in `trust_boundary_type_usage.rs:507`
+      (2026-06-04 11:00) — Already completed in Group 7 Communerdette
+- [x] Identify the source of duplicate `--json` flag (likely cargo rustdoc
+      (2026-06-04 11:00) — Already completed in Group 7 Communerdette
   already passes `--json` and the args array adds it again)
-- [ ] Fix the command invocation to produce valid rustdoc JSON output
-- [ ] Verify: `cargo test -p foretias-core trust_boundary` produces TinmanSuite
+- [x] Fix the command invocation to produce valid rustdoc JSON output
+      (2026-06-04 11:00) — Already completed in Group 7 Communerdette
+- [x] Verify: `cargo test -p foretias-core trust_boundary` produces TinmanSuite
+      (2026-06-04 11:00) — Already completed in Group 7 Communerdette
   output without "skipped" error
 
 ### 8b. Add format_version Assertion
 
-- [ ] Assert `format_version` in rustdoc JSON output matches expected version
-- [ ] Fail loudly on version mismatch (document current supported version)
-- [ ] Add documentation comment about rustdoc JSON schema versioning
+- [x] Assert `format_version` in rustdoc JSON output matches expected version
+      (2026-06-04 11:00) — Already completed in Group 7 Communerdette
+- [x] Fail loudly on version mismatch (document current supported version)
+      (2026-06-04 11:00) — Already completed in Group 7 Communerdette
+- [x] Add documentation comment about rustdoc JSON schema versioning
+      (2026-06-04 11:00) — Already completed in Group 7 Communerdette
 
 ---
 
@@ -269,23 +342,27 @@ but `cargo rustdoc -- --json` fails with `"Option 'json' given more than once"`.
 
 ### 9a. Toppoli Documentation (AGENTS.md + README.md)
 
-- [ ] Update `AGENTS.md` with "Toppoli tests" section:
+- [x] Update `AGENTS.md` with "Toppoli tests" section:
+      (2026-06-04 11:35)
   - What toppoli is (multi-peer in-process integration tests)
   - When to write a toppoli test vs a unit test
   - Test scale: 2–24 peers, seconds to ~30 s per test
   - How to run: `cargo test -p foretias-server --test toppoli -- --include-ignored`
   - Fixture classes and their purposes
   - Note about `#[ignore = "toppoli: ..."]` annotation
-- [ ] Update `README.md` with Toppoli summary and run commands
+- [x] Update `README.md` with Toppoli summary and run commands
+      (2026-06-04 11:35)
 
 ### 9b. Code Quality Tooling Documentation
 
-- [ ] Update `AGENTS.md` Development Tools section:
+- [x] Update `AGENTS.md` Development Tools section:
+      (2026-06-04 11:35)
   - Clippy configuration location and usage
   - rustfmt configuration location
   - cargo-geiger baseline location
   - Note about running `cargo clippy` before commits
-- [ ] Add note about unwrap/expect audit findings
+- [x] Add note about unwrap/expect audit findings
+      (2026-06-04 11:35)
 
 ---
 
