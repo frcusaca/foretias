@@ -179,12 +179,32 @@
 
 | File | Open | Done | Status |
 |------|------|------|--------|
-| `specs/CODE_QUALITY_TOOLING_PLAN.md` | 71 | 0 | **PROPOSED** — not started |
+| `specs/CODE_QUALITY_TOOLING_PLAN.md` | 15 | 56 | **COMPLETE** — Phases 0-5, 9 done; Phase 7 deferred (test impl) |
 
 **Dependencies:** None
 **Blocks:** Nothing
 
-**Description:** Clippy configuration, cargo-geiger, formatting standards. Low urgency but good hygiene.
+**Completed 2026-06-04:**
+- Phase 0: ✅ Worktree setup + baseline verified
+- Phase 1: ✅ clippy.toml, rustfmt.toml, .editorconfig created
+- Phase 2: ✅ Clippy baseline (150 warnings), pedantic scan (1920), documented
+- Phase 3: ✅ cargo-geiger baseline (foretias-server: 302/1075 unsafe)
+- Phase 4: ✅ CI workflows (clippy.yml, rustfmt.yml)
+- Phase 5: ✅ Final verification, AGENTS.md updated
+- Phase 6: ✅ Already completed in POST7 Audit & Cleanup
+- Phase 7: ⏸️ Deferred — substantial test implementation, separate scope
+- Phase 8: ✅ Already completed in Group 7 Communerdette
+- Phase 9: ✅ Toppoli docs (already existed), code quality docs added
+
+**Files delivered:**
+- `p2p/clippy.toml` — too-many-lines-threshold=100, too-many-arguments-threshold=7
+- `p2p/rustfmt.toml` — max_width=100, tab_spaces=4, edition=2021
+- `.editorconfig` — 4-space indent, LF, UTF-8
+- `docs/security/clippy-baseline.md` — 150 unique warnings, 1920 pedantic
+- `docs/security/cargo-geiger-baseline.md` — unsafe code scan
+- `.github/workflows/clippy.yml` — CI gate for clippy
+- `.github/workflows/rustfmt.yml` — CI gate for formatting
+- `AGENTS.md` — Code Quality Tooling section added
 
 ---
 
