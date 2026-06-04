@@ -212,21 +212,18 @@
 
 | File | Open | Done | Status |
 |------|------|------|--------|
-| `specs/CLIPPY_FIX_PLAN.md` | ~120 | 0 | **PROPOSED** — spec + plan written, not started |
+| `specs/CLIPPY_FIX_PLAN.md` | 0 | ~120 | **COMPLETE** — all waves done, merged to alpha |
 | `specs/CLIPPY_FIX_SPEC.md` | — | — | Spec (paired) |
 
-**Dependencies:** Code Quality Tooling (baseline delivered)
-**Blocks:** CI gate passing (clippy.yml)
+**Completed 2026-06-04:**
+- Wave 1: ✅ Auto-fixable mechanical fixes (A1-A37) — 166→48 warnings
+- Wave 2-3: ✅ Struct extraction (GossipLoopConfig, RegistrationConfig), type aliases, visibility, large_enum_variant, dead_code
+- Wave 4a: ✅ Simple fixes (doc list, push, collapsible, question_mark)
+- Wave 4b-f: ✅ Struct extractions for too_many_arguments (TimeFamilyCliConfig, CommunerdConfig, etc.)
+- Wave 5: ✅ Migrate ed25519_sign → ed25519_sign_with_handle (15 calls)
+- Wave 6: ✅ Final doc list indentation fix
 
-**Scope:** ~120 tasks across 8 waves:
-- Wave 1: ~30 auto-fixable mechanical fixes (clone_on_copy, redundant_closure, etc.)
-- Wave 2: 6 struct extraction tasks (GossipLoopConfig, RegistrationConfig)
-- Wave 3: 10 type aliases + visibility adjustments
-- Wave 4: ~40 `too_many_lines` refactoring (6 functions, tests-first approach)
-- Wave 5: 10 high-value pedantic warnings (cast truncation, float cmp, etc.)
-- Wave 6: 3 suppressions with justifications
-- Wave 7: 8 deprecated API migrations (ed25519_sign → ed25519_sign_with_handle)
-- Wave 8: 8 final verification tasks
+**Result:** Zero clippy warnings, 266 tests pass, merged to alpha (086db4ba)
 
 **Functions requiring refactoring (too_many_lines > 100):**
 | Function | File | Lines | Sub-Functions |
