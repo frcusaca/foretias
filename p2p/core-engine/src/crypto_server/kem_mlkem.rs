@@ -24,7 +24,7 @@ pub fn mlkem_768_keypair() -> Result<(SignatureBytes, SignatureBytes), CryptoErr
 pub fn mlkem_768_encapsulate(public_key: &SignatureBytes) -> Result<(SignatureBytes, SignatureBytes), CryptoError> {
     let mut pk: ForetiasKemPubKey = unsafe { std::mem::zeroed() };
     pk.bytes[..public_key.len()].copy_from_slice(public_key);
-    pk.len = public_key.len() as usize;
+    pk.len = public_key.len();
     let mut ct: ForetiasKemCiphertext = unsafe { std::mem::zeroed() };
     let mut ss: [u8; 32] = [0u8; 32];
     let rc = unsafe {
@@ -38,10 +38,10 @@ pub fn mlkem_768_encapsulate(public_key: &SignatureBytes) -> Result<(SignatureBy
 pub fn mlkem_768_decapsulate(secret_key: &SignatureBytes, ciphertext: &SignatureBytes) -> Result<SignatureBytes, CryptoError> {
     let mut sk: ForetiasKemSecretKey = unsafe { std::mem::zeroed() };
     sk.bytes[..secret_key.len()].copy_from_slice(secret_key);
-    sk.len = secret_key.len() as usize;
+    sk.len = secret_key.len();
     let mut ct: ForetiasKemCiphertext = unsafe { std::mem::zeroed() };
     ct.bytes[..ciphertext.len()].copy_from_slice(ciphertext);
-    ct.len = ciphertext.len() as usize;
+    ct.len = ciphertext.len();
     let mut ss: [u8; 32] = [0u8; 32];
     let rc = unsafe {
         foretias_mlkem_768_decapsulate(&sk, &ct, ss.as_mut_ptr())

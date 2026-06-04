@@ -91,7 +91,7 @@ pub fn derive_keypair(
         .hash_password_into(passphrase.as_bytes(), SALT, &mut hash_output)
         .map_err(SnapshotSignatureError::Argon2Failure)?;
 
-    let signing_key = SigningKey::from(&hash_output.into());
+    let signing_key = SigningKey::from(&hash_output);
     let verifying_key = signing_key.verifying_key();
     Ok((signing_key, verifying_key))
 }

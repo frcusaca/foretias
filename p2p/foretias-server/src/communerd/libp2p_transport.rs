@@ -46,7 +46,9 @@ impl Libp2pTransport {
         let peer_id = match peer.peer_id {
             Some(id) => id,
             None => {
-                return Err(TransportError::Unsupported("peer has no libp2p PeerId".into()));
+                return Err(TransportError::Unsupported(
+                    "peer has no libp2p PeerId".into(),
+                ));
             }
         };
 
@@ -58,18 +60,18 @@ impl Libp2pTransport {
         });
 
         let (tx, rx) = tokio::sync::oneshot::channel();
-        if cmd_tx.send(SwarmCommand::RequestResponse {
-            peer_id,
-            request,
-            reply: tx,
-        }).is_err() {
+        if cmd_tx
+            .send(SwarmCommand::RequestResponse {
+                peer_id,
+                request,
+                reply: tx,
+            })
+            .is_err()
+        {
             return Err(TransportError::Connect("swarm channel closed".into()));
         }
 
-        match tokio::time::timeout(
-            Duration::from_secs(self.timeout_secs),
-            rx
-        ).await {
+        match tokio::time::timeout(Duration::from_secs(self.timeout_secs), rx).await {
             Ok(Ok(result)) => result,
             Ok(Err(_)) => Err(TransportError::Connect("oneshot dropped".into())),
             Err(_) => Err(TransportError::Timeout),
@@ -122,10 +124,15 @@ impl PeerTransport for Libp2pTransport {
         channel_id: &str,
         requester_tbid_hex: &str,
     ) -> Result<serde_json::Value, TransportError> {
-        self.rpc_call(peer, "channel_bind_challenge", serde_json::json!({
-            "nonce": nonce_hex,
-            "channel_id": channel_id,
-            "requester_tbid": requester_tbid_hex,
-        })).await
+        self.rpc_call(
+            peer,
+            "channel_bind_challenge",
+            serde_json::json!({
+                "nonce": nonce_hex,
+                "channel_id": channel_id,
+                "requester_tbid": requester_tbid_hex,
+            }),
+        )
+        .await
     }
 }

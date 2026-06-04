@@ -145,7 +145,7 @@ fn verify_report_signature(
     let canonical = report.canonical();
     let valid = crypto
         .verify_with(&public_key, "Ed25519", &canonical, &report.signature)
-        .map_err(|e| NodeError::Crypto(e))?;
+        .map_err(NodeError::Crypto)?;
 
     if !valid {
         return Err(NodeError::BadFormat(format!(

@@ -189,7 +189,7 @@ fn humanize_nanoseconds(ns: u64) -> String {
     ];
 
     for (name, value) in &units {
-        if ns % *value == 0 && ns >= *value {
+        if ns.is_multiple_of(*value) && ns >= *value {
             let count = ns / value;
             if count == 1 {
                 return format!("1 {name}");
@@ -234,7 +234,7 @@ fn format_comma_delimited(n: u64, unit: &str) -> String {
     let chars: Vec<char> = s.chars().collect();
     let len = chars.len();
     for (i, &c) in chars.iter().enumerate() {
-        if i > 0 && (len - i) % 3 == 0 {
+        if i > 0 && (len - i).is_multiple_of(3) {
             result.push(',');
         }
         result.push(c);

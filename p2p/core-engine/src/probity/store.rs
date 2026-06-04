@@ -8,6 +8,12 @@ pub struct ProbityStore {
     scores: RwLock<HashMap<String, f32>>,
 }
 
+impl Default for ProbityStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ProbityStore {
     pub fn new() -> Self {
         Self {

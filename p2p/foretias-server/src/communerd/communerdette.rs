@@ -18,20 +18,19 @@ use std::collections::BinaryHeap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
-use parking_lot::RwLock;
-#[cfg(test)]
-use parking_lot::Mutex;
 use async_trait::async_trait;
 #[allow(unused_imports)]
 use foretias_core::clock::{Clock, SystemClock};
 use foretias_core::crypto_server::CryptoServer;
 use foretias_core::error::NodeError;
 use foretias_core::foretias::clean_auth::{
-    CleanAuthenticated,
-    UnverifiedSignatureEnvelope, CleanAuthError,
+    CleanAuthError, CleanAuthenticated, UnverifiedSignatureEnvelope,
 };
 use foretias_core::foretias::tick::{ChrononRecord, Foretis};
 use foretias_core::foretias::types::Tbid;
+#[cfg(test)]
+use parking_lot::Mutex;
+use parking_lot::RwLock;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::Duration as TokioDuration;
 use tokio_util::sync::CancellationToken;
@@ -50,7 +49,11 @@ use super::PeerRegistrationRecord;
 #[async_trait]
 pub(super) trait CommunerdetteHost: Send + Sync {
     /// Look up a TBID in the DHT (cache + live lookup).
-    async fn host_lookup_tbid(&self, tbid_hex: &str, namespace: &str) -> Option<PeerRegistrationRecord>;
+    async fn host_lookup_tbid(
+        &self,
+        tbid_hex: &str,
+        namespace: &str,
+    ) -> Option<PeerRegistrationRecord>;
     /// Look up a TBID in the local cache only.
     fn host_lookup_tbid_cached(&self, tbid_hex: &str) -> Option<PeerRegistrationRecord>;
     /// Get the current DHT namespace.
@@ -86,7 +89,10 @@ pub(super) trait CommunerdetteHost: Send + Sync {
     async fn host_execute_ping(&self, peer: &PeerAddr) -> Result<(), TransportError>;
     /// Sign a ProbityReport (Phase 13.1).
     /// Calendar signing stub — returns signed bytes or error.
-    fn host_sign_probity_report(&self, report: &crate::probity::ProbityReport) -> Result<Vec<u8>, String>;
+    fn host_sign_probity_report(
+        &self,
+        report: &crate::probity::ProbityReport,
+    ) -> Result<Vec<u8>, String>;
     /// Publish a signed ProbityReport via gossip (Phase 13.1).
     fn host_publish_probity_report(&self, signed_bytes: Vec<u8>);
 }
@@ -110,10 +116,7 @@ pub enum TbidBindingStatus {
         proof_expires_at_ns: Option<u64>,
     },
     /// This binding was rejected (e.g. proof verification failed).
-    Rejected {
-        reason: String,
-        observed_at_ns: u64,
-    },
+    Rejected { reason: String, observed_at_ns: u64 },
 }
 
 impl TbidBindingStatus {
@@ -124,7 +127,10 @@ impl TbidBindingStatus {
 
     /// Returns true if there is at least a DHT-level claim (useful for discovery).
     pub fn has_any_claim(&self) -> bool {
-        !matches!(self, TbidBindingStatus::Unknown | TbidBindingStatus::Rejected { .. })
+        !matches!(
+            self,
+            TbidBindingStatus::Unknown | TbidBindingStatus::Rejected { .. }
+        )
     }
 }
 
@@ -140,7 +146,7 @@ pub enum ActiveRoute {
 }
 
 /// Per-relationship statistics.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct CommunerdetteStats {
     pub last_success_ns: Option<u64>,
     pub last_failure_ns: Option<u64>,
@@ -151,22 +157,6 @@ pub struct CommunerdetteStats {
     pub noise_failures: u64,
     pub smoothed_rtt_ms: Option<f64>,
     pub queue_depth: usize,
-}
-
-impl Default for CommunerdetteStats {
-    fn default() -> Self {
-        Self {
-            last_success_ns: None,
-            last_failure_ns: None,
-            consecutive_failures: 0,
-            libp2p_successes: 0,
-            libp2p_failures: 0,
-            noise_successes: 0,
-            noise_failures: 0,
-            smoothed_rtt_ms: None,
-            queue_depth: 0,
-        }
-    }
 }
 
 /// Per-route stats for granular tracking (Phase 6).
@@ -278,11 +268,11 @@ impl Default for CommunerdetteState {
 /// `CleanFullyAuthenticated<ChannelBinding>` after dual-key verification.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ChannelBinding {
-    pub responder_tbid: String,  // hex-encoded Tbid (96 bytes → 192 hex chars)
-    pub nonce_echo: String,      // hex-encoded echoed challenge nonce
-    pub channel_id: String,      // transport identity string
-    pub fast_sig: String,        // hex-encoded Ed25519 signature (64 bytes)
-    pub slow_sig: String,        // hex-encoded SLH-DSA signature (49856 bytes)
+    pub responder_tbid: String, // hex-encoded Tbid (96 bytes → 192 hex chars)
+    pub nonce_echo: String,     // hex-encoded echoed challenge nonce
+    pub channel_id: String,     // transport identity string
+    pub fast_sig: String,       // hex-encoded Ed25519 signature (64 bytes)
+    pub slow_sig: String,       // hex-encoded SLH-DSA signature (49856 bytes)
 }
 
 /// Take 3 UnverifiedSignatureEnvelope stage for channel-binding responses.
@@ -290,7 +280,8 @@ pub struct ChannelBinding {
 /// `UnverifiedSignatureEnvelope<ChannelBinding>` holds the parsed-but-unverified wire data.
 /// Call methods from `ChannelBindingGate` to verify and produce
 /// `CleanFullyAuthenticated<ChannelBinding>`.
-pub type UnverifiedSignatureEnvelopeChannelBinding = foretias_core::foretias::clean_auth::UnverifiedSignatureEnvelope<ChannelBinding>;
+pub type UnverifiedSignatureEnvelopeChannelBinding =
+    foretias_core::foretias::clean_auth::UnverifiedSignatureEnvelope<ChannelBinding>;
 
 /// Extension trait that adds the inbound gate methods to `UnverifiedSignatureEnvelope<ChannelBinding>`.
 ///
@@ -328,7 +319,10 @@ pub trait ChannelBindingGate: Sized {
         nonce: &[u8],
         channel_id: &str,
         target_tbid: &Tbid,
-    ) -> Result<foretias_core::foretias::clean_auth::CleanFullyAuthenticated<ChannelBinding>, CommunerdetteError>;
+    ) -> Result<
+        foretias_core::foretias::clean_auth::CleanFullyAuthenticated<ChannelBinding>,
+        CommunerdetteError,
+    >;
 }
 
 impl ChannelBindingGate for UnverifiedSignatureEnvelopeChannelBinding {
@@ -343,8 +337,16 @@ impl ChannelBindingGate for UnverifiedSignatureEnvelopeChannelBinding {
         let fast_sig = hex::decode(&self.inner().fast_sig)
             .map_err(|_| CommunerdetteError::Structural("fast_sig not hex".into()))?;
         let msg = binding_msg(nonce, channel_id, &self.inner().responder_tbid);
-        let ok = crypto.verify_with(&target_tbid.ed25519_public_key(), "Ed25519", &msg, &fast_sig)
-            .map_err(|e| CommunerdetteError::CleanAuth(CleanAuthError::Crypto(NodeError::Crypto(e))))?;
+        let ok = crypto
+            .verify_with(
+                &target_tbid.ed25519_public_key(),
+                "Ed25519",
+                &msg,
+                &fast_sig,
+            )
+            .map_err(|e| {
+                CommunerdetteError::CleanAuth(CleanAuthError::Crypto(NodeError::Crypto(e)))
+            })?;
         Ok(ok)
     }
 
@@ -359,8 +361,16 @@ impl ChannelBindingGate for UnverifiedSignatureEnvelopeChannelBinding {
         let slow_sig = hex::decode(&self.inner().slow_sig)
             .map_err(|_| CommunerdetteError::Structural("slow_sig not hex".into()))?;
         let msg = binding_msg(nonce, channel_id, &self.inner().responder_tbid);
-        let ok = crypto.verify_with(&target_tbid.slh_dsa_public_key(), "SLH-DSA-SHA2-256f", &msg, &slow_sig)
-            .map_err(|e| CommunerdetteError::CleanAuth(CleanAuthError::Crypto(NodeError::Crypto(e))))?;
+        let ok = crypto
+            .verify_with(
+                &target_tbid.slh_dsa_public_key(),
+                "SLH-DSA-SHA2-256f",
+                &msg,
+                &slow_sig,
+            )
+            .map_err(|e| {
+                CommunerdetteError::CleanAuth(CleanAuthError::Crypto(NodeError::Crypto(e)))
+            })?;
         Ok(ok)
     }
 
@@ -370,7 +380,10 @@ impl ChannelBindingGate for UnverifiedSignatureEnvelopeChannelBinding {
         nonce: &[u8],
         channel_id: &str,
         target_tbid: &Tbid,
-    ) -> Result<foretias_core::foretias::clean_auth::CleanFullyAuthenticated<ChannelBinding>, CommunerdetteError> {
+    ) -> Result<
+        foretias_core::foretias::clean_auth::CleanFullyAuthenticated<ChannelBinding>,
+        CommunerdetteError,
+    > {
         check_binding_fields(self.inner(), nonce, channel_id, target_tbid)?;
 
         let fast_bytes = hex::decode(&self.inner().fast_sig)
@@ -384,19 +397,26 @@ impl ChannelBindingGate for UnverifiedSignatureEnvelopeChannelBinding {
         combined.extend_from_slice(&slow_bytes);
 
         let msg = binding_msg(nonce, channel_id, &self.inner().responder_tbid);
-        let pub_key = foretias_core::foretias::types::SignatureBytes::from(target_tbid.raw_bytes().to_vec());
+        let pub_key =
+            foretias_core::foretias::types::SignatureBytes::from(target_tbid.raw_bytes().to_vec());
         let sig = foretias_core::foretias::types::SignatureBytes::from(combined);
 
         // TBID V1 C verifier — authoritative dual-key verification
         let ok = foretias_core::crypto_server::signing_tbid::tbid_verify(&pub_key, &msg, &sig)
-            .map_err(|e| CommunerdetteError::CleanAuth(CleanAuthError::Crypto(NodeError::Crypto(e))))?;
+            .map_err(|e| {
+                CommunerdetteError::CleanAuth(CleanAuthError::Crypto(NodeError::Crypto(e)))
+            })?;
         if !ok {
-            return Err(CommunerdetteError::CleanAuth(CleanAuthError::InvalidSignature));
+            return Err(CommunerdetteError::CleanAuth(
+                CleanAuthError::InvalidSignature,
+            ));
         }
 
-        Ok(foretias_core::foretias::clean_auth::CleanFullyAuthenticated::from_dual_verified(
-            self.into_inner(),
-        ))
+        Ok(
+            foretias_core::foretias::clean_auth::CleanFullyAuthenticated::from_dual_verified(
+                self.into_inner(),
+            ),
+        )
     }
 }
 
@@ -436,18 +456,15 @@ fn binding_msg(nonce: &[u8], channel_id: &str, responder_tbid_hex: &str) -> Vec<
 
 /// Phase 12.0: Channel binding, awaiting state field integration.
 #[allow(dead_code)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum ChannelBindingState {
     /// Channel known but binding challenge not yet sent/verified.
+    #[default]
     Unbound,
     /// Dual-key proof received and verified; channel is trusted.
     FullyBound(foretias_core::foretias::clean_auth::CleanFullyAuthenticated<ChannelBinding>),
     /// Binding challenge failed; channel is not trusted.
     Rejected { reason: String },
-}
-
-impl Default for ChannelBindingState {
-    fn default() -> Self { Self::Unbound }
 }
 
 /// Read-only diagnostics surface for a Communerdette.
@@ -522,7 +539,8 @@ impl Communerdette {
         state.stats.smoothed_rtt_ms = Some(smoothed);
 
         // Per-route stats
-        state.route_stats
+        state
+            .route_stats
             .entry(route)
             .or_default()
             .record_success(now_ns, rtt_ms);
@@ -543,14 +561,16 @@ impl Communerdette {
         state.stats.consecutive_failures += 1;
 
         // Exponential backoff: double delay, cap at 32x
-        let current_backoff = state.backoff_until_ns
+        let current_backoff = state
+            .backoff_until_ns
             .map(|b| (now_ns - b) as f64)
             .unwrap_or(1.0);
         let next_backoff = (current_backoff * 2.0).min(32_000_000_000.0); // 32s cap in ns
         state.backoff_until_ns = Some(now_ns + next_backoff as u64);
 
         // Per-route stats
-        state.route_stats
+        state
+            .route_stats
             .entry(route)
             .or_default()
             .record_failure(now_ns);
@@ -559,7 +579,8 @@ impl Communerdette {
     /// Check if the relationship is currently in backoff.
     pub(super) fn is_in_backoff(&self, now_ns: u64) -> bool {
         let state = self.state.read();
-        state.backoff_until_ns
+        state
+            .backoff_until_ns
             .map(|until| now_ns < until)
             .unwrap_or(false)
     }
@@ -567,7 +588,9 @@ impl Communerdette {
     /// Get backoff multiplier for adaptive timeout calculation.
     pub(super) fn backoff_multiplier(&self) -> f64 {
         let state = self.state.read();
-        state.stats.consecutive_failures
+        state
+            .stats
+            .consecutive_failures
             .max(1)
             .checked_pow(2)
             .unwrap_or(32) as f64
@@ -614,7 +637,9 @@ impl Communerdette {
     }
 
     /// Get per-route stats snapshot.
-    pub(super) fn route_stats_snapshot(&self) -> std::collections::HashMap<ActiveRoute, CommunerdetteRouteStats> {
+    pub(super) fn route_stats_snapshot(
+        &self,
+    ) -> std::collections::HashMap<ActiveRoute, CommunerdetteRouteStats> {
         self.state.read().route_stats.clone()
     }
 
@@ -695,7 +720,10 @@ impl Communerdette {
                 if !candidate.peer_id.is_empty() {
                     // Check if route health is acceptable
                     let route_stats = state.route_stats.get(&ActiveRoute::Libp2pDirect);
-                    if route_stats.map(|s| s.consecutive_failures < 5).unwrap_or(true) {
+                    if route_stats
+                        .map(|s| s.consecutive_failures < 5)
+                        .unwrap_or(true)
+                    {
                         return ActiveRoute::Libp2pDirect;
                     }
                 }
@@ -704,7 +732,10 @@ impl Communerdette {
 
         // Second pass: healthy Noise candidates
         let noise_stats = state.route_stats.get(&ActiveRoute::NoiseJsonRpc);
-        if noise_stats.map(|s| s.consecutive_failures < 5).unwrap_or(false) {
+        if noise_stats
+            .map(|s| s.consecutive_failures < 5)
+            .unwrap_or(false)
+        {
             for candidate in &state.route_candidates {
                 if !candidate.json_rpc.is_empty() {
                     return ActiveRoute::NoiseJsonRpc;
@@ -744,7 +775,7 @@ impl Communerdette {
         let mut state = self.state.write();
         state.binding_proof_requested = true;
         Err(foretias_core::error::NodeError::Unsupported(
-            "TBID binding proof not yet implemented; proof transcript format pending".into(),
+            "TBID binding proof not yet implemented; proof transcript format pending",
         ))
     }
 
@@ -755,12 +786,17 @@ impl Communerdette {
         _proof: &[u8],
     ) -> Result<(), foretias_core::error::NodeError> {
         Err(foretias_core::error::NodeError::Unsupported(
-            "TBID binding proof verification not yet implemented".into(),
+            "TBID binding proof verification not yet implemented",
         ))
     }
 
     /// Mark binding as verified (after successful binding proof).
-    pub(super) fn mark_binding_verified(&self, peer_id: Option<String>, json_rpc: Option<String>, verified_at_ns: u64) {
+    pub(super) fn mark_binding_verified(
+        &self,
+        peer_id: Option<String>,
+        json_rpc: Option<String>,
+        verified_at_ns: u64,
+    ) {
         let mut state = self.state.write();
         state.binding = TbidBindingStatus::Verified {
             peer_id,
@@ -781,7 +817,12 @@ impl Communerdette {
     }
 
     /// Update binding to ClaimedByDht (from DHT discovery).
-    pub(super) fn mark_binding_claimed_by_dht(&self, peer_id: Option<String>, json_rpc: Option<String>, observed_at_ns: u64) {
+    pub(super) fn mark_binding_claimed_by_dht(
+        &self,
+        peer_id: Option<String>,
+        json_rpc: Option<String>,
+        observed_at_ns: u64,
+    ) {
         let mut state = self.state.write();
         state.binding = TbidBindingStatus::ClaimedByDht {
             peer_id,
@@ -808,35 +849,51 @@ impl Communerdette {
     // ── Phase 8: Mirror RPC Stubs ───────────────────────────────────────
 
     /// Mirror request: request mirror history from remote (stub).
-    pub(super) fn mirror_request(&self, _from_tick: u64) -> Result<serde_json::Value, super::transport::TransportError> {
+    pub(super) fn mirror_request(
+        &self,
+        _from_tick: u64,
+    ) -> Result<serde_json::Value, super::transport::TransportError> {
         Err(super::transport::TransportError::Unsupported(
             "mirror_request not yet implemented".into(),
         ))
     }
 
     /// Ship batch: send calendar batch to remote mirror (stub).
-    pub(super) fn ship_batch(&self, _batch: serde_json::Value) -> Result<serde_json::Value, super::transport::TransportError> {
+    pub(super) fn ship_batch(
+        &self,
+        _batch: serde_json::Value,
+    ) -> Result<serde_json::Value, super::transport::TransportError> {
         Err(super::transport::TransportError::Unsupported(
             "ship_batch not yet implemented".into(),
         ))
     }
 
     /// Ship ack: acknowledge batch receipt (stub).
-    pub(super) fn ship_ack(&self, _batch_id: &str) -> Result<serde_json::Value, super::transport::TransportError> {
+    pub(super) fn ship_ack(
+        &self,
+        _batch_id: &str,
+    ) -> Result<serde_json::Value, super::transport::TransportError> {
         Err(super::transport::TransportError::Unsupported(
             "ship_ack not yet implemented".into(),
         ))
     }
 
     /// Stream tick: stream single tick to remote (stub).
-    pub(super) fn stream_tick(&self, _tick_number: u64) -> Result<serde_json::Value, super::transport::TransportError> {
+    pub(super) fn stream_tick(
+        &self,
+        _tick_number: u64,
+    ) -> Result<serde_json::Value, super::transport::TransportError> {
         Err(super::transport::TransportError::Unsupported(
             "stream_tick not yet implemented".into(),
         ))
     }
 
     /// Mirror reconcile: reconcile mirror state between local and remote (stub).
-    pub(super) fn mirror_reconcile(&self, _local_tip: u64, _remote_tip: u64) -> Result<serde_json::Value, super::transport::TransportError> {
+    pub(super) fn mirror_reconcile(
+        &self,
+        _local_tip: u64,
+        _remote_tip: u64,
+    ) -> Result<serde_json::Value, super::transport::TransportError> {
         Err(super::transport::TransportError::Unsupported(
             "mirror_reconcile not yet implemented".into(),
         ))
@@ -976,8 +1033,20 @@ struct CommunerdetteExecutor {
 }
 
 impl CommunerdetteExecutor {
-    fn new(host: Arc<dyn CommunerdetteHost>, target_tbid: Tbid, crypto: Arc<dyn CryptoServer>, clock: Arc<dyn Clock>, local_calendar_tbid: Option<String>) -> Self {
-        Self { host, target_tbid, crypto, clock, local_calendar_tbid }
+    fn new(
+        host: Arc<dyn CommunerdetteHost>,
+        target_tbid: Tbid,
+        crypto: Arc<dyn CryptoServer>,
+        clock: Arc<dyn Clock>,
+        local_calendar_tbid: Option<String>,
+    ) -> Self {
+        Self {
+            host,
+            target_tbid,
+            crypto,
+            clock,
+            local_calendar_tbid,
+        }
     }
 
     /// Phase 12.0: FB emission, awaiting channel-bind integration.
@@ -999,7 +1068,9 @@ impl CommunerdetteExecutor {
         };
         match self.host.host_sign_probity_report(&report) {
             Ok(signed) => self.host.host_publish_probity_report(signed),
-            Err(e) => tracing::warn!(target_tbid = %self.target_tbid.to_hex(), fb_value = value, "FB emission signing failed: {e}"),
+            Err(e) => {
+                tracing::warn!(target_tbid = %self.target_tbid.to_hex(), fb_value = value, "FB emission signing failed: {e}")
+            }
         }
     }
 
@@ -1007,8 +1078,13 @@ impl CommunerdetteExecutor {
     async fn resolve_peer(&self) -> Result<PeerAddr, CommunerdetteError> {
         let tbid_hex = self.target_tbid.to_hex();
         let ns = self.host.host_namespace();
-        let owner = self.host.host_lookup_tbid(&tbid_hex, &ns).await
-            .ok_or_else(|| TransportError::Connect(format!("TBID {} not found in DHT", tbid_hex)))?;
+        let owner = self
+            .host
+            .host_lookup_tbid(&tbid_hex, &ns)
+            .await
+            .ok_or_else(|| {
+                TransportError::Connect(format!("TBID {} not found in DHT", tbid_hex))
+            })?;
 
         let peer = PeerAddr {
             json_rpc: owner.json_rpc.clone(),
@@ -1028,7 +1104,9 @@ impl CommunerdetteExecutor {
     ) -> Result<Vec<ChrononRecord>, TransportError> {
         // TODO(externalized): wrap outbound request params as Externalized<R> before
         // dispatch once outbound type enforcement is implemented (Phase 11.4).
-        self.host.host_execute_calendar_slice(peer, tick_start, count).await
+        self.host
+            .host_execute_calendar_slice(peer, tick_start, count)
+            .await
     }
 
     /// Phase 12.0: Channel-bind challenge, awaiting channel-bind integration.
@@ -1041,7 +1119,9 @@ impl CommunerdetteExecutor {
         requester_tbid_hex: &str,
     ) -> Result<serde_json::Value, TransportError> {
         // TODO(externalized): wrap params as Externalized<R> before dispatch (Phase 11.4).
-        self.host.host_execute_channel_bind_challenge(peer, nonce_hex, channel_id, requester_tbid_hex).await
+        self.host
+            .host_execute_channel_bind_challenge(peer, nonce_hex, channel_id, requester_tbid_hex)
+            .await
     }
 
     /// Phase 12.1: Transport-level ping, awaiting L1 liveness spawn.
@@ -1060,7 +1140,9 @@ impl CommunerdetteExecutor {
         // TODO(externalized): wrap outbound request params as Externalized<R> before
         // dispatch once outbound type enforcement is implemented (Phase 11.4).
         let tbid_hex = self.target_tbid.to_hex();
-        self.host.host_execute_stamp(peer, &tbid_hex, content_hex, echo).await
+        self.host
+            .host_execute_stamp(peer, &tbid_hex, content_hex, echo)
+            .await
     }
 
     /// Run Take 3 inbound gate for a vector of ChrononRecords.
@@ -1071,7 +1153,7 @@ impl CommunerdetteExecutor {
         &self,
         records: Vec<ChrononRecord>,
     ) -> Result<Vec<CleanAuthenticated<ChrononRecord>>, CommunerdetteError> {
-        let target_tbid = self.target_tbid.clone();
+        let target_tbid = self.target_tbid;
         let crypto = &*self.crypto;
         let mut authenticated = Vec::new();
 
@@ -1097,10 +1179,13 @@ impl CommunerdetteExecutor {
             let prev = authenticated.last();
             let ca = if idx == 0 {
                 // First record: genesis verification (tick 1) or standalone
-                unprocessed.verify(crypto, None).map_err(CommunerdetteError::CleanAuth)?
+                unprocessed
+                    .verify(crypto, None)
+                    .map_err(CommunerdetteError::CleanAuth)?
             } else {
                 // Subsequent: chain verify against previous
-                unprocessed.into_clean_authenticated(crypto, prev.expect("idx > 0 implies prev exists"))
+                unprocessed
+                    .into_clean_authenticated(crypto, prev.expect("idx > 0 implies prev exists"))
                     .map_err(CommunerdetteError::CleanAuth)?
             };
 
@@ -1128,7 +1213,8 @@ impl CommunerdetteExecutor {
         chronon_record: &CleanAuthenticated<ChrononRecord>,
         content: &[u8],
     ) -> Result<CleanAuthenticated<Foretis>, CommunerdetteError> {
-        let unprocessed: Result<UnverifiedSignatureEnvelope<Foretis>, _> = UnverifiedSignatureEnvelope::<Foretis>::from_json_value_v2(raw);
+        let unprocessed: Result<UnverifiedSignatureEnvelope<Foretis>, _> =
+            UnverifiedSignatureEnvelope::<Foretis>::from_json_value_v2(raw);
         let unprocessed = unprocessed.map_err(|e| TransportError::Decode(e.to_string()))?;
 
         // Structural validation (signature is now in the envelope, not Foretis)
@@ -1186,9 +1272,12 @@ impl Communerdette {
     ) -> Result<Vec<CleanAuthenticated<ChrononRecord>>, CommunerdetteError> {
         let peer = executor.resolve_peer().await?;
 
-        let raw = tokio::time::timeout(timeout, executor.do_calendar_slice(&peer, tick_start, count))
-            .await
-            .map_err(|_| CommunerdetteError::Transport(TransportError::Timeout))??;
+        let raw = tokio::time::timeout(
+            timeout,
+            executor.do_calendar_slice(&peer, tick_start, count),
+        )
+        .await
+        .map_err(|_| CommunerdetteError::Transport(TransportError::Timeout))??;
 
         // Run Take 3 inbound gate
         executor.gate_chronon_records(raw)
@@ -1322,10 +1411,14 @@ impl Communerdette {
         executor: Arc<CommunerdetteExecutor>,
         channel_id: String,
         cancel: CancellationToken,
-    ) -> tokio::task::JoinHandle<Option<foretias_core::foretias::clean_auth::CleanFullyAuthenticated<ChannelBinding>>> {
+    ) -> tokio::task::JoinHandle<
+        Option<foretias_core::foretias::clean_auth::CleanFullyAuthenticated<ChannelBinding>>,
+    > {
         tokio::spawn(async move {
             use rand::Rng;
-            if cancel.is_cancelled() { return None; }
+            if cancel.is_cancelled() {
+                return None;
+            }
 
             // 1. Generate nonce
             let nonce: [u8; 32] = rand::thread_rng().gen();
@@ -1344,8 +1437,15 @@ impl Communerdette {
             // 3. Send challenge
             let raw = match tokio::time::timeout(
                 TokioDuration::from_secs(30),
-                executor.do_channel_bind_challenge(&peer, &nonce_hex, &channel_id, &requester_tbid_hex),
-            ).await {
+                executor.do_channel_bind_challenge(
+                    &peer,
+                    &nonce_hex,
+                    &channel_id,
+                    &requester_tbid_hex,
+                ),
+            )
+            .await
+            {
                 Ok(Ok(v)) => v,
                 Ok(Err(e)) => {
                     tracing::warn!(target_tbid = %requester_tbid_hex, "channel_bind: challenge RPC failed: {e}");
@@ -1358,7 +1458,8 @@ impl Communerdette {
             };
 
             // 4. Parse + dual-key verify
-            let unprocessed = match UnverifiedSignatureEnvelopeChannelBinding::from_json_value(raw) {
+            let unprocessed = match UnverifiedSignatureEnvelopeChannelBinding::from_json_value(raw)
+            {
                 Ok(u) => u,
                 Err(e) => {
                     tracing::warn!(target_tbid = %requester_tbid_hex, "channel_bind: parse failed: {e:?}");
@@ -1367,7 +1468,12 @@ impl Communerdette {
             };
 
             // VERIFY(remote-tbid, fast-key+slow-key)
-            match unprocessed.verify_full(&*executor.crypto, &nonce, &channel_id, &executor.target_tbid) {
+            match unprocessed.verify_full(
+                &*executor.crypto,
+                &nonce,
+                &channel_id,
+                &executor.target_tbid,
+            ) {
                 Ok(binding) => {
                     tracing::info!(target_tbid = %requester_tbid_hex, channel_id = %channel_id, "channel bound (FullyBound)");
                     executor.emit_fb_report(1.0);
@@ -1436,7 +1542,7 @@ impl Communerdette {
                 let last_rpc_ns = flags.last_application_rpc_ns.load(Ordering::Relaxed);
                 if last_rpc_ns > 0 {
                     let elapsed_ns = now_ns.saturating_sub(last_rpc_ns);
-                    let threshold_ns = (interval_ms as u64).saturating_mul(1_000_000);
+                    let threshold_ns = interval_ms.saturating_mul(1_000_000);
                     if elapsed_ns < threshold_ns {
                         tracing::trace!(
                             target_tbid = %executor.target_tbid.to_hex(),
@@ -1459,7 +1565,9 @@ impl Communerdette {
                 let ok = match tokio::time::timeout(
                     TokioDuration::from_secs(5),
                     executor.do_ping(&peer),
-                ).await {
+                )
+                .await
+                {
                     Ok(Ok(())) => {
                         tracing::trace!(target_tbid = %executor.target_tbid.to_hex(), "L1 ok via transport ping");
                         true
@@ -1502,8 +1610,8 @@ pub struct UnverifiedSignatureEnvelopeAuthenticatedPong {
 #[allow(dead_code)]
 impl UnverifiedSignatureEnvelopeAuthenticatedPong {
     pub fn from_json_value(v: serde_json::Value) -> Result<Self, TransportError> {
-        let inner: AuthenticatedPong = serde_json::from_value(v)
-            .map_err(|e| TransportError::Decode(e.to_string()))?;
+        let inner: AuthenticatedPong =
+            serde_json::from_value(v).map_err(|e| TransportError::Decode(e.to_string()))?;
         Ok(Self { inner })
     }
 
@@ -1520,13 +1628,15 @@ impl UnverifiedSignatureEnvelopeAuthenticatedPong {
         if responder != *target_tbid {
             return Err(CommunerdetteError::TbidMismatch {
                 expected: target_tbid.to_hex(),
-                actual: self.inner.responder_tbid.clone(),
+                actual: self.inner.responder_tbid,
             });
         }
         let echo = hex::decode(&self.inner.challenge_echo)
             .map_err(|_| CommunerdetteError::Structural("challenge_echo not hex".into()))?;
         if echo != challenge {
-            return Err(CommunerdetteError::Structural("challenge_echo mismatch".into()));
+            return Err(CommunerdetteError::Structural(
+                "challenge_echo mismatch".into(),
+            ));
         }
         let sig = hex::decode(&self.inner.signature)
             .map_err(|_| CommunerdetteError::Structural("signature not hex".into()))?;
@@ -1534,10 +1644,15 @@ impl UnverifiedSignatureEnvelopeAuthenticatedPong {
         msg.extend_from_slice(challenge);
         msg.extend_from_slice(target_tbid.to_hex().as_bytes());
         // VERIFY(remote-tbid, fast-key)
-        let ok = crypto.verify_with(&target_tbid.ed25519_public_key(), "Ed25519", &msg, &sig)
-            .map_err(|e| CommunerdetteError::CleanAuth(CleanAuthError::Crypto(NodeError::Crypto(e))))?;
+        let ok = crypto
+            .verify_with(&target_tbid.ed25519_public_key(), "Ed25519", &msg, &sig)
+            .map_err(|e| {
+                CommunerdetteError::CleanAuth(CleanAuthError::Crypto(NodeError::Crypto(e)))
+            })?;
         if !ok {
-            return Err(CommunerdetteError::CleanAuth(CleanAuthError::InvalidSignature));
+            return Err(CommunerdetteError::CleanAuth(
+                CleanAuthError::InvalidSignature,
+            ));
         }
         Ok(CleanAuthenticated::from_trusted(self.inner))
     }
@@ -1580,8 +1695,12 @@ impl Communerdette {
 
                 let raw = match tokio::time::timeout(
                     TokioDuration::from_secs(10),
-                    executor.host.host_execute_stamp(&peer, &tbid_hex, &challenge_hex, "auth-ping"),
-                ).await {
+                    executor
+                        .host
+                        .host_execute_stamp(&peer, &tbid_hex, &challenge_hex, "auth-ping"),
+                )
+                .await
+                {
                     Ok(Ok(v)) => v,
                     _ => {
                         flags.l2_last_ok.store(false, Ordering::Relaxed);
@@ -1589,14 +1708,19 @@ impl Communerdette {
                     }
                 };
 
-                let unprocessed = match UnverifiedSignatureEnvelopeAuthenticatedPong::from_json_value(raw) {
-                    Ok(u) => u,
-                    Err(_) => {
-                        flags.l2_last_ok.store(false, Ordering::Relaxed);
-                        continue;
-                    }
-                };
-                let ok = match unprocessed.verify(&*executor.crypto, &challenge, &executor.target_tbid) {
+                let unprocessed =
+                    match UnverifiedSignatureEnvelopeAuthenticatedPong::from_json_value(raw) {
+                        Ok(u) => u,
+                        Err(_) => {
+                            flags.l2_last_ok.store(false, Ordering::Relaxed);
+                            continue;
+                        }
+                    };
+                let ok = match unprocessed.verify(
+                    &*executor.crypto,
+                    &challenge,
+                    &executor.target_tbid,
+                ) {
                     Ok(_) => {
                         tracing::trace!(target_tbid = %tbid_hex, "L2 auth-ping ok");
                         true
@@ -1644,8 +1768,13 @@ impl Communerdette {
                 }
                 let content = b"liveness-probe".to_vec();
                 match Communerdette::execute_stamp(
-                    &executor, content, "liveness".into(), TokioDuration::from_secs(15),
-                ).await {
+                    &executor,
+                    content,
+                    "liveness".into(),
+                    TokioDuration::from_secs(15),
+                )
+                .await
+                {
                     Ok(_) => {
                         tracing::trace!(target_tbid = %executor.target_tbid.to_hex(), "L3 stamp ok");
                     }
@@ -1737,11 +1866,14 @@ impl CommunerdetteLine {
             Arc::clone(&self.clock),
             None,
         );
-        let result = Communerdette::execute_calendar_slice(&executor, tick_start, count, timeout).await;
+        let result =
+            Communerdette::execute_calendar_slice(&executor, tick_start, count, timeout).await;
         if result.is_ok() {
             let now_ns = self.clock.now_ns().unwrap_or(0);
             let flags = self.inner.liveness_flags();
-            flags.last_application_rpc_ns.store(now_ns, std::sync::atomic::Ordering::Relaxed);
+            flags
+                .last_application_rpc_ns
+                .store(now_ns, std::sync::atomic::Ordering::Relaxed);
         }
         result
     }
@@ -1766,7 +1898,9 @@ impl CommunerdetteLine {
         if result.is_ok() {
             let now_ns = self.clock.now_ns().unwrap_or(0);
             let flags = self.inner.liveness_flags();
-            flags.last_application_rpc_ns.store(now_ns, std::sync::atomic::Ordering::Relaxed);
+            flags
+                .last_application_rpc_ns
+                .store(now_ns, std::sync::atomic::Ordering::Relaxed);
         }
         result
     }
@@ -1795,7 +1929,9 @@ impl CommunerdetteLine {
         if result.is_ok() {
             let now_ns = self.clock.now_ns().unwrap_or(0);
             let flags = self.inner.liveness_flags();
-            flags.last_application_rpc_ns.store(now_ns, std::sync::atomic::Ordering::Relaxed);
+            flags
+                .last_application_rpc_ns
+                .store(now_ns, std::sync::atomic::Ordering::Relaxed);
         }
         result
     }
@@ -1823,7 +1959,13 @@ impl CommunerdetteLine {
         crypto: Arc<dyn CryptoServer>,
         clock: Arc<dyn Clock>,
     ) -> Self {
-        Self { target_tbid, inner, host, crypto, clock }
+        Self {
+            target_tbid,
+            inner,
+            host,
+            crypto,
+            clock,
+        }
     }
 
     /// Returns the TBID this line is scoped to.
@@ -1854,10 +1996,12 @@ impl CommunerdetteLine {
         serialization: foretias_core::foretias::tick::SerializationAlgorithm,
         echo: String,
     ) -> Result<CleanAuthenticated<Foretis>, CommunerdetteError> {
-        let serialized = serialization.serialize(content)
-            .map_err(|e| CommunerdetteError::Structural(
-                format!("{} serialization failed: {e}", serialization.name())
-            ))?;
+        let serialized = serialization.serialize(content).map_err(|e| {
+            CommunerdetteError::Structural(format!(
+                "{} serialization failed: {e}",
+                serialization.name()
+            ))
+        })?;
         self.stamp(serialized, echo).await
     }
 }
@@ -1873,8 +2017,8 @@ impl std::fmt::Debug for CommunerdetteLine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use foretias_core::foretias::clean_auth::{UnverifiedSignatureEnvelope, Externalized};
-    use foretias_core::foretias::encoding::{FTByteVector, FTByteArray};
+    use foretias_core::foretias::clean_auth::{Externalized, UnverifiedSignatureEnvelope};
+    use foretias_core::foretias::encoding::{FTByteArray, FTByteVector};
 
     fn make_line() -> CommunerdetteLine {
         let tbid = Tbid::from_raw([0u8; 96]);
@@ -1885,11 +2029,19 @@ mod tests {
             local_peer_id: None,
             namespace: "test".to_string(),
         });
-        let crypto = foretias_core::crypto_server::new_software(foretias_core::crypto_server::ForetiasCurve::Ed25519)
-            .expect("libsodium must be available")
-            .into();
+        let crypto = foretias_core::crypto_server::new_software(
+            foretias_core::crypto_server::ForetiasCurve::Ed25519,
+        )
+        .expect("libsodium must be available")
+        .into();
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
-        CommunerdetteLine::new(tbid, Arc::new(Communerdette::new(tbid)), host, crypto, clock)
+        CommunerdetteLine::new(
+            tbid,
+            Arc::new(Communerdette::new(tbid)),
+            host,
+            crypto,
+            clock,
+        )
     }
 
     #[test]
@@ -1930,18 +2082,48 @@ mod tests {
         let tbid_b = Tbid::from_raw([1u8; 96]);
 
         let host_a: Arc<dyn CommunerdetteHost> = Arc::new(MockHost {
-            dht_record: None, cached_record: None, swarm_available: false, local_peer_id: None, namespace: "test".to_string(),
+            dht_record: None,
+            cached_record: None,
+            swarm_available: false,
+            local_peer_id: None,
+            namespace: "test".to_string(),
         });
         let host_b: Arc<dyn CommunerdetteHost> = Arc::new(MockHost {
-            dht_record: None, cached_record: None, swarm_available: false, local_peer_id: None, namespace: "test".to_string(),
+            dht_record: None,
+            cached_record: None,
+            swarm_available: false,
+            local_peer_id: None,
+            namespace: "test".to_string(),
         });
-        let crypto_a = Arc::from(foretias_core::crypto_server::new_software(foretias_core::crypto_server::ForetiasCurve::Ed25519).expect("libsodium"));
-        let crypto_b = Arc::from(foretias_core::crypto_server::new_software(foretias_core::crypto_server::ForetiasCurve::Ed25519).expect("libsodium"));
+        let crypto_a = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            )
+            .expect("libsodium"),
+        );
+        let crypto_b = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            )
+            .expect("libsodium"),
+        );
         let clock_a: Arc<dyn Clock> = Arc::new(SystemClock);
         let clock_b: Arc<dyn Clock> = Arc::new(SystemClock);
 
-        let line_a = CommunerdetteLine::new(tbid_a, Arc::new(Communerdette::new(tbid_a)), host_a, crypto_a, clock_a);
-        let line_b = CommunerdetteLine::new(tbid_b, Arc::new(Communerdette::new(tbid_b)), host_b, crypto_b, clock_b);
+        let line_a = CommunerdetteLine::new(
+            tbid_a,
+            Arc::new(Communerdette::new(tbid_a)),
+            host_a,
+            crypto_a,
+            clock_a,
+        );
+        let line_b = CommunerdetteLine::new(
+            tbid_b,
+            Arc::new(Communerdette::new(tbid_b)),
+            host_b,
+            crypto_b,
+            clock_b,
+        );
 
         assert_ne!(line_a.target_tbid(), line_b.target_tbid());
     }
@@ -1951,12 +2133,33 @@ mod tests {
         let tbid = Tbid::from_raw([5u8; 96]);
         let inner = Arc::new(Communerdette::new(tbid));
         let host: Arc<dyn CommunerdetteHost> = Arc::new(MockHost {
-            dht_record: None, cached_record: None, swarm_available: false, local_peer_id: None, namespace: "test".to_string(),
+            dht_record: None,
+            cached_record: None,
+            swarm_available: false,
+            local_peer_id: None,
+            namespace: "test".to_string(),
         });
-        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(foretias_core::crypto_server::ForetiasCurve::Ed25519).expect("libsodium"));
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            )
+            .expect("libsodium"),
+        );
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
-        let line1 = CommunerdetteLine::new(tbid, Arc::clone(&inner), Arc::clone(&host), crypto.clone(), Arc::clone(&clock));
-        let line2 = CommunerdetteLine::new(tbid, Arc::clone(&inner), Arc::clone(&host), crypto.clone(), Arc::clone(&clock));
+        let line1 = CommunerdetteLine::new(
+            tbid,
+            Arc::clone(&inner),
+            Arc::clone(&host),
+            crypto.clone(),
+            Arc::clone(&clock),
+        );
+        let line2 = CommunerdetteLine::new(
+            tbid,
+            Arc::clone(&inner),
+            Arc::clone(&host),
+            crypto.clone(),
+            Arc::clone(&clock),
+        );
 
         assert_eq!(line1.target_tbid(), line2.target_tbid());
         assert!(Arc::ptr_eq(&inner, &line1.inner));
@@ -2034,7 +2237,11 @@ mod tests {
 
     #[async_trait]
     impl CommunerdetteHost for MockHost {
-        async fn host_lookup_tbid(&self, _tbid_hex: &str, _namespace: &str) -> Option<PeerRegistrationRecord> {
+        async fn host_lookup_tbid(
+            &self,
+            _tbid_hex: &str,
+            _namespace: &str,
+        ) -> Option<PeerRegistrationRecord> {
             self.dht_record.clone()
         }
 
@@ -2087,12 +2294,14 @@ mod tests {
             Err(TransportError::Unsupported("mock".into()))
         }
 
-        fn host_sign_probity_report(&self, _report: &crate::probity::ProbityReport) -> Result<Vec<u8>, String> {
+        fn host_sign_probity_report(
+            &self,
+            _report: &crate::probity::ProbityReport,
+        ) -> Result<Vec<u8>, String> {
             Ok(vec![0xAA; 64])
         }
 
-        fn host_publish_probity_report(&self, _signed_bytes: Vec<u8>) {
-        }
+        fn host_publish_probity_report(&self, _signed_bytes: Vec<u8>) {}
     }
 
     fn make_record(peer_id: &str, json_rpc: &str) -> PeerRegistrationRecord {
@@ -2240,7 +2449,7 @@ mod tests {
             chronon_stamp_count: 0,
             external_attestations: vec![],
             tb_version: 0,
-            tbid: tbid.clone(),
+            tbid: *tbid,
         }
     }
 
@@ -2248,7 +2457,7 @@ mod tests {
         Foretis {
             chronon_number: 1,
             content_hash: FTByteArray::from([5u8; 32]),
-            tbid: tbid.clone(),
+            tbid: *tbid,
             echo: "test".to_string(),
             tbn: "test-tb".to_string(),
             time_being_reference_time: "UE+1000000000ns".to_string(),
@@ -2258,10 +2467,12 @@ mod tests {
     #[test]
     fn gate_chronon_records_rejects_chronon_number_zero() {
         let tbid = Tbid::from_raw([0u8; 96]);
-        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(
-            foretias_core::crypto_server::ForetiasCurve::Ed25519,
-        )
-        .expect("libsodium"));
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            )
+            .expect("libsodium"),
+        );
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
 
         let executor = CommunerdetteExecutor::new(
@@ -2298,10 +2509,12 @@ mod tests {
     #[test]
     fn gate_chronon_records_rejects_empty_public_key() {
         let tbid = Tbid::from_raw([0u8; 96]);
-        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(
-            foretias_core::crypto_server::ForetiasCurve::Ed25519,
-        )
-        .expect("libsodium"));
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            )
+            .expect("libsodium"),
+        );
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
 
         let executor = CommunerdetteExecutor::new(
@@ -2339,10 +2552,12 @@ mod tests {
     fn gate_chronon_records_rejects_tbid_mismatch() {
         let target_tbid = Tbid::from_raw([0u8; 96]);
         let other_tbid = Tbid::from_raw([1u8; 96]);
-        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(
-            foretias_core::crypto_server::ForetiasCurve::Ed25519,
-        )
-        .expect("libsodium"));
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            )
+            .expect("libsodium"),
+        );
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
 
         let executor = CommunerdetteExecutor::new(
@@ -2362,7 +2577,10 @@ mod tests {
         let record = make_test_chronon_record(&other_tbid, 1);
         let result = executor.gate_chronon_records(vec![record]);
 
-        assert!(matches!(result, Err(CommunerdetteError::TbidMismatch { .. })));
+        assert!(matches!(
+            result,
+            Err(CommunerdetteError::TbidMismatch { .. })
+        ));
         if let Err(CommunerdetteError::TbidMismatch { expected, actual }) = result {
             assert_eq!(expected, target_tbid.to_hex());
             assert_eq!(actual, other_tbid.to_hex());
@@ -2372,10 +2590,12 @@ mod tests {
     #[test]
     fn gate_chronon_records_returns_clean_authenticated_on_valid_genesis() {
         let target_tbid = Tbid::from_raw([0u8; 96]);
-        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(
-            foretias_core::crypto_server::ForetiasCurve::Ed25519,
-        )
-        .expect("libsodium"));
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            )
+            .expect("libsodium"),
+        );
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
 
         let executor = CommunerdetteExecutor::new(
@@ -2410,10 +2630,12 @@ mod tests {
     #[test]
     fn gate_foretis_rejects_chronon_number_zero() {
         let tbid = Tbid::from_raw([0u8; 96]);
-        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(
-            foretias_core::crypto_server::ForetiasCurve::Ed25519,
-        )
-        .expect("libsodium"));
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            )
+            .expect("libsodium"),
+        );
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
 
         let executor = CommunerdetteExecutor::new(
@@ -2424,7 +2646,7 @@ mod tests {
                 local_peer_id: None,
                 namespace: "test".to_string(),
             }),
-            tbid.clone(),
+            tbid,
             crypto,
             clock,
             None,
@@ -2433,7 +2655,7 @@ mod tests {
         let bad_foretis = Foretis {
             chronon_number: 0,
             content_hash: FTByteArray::from([0u8; 32]),
-            tbid: tbid.clone(),
+            tbid,
             echo: "test".to_string(),
             tbn: "test".to_string(),
             time_being_reference_time: "UE+0ns".to_string(),
@@ -2448,10 +2670,12 @@ mod tests {
     #[test]
     fn gate_foretis_rejects_empty_signature() {
         let tbid = Tbid::from_raw([0u8; 96]);
-        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(
-            foretias_core::crypto_server::ForetiasCurve::Ed25519,
-        )
-        .expect("libsodium"));
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            )
+            .expect("libsodium"),
+        );
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
 
         let executor = CommunerdetteExecutor::new(
@@ -2462,7 +2686,7 @@ mod tests {
                 local_peer_id: None,
                 namespace: "test".to_string(),
             }),
-            tbid.clone(),
+            tbid,
             crypto,
             clock,
             None,
@@ -2471,7 +2695,7 @@ mod tests {
         let bad_foretis = Foretis {
             chronon_number: 1,
             content_hash: FTByteArray::from([0u8; 32]),
-            tbid: tbid.clone(),
+            tbid,
             echo: "test".to_string(),
             tbn: "test".to_string(),
             time_being_reference_time: "UE+0ns".to_string(),
@@ -2486,10 +2710,12 @@ mod tests {
     #[test]
     fn gate_foretis_rejects_empty_signature_algorithm() {
         let tbid = Tbid::from_raw([0u8; 96]);
-        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(
-            foretias_core::crypto_server::ForetiasCurve::Ed25519,
-        )
-        .expect("libsodium"));
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            )
+            .expect("libsodium"),
+        );
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
 
         let executor = CommunerdetteExecutor::new(
@@ -2500,7 +2726,7 @@ mod tests {
                 local_peer_id: None,
                 namespace: "test".to_string(),
             }),
-            tbid.clone(),
+            tbid,
             crypto,
             clock,
             None,
@@ -2509,7 +2735,7 @@ mod tests {
         let bad_foretis = Foretis {
             chronon_number: 1,
             content_hash: FTByteArray::from([0u8; 32]),
-            tbid: tbid.clone(),
+            tbid,
             echo: "test".to_string(),
             tbn: "test".to_string(),
             time_being_reference_time: "UE+0ns".to_string(),
@@ -2525,10 +2751,12 @@ mod tests {
     fn gate_foretis_rejects_tbid_mismatch() {
         let target_tbid = Tbid::from_raw([0u8; 96]);
         let other_tbid = Tbid::from_raw([2u8; 96]);
-        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(
-            foretias_core::crypto_server::ForetiasCurve::Ed25519,
-        )
-        .expect("libsodium"));
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            )
+            .expect("libsodium"),
+        );
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
 
         let executor = CommunerdetteExecutor::new(
@@ -2539,7 +2767,7 @@ mod tests {
                 local_peer_id: None,
                 namespace: "test".to_string(),
             }),
-            target_tbid.clone(),
+            target_tbid,
             crypto,
             clock,
             None,
@@ -2551,7 +2779,10 @@ mod tests {
 
         let result = executor.gate_foretis(json, &rec, b"");
 
-        assert!(matches!(result, Err(CommunerdetteError::TbidMismatch { .. })));
+        assert!(matches!(
+            result,
+            Err(CommunerdetteError::TbidMismatch { .. })
+        ));
         if let Err(CommunerdetteError::TbidMismatch { expected, actual }) = result {
             assert_eq!(expected, target_tbid.to_hex());
             assert_eq!(actual, other_tbid.to_hex());
@@ -2563,10 +2794,12 @@ mod tests {
         use foretias_core::foretias::types::SignatureAlgorithm;
 
         let target_tbid = Tbid::from_raw([0u8; 96]);
-        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(
-            foretias_core::crypto_server::ForetiasCurve::Ed25519,
-        )
-        .expect("libsodium"));
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            )
+            .expect("libsodium"),
+        );
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
 
         let content = b"valid foretis content" as &[u8];
@@ -2578,20 +2811,25 @@ mod tests {
         let foretis_for_signing = Foretis {
             chronon_number,
             content_hash: FTByteArray::from(content_hash.bytes),
-            tbid: target_tbid.clone(),
+            tbid: target_tbid,
             echo: "test".to_string(),
             tbn: "test-tb".to_string(),
             time_being_reference_time: "UE+1000000000ns".to_string(),
         };
         let sig_input = foretis_for_signing.sig_input_bytes();
 
-        let sig = crypto.sign_with(&sig_input, SignatureAlgorithm::Ed25519).expect("sign");
+        let sig = crypto
+            .sign_with(&sig_input, SignatureAlgorithm::Ed25519)
+            .expect("sign");
         let pub_key = crypto.public_key();
 
         // ChrononRecord with the CryptoServer's real public key (from_trusted: test-local data)
         let chronon_record = CleanAuthenticated::from_trusted(ChrononRecord {
             chronon_number,
-            public_key: FTByteVector::from(match pub_key { foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(), _ => panic!("expected Ed25519") }),
+            public_key: FTByteVector::from(match pub_key {
+                foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
+                _ => panic!("expected Ed25519"),
+            }),
             signature_algorithm: "Ed25519".to_string(),
             forward_foretis: FTByteVector::from(vec![]),
             backward_foretis: FTByteVector::from(vec![]),
@@ -2599,13 +2837,13 @@ mod tests {
             chronon_stamp_count: 0,
             external_attestations: vec![],
             tb_version: 0,
-            tbid: target_tbid.clone(),
+            tbid: target_tbid,
         });
 
         let foretis = Foretis {
             chronon_number,
             content_hash: FTByteArray::from(content_hash.bytes),
-            tbid: target_tbid.clone(),
+            tbid: target_tbid,
             echo: "test".to_string(),
             tbn: "test-tb".to_string(),
             time_being_reference_time: "UE+1000000000ns".to_string(),
@@ -2631,7 +2869,11 @@ mod tests {
             "signature_algorithm": "Ed25519",
         });
         let result = executor.gate_foretis(json, &chronon_record, content);
-        assert!(result.is_ok(), "gate_foretis must accept valid signed Foretis: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "gate_foretis must accept valid signed Foretis: {:?}",
+            result
+        );
         let ca = result.unwrap();
         assert_eq!(*ca.chronon_number(), 1);
         assert!(ca.is_authenticated_quickly());
@@ -2640,13 +2882,13 @@ mod tests {
 
     #[test]
     fn gate_foretis_rejects_foretis_with_wrong_signature() {
-
-
         let target_tbid = Tbid::from_raw([0u8; 96]);
-        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(
-            foretias_core::crypto_server::ForetiasCurve::Ed25519,
-        )
-        .expect("libsodium"));
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            )
+            .expect("libsodium"),
+        );
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
 
         let content = b"some content" as &[u8];
@@ -2656,7 +2898,10 @@ mod tests {
 
         let chronon_record = CleanAuthenticated::from_trusted(ChrononRecord {
             chronon_number,
-            public_key: FTByteVector::from(match pub_key { foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(), _ => panic!("expected Ed25519") }),
+            public_key: FTByteVector::from(match pub_key {
+                foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
+                _ => panic!("expected Ed25519"),
+            }),
             signature_algorithm: "Ed25519".to_string(),
             forward_foretis: FTByteVector::from(vec![]),
             backward_foretis: FTByteVector::from(vec![]),
@@ -2664,14 +2909,14 @@ mod tests {
             chronon_stamp_count: 0,
             external_attestations: vec![],
             tb_version: 0,
-            tbid: target_tbid.clone(),
+            tbid: target_tbid,
         });
 
         // Wrong signature — 64 bytes of garbage, not a real Ed25519 signature
         let foretis = Foretis {
             chronon_number,
             content_hash: FTByteArray::from(content_hash.bytes),
-            tbid: target_tbid.clone(),
+            tbid: target_tbid,
             echo: "test".to_string(),
             tbn: "test-tb".to_string(),
             time_being_reference_time: "UE+1000000000ns".to_string(),
@@ -2700,17 +2945,20 @@ mod tests {
         let result = executor.gate_foretis(json, &chronon_record, content);
         assert!(
             matches!(result, Err(CommunerdetteError::CleanAuth(_))),
-            "gate_foretis must reject Foretis with wrong signature: {:?}", result
+            "gate_foretis must reject Foretis with wrong signature: {:?}",
+            result
         );
     }
 
     #[test]
     fn gate_foretis_rejects_invalid_json() {
         let tbid = Tbid::from_raw([0u8; 96]);
-        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(
-            foretias_core::crypto_server::ForetiasCurve::Ed25519,
-        )
-        .expect("libsodium"));
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            )
+            .expect("libsodium"),
+        );
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
 
         let executor = CommunerdetteExecutor::new(
@@ -2729,7 +2977,8 @@ mod tests {
 
         let tbid_for_dummy = Tbid::from_raw([0u8; 96]);
         let rec = dummy_chronon_record(&tbid_for_dummy);
-        let result = executor.gate_foretis(serde_json::Value::String("not an object".into()), &rec, b"");
+        let result =
+            executor.gate_foretis(serde_json::Value::String("not an object".into()), &rec, b"");
         assert!(matches!(result, Err(CommunerdetteError::Transport(_))));
     }
 
@@ -2743,16 +2992,19 @@ mod tests {
             local_peer_id: None,
             namespace: "test".to_string(),
         });
-        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(
-            foretias_core::crypto_server::ForetiasCurve::Ed25519,
-        )
-        .expect("libsodium"));
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            )
+            .expect("libsodium"),
+        );
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
 
         let executor = CommunerdetteExecutor::new(host, tbid, crypto, clock, None);
 
-        let result = Communerdette::execute_calendar_slice(&executor, 1, 10, TokioDuration::from_secs(5))
-            .await;
+        let result =
+            Communerdette::execute_calendar_slice(&executor, 1, 10, TokioDuration::from_secs(5))
+                .await;
 
         assert!(result.is_err());
     }
@@ -2767,16 +3019,23 @@ mod tests {
             local_peer_id: None,
             namespace: "test".to_string(),
         });
-        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(
-            foretias_core::crypto_server::ForetiasCurve::Ed25519,
-        )
-        .expect("libsodium"));
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            )
+            .expect("libsodium"),
+        );
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
 
         let executor = CommunerdetteExecutor::new(host, tbid, crypto, clock, None);
 
-        let result = Communerdette::execute_stamp(&executor, b"hello".to_vec(), "test".into(), TokioDuration::from_secs(5))
-            .await;
+        let result = Communerdette::execute_stamp(
+            &executor,
+            b"hello".to_vec(),
+            "test".into(),
+            TokioDuration::from_secs(5),
+        )
+        .await;
 
         assert!(result.is_err());
     }
@@ -3000,10 +3259,12 @@ mod tests {
     #[test]
     fn gate_chronon_records_rejects_bad_chained_signature() {
         let target_tbid = Tbid::from_raw([0u8; 96]);
-        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(
-            foretias_core::crypto_server::ForetiasCurve::Ed25519,
-        )
-        .expect("libsodium"));
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            )
+            .expect("libsodium"),
+        );
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
 
         let executor = CommunerdetteExecutor::new(
@@ -3044,10 +3305,12 @@ mod tests {
     #[test]
     fn gate_foretis_phase11_rejects_bad_signature_after_fix() {
         let target_tbid = Tbid::from_raw([0u8; 96]);
-        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(foretias_core::crypto_server::new_software(
-            foretias_core::crypto_server::ForetiasCurve::Ed25519,
-        )
-        .expect("libsodium"));
+        let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
+            foretias_core::crypto_server::new_software(
+                foretias_core::crypto_server::ForetiasCurve::Ed25519,
+            )
+            .expect("libsodium"),
+        );
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
 
         let content = b"content bytes" as &[u8];
@@ -3056,7 +3319,10 @@ mod tests {
 
         let chronon_record = CleanAuthenticated::from_trusted(ChrononRecord {
             chronon_number: 1,
-            public_key: FTByteVector::from(match pub_key { foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(), _ => panic!("expected Ed25519") }),
+            public_key: FTByteVector::from(match pub_key {
+                foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
+                _ => panic!("expected Ed25519"),
+            }),
             signature_algorithm: "Ed25519".to_string(),
             forward_foretis: FTByteVector::from(vec![]),
             backward_foretis: FTByteVector::from(vec![]),
@@ -3064,13 +3330,13 @@ mod tests {
             chronon_stamp_count: 0,
             external_attestations: vec![],
             tb_version: 0,
-            tbid: target_tbid.clone(),
+            tbid: target_tbid,
         });
 
         let foretis_bad_sig = Foretis {
             chronon_number: 1,
             content_hash: FTByteArray::from(content_hash.bytes),
-            tbid: target_tbid.clone(),
+            tbid: target_tbid,
             echo: "test".to_string(),
             tbn: "test-tb".to_string(),
             time_being_reference_time: "UE+1000000000ns".to_string(),
@@ -3099,7 +3365,8 @@ mod tests {
         let result = executor.gate_foretis(json, &chronon_record, content);
         assert!(
             matches!(result, Err(CommunerdetteError::CleanAuth(_))),
-            "gate_foretis must reject Foretis with garbage signature: {:?}", result
+            "gate_foretis must reject Foretis with garbage signature: {:?}",
+            result
         );
     }
 
@@ -3107,7 +3374,7 @@ mod tests {
 
     /// Build a valid dual-key signed ChannelBindResponse for testing.
     fn make_valid_bind_response(
-        crypto: &dyn CryptoServer,
+        _crypto: &dyn CryptoServer,
         nonce: &[u8],
         channel_id: &str,
         tbid: &Tbid,
@@ -3136,16 +3403,22 @@ mod tests {
         let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
             foretias_core::crypto_server::new_software(
                 foretias_core::crypto_server::ForetiasCurve::Ed25519,
-            ).expect("libsodium")
+            )
+            .expect("libsodium"),
         );
         let (tbid, secret) = TbidSecret::generate().expect("keygen");
         let nonce = b"test_nonce_32bytes_paddedxxxxxx!!" as &[u8];
         let channel_id = "127.0.0.1:9000";
 
         let resp_json = make_valid_bind_response(&*crypto, nonce, channel_id, &tbid, &secret);
-        let unprocessed = UnverifiedSignatureEnvelopeChannelBinding::from_json_value(resp_json).expect("parse");
+        let unprocessed =
+            UnverifiedSignatureEnvelopeChannelBinding::from_json_value(resp_json).expect("parse");
         let result = unprocessed.verify_full(&*crypto, nonce, channel_id, &tbid);
-        assert!(result.is_ok(), "verify_full must accept valid dual-signed response: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "verify_full must accept valid dual-signed response: {:?}",
+            result
+        );
         let binding = result.unwrap();
         assert!(binding.is_authenticated_fully());
         assert!(binding.is_authenticated_quickly());
@@ -3157,7 +3430,8 @@ mod tests {
         let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
             foretias_core::crypto_server::new_software(
                 foretias_core::crypto_server::ForetiasCurve::Ed25519,
-            ).expect("libsodium")
+            )
+            .expect("libsodium"),
         );
         let (tbid, secret) = TbidSecret::generate().expect("keygen");
         let nonce = b"test_nonce_32bytes_paddedxxxxxx!!" as &[u8];
@@ -3166,11 +3440,13 @@ mod tests {
         let mut resp_json = make_valid_bind_response(&*crypto, nonce, channel_id, &tbid, &secret);
         // Corrupt fast_sig
         resp_json["fast_sig"] = serde_json::json!(hex::encode(vec![0xABu8; 64]));
-        let unprocessed = UnverifiedSignatureEnvelopeChannelBinding::from_json_value(resp_json).expect("parse");
+        let unprocessed =
+            UnverifiedSignatureEnvelopeChannelBinding::from_json_value(resp_json).expect("parse");
         let result = unprocessed.verify_full(&*crypto, nonce, channel_id, &tbid);
         assert!(
             matches!(result, Err(CommunerdetteError::CleanAuth(_))),
-            "must reject wrong fast_sig: {:?}", result
+            "must reject wrong fast_sig: {:?}",
+            result
         );
     }
 
@@ -3180,7 +3456,8 @@ mod tests {
         let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
             foretias_core::crypto_server::new_software(
                 foretias_core::crypto_server::ForetiasCurve::Ed25519,
-            ).expect("libsodium")
+            )
+            .expect("libsodium"),
         );
         let (tbid, secret) = TbidSecret::generate().expect("keygen");
         let nonce = b"test_nonce_32bytes_paddedxxxxxx!!" as &[u8];
@@ -3189,12 +3466,10 @@ mod tests {
         let mut resp_json = make_valid_bind_response(&*crypto, nonce, channel_id, &tbid, &secret);
         // Corrupt slow_sig with wrong-length garbage
         resp_json["slow_sig"] = serde_json::json!(hex::encode(vec![0xCDu8; 100]));
-        let unprocessed = UnverifiedSignatureEnvelopeChannelBinding::from_json_value(resp_json).expect("parse");
+        let unprocessed =
+            UnverifiedSignatureEnvelopeChannelBinding::from_json_value(resp_json).expect("parse");
         let result = unprocessed.verify_full(&*crypto, nonce, channel_id, &tbid);
-        assert!(
-            result.is_err(),
-            "must reject wrong slow_sig: {:?}", result
-        );
+        assert!(result.is_err(), "must reject wrong slow_sig: {:?}", result);
     }
 
     #[test]
@@ -3203,19 +3478,22 @@ mod tests {
         let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
             foretias_core::crypto_server::new_software(
                 foretias_core::crypto_server::ForetiasCurve::Ed25519,
-            ).expect("libsodium")
+            )
+            .expect("libsodium"),
         );
         let (tbid, secret) = TbidSecret::generate().expect("keygen");
         let nonce = b"test_nonce_32bytes_paddedxxxxxx!!" as &[u8];
         let channel_id = "127.0.0.1:9000";
 
         let resp_json = make_valid_bind_response(&*crypto, nonce, channel_id, &tbid, &secret);
-        let unprocessed = UnverifiedSignatureEnvelopeChannelBinding::from_json_value(resp_json).expect("parse");
+        let unprocessed =
+            UnverifiedSignatureEnvelopeChannelBinding::from_json_value(resp_json).expect("parse");
         let wrong_nonce = b"different_nonce_32bytes_paddxx!!" as &[u8];
         let result = unprocessed.verify_full(&*crypto, wrong_nonce, channel_id, &tbid);
         assert!(
             matches!(result, Err(CommunerdetteError::Structural(_))),
-            "must reject nonce mismatch: {:?}", result
+            "must reject nonce mismatch: {:?}",
+            result
         );
     }
 
@@ -3225,7 +3503,8 @@ mod tests {
         let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
             foretias_core::crypto_server::new_software(
                 foretias_core::crypto_server::ForetiasCurve::Ed25519,
-            ).expect("libsodium")
+            )
+            .expect("libsodium"),
         );
         let (tbid, secret) = TbidSecret::generate().expect("keygen");
         let (other_tbid, _) = TbidSecret::generate().expect("keygen");
@@ -3233,11 +3512,13 @@ mod tests {
         let channel_id = "127.0.0.1:9000";
 
         let resp_json = make_valid_bind_response(&*crypto, nonce, channel_id, &tbid, &secret);
-        let unprocessed = UnverifiedSignatureEnvelopeChannelBinding::from_json_value(resp_json).expect("parse");
+        let unprocessed =
+            UnverifiedSignatureEnvelopeChannelBinding::from_json_value(resp_json).expect("parse");
         let result = unprocessed.verify_full(&*crypto, nonce, channel_id, &other_tbid);
         assert!(
             matches!(result, Err(CommunerdetteError::TbidMismatch { .. })),
-            "must reject TBID mismatch: {:?}", result
+            "must reject TBID mismatch: {:?}",
+            result
         );
     }
 
@@ -3271,15 +3552,25 @@ mod tests {
 
     #[async_trait]
     impl CommunerdetteHost for ConfigurableMockHost {
-        async fn host_lookup_tbid(&self, _tbid_hex: &str, _namespace: &str) -> Option<PeerRegistrationRecord> {
+        async fn host_lookup_tbid(
+            &self,
+            _tbid_hex: &str,
+            _namespace: &str,
+        ) -> Option<PeerRegistrationRecord> {
             self.dht_record.clone()
         }
         fn host_lookup_tbid_cached(&self, _tbid_hex: &str) -> Option<PeerRegistrationRecord> {
             self.dht_record.clone()
         }
-        fn host_namespace(&self) -> String { "test".to_string() }
-        fn host_swarm_available(&self) -> bool { false }
-        fn host_local_peer_id(&self) -> Option<libp2p::PeerId> { None }
+        fn host_namespace(&self) -> String {
+            "test".to_string()
+        }
+        fn host_swarm_available(&self) -> bool {
+            false
+        }
+        fn host_local_peer_id(&self) -> Option<libp2p::PeerId> {
+            None
+        }
 
         async fn host_execute_stamp(
             &self,
@@ -3288,7 +3579,9 @@ mod tests {
             _content_hex: &str,
             _echo: &str,
         ) -> Result<serde_json::Value, TransportError> {
-            self.stamp_response.lock().clone()
+            self.stamp_response
+                .lock()
+                .clone()
                 .ok_or_else(|| TransportError::Unsupported("no stamp response set".into()))
         }
 
@@ -3298,7 +3591,9 @@ mod tests {
             _tick_start: u64,
             _count: u64,
         ) -> Result<Vec<ChrononRecord>, TransportError> {
-            self.calendar_response.lock().clone()
+            self.calendar_response
+                .lock()
+                .clone()
                 .ok_or_else(|| TransportError::Unsupported("no calendar response set".into()))
         }
 
@@ -3316,12 +3611,14 @@ mod tests {
             Err(TransportError::Unsupported("mock".into()))
         }
 
-        fn host_sign_probity_report(&self, _report: &crate::probity::ProbityReport) -> Result<Vec<u8>, String> {
+        fn host_sign_probity_report(
+            &self,
+            _report: &crate::probity::ProbityReport,
+        ) -> Result<Vec<u8>, String> {
             Ok(vec![0xBB; 64])
         }
 
-        fn host_publish_probity_report(&self, _signed_bytes: Vec<u8>) {
-        }
+        fn host_publish_probity_report(&self, _signed_bytes: Vec<u8>) {}
     }
 
     #[tokio::test]
@@ -3330,18 +3627,20 @@ mod tests {
         let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
             foretias_core::crypto_server::new_software(
                 foretias_core::crypto_server::ForetiasCurve::Ed25519,
-            ).expect("libsodium")
+            )
+            .expect("libsodium"),
         );
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
 
-        let host = Arc::new(ConfigurableMockHost::new(Some(make_record("peer-1", "127.0.0.1:4002"))));
+        let host = Arc::new(ConfigurableMockHost::new(Some(make_record(
+            "peer-1",
+            "127.0.0.1:4002",
+        ))));
         // Return empty slice — execute_tick must error.
         host.set_calendar_response(vec![]);
 
         let executor = CommunerdetteExecutor::new(host, tbid, crypto, clock, None);
-        let result = Communerdette::execute_tick(
-            &executor, 1, TokioDuration::from_secs(5),
-        ).await;
+        let result = Communerdette::execute_tick(&executor, 1, TokioDuration::from_secs(5)).await;
 
         assert!(
             result.is_err(),
@@ -3349,7 +3648,8 @@ mod tests {
         );
         assert!(
             matches!(result, Err(CommunerdetteError::Structural(_))),
-            "error must be Structural, got: {:?}", result
+            "error must be Structural, got: {:?}",
+            result
         );
     }
 
@@ -3361,7 +3661,8 @@ mod tests {
         let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
             foretias_core::crypto_server::new_software(
                 foretias_core::crypto_server::ForetiasCurve::Ed25519,
-            ).expect("libsodium")
+            )
+            .expect("libsodium"),
         );
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
 
@@ -3374,12 +3675,17 @@ mod tests {
         let foretis_for_signing = Foretis {
             chronon_number,
             content_hash: FTByteArray::from(content_hash.bytes),
-            tbid: tbid.clone(),
+            tbid,
             echo: "test".to_string(),
             tbn: "test-tb".to_string(),
             time_being_reference_time: "UE+1000000000ns".to_string(),
         };
-        let sig = crypto.sign_with(&foretis_for_signing.sig_input_bytes(), SignatureAlgorithm::Ed25519).expect("sign");
+        let sig = crypto
+            .sign_with(
+                &foretis_for_signing.sig_input_bytes(),
+                SignatureAlgorithm::Ed25519,
+            )
+            .expect("sign");
         let pub_key_bytes = match crypto.public_key() {
             foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
             _ => panic!("expected Ed25519"),
@@ -3396,10 +3702,13 @@ mod tests {
             chronon_stamp_count: 0,
             external_attestations: vec![],
             tb_version: 0,
-            tbid: tbid.clone(),
+            tbid,
         };
 
-        let host = Arc::new(ConfigurableMockHost::new(Some(make_record("peer-1", "127.0.0.1:4002"))));
+        let host = Arc::new(ConfigurableMockHost::new(Some(make_record(
+            "peer-1",
+            "127.0.0.1:4002",
+        ))));
         host.set_calendar_response(vec![chronon_record]);
         host.set_stamp_response(serde_json::json!({
             "foretis": foretis_for_signing,
@@ -3407,19 +3716,31 @@ mod tests {
             "signature_algorithm": "Ed25519",
         }));
 
-        let executor = CommunerdetteExecutor::new(host, tbid.clone(), crypto, clock, None);
+        let executor = CommunerdetteExecutor::new(host, tbid, crypto, clock, None);
         let result = Communerdette::execute_stamp(
             &executor,
             content.to_vec(),
             "test".to_string(),
             TokioDuration::from_secs(5),
-        ).await;
+        )
+        .await;
 
-        assert!(result.is_ok(), "execute_stamp must succeed with valid signed Foretis: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "execute_stamp must succeed with valid signed Foretis: {:?}",
+            result
+        );
         let ca = result.unwrap();
-        assert_eq!(*ca.tbid(), tbid, "returned Foretis must carry the target TBID");
+        assert_eq!(
+            *ca.tbid(),
+            tbid,
+            "returned Foretis must carry the target TBID"
+        );
         assert_eq!(*ca.chronon_number(), chronon_number);
-        assert!(ca.is_authenticated_quickly(), "returned Foretis must be authenticated");
+        assert!(
+            ca.is_authenticated_quickly(),
+            "returned Foretis must be authenticated"
+        );
         assert!(ca.is_authenticated_quickly());
     }
 
@@ -3432,7 +3753,11 @@ mod tests {
     }
 
     impl FBMockHost {
-        fn new() -> (Self, std::sync::Arc<Mutex<Vec<crate::probity::ProbityReport>>>, std::sync::Arc<Mutex<Vec<Vec<u8>>>>) {
+        fn new() -> (
+            Self,
+            std::sync::Arc<Mutex<Vec<crate::probity::ProbityReport>>>,
+            std::sync::Arc<Mutex<Vec<Vec<u8>>>>,
+        ) {
             let sign_calls = std::sync::Arc::new(Mutex::new(Vec::new()));
             let publish_calls = std::sync::Arc::new(Mutex::new(Vec::new()));
             (
@@ -3448,25 +3773,59 @@ mod tests {
 
     #[async_trait]
     impl CommunerdetteHost for FBMockHost {
-        async fn host_lookup_tbid(&self, _tbid_hex: &str, _namespace: &str) -> Option<PeerRegistrationRecord> { None }
-        fn host_lookup_tbid_cached(&self, _tbid_hex: &str) -> Option<PeerRegistrationRecord> { None }
-        fn host_namespace(&self) -> String { "test".to_string() }
-        fn host_swarm_available(&self) -> bool { false }
-        fn host_local_peer_id(&self) -> Option<libp2p::PeerId> { None }
-        async fn host_execute_stamp(&self, _: &PeerAddr, _: &str, _: &str, _: &str) -> Result<serde_json::Value, TransportError> {
+        async fn host_lookup_tbid(
+            &self,
+            _tbid_hex: &str,
+            _namespace: &str,
+        ) -> Option<PeerRegistrationRecord> {
+            None
+        }
+        fn host_lookup_tbid_cached(&self, _tbid_hex: &str) -> Option<PeerRegistrationRecord> {
+            None
+        }
+        fn host_namespace(&self) -> String {
+            "test".to_string()
+        }
+        fn host_swarm_available(&self) -> bool {
+            false
+        }
+        fn host_local_peer_id(&self) -> Option<libp2p::PeerId> {
+            None
+        }
+        async fn host_execute_stamp(
+            &self,
+            _: &PeerAddr,
+            _: &str,
+            _: &str,
+            _: &str,
+        ) -> Result<serde_json::Value, TransportError> {
             Err(TransportError::Unsupported("mock".into()))
         }
-        async fn host_execute_calendar_slice(&self, _: &PeerAddr, _: u64, _: u64) -> Result<Vec<ChrononRecord>, TransportError> {
+        async fn host_execute_calendar_slice(
+            &self,
+            _: &PeerAddr,
+            _: u64,
+            _: u64,
+        ) -> Result<Vec<ChrononRecord>, TransportError> {
             Err(TransportError::Unsupported("mock".into()))
         }
-        async fn host_execute_channel_bind_challenge(&self, _: &PeerAddr, _: &str, _: &str, _: &str) -> Result<serde_json::Value, TransportError> {
+        async fn host_execute_channel_bind_challenge(
+            &self,
+            _: &PeerAddr,
+            _: &str,
+            _: &str,
+            _: &str,
+        ) -> Result<serde_json::Value, TransportError> {
             Err(TransportError::Unsupported("mock".into()))
         }
         async fn host_execute_ping(&self, _: &PeerAddr) -> Result<(), TransportError> {
             Err(TransportError::Unsupported("mock".into()))
         }
         // SIGN(report → host_sign_probity_report)
-        fn host_sign_probity_report(&self, report: &crate::probity::ProbityReport) -> Result<Vec<u8>, String> {
+        fn host_sign_probity_report(
+            &self,
+            report: &crate::probity::ProbityReport,
+        ) -> Result<Vec<u8>, String> {
             self.sign_calls.lock().push(report.clone());
             Ok(vec![0xAA; 64])
         }
@@ -3480,7 +3839,8 @@ mod tests {
         let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
             foretias_core::crypto_server::new_software(
                 foretias_core::crypto_server::ForetiasCurve::Ed25519,
-            ).expect("libsodium")
+            )
+            .expect("libsodium"),
         );
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
         let target_tbid = Tbid::from_raw([1u8; 96]);
@@ -3489,25 +3849,51 @@ mod tests {
         let (host_impl, sign_calls, publish_calls) = FBMockHost::new();
         let host: Arc<dyn CommunerdetteHost> = Arc::new(host_impl);
         let executor = CommunerdetteExecutor::new(
-            Arc::clone(&host), target_tbid, crypto, clock, local_calendar_tbid
+            Arc::clone(&host),
+            target_tbid,
+            crypto,
+            clock,
+            local_calendar_tbid,
         );
 
         executor.emit_fb_report(1.0);
 
         let calls = sign_calls.lock();
-        assert_eq!(calls.len(), 1, "host_sign_probity_report must be called exactly once");
+        assert_eq!(
+            calls.len(),
+            1,
+            "host_sign_probity_report must be called exactly once"
+        );
         let report = &calls[0];
         assert_eq!(report.attribute, "fb", "attribute must be 'fb'");
         assert_eq!(report.value, 1.0, "value must be 1.0 for established");
-        assert_eq!(report.reporter, "local-cal-tbid-hex", "reporter must be local_calendar_tbid");
-        assert_eq!(report.subject, target_tbid.to_hex(), "subject must be target_tbid");
+        assert_eq!(
+            report.reporter, "local-cal-tbid-hex",
+            "reporter must be local_calendar_tbid"
+        );
+        assert_eq!(
+            report.subject,
+            target_tbid.to_hex(),
+            "subject must be target_tbid"
+        );
         assert_eq!(report.curve, 1, "curve must be Ed25519 (1)");
-        assert!(report.signature.is_empty(), "signature must be empty (pre-sign)");
+        assert!(
+            report.signature.is_empty(),
+            "signature must be empty (pre-sign)"
+        );
         drop(calls);
 
         let pubs = publish_calls.lock();
-        assert_eq!(pubs.len(), 1, "host_publish_probity_report must be called exactly once");
-        assert_eq!(pubs[0], vec![0xAAu8; 64], "published bytes must match signed output");
+        assert_eq!(
+            pubs.len(),
+            1,
+            "host_publish_probity_report must be called exactly once"
+        );
+        assert_eq!(
+            pubs[0],
+            vec![0xAAu8; 64],
+            "published bytes must match signed output"
+        );
     }
 
     #[test]
@@ -3515,7 +3901,8 @@ mod tests {
         let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
             foretias_core::crypto_server::new_software(
                 foretias_core::crypto_server::ForetiasCurve::Ed25519,
-            ).expect("libsodium")
+            )
+            .expect("libsodium"),
         );
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
         let target_tbid = Tbid::from_raw([2u8; 96]);
@@ -3524,22 +3911,41 @@ mod tests {
         let (host_impl, sign_calls, publish_calls) = FBMockHost::new();
         let host: Arc<dyn CommunerdetteHost> = Arc::new(host_impl);
         let executor = CommunerdetteExecutor::new(
-            Arc::clone(&host), target_tbid, crypto, clock, local_calendar_tbid
+            Arc::clone(&host),
+            target_tbid,
+            crypto,
+            clock,
+            local_calendar_tbid,
         );
 
         executor.emit_fb_report(-1.0);
 
         let calls = sign_calls.lock();
-        assert_eq!(calls.len(), 1, "host_sign_probity_report must be called exactly once");
+        assert_eq!(
+            calls.len(),
+            1,
+            "host_sign_probity_report must be called exactly once"
+        );
         let report = &calls[0];
         assert_eq!(report.attribute, "fb", "attribute must be 'fb'");
         assert_eq!(report.value, -1.0, "value must be -1.0 for lost");
-        assert_eq!(report.reporter, "local-cal-tbid-hex", "reporter must be local_calendar_tbid");
-        assert_eq!(report.subject, target_tbid.to_hex(), "subject must be target_tbid");
+        assert_eq!(
+            report.reporter, "local-cal-tbid-hex",
+            "reporter must be local_calendar_tbid"
+        );
+        assert_eq!(
+            report.subject,
+            target_tbid.to_hex(),
+            "subject must be target_tbid"
+        );
         drop(calls);
 
         let pubs = publish_calls.lock();
-        assert_eq!(pubs.len(), 1, "host_publish_probity_report must be called exactly once");
+        assert_eq!(
+            pubs.len(),
+            1,
+            "host_publish_probity_report must be called exactly once"
+        );
     }
 
     #[test]
@@ -3547,25 +3953,33 @@ mod tests {
         let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
             foretias_core::crypto_server::new_software(
                 foretias_core::crypto_server::ForetiasCurve::Ed25519,
-            ).expect("libsodium")
+            )
+            .expect("libsodium"),
         );
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
         let target_tbid = Tbid::from_raw([3u8; 96]);
 
         let (host_impl, sign_calls, publish_calls) = FBMockHost::new();
         let host: Arc<dyn CommunerdetteHost> = Arc::new(host_impl);
-        let executor = CommunerdetteExecutor::new(
-            Arc::clone(&host), target_tbid, crypto, clock, None
-        );
+        let executor =
+            CommunerdetteExecutor::new(Arc::clone(&host), target_tbid, crypto, clock, None);
 
         executor.emit_fb_report(1.0);
 
         let calls = sign_calls.lock();
-        assert_eq!(calls.len(), 0, "host_sign_probity_report must NOT be called when local_calendar_tbid is None");
+        assert_eq!(
+            calls.len(),
+            0,
+            "host_sign_probity_report must NOT be called when local_calendar_tbid is None"
+        );
         drop(calls);
 
         let pubs = publish_calls.lock();
-        assert_eq!(pubs.len(), 0, "host_publish_probity_report must NOT be called when local_calendar_tbid is None");
+        assert_eq!(
+            pubs.len(),
+            0,
+            "host_publish_probity_report must NOT be called when local_calendar_tbid is None"
+        );
     }
 
     // ── Phase 12 — Liveness task unit tests ──────────────────────────────────
@@ -3601,7 +4015,11 @@ mod tests {
             }
         }
 
-        fn with_auth_ping_crypto(mut self, crypto: Arc<dyn CryptoServer>, target_tbid_hex: String) -> Self {
+        fn with_auth_ping_crypto(
+            mut self,
+            crypto: Arc<dyn CryptoServer>,
+            target_tbid_hex: String,
+        ) -> Self {
             self.auth_ping_crypto = Some(crypto);
             self.target_tbid_hex = target_tbid_hex;
             self
@@ -3623,7 +4041,11 @@ mod tests {
 
     #[async_trait]
     impl CommunerdetteHost for LivenessMockHost {
-        async fn host_lookup_tbid(&self, _tbid_hex: &str, _namespace: &str) -> Option<PeerRegistrationRecord> {
+        async fn host_lookup_tbid(
+            &self,
+            _tbid_hex: &str,
+            _namespace: &str,
+        ) -> Option<PeerRegistrationRecord> {
             self.dht_record.clone()
         }
 
@@ -3631,9 +4053,15 @@ mod tests {
             self.dht_record.clone()
         }
 
-        fn host_namespace(&self) -> String { "test".to_string() }
-        fn host_swarm_available(&self) -> bool { false }
-        fn host_local_peer_id(&self) -> Option<libp2p::PeerId> { None }
+        fn host_namespace(&self) -> String {
+            "test".to_string()
+        }
+        fn host_swarm_available(&self) -> bool {
+            false
+        }
+        fn host_local_peer_id(&self) -> Option<libp2p::PeerId> {
+            None
+        }
 
         async fn host_execute_stamp(
             &self,
@@ -3642,7 +4070,8 @@ mod tests {
             content_hex: &str,
             _echo: &str,
         ) -> Result<serde_json::Value, TransportError> {
-            self.stamp_call_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            self.stamp_call_count
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             // Dynamic signing for auth-ping success tests
             if let Some(ref crypto) = self.auth_ping_crypto {
                 if target_tbid == self.target_tbid_hex {
@@ -3651,12 +4080,15 @@ mod tests {
                     let mut msg = challenge;
                     msg.extend_from_slice(target_tbid.as_bytes());
                     // SIGN(challenge || target_tbid_hex)
-                    let sig = crypto.sign_with(
-                        &msg,
-                        foretias_core::foretias::types::SignatureAlgorithm::Ed25519,
-                    ).map_err(|e| TransportError::Decode(e.to_string()))?;
+                    let sig = crypto
+                        .sign_with(
+                            &msg,
+                            foretias_core::foretias::types::SignatureAlgorithm::Ed25519,
+                        )
+                        .map_err(|e| TransportError::Decode(e.to_string()))?;
                     let echo = if self.corrupt_challenge_echo {
-                        "0000000000000000000000000000000000000000000000000000000000000000".to_string()
+                        "0000000000000000000000000000000000000000000000000000000000000000"
+                            .to_string()
                     } else {
                         content_hex.to_string()
                     };
@@ -3669,7 +4101,9 @@ mod tests {
                 }
             }
             // Static fallback
-            self.stamp_response.lock().clone()
+            self.stamp_response
+                .lock()
+                .clone()
                 .ok_or_else(|| TransportError::Unsupported("no stamp response set".into()))
         }
 
@@ -3679,7 +4113,9 @@ mod tests {
             _tick_start: u64,
             _count: u64,
         ) -> Result<Vec<ChrononRecord>, TransportError> {
-            self.calendar_response.lock().clone()
+            self.calendar_response
+                .lock()
+                .clone()
                 .ok_or_else(|| TransportError::Unsupported("no calendar response set".into()))
         }
 
@@ -3701,7 +4137,10 @@ mod tests {
             }
         }
 
-        fn host_sign_probity_report(&self, _report: &crate::probity::ProbityReport) -> Result<Vec<u8>, String> {
+        fn host_sign_probity_report(
+            &self,
+            _report: &crate::probity::ProbityReport,
+        ) -> Result<Vec<u8>, String> {
             Ok(vec![0xCC; 64])
         }
 
@@ -3717,19 +4156,23 @@ mod tests {
         let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
             foretias_core::crypto_server::new_software(
                 foretias_core::crypto_server::ForetiasCurve::Ed25519,
-            ).expect("libsodium")
+            )
+            .expect("libsodium"),
         );
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
         let target_tbid = Tbid::from_raw([0xAA; 96]);
         let executor = Arc::new(CommunerdetteExecutor::new(
-            host, target_tbid, crypto, clock, None,
+            host,
+            target_tbid,
+            crypto,
+            clock,
+            None,
         ));
         let flags = LivenessCycleFlags::new();
         let cancel = CancellationToken::new();
 
-        let handle = Communerdette::spawn_l1_liveness_task(
-            executor, 50, cancel.clone(), flags.clone(),
-        );
+        let handle =
+            Communerdette::spawn_l1_liveness_task(executor, 50, cancel.clone(), flags.clone());
 
         tokio::time::sleep(TokioDuration::from_millis(200)).await;
 
@@ -3749,19 +4192,23 @@ mod tests {
         let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
             foretias_core::crypto_server::new_software(
                 foretias_core::crypto_server::ForetiasCurve::Ed25519,
-            ).expect("libsodium")
+            )
+            .expect("libsodium"),
         );
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
         let target_tbid = Tbid::from_raw([0xBB; 96]);
         let executor = Arc::new(CommunerdetteExecutor::new(
-            host, target_tbid, crypto, clock, None,
+            host,
+            target_tbid,
+            crypto,
+            clock,
+            None,
         ));
         let flags = LivenessCycleFlags::new();
         let cancel = CancellationToken::new();
 
-        let handle = Communerdette::spawn_l1_liveness_task(
-            executor, 50, cancel.clone(), flags.clone(),
-        );
+        let handle =
+            Communerdette::spawn_l1_liveness_task(executor, 50, cancel.clone(), flags.clone());
 
         tokio::time::sleep(TokioDuration::from_millis(200)).await;
 
@@ -3781,7 +4228,8 @@ mod tests {
         let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
             foretias_core::crypto_server::new_software(
                 foretias_core::crypto_server::ForetiasCurve::Ed25519,
-            ).expect("libsodium")
+            )
+            .expect("libsodium"),
         );
         let pub_key = match crypto.public_key() {
             foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
@@ -3795,18 +4243,21 @@ mod tests {
         let record = make_record("peer-1", "127.0.0.1:4002");
         let host: Arc<dyn CommunerdetteHost> = Arc::new(
             LivenessMockHost::new(Some(record), true)
-                .with_auth_ping_crypto(Arc::clone(&crypto), target_tbid_hex)
+                .with_auth_ping_crypto(Arc::clone(&crypto), target_tbid_hex),
         );
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
         let executor = Arc::new(CommunerdetteExecutor::new(
-            host, target_tbid, crypto, clock, None,
+            host,
+            target_tbid,
+            crypto,
+            clock,
+            None,
         ));
         let flags = LivenessCycleFlags::new();
         let cancel = CancellationToken::new();
 
-        let handle = Communerdette::spawn_l2_liveness_task(
-            executor, 50, cancel.clone(), flags.clone(),
-        );
+        let handle =
+            Communerdette::spawn_l2_liveness_task(executor, 50, cancel.clone(), flags.clone());
 
         tokio::time::sleep(TokioDuration::from_millis(300)).await;
 
@@ -3824,7 +4275,8 @@ mod tests {
         let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
             foretias_core::crypto_server::new_software(
                 foretias_core::crypto_server::ForetiasCurve::Ed25519,
-            ).expect("libsodium")
+            )
+            .expect("libsodium"),
         );
         let target_tbid = Tbid::from_raw([0xCC; 96]);
 
@@ -3841,14 +4293,17 @@ mod tests {
 
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
         let executor = Arc::new(CommunerdetteExecutor::new(
-            host, target_tbid, crypto, clock, None,
+            host,
+            target_tbid,
+            crypto,
+            clock,
+            None,
         ));
         let flags = LivenessCycleFlags::new();
         let cancel = CancellationToken::new();
 
-        let handle = Communerdette::spawn_l2_liveness_task(
-            executor, 50, cancel.clone(), flags.clone(),
-        );
+        let handle =
+            Communerdette::spawn_l2_liveness_task(executor, 50, cancel.clone(), flags.clone());
 
         tokio::time::sleep(TokioDuration::from_millis(300)).await;
 
@@ -3866,7 +4321,8 @@ mod tests {
         let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
             foretias_core::crypto_server::new_software(
                 foretias_core::crypto_server::ForetiasCurve::Ed25519,
-            ).expect("libsodium")
+            )
+            .expect("libsodium"),
         );
         let pub_key = match crypto.public_key() {
             foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
@@ -3881,18 +4337,21 @@ mod tests {
         let host: Arc<dyn CommunerdetteHost> = Arc::new(
             LivenessMockHost::new(Some(record), true)
                 .with_auth_ping_crypto(Arc::clone(&crypto), target_tbid_hex)
-                .with_corrupt_challenge_echo()
+                .with_corrupt_challenge_echo(),
         );
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
         let executor = Arc::new(CommunerdetteExecutor::new(
-            host, target_tbid, crypto, clock, None,
+            host,
+            target_tbid,
+            crypto,
+            clock,
+            None,
         ));
         let flags = LivenessCycleFlags::new();
         let cancel = CancellationToken::new();
 
-        let handle = Communerdette::spawn_l2_liveness_task(
-            executor, 50, cancel.clone(), flags.clone(),
-        );
+        let handle =
+            Communerdette::spawn_l2_liveness_task(executor, 50, cancel.clone(), flags.clone());
 
         tokio::time::sleep(TokioDuration::from_millis(300)).await;
 
@@ -3910,13 +4369,15 @@ mod tests {
         let crypto_executor: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
             foretias_core::crypto_server::new_software(
                 foretias_core::crypto_server::ForetiasCurve::Ed25519,
-            ).expect("libsodium")
+            )
+            .expect("libsodium"),
         );
         // Different key pair — will produce an invalid signature
         let crypto_wrong: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
             foretias_core::crypto_server::new_software(
                 foretias_core::crypto_server::ForetiasCurve::Ed25519,
-            ).expect("libsodium")
+            )
+            .expect("libsodium"),
         );
         let pub_key = match crypto_executor.public_key() {
             foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
@@ -3931,18 +4392,21 @@ mod tests {
         // Mock signs with wrong key — signature won't verify against TBID's public key
         let host: Arc<dyn CommunerdetteHost> = Arc::new(
             LivenessMockHost::new(Some(record), true)
-                .with_auth_ping_crypto(crypto_wrong, target_tbid_hex)
+                .with_auth_ping_crypto(crypto_wrong, target_tbid_hex),
         );
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
         let executor = Arc::new(CommunerdetteExecutor::new(
-            host, target_tbid, crypto_executor, clock, None,
+            host,
+            target_tbid,
+            crypto_executor,
+            clock,
+            None,
         ));
         let flags = LivenessCycleFlags::new();
         let cancel = CancellationToken::new();
 
-        let handle = Communerdette::spawn_l2_liveness_task(
-            executor, 50, cancel.clone(), flags.clone(),
-        );
+        let handle =
+            Communerdette::spawn_l2_liveness_task(executor, 50, cancel.clone(), flags.clone());
 
         tokio::time::sleep(TokioDuration::from_millis(300)).await;
 
@@ -3964,7 +4428,8 @@ mod tests {
         let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
             foretias_core::crypto_server::new_software(
                 foretias_core::crypto_server::ForetiasCurve::Ed25519,
-            ).expect("libsodium")
+            )
+            .expect("libsodium"),
         );
         let pub_key = match crypto.public_key() {
             foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
@@ -3981,16 +4446,18 @@ mod tests {
         let foretis_for_signing = Foretis {
             chronon_number: 1,
             content_hash: FTByteArray::from(content_hash.bytes),
-            tbid: target_tbid.clone(),
+            tbid: target_tbid,
             echo: "liveness".to_string(),
             tbn: "test-tb".to_string(),
             time_being_reference_time: "UE+1000000000ns".to_string(),
         };
         // SIGN(foretis_sig_input_bytes)
-        let sig = crypto.sign_with(
-            &foretis_for_signing.sig_input_bytes(),
-            SignatureAlgorithm::Ed25519,
-        ).expect("sign");
+        let sig = crypto
+            .sign_with(
+                &foretis_for_signing.sig_input_bytes(),
+                SignatureAlgorithm::Ed25519,
+            )
+            .expect("sign");
 
         // ChrononRecord with matching public key (genesis, tb_version=0)
         let chronon_record = ChrononRecord {
@@ -4003,7 +4470,7 @@ mod tests {
             chronon_stamp_count: 0,
             external_attestations: vec![],
             tb_version: 0,
-            tbid: target_tbid.clone(),
+            tbid: target_tbid,
         };
 
         let record = make_record("peer-1", "127.0.0.1:4002");
@@ -4016,14 +4483,17 @@ mod tests {
         }));
 
         let executor = Arc::new(CommunerdetteExecutor::new(
-            host, target_tbid, crypto, clock, None,
+            host,
+            target_tbid,
+            crypto,
+            clock,
+            None,
         ));
         let flags = LivenessCycleFlags::new();
         let cancel = CancellationToken::new();
 
-        let handle = Communerdette::spawn_l3_liveness_task(
-            executor, 200, cancel.clone(), flags.clone(),
-        );
+        let handle =
+            Communerdette::spawn_l3_liveness_task(executor, 200, cancel.clone(), flags.clone());
 
         tokio::time::sleep(TokioDuration::from_millis(500)).await;
 
@@ -4038,7 +4508,8 @@ mod tests {
         let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
             foretias_core::crypto_server::new_software(
                 foretias_core::crypto_server::ForetiasCurve::Ed25519,
-            ).expect("libsodium")
+            )
+            .expect("libsodium"),
         );
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
         let target_tbid = Tbid::from_raw([0xDD; 96]);
@@ -4048,28 +4519,38 @@ mod tests {
         let host_ref = Arc::clone(&host);
 
         let executor = Arc::new(CommunerdetteExecutor::new(
-            host, target_tbid, crypto, clock, None,
+            host,
+            target_tbid,
+            crypto,
+            clock,
+            None,
         ));
         let flags = LivenessCycleFlags::new();
         // L2 is OK but binding is rejected — L3 must skip
-        flags.binding_rejected.store(true, std::sync::atomic::Ordering::Relaxed);
+        flags
+            .binding_rejected
+            .store(true, std::sync::atomic::Ordering::Relaxed);
         let cancel = CancellationToken::new();
 
-        let handle = Communerdette::spawn_l3_liveness_task(
-            executor, 50, cancel.clone(), flags.clone(),
-        );
+        let handle =
+            Communerdette::spawn_l3_liveness_task(executor, 50, cancel.clone(), flags.clone());
 
         tokio::time::sleep(TokioDuration::from_millis(300)).await;
 
         assert_eq!(
-            host_ref.stamp_call_count.load(std::sync::atomic::Ordering::Relaxed),
+            host_ref
+                .stamp_call_count
+                .load(std::sync::atomic::Ordering::Relaxed),
             0,
             "L3 must skip execute_stamp when binding_rejected is true"
         );
 
         cancel.cancel();
         let result = handle.await;
-        assert!(result.is_ok(), "L3 task must not panic when binding is rejected");
+        assert!(
+            result.is_ok(),
+            "L3 task must not panic when binding is rejected"
+        );
     }
 
     // ── Application RPC liveness hierarchy tests ────────────────────────
@@ -4078,27 +4559,34 @@ mod tests {
     async fn l1_skips_ping_when_recent_application_rpc_exists() {
         let record = make_record("peer-1", "127.0.0.1:4002");
         let ping_succeeds = false;
-        let host: Arc<dyn CommunerdetteHost> = Arc::new(LivenessMockHost::new(Some(record), ping_succeeds));
+        let host: Arc<dyn CommunerdetteHost> =
+            Arc::new(LivenessMockHost::new(Some(record), ping_succeeds));
         let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
             foretias_core::crypto_server::new_software(
                 foretias_core::crypto_server::ForetiasCurve::Ed25519,
-            ).expect("libsodium")
+            )
+            .expect("libsodium"),
         );
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
         let target_tbid = Tbid::from_raw([0xEE; 96]);
         let executor = Arc::new(CommunerdetteExecutor::new(
-            host, target_tbid, crypto, clock, None,
+            host,
+            target_tbid,
+            crypto,
+            clock,
+            None,
         ));
         let flags = LivenessCycleFlags::new();
         let cancel = CancellationToken::new();
 
         // Record a recent application RPC success.
         let now_ns = executor.clock.now_ns().unwrap_or(0);
-        flags.last_application_rpc_ns.store(now_ns, std::sync::atomic::Ordering::Relaxed);
+        flags
+            .last_application_rpc_ns
+            .store(now_ns, std::sync::atomic::Ordering::Relaxed);
 
-        let handle = Communerdette::spawn_l1_liveness_task(
-            executor, 500, cancel.clone(), flags.clone(),
-        );
+        let handle =
+            Communerdette::spawn_l1_liveness_task(executor, 500, cancel.clone(), flags.clone());
 
         tokio::time::sleep(TokioDuration::from_millis(200)).await;
 
@@ -4118,21 +4606,25 @@ mod tests {
         let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
             foretias_core::crypto_server::new_software(
                 foretias_core::crypto_server::ForetiasCurve::Ed25519,
-            ).expect("libsodium")
+            )
+            .expect("libsodium"),
         );
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
         let target_tbid = Tbid::from_raw([0xFF; 96]);
         let executor = Arc::new(CommunerdetteExecutor::new(
-            host, target_tbid, crypto, clock, None,
+            host,
+            target_tbid,
+            crypto,
+            clock,
+            None,
         ));
         let flags = LivenessCycleFlags::new();
         let cancel = CancellationToken::new();
 
         // No application RPC recorded (last_application_rpc_ns = 0).
         // L1 should fall back to transport ping, which succeeds.
-        let handle = Communerdette::spawn_l1_liveness_task(
-            executor, 50, cancel.clone(), flags.clone(),
-        );
+        let handle =
+            Communerdette::spawn_l1_liveness_task(executor, 50, cancel.clone(), flags.clone());
 
         tokio::time::sleep(TokioDuration::from_millis(200)).await;
 
@@ -4152,20 +4644,24 @@ mod tests {
         let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
             foretias_core::crypto_server::new_software(
                 foretias_core::crypto_server::ForetiasCurve::Ed25519,
-            ).expect("libsodium")
+            )
+            .expect("libsodium"),
         );
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
         let target_tbid = Tbid::from_raw([0x11; 96]);
         let executor = Arc::new(CommunerdetteExecutor::new(
-            host, target_tbid, crypto, clock, None,
+            host,
+            target_tbid,
+            crypto,
+            clock,
+            None,
         ));
         let flags = LivenessCycleFlags::new();
         let cancel = CancellationToken::new();
 
         // No application RPC, ping fails -> L1 must fail.
-        let handle = Communerdette::spawn_l1_liveness_task(
-            executor, 50, cancel.clone(), flags.clone(),
-        );
+        let handle =
+            Communerdette::spawn_l1_liveness_task(executor, 50, cancel.clone(), flags.clone());
 
         tokio::time::sleep(TokioDuration::from_millis(200)).await;
 
@@ -4202,19 +4698,22 @@ mod tests {
 
     #[tokio::test]
     async fn stamp_chronon_postcard_serialization_produces_correct_content_hash() {
-        use foretias_core::foretias::types::SignatureAlgorithm;
         use foretias_core::foretias::tick::SerializationAlgorithm;
+        use foretias_core::foretias::types::SignatureAlgorithm;
 
         let tbid = Tbid::from_raw([0u8; 96]);
         let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
             foretias_core::crypto_server::new_software(
                 foretias_core::crypto_server::ForetiasCurve::Ed25519,
-            ).expect("libsodium")
+            )
+            .expect("libsodium"),
         );
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
 
         let original_content = b"chronon stamp test payload" as &[u8];
-        let serialized = SerializationAlgorithm::Postcard.serialize(original_content).unwrap();
+        let serialized = SerializationAlgorithm::Postcard
+            .serialize(original_content)
+            .unwrap();
         let chronon_number: u64 = 1;
 
         let content_hash = crypto.sha256(&serialized).expect("sha256");
@@ -4226,7 +4725,12 @@ mod tests {
             tbn: "test-tb".to_string(),
             time_being_reference_time: "UE+1000000000ns".to_string(),
         };
-        let sig = crypto.sign_with(&foretis_for_signing.sig_input_bytes(), SignatureAlgorithm::Ed25519).expect("sign");
+        let sig = crypto
+            .sign_with(
+                &foretis_for_signing.sig_input_bytes(),
+                SignatureAlgorithm::Ed25519,
+            )
+            .expect("sign");
         let pub_key_bytes = match crypto.public_key() {
             foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
             _ => panic!("expected Ed25519"),
@@ -4244,7 +4748,10 @@ mod tests {
             tbid,
         };
 
-        let host = Arc::new(ConfigurableMockHost::new(Some(make_record("peer-1", "127.0.0.1:4002"))));
+        let host = Arc::new(ConfigurableMockHost::new(Some(make_record(
+            "peer-1",
+            "127.0.0.1:4002",
+        ))));
         host.set_calendar_response(vec![chronon_record]);
         host.set_stamp_response(serde_json::json!({
             "foretis": foretis_for_signing,
@@ -4258,9 +4765,14 @@ mod tests {
             serialized.clone(),
             "test".to_string(),
             TokioDuration::from_secs(5),
-        ).await;
+        )
+        .await;
 
-        assert!(result.is_ok(), "stamp_chronon with postcard must succeed: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "stamp_chronon with postcard must succeed: {:?}",
+            result
+        );
         let ca = result.unwrap();
         let expected_hash = crypto.sha256(&serialized).unwrap();
         assert_eq!(ca.content_hash().as_slice(), &expected_hash.bytes);
@@ -4268,19 +4780,22 @@ mod tests {
 
     #[tokio::test]
     async fn stamp_chronon_bincode_serialization_produces_correct_content_hash() {
-        use foretias_core::foretias::types::SignatureAlgorithm;
         use foretias_core::foretias::tick::SerializationAlgorithm;
+        use foretias_core::foretias::types::SignatureAlgorithm;
 
         let tbid = Tbid::from_raw([0u8; 96]);
         let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
             foretias_core::crypto_server::new_software(
                 foretias_core::crypto_server::ForetiasCurve::Ed25519,
-            ).expect("libsodium")
+            )
+            .expect("libsodium"),
         );
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
 
         let original_content = b"chronon stamp test payload" as &[u8];
-        let serialized = SerializationAlgorithm::Bincode.serialize(original_content).unwrap();
+        let serialized = SerializationAlgorithm::Bincode
+            .serialize(original_content)
+            .unwrap();
         let chronon_number: u64 = 1;
 
         let content_hash = crypto.sha256(&serialized).expect("sha256");
@@ -4292,7 +4807,12 @@ mod tests {
             tbn: "test-tb".to_string(),
             time_being_reference_time: "UE+1000000000ns".to_string(),
         };
-        let sig = crypto.sign_with(&foretis_for_signing.sig_input_bytes(), SignatureAlgorithm::Ed25519).expect("sign");
+        let sig = crypto
+            .sign_with(
+                &foretis_for_signing.sig_input_bytes(),
+                SignatureAlgorithm::Ed25519,
+            )
+            .expect("sign");
         let pub_key_bytes = match crypto.public_key() {
             foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
             _ => panic!("expected Ed25519"),
@@ -4310,7 +4830,10 @@ mod tests {
             tbid,
         };
 
-        let host = Arc::new(ConfigurableMockHost::new(Some(make_record("peer-1", "127.0.0.1:4002"))));
+        let host = Arc::new(ConfigurableMockHost::new(Some(make_record(
+            "peer-1",
+            "127.0.0.1:4002",
+        ))));
         host.set_calendar_response(vec![chronon_record]);
         host.set_stamp_response(serde_json::json!({
             "foretis": foretis_for_signing,
@@ -4324,9 +4847,14 @@ mod tests {
             serialized.clone(),
             "test".to_string(),
             TokioDuration::from_secs(5),
-        ).await;
+        )
+        .await;
 
-        assert!(result.is_ok(), "stamp_chronon with bincode must succeed: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "stamp_chronon with bincode must succeed: {:?}",
+            result
+        );
         let ca = result.unwrap();
         let expected_hash = crypto.sha256(&serialized).unwrap();
         assert_eq!(ca.content_hash().as_slice(), &expected_hash.bytes);
@@ -4339,7 +4867,8 @@ mod tests {
         let crypto: Arc<dyn foretias_core::crypto_server::CryptoServer> = Arc::from(
             foretias_core::crypto_server::new_software(
                 foretias_core::crypto_server::ForetiasCurve::Ed25519,
-            ).expect("libsodium")
+            )
+            .expect("libsodium"),
         );
 
         let content = b"same content, different serialization" as &[u8];

@@ -179,10 +179,7 @@ impl SnapshotSuite {
             .position(|l| l.trim().starts_with("```"))?
             + input_fence_start
             + 1;
-        let input = lines[input_fence_start + 1..input_fence_end]
-            .iter()
-            .copied()
-            .collect::<Vec<_>>()
+        let input = lines[input_fence_start + 1..input_fence_end].to_vec()
             .join("\n");
 
         // Find RESULT: block(s)
@@ -201,10 +198,7 @@ impl SnapshotSuite {
             .position(|l| l.trim().starts_with("```"))?
             + result_fence_start
             + 1;
-        let result = lines[result_fence_start + 1..result_fence_end]
-            .iter()
-            .copied()
-            .collect::<Vec<_>>()
+        let result = lines[result_fence_start + 1..result_fence_end].to_vec()
             .join("\n");
 
         // Find COMMENTS: block
@@ -223,10 +217,7 @@ impl SnapshotSuite {
             .position(|l| l.trim().starts_with("```"))?
             + comments_fence_start
             + 1;
-        let comments = lines[comments_fence_start + 1..comments_fence_end]
-            .iter()
-            .copied()
-            .collect::<Vec<_>>()
+        let comments = lines[comments_fence_start + 1..comments_fence_end].to_vec()
             .join("\n");
 
         Some((input, vec![result], comments))

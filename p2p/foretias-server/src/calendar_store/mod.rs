@@ -171,11 +171,19 @@ impl CalendarStore {
             let mut proof_leaves = [[0u8; 32]; 64];
             let mut proof_siblings = [[0u8; 32]; 32];
 
-            for i in 0..(proof.leaf_count as usize) {
-                proof_leaves[i] = proof.leaves[i].bytes;
+            for (i, leaf) in proof_leaves
+                .iter_mut()
+                .enumerate()
+                .take(proof.leaf_count as usize)
+            {
+                *leaf = proof.leaves[i].bytes;
             }
-            for i in 0..(proof.sibling_count as usize) {
-                proof_siblings[i] = proof.siblings[i].bytes;
+            for (i, sibling) in proof_siblings
+                .iter_mut()
+                .enumerate()
+                .take(proof.sibling_count as usize)
+            {
+                *sibling = proof.siblings[i].bytes;
             }
 
             covered_ticks += (block_end - block_start) as u64;
@@ -349,7 +357,7 @@ pub fn verify_storage_proof(
             continue;
         }
 
-        if !known_roots.is_empty() && !known_roots.iter().any(|r| *r == bp.merkle_root) {
+        if !known_roots.is_empty() && !known_roots.contains(&bp.merkle_root) {
             all_verified = false;
             continue;
         }

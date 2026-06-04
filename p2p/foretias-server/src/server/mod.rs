@@ -11,28 +11,37 @@ use foretias_core::chronomatter::Chronomatter;
 use foretias_core::config::CommunerdConfig;
 use foretias_core::core::identity::generate_ed25519_keypair;
 use foretias_core::crypto_server::{self, ForetiasCurve};
-use foretias_core::foretias::callbacks::{TickObserver, MutualAttestObserver};
-use foretias_core::foretias::{ChrononRecord, types::{TickNumber, Tbid}};
 use foretias_core::error::NodeError;
+use foretias_core::foretias::callbacks::{MutualAttestObserver, TickObserver};
+use foretias_core::foretias::{
+    types::{Tbid, TickNumber},
+    ChrononRecord,
+};
 use foretias_core::noise;
 
+use self::jsonrpc::JsonRpcResponse;
 use super::calendar::{Calendar, MirrorStore};
-use super::calendar_store::CalendarStore;
 use super::calendar_store::encrypted_jsonl::EncryptedJsonlCalendarStore;
-use super::communerd::Communerd;
+use super::calendar_store::CalendarStore;
 use super::communerd::p2p::swarm::CommunerdRpcHandler;
 use super::communerd::transport::TransportError;
-use super::metrics::{NodeMetrics, MetricField};
-use self::jsonrpc::JsonRpcResponse;
+use super::communerd::Communerd;
+use super::metrics::{MetricField, NodeMetrics};
 
 struct NoOpObserver;
 impl TickObserver for NoOpObserver {
-    fn on_tick_advance(&self, _chronon_number: TickNumber, _public_key: &[u8], _tick_record: &ChrononRecord) {}
+    fn on_tick_advance(
+        &self,
+        _chronon_number: TickNumber,
+        _public_key: &[u8],
+        _tick_record: &ChrononRecord,
+    ) {
+    }
 }
 
-pub mod jsonrpc;
-pub mod handlers;
 pub mod config;
+pub mod handlers;
+pub mod jsonrpc;
 
 pub use config::ForetiasServerConfig;
 
@@ -70,8 +79,13 @@ impl TimeFamilyServer {
     ) -> Result<Self, NodeError> {
         let metrics = Arc::new(NodeMetrics::new());
         let calendar = Arc::new(Calendar::new(Tbid::default(), "init"));
-        let crypto: Arc<dyn crypto_server::CryptoServer> = Arc::from(crypto_server::new_software(ForetiasCurve::Ed25519)?);
-        let mut cm = Chronomatter::new(chronon_ns, Arc::clone(&calendar) as Arc<dyn TickObserver>, crypto.clone())?;
+        let crypto: Arc<dyn crypto_server::CryptoServer> =
+            Arc::from(crypto_server::new_software(ForetiasCurve::Ed25519)?);
+        let mut cm = Chronomatter::new(
+            chronon_ns,
+            Arc::clone(&calendar) as Arc<dyn TickObserver>,
+            crypto.clone(),
+        )?;
         cm.set_mutual_attest_observer(Arc::clone(&metrics) as Arc<dyn MutualAttestObserver>);
         let (tbid, tbn) = (cm.get_tbid(), cm.get_tbn().to_string());
         let binding = calendar.inner();
@@ -107,15 +121,12 @@ impl TimeFamilyServer {
         })
     }
 
-    pub fn from_calendar(
-        path: &str,
-        listen_addr: &str,
-    ) -> Result<Self, NodeError> {
-        use std::sync::Arc as StdArc;
+    pub fn from_calendar(path: &str, listen_addr: &str) -> Result<Self, NodeError> {
         use foretias_core::crypto_server;
-        let crypto: StdArc<dyn crypto_server::CryptoServer> = StdArc::from(crypto_server::new_software(
-            crypto_server::ForetiasCurve::Ed25519,
-        )?);
+        use std::sync::Arc as StdArc;
+        let crypto: StdArc<dyn crypto_server::CryptoServer> = StdArc::from(
+            crypto_server::new_software(crypto_server::ForetiasCurve::Ed25519)?,
+        );
         let mut cm = Chronomatter::from_calendar(path, crypto.clone(), Arc::new(NoOpObserver))?;
         let metrics = Arc::new(NodeMetrics::new());
         cm.set_mutual_attest_observer(Arc::clone(&metrics) as Arc<dyn MutualAttestObserver>);
@@ -155,7 +166,7 @@ impl TimeFamilyServer {
         let mut server = Self::new_with_config(
             &config.listen_addr,
             config.chronon_ns(),
-            config.persist_path().cloned(),
+            config.persist_path().map(|p| p.to_path_buf()),
             None,
         )?;
         let com = Arc::new(Communerd::new(CommunerdConfig {
@@ -179,7 +190,11 @@ impl TimeFamilyServer {
     /// Returns the combined 49920-byte signature for use in channel-binding and
     /// authenticated-ping handlers.
     /// // SIGN(local-tbid, fast-key+slow-key)
-    pub fn sign_tbid_message(&self, msg: &[u8]) -> Result<foretias_core::foretias::types::SignatureBytes, foretias_core::error::NodeError> {
+    pub fn sign_tbid_message(
+        &self,
+        msg: &[u8],
+    ) -> Result<foretias_core::foretias::types::SignatureBytes, foretias_core::error::NodeError>
+    {
         self.chronomatter.sign_tbid_message(msg)
     }
 
@@ -223,15 +238,23 @@ impl TimeFamilyServer {
         self.chronomatter.current_tick()
     }
 
-    pub fn integrity_check(&self, start: Option<u64>, end: Option<u64>) -> Result<Vec<bool>, NodeError> {
-        self.chronomatter.integrity_check(&*self.calendar, start, end)
+    pub fn integrity_check(
+        &self,
+        start: Option<u64>,
+        end: Option<u64>,
+    ) -> Result<Vec<bool>, NodeError> {
+        self.chronomatter
+            .integrity_check(&*self.calendar, start, end)
     }
 
     pub fn save(&self) -> Result<(), NodeError> {
         if let Some(ref p) = self.persist_path {
             let json_path = p.join(format!("{}.json", self.get_tbid().to_hex()));
             std::fs::create_dir_all(p)?;
-            self.calendar.save(json_path.to_str().ok_or(NodeError::Internal("persist path contains invalid UTF-8".into()))?)?;
+            self.calendar
+                .save(json_path.to_str().ok_or(NodeError::Internal(
+                    "persist path contains invalid UTF-8".into(),
+                ))?)?;
             self.metrics.inc(MetricField::CalendarFlushCount);
         }
         Ok(())
@@ -307,7 +330,10 @@ impl TimeFamilyServer {
         }))
     }
 
-    pub fn start_http(self: Arc<Self>, http_addr: &str) -> Result<tokio::task::JoinHandle<()>, NodeError> {
+    pub fn start_http(
+        self: Arc<Self>,
+        http_addr: &str,
+    ) -> Result<tokio::task::JoinHandle<()>, NodeError> {
         let http_addr = http_addr.to_string();
         let app = axum::Router::new()
             .route("/jsonrpc", post(jsonrpc_handler))
@@ -338,13 +364,18 @@ impl CommunerdRpcHandler for TimeFamilyServer {
     ) -> Result<serde_json::Value, TransportError> {
         let mut jsonrpc_request_envelope = serde_json::Map::new();
         jsonrpc_request_envelope.insert("jsonrpc".into(), serde_json::Value::String("2.0".into()));
-        jsonrpc_request_envelope.insert("method".into(), serde_json::Value::String(method.to_string()));
+        jsonrpc_request_envelope.insert(
+            "method".into(),
+            serde_json::Value::String(method.to_string()),
+        );
         jsonrpc_request_envelope.insert("params".into(), params);
         let req_val = serde_json::Value::Object(jsonrpc_request_envelope);
 
         match process_request_from_value(self, req_val) {
-            Ok(resp) => Ok(serde_json::to_value(&resp)
-                .map_err(|e| TransportError::Decode(e.to_string()))?),
+            Ok(resp) => {
+                Ok(serde_json::to_value(&resp)
+                    .map_err(|e| TransportError::Decode(e.to_string()))?)
+            }
             Err(e) => Err(TransportError::Rpc {
                 code: jsonrpc::INTERNAL_ERROR,
                 message: e.to_string(),
@@ -357,12 +388,9 @@ async fn jsonrpc_handler(
     State(server): State<Arc<TimeFamilyServer>>,
     Json(req): Json<serde_json::Value>,
 ) -> Json<serde_json::Value> {
-    let resp = process_request_from_value(&server, req)
-        .unwrap_or_else(|e| jsonrpc::JsonRpcResponse::error(
-            None,
-            jsonrpc::INTERNAL_ERROR,
-            e.to_string(),
-        ));
+    let resp = process_request_from_value(&server, req).unwrap_or_else(|e| {
+        jsonrpc::JsonRpcResponse::error(None, jsonrpc::INTERNAL_ERROR, e.to_string())
+    });
     Json(serde_json::to_value(resp).unwrap_or(serde_json::Value::Null))
 }
 
@@ -378,7 +406,8 @@ async fn handle_connection(
 ) -> Result<(), NodeError> {
     let static_priv = &*server.noise_static_priv;
 
-    let (mut session, stream) = match noise::noise_handshake(stream, &static_priv, None, false).await {
+    let (mut session, stream) = match noise::noise_handshake(stream, static_priv, None, false).await
+    {
         Ok(res) => res,
         Err(e) => {
             tracing::warn!(component = "server", tbid = %server.get_tbid().to_hex(), "noise handshake failed: {}", e);
@@ -397,7 +426,7 @@ async fn handle_connection(
             Ok(ct) => ct,
             Err(e) => {
                 tracing::warn!("read error: {}", e);
-                return Err(NodeError::from(e));
+                return Err(e);
             }
         };
 
@@ -418,7 +447,10 @@ async fn handle_connection(
         };
 
         if line.len() > MAX_REQUEST_LINE_BYTES {
-            tracing::warn!("request line exceeds {} bytes, dropping connection", MAX_REQUEST_LINE_BYTES);
+            tracing::warn!(
+                "request line exceeds {} bytes, dropping connection",
+                MAX_REQUEST_LINE_BYTES
+            );
             break;
         }
 
@@ -426,11 +458,7 @@ async fn handle_connection(
             Ok(r) => r,
             Err(e) => {
                 tracing::warn!("request processing error: {}", e);
-                jsonrpc::JsonRpcResponse::error(
-                    None,
-                    jsonrpc::INTERNAL_ERROR,
-                    e.to_string(),
-                )
+                jsonrpc::JsonRpcResponse::error(None, jsonrpc::INTERNAL_ERROR, e.to_string())
             }
         };
 
@@ -474,8 +502,12 @@ async fn write_length_prefixed(
     Ok(())
 }
 
-pub(crate) fn process_request_from_value(server: &TimeFamilyServer, req: serde_json::Value) -> Result<JsonRpcResponse, NodeError> {
-    let jsonrpc = req.get("jsonrpc")
+pub(crate) fn process_request_from_value(
+    server: &TimeFamilyServer,
+    req: serde_json::Value,
+) -> Result<JsonRpcResponse, NodeError> {
+    let jsonrpc = req
+        .get("jsonrpc")
         .and_then(|v| v.as_str())
         .ok_or_else(|| NodeError::Internal("missing jsonrpc field".into()))?;
     if jsonrpc != "2.0" {
@@ -486,11 +518,15 @@ pub(crate) fn process_request_from_value(server: &TimeFamilyServer, req: serde_j
         ));
     }
 
-    let id = req.get("id").clone();
-    let method = req.get("method")
+    let id = req.get("id");
+    let method = req
+        .get("method")
         .and_then(|v| v.as_str())
         .ok_or_else(|| NodeError::Internal("missing method field".into()))?;
-    let params = req.get("params").cloned().unwrap_or(serde_json::Value::Null);
+    let params = req
+        .get("params")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
 
     match method {
         "ping" => Ok(handlers::handle_ping(server, params)),

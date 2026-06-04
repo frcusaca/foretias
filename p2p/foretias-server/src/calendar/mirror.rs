@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use foretias_core::foretias::tick::ChrononRecord;
 use foretias_core::error::NodeError;
+use foretias_core::foretias::tick::ChrononRecord;
 use parking_lot::RwLock;
 
 pub struct MirrorStore {
@@ -36,14 +36,20 @@ impl MirrorStore {
     }
 
     pub fn mirror_tick_count(&self, tbid_hex: &str) -> u64 {
-        self.mirrors.read().get(tbid_hex).map(|v| v.len() as u64).unwrap_or(0)
+        self.mirrors
+            .read()
+            .get(tbid_hex)
+            .map(|v| v.len() as u64)
+            .unwrap_or(0)
     }
 
     pub fn insert_mirrored(&self, tbid_hex: &str, record: ChrononRecord) -> Result<(), NodeError> {
         let mut mirrors = self.mirrors.write();
-        let entry = mirrors.entry(tbid_hex.to_string())
-            .or_insert_with(Vec::new);
-        if entry.iter().any(|r| r.chronon_number == record.chronon_number) {
+        let entry = mirrors.entry(tbid_hex.to_string()).or_default();
+        if entry
+            .iter()
+            .any(|r| r.chronon_number == record.chronon_number)
+        {
             return Ok(());
         }
         entry.push(record);
@@ -51,11 +57,18 @@ impl MirrorStore {
         Ok(())
     }
 
-    pub fn get_mirrored(&self, tbid_hex: &str, chronon_number: u64, count: usize) -> Result<Vec<ChrononRecord>, NodeError> {
+    pub fn get_mirrored(
+        &self,
+        tbid_hex: &str,
+        chronon_number: u64,
+        count: usize,
+    ) -> Result<Vec<ChrononRecord>, NodeError> {
         let mirrors = self.mirrors.read();
-        let records = mirrors.get(tbid_hex)
-            .ok_or_else(|| NodeError::NotFound("mirrored calendar"))?;
-        Ok(records.iter()
+        let records = mirrors
+            .get(tbid_hex)
+            .ok_or(NodeError::NotFound("mirrored calendar"))?;
+        Ok(records
+            .iter()
             .skip_while(|r| r.chronon_number < chronon_number)
             .take(count)
             .cloned()
@@ -63,7 +76,10 @@ impl MirrorStore {
     }
 
     pub fn latest_record(&self, tbid_hex: &str) -> Option<ChrononRecord> {
-        self.mirrors.read().get(tbid_hex).and_then(|v| v.last().cloned())
+        self.mirrors
+            .read()
+            .get(tbid_hex)
+            .and_then(|v| v.last().cloned())
     }
 
     pub fn mirror_info(&self, tbid_hex: &str) -> Option<(u64, u64, String)> {
@@ -235,7 +251,10 @@ mod tests {
     fn compute_hash_sanity_empty_records() {
         let records: Vec<ChrononRecord> = vec![];
         let hash = compute_hash_sanity(&records);
-        assert_eq!(hash, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+        assert_eq!(
+            hash,
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
     }
 
     #[test]

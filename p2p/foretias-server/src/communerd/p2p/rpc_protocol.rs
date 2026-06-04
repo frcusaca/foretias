@@ -78,7 +78,10 @@ where
     };
     const MAX_RPC_FRAME_BYTES: usize = 16 * 1024 * 1024;
     if len > MAX_RPC_FRAME_BYTES {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "RPC frame too large"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "RPC frame too large",
+        ));
     }
     let mut payload = vec![0u8; len];
     io.read_exact(&mut payload).await?;

@@ -124,11 +124,7 @@ mod tests {
 
     #[test]
     fn error_response_contains_error_code_and_message() {
-        let resp = JsonRpcResponse::error(
-            None,
-            INTERNAL_ERROR,
-            "something went wrong",
-        );
+        let resp = JsonRpcResponse::error(None, INTERNAL_ERROR, "something went wrong");
         let err = resp.error.unwrap();
         assert_eq!(err.code, INTERNAL_ERROR);
         assert_eq!(err.message, "something went wrong");
@@ -173,7 +169,8 @@ mod tests {
 
     #[test]
     fn request_deserialization_roundtrip() {
-        let json = r#"{"jsonrpc":"2.0","method":"stamp","params":{"content":"abc"},"id":"test-123"}"#;
+        let json =
+            r#"{"jsonrpc":"2.0","method":"stamp","params":{"content":"abc"},"id":"test-123"}"#;
         let parsed: JsonRpcRequest = serde_json::from_str(json).unwrap();
         assert_eq!(parsed.jsonrpc, "2.0");
         assert_eq!(parsed.method, "stamp");

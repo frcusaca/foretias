@@ -184,7 +184,7 @@ mod ft_byte_array {
 
     impl<const N: usize> fmt::Display for FTByteArray<N> {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "{}", URL_SAFE_NO_PAD.encode(&self.inner))
+            write!(f, "{}", URL_SAFE_NO_PAD.encode(self.inner))
         }
     }
 
@@ -193,7 +193,7 @@ mod ft_byte_array {
         where
             S: Serializer,
         {
-            let encoded = URL_SAFE_NO_PAD.encode(&self.inner);
+            let encoded = URL_SAFE_NO_PAD.encode(self.inner);
             serializer.serialize_str(&encoded)
         }
     }

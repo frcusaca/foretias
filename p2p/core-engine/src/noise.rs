@@ -450,7 +450,7 @@ mod tests {
 
         // Step 2: initiator sends es←,ec←
         let e3 = alice.step(None).unwrap();
-        assert!(e3.len() > 0, "M3 should be non-empty");
+        assert!(!e3.is_empty(), "M3 should be non-empty");
 
         // Step 2: responder receives es←,ec←
         bob.step(Some(&e3)).unwrap();

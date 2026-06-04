@@ -1,28 +1,27 @@
 //! libp2p swarm construction and event loop.
 
-use super::behaviour::{ForetiasBehaviour, ForetiasBehaviourEvent, RpcProtocolFactory};
-use super::events::NetworkEvent;
 use super::super::capabilities::PeerCapability;
 use super::super::transport::TransportError;
-use super::gossip::{probity_topic, heartbeat_topic};
+use super::behaviour::{ForetiasBehaviour, ForetiasBehaviourEvent, RpcProtocolFactory};
+use super::events::NetworkEvent;
+use super::gossip::{heartbeat_topic, probity_topic};
 use crate::probity::ProbityReport;
+use async_trait::async_trait;
 use foretias_core::collision::Heartbeat;
 use foretias_core::error::NodeError;
 use futures::StreamExt;
 use libp2p::{
-    identify, kad, gossipsub, request_response,
+    gossipsub, identify, kad, noise, request_response,
     swarm::{derive_prelude::ListenerId, SwarmEvent},
-    tcp, noise, yamux,
-    SwarmBuilder, PeerId,
+    tcp, yamux, PeerId, SwarmBuilder,
 };
+use parking_lot::Mutex;
+use rand::seq::SliceRandom;
 use std::collections::{HashMap, HashSet};
 use std::net::TcpListener;
 use std::sync::Arc;
-use parking_lot::Mutex;
 use std::time::Duration;
-use rand::seq::SliceRandom;
 use tokio::sync::mpsc;
-use async_trait::async_trait;
 
 #[async_trait]
 pub trait CommunerdRpcHandler: Send + Sync {
@@ -55,24 +54,58 @@ pub struct SwarmHandle {
 
 pub enum SwarmCommand {
     Bootstrap,
-    Provide { key: kad::RecordKey },
-    GetProviders { key: kad::RecordKey },
-    PutRecord { key: kad::RecordKey, record: kad::Record },
-    PutRecordTo { key: kad::RecordKey, record: kad::Record, peers: Vec<PeerId> },
+    Provide {
+        key: kad::RecordKey,
+    },
+    GetProviders {
+        key: kad::RecordKey,
+    },
+    PutRecord {
+        key: kad::RecordKey,
+        record: kad::Record,
+    },
+    PutRecordTo {
+        key: kad::RecordKey,
+        record: kad::Record,
+        peers: Vec<PeerId>,
+    },
     /// Store a record directly in the local kad store (bypasses network entirely).
-    StoreRecordLocal { record: kad::Record },
-    GetRecord { key: kad::RecordKey },
-    Dial { addr: libp2p::Multiaddr },
-    AddAddress { peer_id: PeerId, addr: libp2p::Multiaddr },
+    StoreRecordLocal {
+        record: kad::Record,
+    },
+    GetRecord {
+        key: kad::RecordKey,
+    },
+    Dial {
+        addr: libp2p::Multiaddr,
+    },
+    AddAddress {
+        peer_id: PeerId,
+        addr: libp2p::Multiaddr,
+    },
     EnterDormancy,
-    PublishProbity { report: ProbityReport, namespace: String },
-    PublishHeartbeat { heartbeat: Heartbeat, namespace: String },
-    ProvideForCapability { capability: PeerCapability, namespace: String },
-    GetProvidersForCapability { capability: PeerCapability, namespace: String },
+    PublishProbity {
+        report: ProbityReport,
+        namespace: String,
+    },
+    PublishHeartbeat {
+        heartbeat: Heartbeat,
+        namespace: String,
+    },
+    ProvideForCapability {
+        capability: PeerCapability,
+        namespace: String,
+    },
+    GetProvidersForCapability {
+        capability: PeerCapability,
+        namespace: String,
+    },
     RequestResponse {
         peer_id: PeerId,
         request: serde_json::Value,
-        reply: tokio::sync::oneshot::Sender<Result<serde_json::Value, crate::communerd::transport::TransportError>>,
+        reply: tokio::sync::oneshot::Sender<
+            Result<serde_json::Value, crate::communerd::transport::TransportError>,
+        >,
     },
 }
 
@@ -103,18 +136,25 @@ pub async fn build_and_spawn_swarm(
         .build();
 
     if let Some(listen_addr) = listen {
-        swarm.listen_on(listen_addr)
+        swarm
+            .listen_on(listen_addr)
             .map_err(|e| NodeError::Internal(format!("{e}")))?;
     }
 
     // Subscribe to probity topic
     let topic = probity_topic(namespace);
-    swarm.behaviour_mut().gossip.subscribe(&topic)
+    swarm
+        .behaviour_mut()
+        .gossip
+        .subscribe(&topic)
         .map_err(|e| NodeError::Internal(format!("gossip subscribe: {e}")))?;
 
     // Subscribe to heartbeat topic for collision detection
     let hbt = heartbeat_topic(namespace);
-    swarm.behaviour_mut().gossip.subscribe(&hbt)
+    swarm
+        .behaviour_mut()
+        .gossip
+        .subscribe(&hbt)
         .map_err(|e| NodeError::Internal(format!("gossip subscribe heartbeat: {e}")))?;
 
     for ma in dials {
@@ -125,7 +165,15 @@ pub async fn build_and_spawn_swarm(
     let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
     let local_multiaddr = Arc::new(Mutex::new(None));
     let rpc_factory = RpcProtocolFactory::new(namespace);
-    let task = tokio::spawn(swarm_loop(swarm, events_tx, cmd_rx, namespace.to_string(), local_multiaddr.clone(), rpc_handler, rpc_factory));
+    let task = tokio::spawn(swarm_loop(
+        swarm,
+        events_tx,
+        cmd_rx,
+        namespace.to_string(),
+        local_multiaddr.clone(),
+        rpc_handler,
+        rpc_factory,
+    ));
 
     Ok(SwarmHandle {
         local_peer_id,
@@ -146,7 +194,8 @@ async fn swarm_loop(
     rpc_factory: RpcProtocolFactory,
 ) {
     let mut listener_ids: HashSet<ListenerId> = HashSet::new();
-    let mut pending_get_record: HashMap<libp2p::kad::QueryId, (kad::RecordKey, Vec<kad::Record>)> = HashMap::new();
+    let mut pending_get_record: HashMap<libp2p::kad::QueryId, (kad::RecordKey, Vec<kad::Record>)> =
+        HashMap::new();
     let mut pending_put_record: HashMap<libp2p::kad::QueryId, kad::RecordKey> = HashMap::new();
     let mut pending_rpc: HashMap<
         request_response::OutboundRequestId,
@@ -154,15 +203,10 @@ async fn swarm_loop(
     > = HashMap::new();
     let mut pending_inbound: HashMap<
         request_response::InboundRequestId,
-        (
-            request_response::ResponseChannel<Vec<u8>>,
-            libp2p::PeerId,
-        ),
+        (request_response::ResponseChannel<Vec<u8>>, libp2p::PeerId),
     > = HashMap::new();
-    let (inbound_res_tx, mut inbound_res_rx) = tokio::sync::mpsc::unbounded_channel::<(
-        request_response::InboundRequestId,
-        Vec<u8>,
-    )>();
+    let (inbound_res_tx, mut inbound_res_rx) =
+        tokio::sync::mpsc::unbounded_channel::<(request_response::InboundRequestId, Vec<u8>)>();
 
     loop {
         tokio::select! {
@@ -521,7 +565,9 @@ mod tests {
     #[tokio::test]
     async fn swarm_listen_only() {
         let listen: libp2p::Multiaddr = "/ip4/127.0.0.1/tcp/0".parse().unwrap();
-        let mut handle = build_and_spawn_swarm(Some(listen), vec![], "mainnet", None, None).await.unwrap();
+        let mut handle = build_and_spawn_swarm(Some(listen), vec![], "mainnet", None, None)
+            .await
+            .unwrap();
         let _ = tokio::time::timeout(Duration::from_secs(2), handle.events.recv()).await;
         assert!(!handle.local_peer_id.to_string().is_empty());
         handle.task.abort();

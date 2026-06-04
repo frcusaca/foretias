@@ -3,47 +3,55 @@
 //! A Communerd is a communard of a time family commune where timing information
 //! is shared in communal communion between families, AND he's a nerd about communications.
 
+pub mod capabilities;
 mod communerdette;
-pub mod transport;
+pub mod dht_peer_source;
 pub mod json_rpc_transport;
 pub mod libp2p_transport;
-pub mod peer_pool;
-pub mod dht_peer_source;
-pub mod capabilities;
 pub mod p2p;
+pub mod peer_pool;
 pub mod tiers;
+pub mod transport;
 
-pub use tiers::{CommunerdServer, CommunerdP2P};
-pub use communerdette::{CommunerdetteLine, CommunerdetteStatusSummary, TbidBindingStatus, ActiveRoute, CommunerdetteStats};
+pub use communerdette::{
+    ActiveRoute, CommunerdetteLine, CommunerdetteStats, CommunerdetteStatusSummary,
+    TbidBindingStatus,
+};
+pub use tiers::{CommunerdP2P, CommunerdServer};
 
-use std::sync::{Arc, OnceLock};
 use dashmap::DashMap;
 use rand::seq::SliceRandom;
+use std::sync::{Arc, OnceLock};
 
 use foretias_core::clock::{Clock, SystemClock};
-use foretias_core::config::CommunerdConfig;
 use foretias_core::collision::{CollisionDetector, CollisionEvent};
+use foretias_core::config::CommunerdConfig;
 use foretias_core::core::bindings::ForetiasPubKey32;
-use foretias_core::crypto_server::{CryptoServer, new_software, ForetiasCurve};
+use foretias_core::crypto_server::{new_software, CryptoServer, ForetiasCurve};
 use foretias_core::error::NodeError;
-use foretias_core::foretias::callbacks::{CommunityQuery, CommunityResponse, PeerAddr as CorePeerAddr, PeerChangeCallback, PeerMessenger, TransportError as CoreTransportError};
+use foretias_core::foretias::callbacks::{
+    CommunityQuery, CommunityResponse, PeerAddr as CorePeerAddr, PeerChangeCallback, PeerMessenger,
+    TransportError as CoreTransportError,
+};
 #[allow(unused_imports)]
-use foretias_core::foretias::clean_auth::{UnverifiedSignatureEnvelope, CleanAuthenticated, CleanFullyAuthenticated};
-use foretias_core::foretias::tick::{Foretis, ChrononRecord};
-use foretias_core::foretias::types::Tbid;
+use foretias_core::foretias::clean_auth::{
+    CleanAuthenticated, CleanFullyAuthenticated, UnverifiedSignatureEnvelope,
+};
 use foretias_core::foretias::family_record::FamilyRecord;
+use foretias_core::foretias::tick::{ChrononRecord, Foretis};
+use foretias_core::foretias::types::Tbid;
 
 use self::communerdette::Communerdette;
 
-use crate::calendar::Calendar;
+use self::capabilities::PeerCapability;
 use self::json_rpc_transport::JsonRpcTransport;
 use self::libp2p_transport::Libp2pTransport;
-use self::peer_pool::PeerPool;
 use self::p2p::events::NetworkEvent;
 use self::p2p::swarm::{build_and_spawn_swarm, CommunerdRpcHandler, SwarmCommand};
+use self::peer_pool::PeerPool;
 use self::transport::{PeerAddr, PeerTransport, TransportError};
-use self::capabilities::PeerCapability;
-use crate::probity::{ProbityReport, ProbityStore, handle_gossip_message};
+use crate::calendar::Calendar;
+use crate::probity::{handle_gossip_message, ProbityReport, ProbityStore};
 use libp2p::kad;
 use std::collections::HashMap;
 
@@ -139,7 +147,7 @@ pub fn validate_peer_registration(
     let canonical = record.canonical_payload();
     let valid = crypto
         .verify_with(&pubkey[..32], "Ed25519", &canonical, &record.signature)
-        .map_err(|e| NodeError::Crypto(e))?;
+        .map_err(NodeError::Crypto)?;
     if !valid {
         tracing::warn!(
             tbid = %record.tbid,
@@ -172,8 +180,14 @@ pub struct Communerd {
     heartbeat_task: Arc<OnceLock<tokio::task::JoinHandle<()>>>,
     _local_multiaddr_arc: Arc<parking_lot::Mutex<Option<libp2p::Multiaddr>>>,
     tbid_index: Arc<parking_lot::RwLock<HashMap<String, PeerRegistrationRecord>>>,
-    pending_lookups: Arc<parking_lot::Mutex<HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<PeerRegistrationRecord>>>>>,
-    pending_family_lookups: Arc<parking_lot::Mutex<HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<Vec<u8>>>>>>,
+    pending_lookups: Arc<
+        parking_lot::Mutex<
+            HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<PeerRegistrationRecord>>>,
+        >,
+    >,
+    pending_family_lookups: Arc<
+        parking_lot::Mutex<HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<Vec<u8>>>>>,
+    >,
     calendar: Arc<parking_lot::RwLock<Option<Arc<Calendar>>>>,
     communerdettes: Arc<DashMap<Tbid, Arc<communerdette::Communerdette>>>,
     /// Family Cache: TBID → CleanFullyAuthenticated<FamilyRecord>.
@@ -223,11 +237,20 @@ impl Communerd {
         let libp2p_transport = Arc::new(Libp2pTransport::new(
             config.mutual_attest.request_timeout_secs.max(1),
         ));
-        let peers: Vec<PeerAddr> = config.mutual_attest.peers.iter()
-            .map(|p| PeerAddr { json_rpc: p.clone(), peer_id: None, last_seen_ns: 0 })
+        let peers: Vec<PeerAddr> = config
+            .mutual_attest
+            .peers
+            .iter()
+            .map(|p| PeerAddr {
+                json_rpc: p.clone(),
+                peer_id: None,
+                last_seen_ns: 0,
+            })
             .collect();
         let peer_pool = PeerPool::new(peers, Arc::clone(&transport), 30);
-        let crypto = Arc::from(new_software(ForetiasCurve::Ed25519).expect("libsodium must be available at runtime"));
+        let crypto = Arc::from(
+            new_software(ForetiasCurve::Ed25519).expect("libsodium must be available at runtime"),
+        );
         Self {
             transport,
             libp2p_transport,
@@ -262,7 +285,13 @@ impl Communerd {
         let crypto = Arc::clone(&self.crypto);
         let clock = Arc::clone(&self.clock);
         if let Some(entry) = self.communerdettes.get(&tbid) {
-            CommunerdetteLine::new(tbid, Arc::clone(entry.value()), Arc::clone(&host), Arc::clone(&crypto), Arc::clone(&clock))
+            CommunerdetteLine::new(
+                tbid,
+                Arc::clone(entry.value()),
+                Arc::clone(&host),
+                Arc::clone(&crypto),
+                Arc::clone(&clock),
+            )
         } else {
             let communerdette = Arc::new(Communerdette::new(tbid));
             self.communerdettes.insert(tbid, Arc::clone(&communerdette));
@@ -276,7 +305,13 @@ impl Communerd {
         let crypto = Arc::clone(&self.crypto);
         let clock = Arc::clone(&self.clock);
         self.communerdettes.get(&tbid).map(|entry| {
-            CommunerdetteLine::new(tbid, Arc::clone(entry.value()), Arc::clone(&host), Arc::clone(&crypto), Arc::clone(&clock))
+            CommunerdetteLine::new(
+                tbid,
+                Arc::clone(entry.value()),
+                Arc::clone(&host),
+                Arc::clone(&crypto),
+                Arc::clone(&clock),
+            )
         })
     }
 
@@ -284,13 +319,19 @@ impl Communerd {
     /// Indexes by every member TBID for O(1) reverse lookup.
     pub fn family_cache_insert(&self, record: Arc<CleanFullyAuthenticated<FamilyRecord>>) {
         for member_tbid_hex in record.inner().members.iter() {
-            self.family_cache.insert(member_tbid_hex.clone(), Arc::clone(&record));
+            self.family_cache
+                .insert(member_tbid_hex.clone(), Arc::clone(&record));
         }
     }
 
     /// Lookup a FamilyRecord by any member TBID.
-    pub fn family_cache_lookup(&self, tbid_hex: &str) -> Option<Arc<CleanFullyAuthenticated<FamilyRecord>>> {
-        self.family_cache.get(tbid_hex).map(|entry| Arc::clone(entry.value()))
+    pub fn family_cache_lookup(
+        &self,
+        tbid_hex: &str,
+    ) -> Option<Arc<CleanFullyAuthenticated<FamilyRecord>>> {
+        self.family_cache
+            .get(tbid_hex)
+            .map(|entry| Arc::clone(entry.value()))
     }
 
     #[deprecated(note = "Use Communerdette L1 liveness loop (Phase 12.1) instead. \
@@ -311,12 +352,19 @@ impl Communerd {
         target_tbid: &str,
         content_hex: &str,
         echo: &str,
-    ) -> Result<foretias_core::foretias::clean_auth::CleanAuthenticated<Foretis>, communerdette::CommunerdetteError> {
-        let content = hex::decode(content_hex)
-            .map_err(|e| communerdette::CommunerdetteError::Structural(format!("content not hex: {e}")))?;
-        let tbid = Tbid::from_hex(target_tbid)
-            .map_err(|e| communerdette::CommunerdetteError::Structural(format!("bad tbid hex: {e}")))?;
-        self.line_for_tbid(tbid).stamp(content, echo.to_string()).await
+    ) -> Result<
+        foretias_core::foretias::clean_auth::CleanAuthenticated<Foretis>,
+        communerdette::CommunerdetteError,
+    > {
+        let content = hex::decode(content_hex).map_err(|e| {
+            communerdette::CommunerdetteError::Structural(format!("content not hex: {e}"))
+        })?;
+        let tbid = Tbid::from_hex(target_tbid).map_err(|e| {
+            communerdette::CommunerdetteError::Structural(format!("bad tbid hex: {e}"))
+        })?;
+        self.line_for_tbid(tbid)
+            .stamp(content, echo.to_string())
+            .await
     }
 
     /// Route a stamp request through Communerdette with serialization control.
@@ -330,10 +378,16 @@ impl Communerd {
         content: &[u8],
         serialization: foretias_core::foretias::tick::SerializationAlgorithm,
         echo: &str,
-    ) -> Result<foretias_core::foretias::clean_auth::CleanAuthenticated<Foretis>, communerdette::CommunerdetteError> {
-        let tbid = Tbid::from_hex(target_tbid)
-            .map_err(|e| communerdette::CommunerdetteError::Structural(format!("bad tbid hex: {e}")))?;
-        self.line_for_tbid(tbid).stamp_chronon(content, serialization, echo.to_string()).await
+    ) -> Result<
+        foretias_core::foretias::clean_auth::CleanAuthenticated<Foretis>,
+        communerdette::CommunerdetteError,
+    > {
+        let tbid = Tbid::from_hex(target_tbid).map_err(|e| {
+            communerdette::CommunerdetteError::Structural(format!("bad tbid hex: {e}"))
+        })?;
+        self.line_for_tbid(tbid)
+            .stamp_chronon(content, serialization, echo.to_string())
+            .await
     }
 
     pub async fn get_calendar_slice(
@@ -345,7 +399,11 @@ impl Communerd {
         // TODO(Phase B.4): Add chain verification for returned ChrononRecords using
         // UnverifiedSignatureEnvelopeChrononRecord -> CleanAuthenticatedChrononRecord flow.
         if peer.peer_id.is_some() && self.p2p_cmd_tx.get().is_some() {
-            match self.libp2p_transport.get_calendar_slice(peer, tick_start, count).await {
+            match self
+                .libp2p_transport
+                .get_calendar_slice(peer, tick_start, count)
+                .await
+            {
                 Ok(r) => {
                     tracing::debug!(peer = %peer, transport = "libp2p-direct", "communerd: get_calendar_slice succeeded");
                     return Ok(r);
@@ -355,7 +413,9 @@ impl Communerd {
                 }
             }
         }
-        self.transport.get_calendar_slice(peer, tick_start, count).await
+        self.transport
+            .get_calendar_slice(peer, tick_start, count)
+            .await
     }
 
     pub async fn add_peer(&self, addr: PeerAddr) {
@@ -390,7 +450,9 @@ impl Communerd {
             let peers = self.peer_pool.get_peers().await;
             let core_peers: Vec<CorePeerAddr> = peers
                 .into_iter()
-                .map(|p| CorePeerAddr { json_rpc: p.json_rpc })
+                .map(|p| CorePeerAddr {
+                    json_rpc: p.json_rpc,
+                })
                 .collect();
             cb.on_peer_change(core_peers);
         }
@@ -442,7 +504,8 @@ impl Communerd {
 
         *self.namespace.lock() = namespace.to_string();
 
-        let handle = build_and_spawn_swarm(listen, dials, namespace, json_rpc_addr, rpc_handler).await?;
+        let handle =
+            build_and_spawn_swarm(listen, dials, namespace, json_rpc_addr, rpc_handler).await?;
 
         let peer_id = handle.local_peer_id;
         let _ = self.local_peer_id.set(peer_id);
@@ -460,7 +523,9 @@ impl Communerd {
             _ => ForetiasPubKey32 { bytes: [0u8; 32] },
         };
         let detector = Arc::new(CollisionDetector::new(
-            peer_id.to_string(), my_pub_key, self.config.collision.nonce_window,
+            peer_id.to_string(),
+            my_pub_key,
+            self.config.collision.nonce_window,
         ));
 
         // Start gossip event loop
@@ -476,7 +541,20 @@ impl Communerd {
         let pending_family_lookups = Arc::clone(&self.pending_family_lookups);
         let communerd_ref = self.clone();
         let task = tokio::spawn(async move {
-            Self::gossip_event_loop(events, cmd_tx, probity_store, crypto, clock_gossip, Some(det), peer_pool, tbid_index, pending_lookups, pending_family_lookups, communerd_ref).await;
+            Self::gossip_event_loop(
+                events,
+                cmd_tx,
+                probity_store,
+                crypto,
+                clock_gossip,
+                Some(det),
+                peer_pool,
+                tbid_index,
+                pending_lookups,
+                pending_family_lookups,
+                communerd_ref,
+            )
+            .await;
         });
         let _ = self.gossip_task.set(task);
 
@@ -496,15 +574,22 @@ impl Communerd {
         // Start heartbeat broadcast task
         let cmd_tx = self.p2p_cmd_tx.get().cloned();
         let ns = self.namespace.clone();
-        let interval_secs = self.config.collision.heartbeat_interval_secs.max(5) as u64;
+        let interval_secs = self.config.collision.heartbeat_interval_secs.max(5);
         let crypto_hb = Arc::clone(&self.crypto);
         let clock_hb = Arc::clone(&self.clock);
         let peer_id_str = peer_id.to_string();
         let det_hb = Arc::clone(&detector);
         let heartbeat_broadcaster = tokio::spawn(async move {
             Self::heartbeat_broadcast_loop(
-                cmd_tx, ns, interval_secs, crypto_hb, clock_hb, peer_id_str, det_hb,
-            ).await;
+                cmd_tx,
+                ns,
+                interval_secs,
+                crypto_hb,
+                clock_hb,
+                peer_id_str,
+                det_hb,
+            )
+            .await;
         });
         let _ = self.heartbeat_task.set(heartbeat_broadcaster);
 
@@ -543,7 +628,10 @@ impl Communerd {
             }
             if let Some(ref tx) = cmd_tx {
                 let n = ns.lock().clone();
-                let _ = tx.send(SwarmCommand::PublishHeartbeat { heartbeat: hb, namespace: n });
+                let _ = tx.send(SwarmCommand::PublishHeartbeat {
+                    heartbeat: hb,
+                    namespace: n,
+                });
             }
         }
     }
@@ -557,22 +645,39 @@ impl Communerd {
         detector: Option<Arc<CollisionDetector>>,
         peer_pool: PeerPool,
         tbid_index: Arc<parking_lot::RwLock<HashMap<String, PeerRegistrationRecord>>>,
-        pending_lookups: Arc<parking_lot::Mutex<HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<PeerRegistrationRecord>>>>>,
-        pending_family_lookups: Arc<parking_lot::Mutex<HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<Vec<u8>>>>>>,
+        pending_lookups: Arc<
+            parking_lot::Mutex<
+                HashMap<
+                    kad::RecordKey,
+                    tokio::sync::oneshot::Sender<Option<PeerRegistrationRecord>>,
+                >,
+            >,
+        >,
+        pending_family_lookups: Arc<
+            parking_lot::Mutex<
+                HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<Vec<u8>>>>,
+            >,
+        >,
         communerd: Communerd,
     ) {
         while let Some(event) = events.recv().await {
             match event {
                 NetworkEvent::GossipMessage { data, .. } => {
                     let now_ns = clock.now_ns().unwrap_or(0);
-                    if let Err(e) = handle_gossip_message(&data, &probity_store, crypto.as_ref(), now_ns) {
+                    if let Err(e) =
+                        handle_gossip_message(&data, &probity_store, crypto.as_ref(), now_ns)
+                    {
                         tracing::warn!("gossip message rejected: {e}");
                     }
                 }
                 NetworkEvent::HeartbeatMessage { data, .. } => {
-                    if let Ok(hb) = serde_json::from_slice::<foretias_core::collision::Heartbeat>(&data) {
+                    if let Ok(hb) =
+                        serde_json::from_slice::<foretias_core::collision::Heartbeat>(&data)
+                    {
                         if let Some(det) = &detector {
-                            if let Some(CollisionEvent::Confirmed { foreign_heartbeat }) = det.on_heartbeat(&hb, crypto.as_ref()) {
+                            if let Some(CollisionEvent::Confirmed { foreign_heartbeat }) =
+                                det.on_heartbeat(&hb, crypto.as_ref())
+                            {
                                 tracing::error!(
                                     peer_id = %foreign_heartbeat.peer_id,
                                     nonce = ?foreign_heartbeat.nonce,
@@ -587,9 +692,11 @@ impl Communerd {
                     }
                 }
                 NetworkEvent::RecordRetrieved { key, records } => {
-                    if (&*key.to_vec()).ends_with(b"/peers/v1") {
+                    if key.to_vec().ends_with(b"/peers/v1") {
                         for record in &records {
-                            if let Ok(peer_record) = serde_json::from_slice::<PeerRegistrationRecord>(&record.value) {
+                            if let Ok(peer_record) =
+                                serde_json::from_slice::<PeerRegistrationRecord>(&record.value)
+                            {
                                 match validate_peer_registration(&peer_record, crypto.as_ref()) {
                                     Ok(true) => {}
                                     Ok(false) => {
@@ -617,14 +724,18 @@ impl Communerd {
                         // Handle FamilyRecord lookups (raw bytes, no deserialization)
                         if key_str.contains("/family/") {
                             if let Some(sender) = pending_family_lookups.lock().remove(&key) {
-                                let raw_value: Option<Vec<u8>> = records.first().map(|r| r.value.clone());
+                                let raw_value: Option<Vec<u8>> =
+                                    records.first().map(|r| r.value.clone());
                                 let _ = sender.send(raw_value);
                             }
                         }
                         if key_str.contains("/tbid/") {
                             for record in &records {
-                                if let Ok(peer_record) = serde_json::from_slice::<PeerRegistrationRecord>(&record.value) {
-                                    match validate_peer_registration(&peer_record, crypto.as_ref()) {
+                                if let Ok(peer_record) =
+                                    serde_json::from_slice::<PeerRegistrationRecord>(&record.value)
+                                {
+                                    match validate_peer_registration(&peer_record, crypto.as_ref())
+                                    {
                                         Ok(true) => {}
                                         Ok(false) => {
                                             tracing::warn!(component = "communerd", tbid = %peer_record.tbid, "communerd: DHT TBID record failed structural or signature validation, skipping");
@@ -636,7 +747,9 @@ impl Communerd {
                                         }
                                     }
                                     let tbid_hex = peer_record.tbid.clone();
-                                    tbid_index.write().insert(tbid_hex.clone(), peer_record.clone());
+                                    tbid_index
+                                        .write()
+                                        .insert(tbid_hex.clone(), peer_record.clone());
                                     tracing::debug!(tbid = %tbid_hex, "TBID index record cached");
 
                                     communerd.bridge_dht_to_communerdette(&tbid_hex, &peer_record);
@@ -658,7 +771,10 @@ impl Communerd {
                         }
                     }
                 }
-                NetworkEvent::DhtPeerDiscovered { peer_id, addresses: _ } => {
+                NetworkEvent::DhtPeerDiscovered {
+                    peer_id,
+                    addresses: _,
+                } => {
                     let peer_addr = PeerAddr {
                         json_rpc: String::new(),
                         peer_id: Some(peer_id),
@@ -677,9 +793,12 @@ impl Communerd {
             return Ok(());
         };
         for addr_str in bootstrap_addrs {
-            let bootstrap_addr: libp2p::Multiaddr = addr_str.parse()
+            let bootstrap_addr: libp2p::Multiaddr = addr_str
+                .parse()
                 .map_err(|e| NodeError::Internal(format!("invalid dht_bootstrap addr: {e}")))?;
-            let _ = cmd_tx.send(SwarmCommand::Dial { addr: bootstrap_addr });
+            let _ = cmd_tx.send(SwarmCommand::Dial {
+                addr: bootstrap_addr,
+            });
         }
         let _ = cmd_tx.send(SwarmCommand::Bootstrap);
         Ok(())
@@ -715,7 +834,10 @@ impl Communerd {
         let _ = self.probity_store.ingest(report.clone());
         if let Some(cmd_tx) = self.p2p_cmd_tx.get() {
             let ns = self.namespace.lock().clone();
-            let _ = cmd_tx.send(SwarmCommand::PublishProbity { report, namespace: ns });
+            let _ = cmd_tx.send(SwarmCommand::PublishProbity {
+                report,
+                namespace: ns,
+            });
         }
     }
 
@@ -738,7 +860,9 @@ impl Communerd {
             return Err(NodeError::Internal("P2P not enabled".into()));
         };
 
-        let peer_id = self.local_peer_id.get()
+        let peer_id = self
+            .local_peer_id
+            .get()
             .copied()
             .ok_or_else(|| NodeError::Internal("PeerId not available".into()))?;
 
@@ -769,7 +893,8 @@ impl Communerd {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
         // Step 2: Get our listen address
-        let my_multiaddr = self.local_multiaddr()
+        let my_multiaddr = self
+            .local_multiaddr()
             .ok_or_else(|| NodeError::Internal("timed out waiting for listen address".into()))?;
 
         // Step 3: Bootstrap DHT
@@ -805,11 +930,15 @@ impl Communerd {
             publisher: Some(peer_id),
             expires: None,
         };
-        let _ = cmd_tx.send(SwarmCommand::PutRecord { key: key.clone(), record });
+        let _ = cmd_tx.send(SwarmCommand::PutRecord {
+            key: key.clone(),
+            record,
+        });
         tracing::info!(component = "communerd", peer = %peer_id, "communerd: self-registration initiated");
 
         let tbid_hex = tbid.to_hex();
-        let tbid_key = kad::RecordKey::new(&format!("/foretias/{}/tbid/{}/v1", namespace, tbid_hex));
+        let tbid_key =
+            kad::RecordKey::new(&format!("/foretias/{}/tbid/{}/v1", namespace, tbid_hex));
         let tbid_record = kad::Record {
             key: tbid_key.clone(),
             value: serde_json::to_vec(&peer_record)
@@ -817,7 +946,10 @@ impl Communerd {
             publisher: Some(peer_id),
             expires: None,
         };
-        let _ = cmd_tx.send(SwarmCommand::PutRecord { key: tbid_key.clone(), record: tbid_record });
+        let _ = cmd_tx.send(SwarmCommand::PutRecord {
+            key: tbid_key.clone(),
+            record: tbid_record,
+        });
         tracing::info!(component = "communerd", tbid = %tbid_hex, "communerd: TBID index record published");
 
         // Step 5: Discover peers (GET record)
@@ -838,8 +970,17 @@ impl Communerd {
             loop {
                 interval.tick().await;
                 Self::refresh_self_registration(
-                    cmd_tx_clone.clone(), ns.clone(), tbid_arc, chronon, &rpc, ma_arc.clone(), pid, Arc::clone(&clock_refresh), Arc::clone(&crypto_refresh),
-                ).await;
+                    cmd_tx_clone.clone(),
+                    ns.clone(),
+                    tbid_arc,
+                    chronon,
+                    &rpc,
+                    ma_arc.clone(),
+                    pid,
+                    Arc::clone(&clock_refresh),
+                    Arc::clone(&crypto_refresh),
+                )
+                .await;
             }
         });
 
@@ -904,7 +1045,10 @@ impl Communerd {
             publisher: Some(peer_id),
             expires: None,
         };
-        let _ = cmd_tx.send(SwarmCommand::PutRecord { key: tbid_key, record: tbid_record });
+        let _ = cmd_tx.send(SwarmCommand::PutRecord {
+            key: tbid_key,
+            record: tbid_record,
+        });
         tracing::debug!(component = "communerd", peer = %peer_id, "communerd: self-registration refreshed");
     }
 
@@ -912,7 +1056,11 @@ impl Communerd {
         self.tbid_index.read().get(tbid_hex).cloned()
     }
 
-    pub async fn lookup_tbid(&self, tbid_hex: &str, namespace: &str) -> Option<PeerRegistrationRecord> {
+    pub async fn lookup_tbid(
+        &self,
+        tbid_hex: &str,
+        namespace: &str,
+    ) -> Option<PeerRegistrationRecord> {
         if let Some(record) = self.lookup_tbid_cached(tbid_hex) {
             return Some(record);
         }
@@ -940,8 +1088,12 @@ impl Communerd {
     /// Publish a FamilyRecord to the DHT under the `/family/{tbid}/v1` key.
     /// Called once per family by the Communerd that owns it.
     pub fn publish_family_record(&self, ns: &str, record: &FamilyRecord) {
-        let Some(peer_id) = self.local_peer_id.get().cloned() else { return };
-        let Some(cmd_tx) = self.p2p_cmd_tx.get() else { return };
+        let Some(peer_id) = self.local_peer_id.get().cloned() else {
+            return;
+        };
+        let Some(cmd_tx) = self.p2p_cmd_tx.get() else {
+            return;
+        };
         let value = match serde_json::to_vec(record) {
             Ok(v) => v,
             Err(e) => {
@@ -951,28 +1103,36 @@ impl Communerd {
         };
         // Publish under each member's family key
         for member_tbid_hex in &record.members {
-            let key = kad::RecordKey::new(&format!("/foretias/{}/family/{}/v1", ns, member_tbid_hex));
+            let key =
+                kad::RecordKey::new(&format!("/foretias/{}/family/{}/v1", ns, member_tbid_hex));
             let kad_record = kad::Record {
                 key: key.clone(),
                 value: value.clone(),
                 publisher: Some(peer_id),
                 expires: None,
             };
-            let _ = cmd_tx.send(SwarmCommand::PutRecord { key, record: kad_record });
+            let _ = cmd_tx.send(SwarmCommand::PutRecord {
+                key,
+                record: kad_record,
+            });
         }
         tracing::debug!(component = "communerd", members = %record.members.len(), "communerd: FamilyRecord published to DHT");
     }
 
     /// Fetch FamilyRecord from DHT, verify (full gate), insert into family cache.
     /// Returns the cached record on success, None on any failure.
-    pub async fn fetch_and_cache_family_record(&self, tbid_hex: &str, ns: &str) -> Option<Arc<CleanFullyAuthenticated<FamilyRecord>>> {
+    pub async fn fetch_and_cache_family_record(
+        &self,
+        tbid_hex: &str,
+        ns: &str,
+    ) -> Option<Arc<CleanFullyAuthenticated<FamilyRecord>>> {
         // Check local cache first
         if let Some(cached) = self.family_cache_lookup(tbid_hex) {
             return Some(cached);
         }
         // DHT lookup
         let key = kad::RecordKey::new(&format!("/foretias/{}/family/{}/v1", ns, tbid_hex));
-        let Some(cmd_tx) = self.p2p_cmd_tx.get() else { return None };
+        let cmd_tx = self.p2p_cmd_tx.get()?;
         let (tx, rx) = tokio::sync::oneshot::channel();
         self.pending_family_lookups.lock().insert(key.clone(), tx);
         let _ = cmd_tx.send(SwarmCommand::GetRecord { key: key.clone() });
@@ -1023,7 +1183,10 @@ impl Communerd {
     /// After this call, all CommunerdetteLines for affected TBIDs
     /// will report their shutdown tokens as cancelled.
     pub fn shutdown_relationships(&self) {
-        tracing::info!(component = "communerd", "shutting down all communerdette relationships");
+        tracing::info!(
+            component = "communerd",
+            "shutting down all communerdette relationships"
+        );
         for entry in self.communerdettes.iter() {
             entry.value().shutdown();
         }
@@ -1037,7 +1200,11 @@ impl Communerd {
     /// This is called from the gossip event loop when a TBID record is retrieved.
     /// Phase 3.1: DHT bridge.
     #[allow(dead_code)]
-    pub(super) fn bridge_dht_to_communerdette(&self, tbid_hex: &str, record: &PeerRegistrationRecord) {
+    pub(super) fn bridge_dht_to_communerdette(
+        &self,
+        tbid_hex: &str,
+        record: &PeerRegistrationRecord,
+    ) {
         let tbid = match Tbid::from_hex(tbid_hex) {
             Ok(t) => t,
             Err(_) => {
@@ -1045,7 +1212,8 @@ impl Communerd {
                 return;
             }
         };
-        let communerdette = self.communerdettes
+        let communerdette = self
+            .communerdettes
             .entry(tbid)
             .or_insert_with(|| Arc::new(communerdette::Communerdette::new(tbid)));
         let now_ns = self.clock.now_ns().unwrap_or(0);
@@ -1067,7 +1235,9 @@ impl Communerd {
         let tbid = Tbid::from_hex(tbid_hex)
             .map_err(|e| TransportError::Decode(format!("invalid TBID: {e}")))?;
         let _line = self.line_for_tbid(tbid);
-        let owner = self.lookup_tbid(tbid_hex, &self.namespace()).await
+        let owner = self
+            .lookup_tbid(tbid_hex, &self.namespace())
+            .await
             .ok_or_else(|| TransportError::Decode(format!("TBID {} not found in DHT", tbid_hex)))?;
         let peer = PeerAddr {
             json_rpc: owner.json_rpc,
@@ -1151,10 +1321,7 @@ impl crate::calendar::MirrorDispatcher for Communerd {
             }),
         )
         .await?;
-        Ok(resp
-            .get("tick_count")
-            .and_then(|c| c.as_u64())
-            .unwrap_or(0))
+        Ok(resp.get("tick_count").and_then(|c| c.as_u64()).unwrap_or(0))
     }
 
     async fn mirror_health_check(
@@ -1169,10 +1336,7 @@ impl crate::calendar::MirrorDispatcher for Communerd {
             serde_json::json!({ "tbid": local_tbid_hex }),
         )
         .await?;
-        Ok(resp
-            .get("tick_count")
-            .and_then(|c| c.as_u64())
-            .unwrap_or(0))
+        Ok(resp.get("tick_count").and_then(|c| c.as_u64()).unwrap_or(0))
     }
 }
 
@@ -1213,7 +1377,11 @@ async fn mirror_rpc(
 
 #[async_trait::async_trait]
 impl communerdette::CommunerdetteHost for Communerd {
-    async fn host_lookup_tbid(&self, tbid_hex: &str, namespace: &str) -> Option<PeerRegistrationRecord> {
+    async fn host_lookup_tbid(
+        &self,
+        tbid_hex: &str,
+        namespace: &str,
+    ) -> Option<PeerRegistrationRecord> {
         self.lookup_tbid(tbid_hex, namespace).await
     }
 
@@ -1241,15 +1409,23 @@ impl communerdette::CommunerdetteHost for Communerd {
         echo: &str,
     ) -> Result<serde_json::Value, TransportError> {
         if peer.peer_id.is_some() && self.p2p_cmd_tx().is_some() {
-            match self.libp2p_transport.route_stamp(peer, target_tbid, content_hex, echo).await {
+            match self
+                .libp2p_transport
+                .route_stamp(peer, target_tbid, content_hex, echo)
+                .await
+            {
                 Ok(r) => Ok(r),
                 Err(e) => {
                     tracing::debug!(%peer, ?e, "communerdette: libp2p stamp failed, falling back");
-                    self.transport.route_stamp(peer, target_tbid, content_hex, echo).await
+                    self.transport
+                        .route_stamp(peer, target_tbid, content_hex, echo)
+                        .await
                 }
             }
         } else {
-            self.transport.route_stamp(peer, target_tbid, content_hex, echo).await
+            self.transport
+                .route_stamp(peer, target_tbid, content_hex, echo)
+                .await
         }
     }
 
@@ -1260,15 +1436,23 @@ impl communerdette::CommunerdetteHost for Communerd {
         count: u64,
     ) -> Result<Vec<ChrononRecord>, TransportError> {
         if peer.peer_id.is_some() && self.p2p_cmd_tx().is_some() {
-            match self.libp2p_transport.get_calendar_slice(peer, tick_start, count).await {
+            match self
+                .libp2p_transport
+                .get_calendar_slice(peer, tick_start, count)
+                .await
+            {
                 Ok(r) => Ok(r),
                 Err(e) => {
                     tracing::debug!(%peer, ?e, "communerdette: libp2p calendar_slice failed, falling back");
-                    self.transport.get_calendar_slice(peer, tick_start, count).await
+                    self.transport
+                        .get_calendar_slice(peer, tick_start, count)
+                        .await
                 }
             }
         } else {
-            self.transport.get_calendar_slice(peer, tick_start, count).await
+            self.transport
+                .get_calendar_slice(peer, tick_start, count)
+                .await
         }
     }
 
@@ -1280,42 +1464,58 @@ impl communerdette::CommunerdetteHost for Communerd {
         requester_tbid_hex: &str,
     ) -> Result<serde_json::Value, TransportError> {
         // TODO(externalized): wrap params as Externalized<R> before dispatch (Phase 11.4).
-        self.transport.channel_bind_challenge(peer, nonce_hex, channel_id, requester_tbid_hex).await
+        self.transport
+            .channel_bind_challenge(peer, nonce_hex, channel_id, requester_tbid_hex)
+            .await
     }
 
     async fn host_execute_ping(&self, peer: &PeerAddr) -> Result<(), TransportError> {
         self.transport.ping(peer).await
     }
 
-    fn host_sign_probity_report(&self, report: &crate::probity::ProbityReport) -> Result<Vec<u8>, String> {
+    fn host_sign_probity_report(
+        &self,
+        report: &crate::probity::ProbityReport,
+    ) -> Result<Vec<u8>, String> {
         let canonical = report.canonical();
-        self.crypto.sign(&canonical)
+        self.crypto
+            .sign(&canonical)
             .map(|sig| sig.bytes.to_vec())
             .map_err(|e| format!("signing failed: {e}"))
     }
 
     fn host_publish_probity_report(&self, signed_bytes: Vec<u8>) {
-        tracing::debug!(len = signed_bytes.len(), "communerd: probity report published (stub)");
+        tracing::debug!(
+            len = signed_bytes.len(),
+            "communerd: probity report published (stub)"
+        );
     }
 }
 
 fn resolve_known_server(addr_str: &str) -> Result<libp2p::Multiaddr, NodeError> {
     let parts: Vec<&str> = addr_str.rsplitn(2, ':').collect();
     if parts.len() != 2 {
-        return Err(NodeError::Internal(format!("invalid known server address: {}", addr_str)));
+        return Err(NodeError::Internal(format!(
+            "invalid known server address: {}",
+            addr_str
+        )));
     }
-    let port: u16 = parts[0].parse()
+    let port: u16 = parts[0]
+        .parse()
         .map_err(|e| NodeError::Internal(format!("invalid port in known server: {e}")))?;
     let host = parts[1];
 
     if host.parse::<std::net::Ipv4Addr>().is_ok() {
-        Ok(format!("/ip4/{}/tcp/{}", host, port).parse()
+        Ok(format!("/ip4/{}/tcp/{}", host, port)
+            .parse()
             .map_err(|e| NodeError::Internal(format!("invalid multiaddr parse: {}", e)))?)
     } else if host.parse::<std::net::Ipv6Addr>().is_ok() {
-        Ok(format!("/ip6/{}/tcp/{}", host, port).parse()
+        Ok(format!("/ip6/{}/tcp/{}", host, port)
+            .parse()
             .map_err(|e| NodeError::Internal(format!("invalid multiaddr parse: {}", e)))?)
     } else {
-        Ok(format!("/dns/{}/tcp/{}", host, port).parse()
+        Ok(format!("/dns/{}/tcp/{}", host, port)
+            .parse()
             .map_err(|e| NodeError::Internal(format!("invalid multiaddr parse: {}", e)))?)
     }
 }
@@ -1342,9 +1542,7 @@ impl PeerMessenger for Communerd {
                 // Safe: we hold no async-unsafe locks here, and get_peers() is a
                 // non-blocking read (tokio::sync::RwLock::read is future-based).
                 let peers = match tokio::runtime::Handle::try_current() {
-                    Ok(handle) => {
-                        handle.block_on(async { self.peer_pool.get_peers().await })
-                    }
+                    Ok(handle) => handle.block_on(async { self.peer_pool.get_peers().await }),
                     Err(_) => {
                         tracing::warn!("query_community: no tokio runtime available, returning empty peer list");
                         Vec::new()
@@ -1354,25 +1552,24 @@ impl PeerMessenger for Communerd {
                 let core_peers: Vec<CorePeerAddr> = peers
                     .into_iter()
                     .filter(|p| !p.json_rpc.is_empty())
-                    .map(|p| CorePeerAddr { json_rpc: p.json_rpc })
+                    .map(|p| CorePeerAddr {
+                        json_rpc: p.json_rpc,
+                    })
                     .collect();
                 Ok(CommunityResponse::KnownPeers(core_peers))
             }
             CommunityQuery::PeerByAddr(addr) => {
                 // Check liveness: is this peer in our pool and does it have a recent last_seen_ns?
                 let alive = match tokio::runtime::Handle::try_current() {
-                    Ok(handle) => {
-                        handle.block_on(async {
-                            let peers = self.peer_pool.get_peers().await;
-                            peers.iter().any(|p| p.json_rpc == addr.json_rpc && p.last_seen_ns > 0)
-                        })
-                    }
+                    Ok(handle) => handle.block_on(async {
+                        let peers = self.peer_pool.get_peers().await;
+                        peers
+                            .iter()
+                            .any(|p| p.json_rpc == addr.json_rpc && p.last_seen_ns > 0)
+                    }),
                     Err(_) => false,
                 };
-                Ok(CommunityResponse::PeerStatus {
-                    peer: addr,
-                    alive,
-                })
+                Ok(CommunityResponse::PeerStatus { peer: addr, alive })
             }
         }
     }
@@ -1411,7 +1608,13 @@ mod tests {
         let communerd = Communerd::new(make_config());
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
-            communerd.add_peer(PeerAddr { json_rpc: "127.0.0.1:4003".into(), peer_id: None, last_seen_ns: 0 }).await;
+            communerd
+                .add_peer(PeerAddr {
+                    json_rpc: "127.0.0.1:4003".into(),
+                    peer_id: None,
+                    last_seen_ns: 0,
+                })
+                .await;
             let peers = communerd.get_peers().await;
             assert_eq!(peers.len(), 2);
         });
@@ -1422,7 +1625,13 @@ mod tests {
         let communerd = Communerd::new(make_config());
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
-            communerd.remove_peer(&PeerAddr { json_rpc: "127.0.0.1:4002".into(), peer_id: None, last_seen_ns: 0 }).await;
+            communerd
+                .remove_peer(&PeerAddr {
+                    json_rpc: "127.0.0.1:4002".into(),
+                    peer_id: None,
+                    last_seen_ns: 0,
+                })
+                .await;
             assert!(communerd.get_peers().await.is_empty());
         });
     }
@@ -1433,7 +1642,12 @@ mod tests {
         let c2 = communerd.clone();
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
-            c2.add_peer(PeerAddr { json_rpc: "127.0.0.1:4004".into(), peer_id: None, last_seen_ns: 0 }).await;
+            c2.add_peer(PeerAddr {
+                json_rpc: "127.0.0.1:4004".into(),
+                peer_id: None,
+                last_seen_ns: 0,
+            })
+            .await;
             let peers = communerd.get_peers().await;
             assert_eq!(peers.len(), 2);
         });
@@ -1443,7 +1657,10 @@ mod tests {
     fn communerd_config_access() {
         let config = make_config();
         let communerd = Communerd::new(config.clone());
-        assert_eq!(communerd.config().mutual_attest.peers, config.mutual_attest.peers);
+        assert_eq!(
+            communerd.config().mutual_attest.peers,
+            config.mutual_attest.peers
+        );
         assert_eq!(communerd.config().mutual_attest.every_n_chronons, 1);
     }
 
@@ -1590,7 +1807,10 @@ mod tests {
         communerd.remove_peer(&new_peer).await;
 
         let events = cb.events();
-        assert!(!events.is_empty(), "remove_peer must fire a peer-change event");
+        assert!(
+            !events.is_empty(),
+            "remove_peer must fire a peer-change event"
+        );
         let latest = events.last().expect("at least one event");
         assert!(
             !latest.iter().any(|p| p.json_rpc == "127.0.0.1:8888"),

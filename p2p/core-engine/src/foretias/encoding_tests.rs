@@ -4,15 +4,15 @@
 //! verifying that base64 strings (not integer arrays) are always produced,
 //! and that roundtrip serialization preserves all data.
 
-use crate::foretias::encoding::{FTByteVector, FTByteArray, to_json, from_json, to_json_pretty};
-use crate::foretias::tick::{Foretis, ChrononRecord};
-use crate::foretias::calendar::Calendar;
-use crate::foretias::types::Tbid;
-use crate::foretias::external_attestation::ExternalAttestation;
 use crate::collision::heartbeat::Heartbeat;
-use crate::epoch::snapshot::EpochSnapshot;
-use crate::epoch::frost_bridge::FrostMsg;
 use crate::crypto_server::SealedBlob;
+use crate::epoch::frost_bridge::FrostMsg;
+use crate::epoch::snapshot::EpochSnapshot;
+use crate::foretias::calendar::Calendar;
+use crate::foretias::encoding::{from_json, to_json, to_json_pretty, FTByteArray, FTByteVector};
+use crate::foretias::external_attestation::ExternalAttestation;
+use crate::foretias::tick::{ChrononRecord, Foretis};
+use crate::foretias::types::Tbid;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 
@@ -20,16 +20,16 @@ use base64::Engine;
 
 fn make_test_tbid() -> Tbid {
     let mut bytes = [0u8; 96];
-    for i in 0..96 {
-        bytes[i] = i as u8;
+    for (i, b) in bytes.iter_mut().enumerate() {
+        *b = i as u8;
     }
     Tbid::from_raw(bytes)
 }
 
 fn make_test_foretis() -> Foretis {
     let mut ch = [0u8; 32];
-    for i in 0..32 {
-        ch[i] = (i * 3 + 1) as u8;
+    for (i, c) in ch.iter_mut().enumerate() {
+        *c = (i * 3 + 1) as u8;
     }
     Foretis::new(
         42,
@@ -38,13 +38,14 @@ fn make_test_foretis() -> Foretis {
         "test-echo".to_string(),
         "test-tbn".to_string(),
         "2026-01-01T00:00:00Z".to_string(),
-    ).expect("valid foretis")
+    )
+    .expect("valid foretis")
 }
 
 fn make_test_tick_record(tick: u64) -> ChrononRecord {
     let mut nonce = [0u8; 16];
-    for i in 0..16 {
-        nonce[i] = (tick.wrapping_mul(7).wrapping_add(i as u64)) as u8;
+    for (i, n) in nonce.iter_mut().enumerate() {
+        *n = (tick.wrapping_mul(7).wrapping_add(i as u64)) as u8;
     }
     ChrononRecord::new(
         tick,
@@ -54,7 +55,8 @@ fn make_test_tick_record(tick: u64) -> ChrononRecord {
         FTByteVector::new(),
         FTByteArray::from(nonce),
         0,
-    ).expect("valid tick record")
+    )
+    .expect("valid tick record")
 }
 
 fn make_test_calendar(num_ticks: u64) -> Calendar {
@@ -72,7 +74,9 @@ fn assert_json_has_no_int_arrays(value: &serde_json::Value) {
             // Empty arrays (e.g. external_attestations: []) are fine — only flag
             // non-empty arrays where every element is a number (byte-array-as-ints).
             if !arr.is_empty() {
-                let all_numbers = arr.iter().all(|v| matches!(v, serde_json::Value::Number(_)));
+                let all_numbers = arr
+                    .iter()
+                    .all(|v| matches!(v, serde_json::Value::Number(_)));
                 assert!(!all_numbers, "Found integer array in JSON: {:?}", arr);
             }
             for v in arr {
@@ -91,9 +95,15 @@ fn assert_json_has_no_int_arrays(value: &serde_json::Value) {
 fn assert_field_is_base64_string(json_str: &str, field: &str) {
     let val: serde_json::Value = serde_json::from_str(json_str)
         .unwrap_or_else(|e| panic!("valid JSON for field {}: {}", field, e));
-    let field_val = val.get(field)
+    let field_val = val
+        .get(field)
         .unwrap_or_else(|| panic!("field {} exists", field));
-    assert!(field_val.is_string(), "field {} is a string, not {:?}", field, field_val);
+    assert!(
+        field_val.is_string(),
+        "field {} is a string, not {:?}",
+        field,
+        field_val
+    );
     let s = field_val.as_str().expect("field is string");
     let decoded = URL_SAFE_NO_PAD.decode(s);
     assert!(decoded.is_ok(), "field {} decodes as valid base64", field);
@@ -151,15 +161,23 @@ fn base64vec_output_is_string_not_array() {
     let v = FTByteVector::from(vec![1, 2, 3]);
     let json = to_json(&v).unwrap();
     // Must be a JSON string, not [1, 2, 3]
-    assert!(json.starts_with('"'), "FTByteVector JSON must be a string, got: {}", json);
-    assert!(!json.contains(','), "FTByteVector JSON must not contain commas: {}", json);
+    assert!(
+        json.starts_with('"'),
+        "FTByteVector JSON must be a string, got: {}",
+        json
+    );
+    assert!(
+        !json.contains(','),
+        "FTByteVector JSON must not contain commas: {}",
+        json
+    );
 }
 
 #[test]
 fn base64array16_roundtrip() {
     let arr: FTByteArray<16> = FTByteArray::new([
-        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-        0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10,
+        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+        0x10,
     ]);
     let json = to_json(&arr).unwrap();
     let decoded: FTByteArray<16> = from_json(&json).unwrap();
@@ -190,7 +208,11 @@ fn base64array_wrong_length_rejected() {
     let result: Result<FTByteArray<32>, _> = from_json(&json);
     assert!(result.is_err(), "wrong-length array must be rejected");
     let err_msg = result.unwrap_err().to_string();
-    assert!(err_msg.contains("32"), "error should mention expected length: {}", err_msg);
+    assert!(
+        err_msg.contains("32"),
+        "error should mention expected length: {}",
+        err_msg
+    );
 }
 
 #[test]
@@ -252,7 +274,10 @@ fn foretis_roundtrip() {
     assert_eq!(decoded.tbid, f.tbid);
     assert_eq!(decoded.echo, f.echo);
     assert_eq!(decoded.tbn, f.tbn);
-    assert_eq!(decoded.time_being_reference_time, f.time_being_reference_time);
+    assert_eq!(
+        decoded.time_being_reference_time,
+        f.time_being_reference_time
+    );
 }
 
 // ChrononRecord
@@ -311,14 +336,8 @@ fn calendar_serializes_ticks_as_base64() {
     let ticks = val.get("ticks").unwrap().as_array().unwrap();
     assert_eq!(ticks.len(), 3);
     for tick in ticks {
-        assert_field_is_base64_string(
-            &serde_json::to_string(tick).unwrap(),
-            "public_key",
-        );
-        assert_field_is_base64_string(
-            &serde_json::to_string(tick).unwrap(),
-            "aa_nonce",
-        );
+        assert_field_is_base64_string(&serde_json::to_string(tick).unwrap(), "public_key");
+        assert_field_is_base64_string(&serde_json::to_string(tick).unwrap(), "aa_nonce");
     }
 }
 
@@ -456,7 +475,10 @@ fn external_attestation_roundtrip() {
     assert_eq!(decoded.attester_tbid, att.attester_tbid);
     assert_eq!(decoded.received_at_ns, att.received_at_ns);
     assert_eq!(decoded.foretis.chronon_number, att.foretis.chronon_number);
-    assert_eq!(decoded.attester_tick_record.chronon_number, att.attester_tick_record.chronon_number);
+    assert_eq!(
+        decoded.attester_tick_record.chronon_number,
+        att.attester_tick_record.chronon_number
+    );
 }
 
 // ─── Category 3: Cross-Language Canonical Output (4 tests) ──────────
@@ -605,7 +627,8 @@ fn all_zero_calendars() {
         FTByteVector::new(),
         FTByteArray::from(zero_nonce),
         0,
-    ).expect("zero tick");
+    )
+    .expect("zero tick");
     cal.append(tr).expect("append zero tick");
 
     let json = to_json(&cal).unwrap();
@@ -619,7 +642,9 @@ fn all_zero_calendars() {
 fn max_slh_dsa_signature_in_tick_record() {
     // ChrononRecord with a 49856-byte forward_foretis (max SLH-DSA sig)
     let mut nonce = [0u8; 16];
-    for i in 0..16 { nonce[i] = i as u8; }
+    for (i, n) in nonce.iter_mut().enumerate() {
+        *n = i as u8;
+    }
     let tr = ChrononRecord::new(
         1,
         FTByteVector::from(vec![0x01; 32]),
@@ -628,7 +653,8 @@ fn max_slh_dsa_signature_in_tick_record() {
         FTByteVector::from(vec![0x43u8; 49_856]),
         FTByteArray::from(nonce),
         0,
-    ).expect("large tick");
+    )
+    .expect("large tick");
     let json = to_json(&tr).unwrap();
     let decoded: ChrononRecord = from_json(&json).unwrap();
     assert_eq!(decoded.forward_foretis.len(), 49_856);
@@ -640,7 +666,9 @@ fn max_slh_dsa_signature_in_tick_record() {
 fn mimic_spincs_signature_size() {
     // Mimic SPHINCS+-SHA2-128s signature size (7856 bytes)
     let mut nonce = [0u8; 16];
-    for i in 0..16 { nonce[i] = (i + 1) as u8; }
+    for (i, n) in nonce.iter_mut().enumerate() {
+        *n = (i + 1) as u8;
+    }
     let tr = ChrononRecord::new(
         2,
         FTByteVector::from(vec![0x02; 32]),
@@ -649,7 +677,8 @@ fn mimic_spincs_signature_size() {
         FTByteVector::new(),
         FTByteArray::from(nonce),
         0,
-    ).expect("sphincs tick");
+    )
+    .expect("sphincs tick");
     let json = to_json(&tr).unwrap();
     let decoded: ChrononRecord = from_json(&json).unwrap();
     assert_eq!(decoded.forward_foretis.len(), 7_856);
@@ -671,25 +700,37 @@ fn deserialize_wrong_length_for_array32_fails() {
     let arr: FTByteArray<16> = FTByteArray::new([0x01u8; 16]);
     let json = to_json(&arr).unwrap();
     let result: Result<FTByteArray<32>, _> = from_json(&json);
-    assert!(result.is_err(), "wrong length must fail for FTByteArray<32>");
+    assert!(
+        result.is_err(),
+        "wrong length must fail for FTByteArray<32>"
+    );
 }
 
 #[test]
 fn deserialize_integer_array_fails() {
     // FTByteVector must reject [1, 2, 3] — only strings accepted
     let result: Result<FTByteVector, _> = from_json("[1, 2, 3]");
-    assert!(result.is_err(), "integer array must be rejected for FTByteVector");
+    assert!(
+        result.is_err(),
+        "integer array must be rejected for FTByteVector"
+    );
 
     // FTByteArray must also reject integer arrays
     let result: Result<FTByteArray<32>, _> = from_json("[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32]");
-    assert!(result.is_err(), "integer array must be rejected for FTByteArray<32>");
+    assert!(
+        result.is_err(),
+        "integer array must be rejected for FTByteArray<32>"
+    );
 }
 
 #[test]
 fn deserialize_empty_string_for_array32_fails() {
     // Empty base64 decodes to 0 bytes, which is wrong for FTByteArray<32>
     let result: Result<FTByteArray<32>, _> = from_json("\"\"");
-    assert!(result.is_err(), "empty string must fail for FTByteArray<32>");
+    assert!(
+        result.is_err(),
+        "empty string must fail for FTByteArray<32>"
+    );
 }
 
 #[test]
