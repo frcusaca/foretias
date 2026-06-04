@@ -175,7 +175,7 @@
 
 ---
 
-### 9. Code Quality Tooling
+### 9. Code Quality Tooling (Baseline + CI)
 
 | File | Open | Done | Status |
 |------|------|------|--------|
@@ -205,6 +205,40 @@
 - `.github/workflows/clippy.yml` — CI gate for clippy
 - `.github/workflows/rustfmt.yml` — CI gate for formatting
 - `AGENTS.md` — Code Quality Tooling section added
+
+---
+
+### 10. Clippy Fix (Warning Remediation + Refactoring)
+
+| File | Open | Done | Status |
+|------|------|------|--------|
+| `specs/CLIPPY_FIX_PLAN.md` | ~120 | 0 | **PROPOSED** — spec + plan written, not started |
+| `specs/CLIPPY_FIX_SPEC.md` | — | — | Spec (paired) |
+
+**Dependencies:** Code Quality Tooling (baseline delivered)
+**Blocks:** CI gate passing (clippy.yml)
+
+**Scope:** ~120 tasks across 8 waves:
+- Wave 1: ~30 auto-fixable mechanical fixes (clone_on_copy, redundant_closure, etc.)
+- Wave 2: 6 struct extraction tasks (GossipLoopConfig, RegistrationConfig)
+- Wave 3: 10 type aliases + visibility adjustments
+- Wave 4: ~40 `too_many_lines` refactoring (6 functions, tests-first approach)
+- Wave 5: 10 high-value pedantic warnings (cast truncation, float cmp, etc.)
+- Wave 6: 3 suppressions with justifications
+- Wave 7: 8 deprecated API migrations (ed25519_sign → ed25519_sign_with_handle)
+- Wave 8: 8 final verification tasks
+
+**Functions requiring refactoring (too_many_lines > 100):**
+| Function | File | Lines | Sub-Functions |
+|----------|------|-------|---------------|
+| `verify_pair` | `core-engine/src/foretias/tick.rs:405` | ~120 | 4 |
+| `handle_storage_proof_verify` | `foretias-server/src/server/handlers.rs:1177` | ~130 | 4 |
+| `handle_do_chronon_attestation` | `foretias-server/src/calendar/task_queue.rs:305` | ~155 | 5 |
+| `handle_do_epoch_attestation` | `foretias-server/src/calendar/task_queue.rs:470` | ~120 | 2 (shared) |
+| `handle_verify_fb_recorded` | `foretias-server/src/calendar/task_queue.rs:781` | ~135 | 4 |
+| `gossip_event_loop` | `foretias-server/src/communerd/mod.rs:551` | ~110 | struct + extraction |
+
+**Test strategy:** Tests written BEFORE refactoring for each function. Regression tests verify behavior preservation.
 
 ---
 
@@ -318,7 +352,8 @@ Group 2 (pre-flight)
 
 | Priority | Item | Action |
 |----------|------|--------|
-| **1** | Group 5 g5-c | Human decision on JSON-RPC auth (mTLS) — blocked, needs dedicated spec |
-| **2** | Group 4 StartStream | Implement live calendar streaming to mirrors (deferred — Phase 4b.4c) |
-| **3** | Peering v1 | 8 items blocked on bindings reintroduction |
-| **4** | Code Quality Tooling | 71 items, low priority, not started |
+| **1** | Clippy Fix | ~120 tasks to fix all clippy warnings — spec+plan written, ready to execute |
+| **2** | Group 5 g5-c | Human decision on JSON-RPC auth (mTLS) — blocked, needs dedicated spec |
+| **3** | Group 4 StartStream | Implement live calendar streaming to mirrors (deferred — Phase 4b.4c) |
+| **4** | Peering v1 | 8 items blocked on bindings reintroduction |
+| **5** | Code Quality Tooling Phase 7 | 15 deferred test implementation items |
