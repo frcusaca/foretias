@@ -2,7 +2,7 @@ INPUT:
 ```json
 {
   "description": "All sign/verify/gate call sites in the Rust workspace",
-  "source_root": "/home/hcbusy/webhash/foretias/p2p",
+  "source_root": "/home/hcbusy/opencodes/local/tmp/foretias-worktrees/CODE_QUALITY_TOOLING_4821/p2p",
   "test": "crypto_callsite_snapshot"
 }
 ```
@@ -112,6 +112,10 @@ core-engine/src/snapshot_signature.rs                            111  sign    le
 foretias-client/src/foretias.rs                                  341  verify  let result = cm.verify(foretis, signature, signature_algorithm, &content.to_vec(
 foretias-client/src/foretias.rs                                  616  verify  let verified = client.verify(content, &foretis, &sig, &alg).await.unwrap();
 foretias-client/src/foretias.rs                                  627  verify  let verified = client.verify(b"tampered", &foretis, &sig, &alg).await.unwrap();
+foretias-server/src/calendar/mod.rs                              222  sign    let sig = key.sign(foretis_bytes)?;
+foretias-server/src/calendar/task_queue.rs                       595  sign    match key.sign(data) {
+foretias-server/src/calendar_store/mod.rs                        221  gate    return Some(CleanAuthenticated::from_trusted(record));
+foretias-server/src/calendar_store/mod.rs                        271  gate    found.push((cn, CleanAuthenticated::from_trusted(record)));
 foretias-server/src/communerd/communerdette.rs                   293  gate    pub type UnverifiedSignatureEnvelopeChannelBinding = foretias_core::foretias::cl
 foretias-server/src/communerd/communerdette.rs                   304  verify  /// // VERIFY(remote-tbid, fast-key)
 foretias-server/src/communerd/communerdette.rs                   314  verify  /// // VERIFY(remote-tbid, slow-key)
@@ -218,6 +222,6 @@ crypto_callsite_snapshot — update with UPDATE_SNAPSHOT=1 when adding new crypt
 ```
 SIGNATURES:
 Public key: 4193efbf702cde19fbae087ea53189f67e7768ebe888e0816e24a27282a5b030
-Input signature: XjHNYkZ6L7a87pFmkmHyBj39ofhWg0Gh2EmeGLitRFPtupEN6ZFsd0Nl+Sx3sbFTcEuWuPCDF+duRzvKVNFzAQ==
-Result signature: gkXajw4VtehiMqrMCoNoHnVtF53V1SxVJ6iIfOWnvwP6JoHD1XQWarAKzBnNCgFcoGLZ2zhCUH7iLr7CCSoiCA==
-Comments signature: 2HyikmdP5Qd0ps7lh+0OOb8vtfEL+1fznKBsHy661ZmhOVBUnkIKzOOfW8CQp/PX9EgFsY9qREuI3PqqhRDJBQ==
+Input signature: nSzYFt28UzxquJxhWoHvc8oFCMjM9w2iCt1iSF9i0Ck/H9jKJMWnS3N63KuRLjei8PACCqCXixRpWagjLms3Aw==
+Result signature: x0gw+VlDWEc81AdDbYutej5sMAJMZKXbsgWgMgly5bWGLGEuCCa48lNmBHE3v+50uuXV25Om1HePFgJ7aBQgBg==
+Comments signature: xGAFhLx1BwnKh7L+x52eDLYkj56BRQ2AL6EvMh0RI7g+GcBiaaKiNJKZ7y2oRumFBrV15WC4DMRK+i0QDQPCCQ==
