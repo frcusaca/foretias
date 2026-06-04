@@ -546,7 +546,9 @@ async fn cmd_stamp(
     Ok(())
 }
 
-async fn cmd_verify(
+/// Configuration for the `verify` subcommand.
+#[derive(Debug, Clone)]
+struct VerifyConfig {
     message: Option<String>,
     message_file: Option<String>,
     foretis: Option<String>,
@@ -555,9 +557,11 @@ async fn cmd_verify(
     signature_algorithm: String,
     verify_output: Option<String>,
     server_addr: String,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let content = read_message(message, message_file)?;
-    let stamp_str = read_foretis(foretis, foretis_file)?;
+}
+
+async fn cmd_verify(config: VerifyConfig) -> Result<(), Box<dyn std::error::Error>> {
+    let content = read_message(config.message, config.message_file)?;
+    let stamp_str = read_foretis(config.foretis, config.foretis_file)?;
     let stamp_obj: serde_json::Value = serde_json::from_str(&stamp_str)?;
     let foretis: foretias_core::foretias::tick::Foretis = serde_json::from_value(
         stamp_obj
@@ -566,7 +570,7 @@ async fn cmd_verify(
             .unwrap_or(stamp_obj.clone()),
     )?;
     // v2: prefer CLI --signature, fall back to stamp object's signature field
-    let sig_hex = signature.clone().unwrap_or_else(|| {
+    let sig_hex = config.signature.clone().unwrap_or_else(|| {
         stamp_obj
             .get("signature")
             .and_then(|v| v.as_str())
@@ -574,8 +578,8 @@ async fn cmd_verify(
             .to_string()
     });
     let signature_bytes = hex::decode(&sig_hex).unwrap_or_default();
-    let sig_alg = if signature.is_some() {
-        &signature_algorithm
+    let sig_alg = if config.signature.is_some() {
+        &config.signature_algorithm
     } else {
         stamp_obj
             .get("signature_algorithm")
@@ -583,7 +587,7 @@ async fn cmd_verify(
             .unwrap_or("Ed25519")
     };
 
-    let client = Foretias::connect_one("cli-verify".into(), server_addr.clone(), None)?;
+    let client = Foretias::connect_one("cli-verify".into(), config.server_addr.clone(), None)?;
 
     let valid = client
         .verify(&content, &foretis, &signature_bytes, sig_alg)
@@ -596,7 +600,7 @@ async fn cmd_verify(
     });
 
     let output = serde_json::to_string_pretty(&result)?;
-    match verify_output {
+    match config.verify_output {
         Some(path) => std::fs::write(&path, &output)
             .map_err(|e| format!("Failed to write {}: {}", path, e))?,
         None => println!("{}", output),
@@ -864,7 +868,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             verify_output,
             server,
         } => {
-            cmd_verify(
+            cmd_verify(VerifyConfig {
                 message,
                 message_file,
                 foretis,
@@ -872,8 +876,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 signature,
                 signature_algorithm,
                 verify_output,
-                server,
-            )
+                server_addr: server,
+            })
             .await
         }
         Commands::VerifyWithProof {
