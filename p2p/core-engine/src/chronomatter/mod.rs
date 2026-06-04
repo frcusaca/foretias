@@ -47,6 +47,9 @@ pub struct Chronomatter {
     chronon_stamp_count: AtomicU64,
 }
 
+/// Result of building an auto-attestation: (signature, slow_signature, nonce, stamp_count).
+type AutoAttestationResult = (Vec<u8>, Vec<u8>, [u8; 16], u64);
+
 impl Chronomatter {
     pub fn new(
         chronon_ns: u64,
@@ -207,7 +210,7 @@ impl Chronomatter {
         &self,
         tick: u64,
         new_pub: [u8; 32],
-    ) -> Result<(Vec<u8>, Vec<u8>, [u8; 16], u64), NodeError> {
+    ) -> Result<AutoAttestationResult, NodeError> {
         let tbid_str = self.tbid.to_hex();
         let stamps = self.chronon_stamp_count.swap(0, SeqCst);
 

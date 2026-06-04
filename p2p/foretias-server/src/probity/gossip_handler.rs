@@ -103,6 +103,8 @@ pub fn handle_gossip_message(
     Ok(())
 }
 
+/// Reserved for future use in binding proof verification.
+#[allow(dead_code)]
 fn verify_report_signature(
     report: &ProbityReport,
     crypto: &dyn CryptoServer,

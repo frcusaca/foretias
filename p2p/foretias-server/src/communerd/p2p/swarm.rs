@@ -362,7 +362,7 @@ async fn swarm_loop(
                             identify::Event::Received { peer_id, info, .. } => {
                                 let _ = tx.send(NetworkEvent::Identified {
                                     peer_id,
-                                    info: info.clone(),
+                                    info: Box::new(info.clone()),
                                 });
                                 tracing::info!(
                                     peer = %peer_id,

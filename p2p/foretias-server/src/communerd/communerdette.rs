@@ -47,7 +47,7 @@ use super::PeerRegistrationRecord;
 /// Phase 3.3/12: Host helpers, awaiting consumer tasks.
 #[allow(dead_code)]
 #[async_trait]
-pub(super) trait CommunerdetteHost: Send + Sync {
+pub(crate) trait CommunerdetteHost: Send + Sync {
     /// Look up a TBID in the DHT (cache + live lookup).
     async fn host_lookup_tbid(
         &self,
@@ -479,7 +479,7 @@ pub struct CommunerdetteStatusSummary {
 
 /// Private per-TBID relationship manager.
 #[doc(hidden)]
-pub(super) struct Communerdette {
+pub(crate) struct Communerdette {
     target_tbid: Tbid,
     state: RwLock<CommunerdetteState>,
     shutdown: CancellationToken,
@@ -1024,7 +1024,7 @@ impl PartialOrd for QueuedCommand {
 }
 
 /// Internal executor reference that the Communerdette holds for transport calls.
-struct CommunerdetteExecutor {
+pub(super) struct CommunerdetteExecutor {
     host: Arc<dyn CommunerdetteHost>,
     target_tbid: Tbid,
     crypto: Arc<dyn CryptoServer>,
@@ -3752,12 +3752,14 @@ mod tests {
         publish_calls: std::sync::Arc<Mutex<Vec<Vec<u8>>>>,
     }
 
+    type FbMockHostResult = (
+        FBMockHost,
+        std::sync::Arc<Mutex<Vec<crate::probity::ProbityReport>>>,
+        std::sync::Arc<Mutex<Vec<Vec<u8>>>>,
+    );
+
     impl FBMockHost {
-        fn new() -> (
-            Self,
-            std::sync::Arc<Mutex<Vec<crate::probity::ProbityReport>>>,
-            std::sync::Arc<Mutex<Vec<Vec<u8>>>>,
-        ) {
+        fn new() -> FbMockHostResult {
             let sign_calls = std::sync::Arc::new(Mutex::new(Vec::new()));
             let publish_calls = std::sync::Arc::new(Mutex::new(Vec::new()));
             (

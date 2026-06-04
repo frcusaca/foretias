@@ -13,7 +13,7 @@ pub enum NetworkEvent {
     },
     Identified {
         peer_id: PeerId,
-        info: identify::Info,
+        info: Box<identify::Info>,
     },
     PingSuccess {
         peer_id: PeerId,

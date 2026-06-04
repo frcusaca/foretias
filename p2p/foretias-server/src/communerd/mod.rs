@@ -55,6 +55,123 @@ use crate::probity::{handle_gossip_message, ProbityReport, ProbityStore};
 use libp2p::kad;
 use std::collections::HashMap;
 
+/// Type alias for pending DHT lookup responses (peer registration records).
+type PendingLookupMap = Arc<
+    parking_lot::Mutex<
+        HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<PeerRegistrationRecord>>>,
+    >,
+>;
+
+/// Type alias for pending DHT family lookup responses (raw bytes).
+type PendingFamilyLookupMap =
+    Arc<parking_lot::Mutex<HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<Vec<u8>>>>>>;
+
+/// Configuration for the gossip event loop.
+pub struct GossipLoopConfig {
+    /// Event receiver for network events.
+    pub events: tokio::sync::mpsc::UnboundedReceiver<NetworkEvent>,
+    /// Command sender for swarm commands.
+    pub cmd_tx: Option<tokio::sync::mpsc::UnboundedSender<SwarmCommand>>,
+    /// Probity store for reputation tracking.
+    pub probity_store: Arc<ProbityStore>,
+    /// Cryptographic server for signing and verification.
+    pub crypto: Arc<dyn CryptoServer>,
+    /// Clock for timestamp generation.
+    pub clock: Arc<dyn Clock>,
+    /// Collision detector for identity collision detection.
+    pub detector: Option<Arc<CollisionDetector>>,
+    /// Peer pool for managing peer connections.
+    pub peer_pool: PeerPool,
+    /// TBID index for peer registration records.
+    pub tbid_index: Arc<parking_lot::RwLock<HashMap<String, PeerRegistrationRecord>>>,
+    /// Pending DHT lookup responses.
+    pub pending_lookups: PendingLookupMap,
+    /// Pending DHT family lookup responses.
+    pub pending_family_lookups: PendingFamilyLookupMap,
+    /// Communerd reference for accessing communerdette and other resources.
+    pub communerd: Communerd,
+}
+
+impl GossipLoopConfig {
+    /// Create a new GossipLoopConfig from the given parameters.
+    pub fn new(
+        events: tokio::sync::mpsc::UnboundedReceiver<NetworkEvent>,
+        cmd_tx: Option<tokio::sync::mpsc::UnboundedSender<SwarmCommand>>,
+        probity_store: Arc<ProbityStore>,
+        crypto: Arc<dyn CryptoServer>,
+        clock: Arc<dyn Clock>,
+        detector: Option<Arc<CollisionDetector>>,
+        peer_pool: PeerPool,
+        tbid_index: Arc<parking_lot::RwLock<HashMap<String, PeerRegistrationRecord>>>,
+        pending_lookups: PendingLookupMap,
+        pending_family_lookups: PendingFamilyLookupMap,
+        communerd: Communerd,
+    ) -> Self {
+        Self {
+            events,
+            cmd_tx,
+            probity_store,
+            crypto,
+            clock,
+            detector,
+            peer_pool,
+            tbid_index,
+            pending_lookups,
+            pending_family_lookups,
+            communerd,
+        }
+    }
+}
+
+/// Configuration for self-registration refresh.
+pub struct RegistrationConfig {
+    /// Command sender for swarm commands.
+    pub cmd_tx: tokio::sync::mpsc::UnboundedSender<SwarmCommand>,
+    /// DHT namespace.
+    pub namespace: Arc<parking_lot::Mutex<String>>,
+    /// Time Being ID.
+    pub tbid: Tbid,
+    /// Chronon period in nanoseconds.
+    pub chronon_ns: u64,
+    /// JSON-RPC address.
+    pub json_rpc_addr: String,
+    /// Local multiaddress.
+    pub local_multiaddr: Arc<parking_lot::Mutex<Option<libp2p::Multiaddr>>>,
+    /// Local PeerId.
+    pub peer_id: libp2p::PeerId,
+    /// Clock for timestamp generation.
+    pub clock: Arc<dyn Clock>,
+    /// Cryptographic server for signing.
+    pub crypto: Arc<dyn CryptoServer>,
+}
+
+impl RegistrationConfig {
+    /// Create a new RegistrationConfig from the given parameters.
+    pub fn new(
+        cmd_tx: tokio::sync::mpsc::UnboundedSender<SwarmCommand>,
+        namespace: Arc<parking_lot::Mutex<String>>,
+        tbid: Tbid,
+        chronon_ns: u64,
+        json_rpc_addr: String,
+        local_multiaddr: Arc<parking_lot::Mutex<Option<libp2p::Multiaddr>>>,
+        peer_id: libp2p::PeerId,
+        clock: Arc<dyn Clock>,
+        crypto: Arc<dyn CryptoServer>,
+    ) -> Self {
+        Self {
+            cmd_tx,
+            namespace,
+            tbid,
+            chronon_ns,
+            json_rpc_addr,
+            local_multiaddr,
+            peer_id,
+            clock,
+            crypto,
+        }
+    }
+}
+
 /// Peer registration record stored in the DHT for self-registration and peer discovery.
 ///
 /// The `signature` field is an Ed25519 signature over `canonical_payload()` produced
@@ -180,14 +297,8 @@ pub struct Communerd {
     heartbeat_task: Arc<OnceLock<tokio::task::JoinHandle<()>>>,
     _local_multiaddr_arc: Arc<parking_lot::Mutex<Option<libp2p::Multiaddr>>>,
     tbid_index: Arc<parking_lot::RwLock<HashMap<String, PeerRegistrationRecord>>>,
-    pending_lookups: Arc<
-        parking_lot::Mutex<
-            HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<PeerRegistrationRecord>>>,
-        >,
-    >,
-    pending_family_lookups: Arc<
-        parking_lot::Mutex<HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<Vec<u8>>>>>,
-    >,
+    pending_lookups: PendingLookupMap,
+    pending_family_lookups: PendingFamilyLookupMap,
     calendar: Arc<parking_lot::RwLock<Option<Arc<Calendar>>>>,
     communerdettes: Arc<DashMap<Tbid, Arc<communerdette::Communerdette>>>,
     /// Family Cache: TBID → CleanFullyAuthenticated<FamilyRecord>.
@@ -541,7 +652,7 @@ impl Communerd {
         let pending_family_lookups = Arc::clone(&self.pending_family_lookups);
         let communerd_ref = self.clone();
         let task = tokio::spawn(async move {
-            Self::gossip_event_loop(
+            Self::gossip_event_loop(GossipLoopConfig::new(
                 events,
                 cmd_tx,
                 probity_store,
@@ -553,7 +664,7 @@ impl Communerd {
                 pending_lookups,
                 pending_family_lookups,
                 communerd_ref,
-            )
+            ))
             .await;
         });
         let _ = self.gossip_task.set(task);
@@ -636,30 +747,20 @@ impl Communerd {
         }
     }
 
-    async fn gossip_event_loop(
-        mut events: tokio::sync::mpsc::UnboundedReceiver<NetworkEvent>,
-        cmd_tx: Option<tokio::sync::mpsc::UnboundedSender<SwarmCommand>>,
-        probity_store: Arc<ProbityStore>,
-        crypto: Arc<dyn CryptoServer>,
-        clock: Arc<dyn Clock>,
-        detector: Option<Arc<CollisionDetector>>,
-        peer_pool: PeerPool,
-        tbid_index: Arc<parking_lot::RwLock<HashMap<String, PeerRegistrationRecord>>>,
-        pending_lookups: Arc<
-            parking_lot::Mutex<
-                HashMap<
-                    kad::RecordKey,
-                    tokio::sync::oneshot::Sender<Option<PeerRegistrationRecord>>,
-                >,
-            >,
-        >,
-        pending_family_lookups: Arc<
-            parking_lot::Mutex<
-                HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<Vec<u8>>>>,
-            >,
-        >,
-        communerd: Communerd,
-    ) {
+    async fn gossip_event_loop(config: GossipLoopConfig) {
+        let GossipLoopConfig {
+            mut events,
+            cmd_tx,
+            probity_store,
+            crypto,
+            clock,
+            detector,
+            peer_pool,
+            tbid_index,
+            pending_lookups,
+            pending_family_lookups,
+            communerd,
+        } = config;
         while let Some(event) = events.recv().await {
             match event {
                 NetworkEvent::GossipMessage { data, .. } => {
@@ -969,17 +1070,17 @@ impl Communerd {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
             loop {
                 interval.tick().await;
-                Self::refresh_self_registration(
+                Self::refresh_self_registration(RegistrationConfig::new(
                     cmd_tx_clone.clone(),
                     ns.clone(),
                     tbid_arc,
                     chronon,
-                    &rpc,
+                    rpc.clone(),
                     ma_arc.clone(),
                     pid,
                     Arc::clone(&clock_refresh),
                     Arc::clone(&crypto_refresh),
-                )
+                ))
                 .await;
             }
         });
@@ -987,17 +1088,18 @@ impl Communerd {
         Ok(())
     }
 
-    async fn refresh_self_registration(
-        cmd_tx: tokio::sync::mpsc::UnboundedSender<SwarmCommand>,
-        namespace: Arc<parking_lot::Mutex<String>>,
-        tbid: Tbid,
-        chronon_ns: u64,
-        json_rpc_addr: &str,
-        local_multiaddr: Arc<parking_lot::Mutex<Option<libp2p::Multiaddr>>>,
-        peer_id: libp2p::PeerId,
-        clock: Arc<dyn Clock>,
-        crypto: Arc<dyn CryptoServer>,
-    ) {
+    async fn refresh_self_registration(config: RegistrationConfig) {
+        let RegistrationConfig {
+            cmd_tx,
+            namespace,
+            tbid,
+            chronon_ns,
+            json_rpc_addr,
+            local_multiaddr,
+            peer_id,
+            clock,
+            crypto,
+        } = config;
         let ns = namespace.lock().clone();
         let key = kad::RecordKey::new(&format!("/foretias/{}/peers/v1", ns));
         let ma = match local_multiaddr.lock().clone() {
@@ -1008,7 +1110,7 @@ impl Communerd {
             peer_id: peer_id.to_string(),
             tbid: tbid.to_hex(),
             multiaddr: ma,
-            json_rpc: json_rpc_addr.to_string(),
+            json_rpc: json_rpc_addr.clone(),
             chronon_ns,
             registered_at_ns: clock.now_ns().unwrap_or(0),
             capabilities: vec![PeerCapability::AttestWilling],
