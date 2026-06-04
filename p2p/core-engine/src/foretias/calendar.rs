@@ -1,6 +1,6 @@
 //! In-memory Calendar with append-only tick records.
 
-use super::tick::{ChrononRecord, CalendarLookup, verify_pair};
+use super::tick::{verify_pair, CalendarLookup, ChrononRecord};
 use super::types::Tbid;
 use crate::crypto_server::CryptoServer;
 use crate::error::NodeError;
@@ -61,7 +61,9 @@ impl Calendar {
         let start_tick = start.unwrap_or(0);
         let end_tick = end.unwrap_or(u64::MAX);
 
-        let ticks: Vec<&ChrononRecord> = self.ticks.iter()
+        let ticks: Vec<&ChrononRecord> = self
+            .ticks
+            .iter()
             .filter(|t| t.chronon_number >= start_tick && t.chronon_number <= end_tick)
             .collect();
 
@@ -147,7 +149,8 @@ impl Calendar {
                 Ok(tmp)
             }
             (None, None) => Err(NodeError::Internal(format!(
-                "calendar file not found: {}", path
+                "calendar file not found: {}",
+                path
             ))),
         }
     }
@@ -207,7 +210,9 @@ impl Calendar {
 
 impl CalendarLookup for Calendar {
     fn get(&self, chronon_number: u64, count: usize) -> Result<Vec<ChrononRecord>, NodeError> {
-        Ok(self.ticks.iter()
+        Ok(self
+            .ticks
+            .iter()
             .filter(|t| t.chronon_number >= chronon_number)
             .take(count)
             .cloned()
@@ -322,8 +327,11 @@ mod tests {
     #[test]
     fn integrity_check_returns_empty_on_empty_calendar() {
         let cal = Calendar::new(Tbid::from_raw([0u8; 96]), "test");
-        let server = crypto_server::new_software(crate::crypto_server::ForetiasCurve::Ed25519).unwrap();
-        let results = cal.integrity_check(server.as_ref(), "test", None, None).unwrap();
+        let server =
+            crypto_server::new_software(crate::crypto_server::ForetiasCurve::Ed25519).unwrap();
+        let results = cal
+            .integrity_check(server.as_ref(), "test", None, None)
+            .unwrap();
         assert!(results.is_empty());
     }
 
@@ -331,39 +339,60 @@ mod tests {
     fn integrity_check_returns_empty_on_single_tick() {
         let mut cal = Calendar::new(Tbid::from_raw([0u8; 96]), "test");
         cal.append(make_tick(1)).unwrap();
-        let server = crypto_server::new_software(crate::crypto_server::ForetiasCurve::Ed25519).unwrap();
-        let results = cal.integrity_check(server.as_ref(), "test", None, None).unwrap();
+        let server =
+            crypto_server::new_software(crate::crypto_server::ForetiasCurve::Ed25519).unwrap();
+        let results = cal
+            .integrity_check(server.as_ref(), "test", None, None)
+            .unwrap();
         assert!(results.is_empty());
     }
 
     #[test]
     fn integrity_check_full_chain() {
-        use crate::core::identity::generate_ed25519_keypair;
-        use crate::core::signing::ed25519_sign;
-        use crate::core::bindings::ForetiasPrivKey32;
+        use crate::core::identity::{generate_ed25519_keypair, PrivKeyHandle};
+        use crate::core::signing::ed25519_sign_with_handle;
         use crate::foretias::tick::auto_attestation_blob_with_count;
-        use zeroize::Zeroizing;
 
-        let server = crypto_server::new_software(crate::crypto_server::ForetiasCurve::Ed25519).unwrap();
+        let server =
+            crypto_server::new_software(crate::crypto_server::ForetiasCurve::Ed25519).unwrap();
         let tbid = Tbid::from_raw([0xEE; 96]);
         let tbid_str = tbid.to_hex();
         let mut cal = Calendar::new(tbid, "full-chain");
 
-        let mut keypairs: Vec<([u8; 32], Zeroizing<[u8; 32]>)> = Vec::new();
+        PrivKeyHandle::init();
+        let mut keypairs: Vec<([u8; 32], PrivKeyHandle)> = Vec::new();
         for _ in 0..5 {
             let (pub_key, priv_key) = generate_ed25519_keypair().unwrap();
-            keypairs.push((pub_key.bytes, Zeroizing::new(priv_key.bytes)));
+            let handle = PrivKeyHandle::from_seed(&priv_key.bytes).unwrap();
+            keypairs.push((pub_key.bytes, handle));
         }
 
         for i in 0..5u64 {
             let (forward_foretis, backward_foretis, nonce) = if i == 0 {
-                let (attest_blob, nonce) = auto_attestation_blob_with_count(&tbid_str, i, &keypairs[0].0, i, &keypairs[0].0, 0).unwrap();
-                let sig = ed25519_sign(&ForetiasPrivKey32 { bytes: *keypairs[0].1 }, &attest_blob).unwrap();
+                let (attest_blob, nonce) = auto_attestation_blob_with_count(
+                    &tbid_str,
+                    i,
+                    &keypairs[0].0,
+                    i,
+                    &keypairs[0].0,
+                    0,
+                )
+                .unwrap();
+                let sig = ed25519_sign_with_handle(&keypairs[0].1, &attest_blob).unwrap();
                 (sig.bytes.to_vec(), sig.bytes.to_vec(), nonce)
             } else {
-                let (attest_blob, nonce) = auto_attestation_blob_with_count(&tbid_str, i - 1, &keypairs[(i-1) as usize].0, i, &keypairs[i as usize].0, 0).unwrap();
-                let fwd = ed25519_sign(&ForetiasPrivKey32 { bytes: *keypairs[(i-1) as usize].1 }, &attest_blob).unwrap();
-                let bwd = ed25519_sign(&ForetiasPrivKey32 { bytes: *keypairs[i as usize].1 }, &attest_blob).unwrap();
+                let (attest_blob, nonce) = auto_attestation_blob_with_count(
+                    &tbid_str,
+                    i - 1,
+                    &keypairs[(i - 1) as usize].0,
+                    i,
+                    &keypairs[i as usize].0,
+                    0,
+                )
+                .unwrap();
+                let fwd =
+                    ed25519_sign_with_handle(&keypairs[(i - 1) as usize].1, &attest_blob).unwrap();
+                let bwd = ed25519_sign_with_handle(&keypairs[i as usize].1, &attest_blob).unwrap();
                 (fwd.bytes.to_vec(), bwd.bytes.to_vec(), nonce)
             };
 
@@ -378,42 +407,63 @@ mod tests {
                 external_attestations: Vec::new(),
                 tb_version: 0,
                 tbid: Tbid::default(),
-            }).unwrap();
+            })
+            .unwrap();
         }
 
-        let results = cal.integrity_check(server.as_ref(), &tbid_str, None, None).unwrap();
+        let results = cal
+            .integrity_check(server.as_ref(), &tbid_str, None, None)
+            .unwrap();
         assert_eq!(results.len(), 4);
         assert!(results.iter().all(|&v| v));
     }
 
     #[test]
     fn integrity_check_partial_range() {
-        use crate::core::identity::generate_ed25519_keypair;
-        use crate::core::signing::ed25519_sign;
-        use crate::core::bindings::ForetiasPrivKey32;
+        use crate::core::identity::{generate_ed25519_keypair, PrivKeyHandle};
+        use crate::core::signing::ed25519_sign_with_handle;
         use crate::foretias::tick::auto_attestation_blob_with_count;
-        use zeroize::Zeroizing;
 
-        let server = crypto_server::new_software(crate::crypto_server::ForetiasCurve::Ed25519).unwrap();
+        let server =
+            crypto_server::new_software(crate::crypto_server::ForetiasCurve::Ed25519).unwrap();
         let tbid = Tbid::from_raw([0xFF; 96]);
         let tbid_str = tbid.to_hex();
         let mut cal = Calendar::new(tbid, "partial-range");
 
-        let mut keypairs: Vec<([u8; 32], Zeroizing<[u8; 32]>)> = Vec::new();
+        PrivKeyHandle::init();
+        let mut keypairs: Vec<([u8; 32], PrivKeyHandle)> = Vec::new();
         for _ in 0..5 {
             let (pub_key, priv_key) = generate_ed25519_keypair().unwrap();
-            keypairs.push((pub_key.bytes, Zeroizing::new(priv_key.bytes)));
+            let handle = PrivKeyHandle::from_seed(&priv_key.bytes).unwrap();
+            keypairs.push((pub_key.bytes, handle));
         }
 
         for i in 0..5u64 {
             let (forward_foretis, backward_foretis, nonce) = if i == 0 {
-                let (attest_blob, nonce) = auto_attestation_blob_with_count(&tbid_str, i, &keypairs[0].0, i, &keypairs[0].0, 0).unwrap();
-                let sig = ed25519_sign(&ForetiasPrivKey32 { bytes: *keypairs[0].1 }, &attest_blob).unwrap();
+                let (attest_blob, nonce) = auto_attestation_blob_with_count(
+                    &tbid_str,
+                    i,
+                    &keypairs[0].0,
+                    i,
+                    &keypairs[0].0,
+                    0,
+                )
+                .unwrap();
+                let sig = ed25519_sign_with_handle(&keypairs[0].1, &attest_blob).unwrap();
                 (sig.bytes.to_vec(), sig.bytes.to_vec(), nonce)
             } else {
-                let (attest_blob, nonce) = auto_attestation_blob_with_count(&tbid_str, i - 1, &keypairs[(i-1) as usize].0, i, &keypairs[i as usize].0, 0).unwrap();
-                let fwd = ed25519_sign(&ForetiasPrivKey32 { bytes: *keypairs[(i-1) as usize].1 }, &attest_blob).unwrap();
-                let bwd = ed25519_sign(&ForetiasPrivKey32 { bytes: *keypairs[i as usize].1 }, &attest_blob).unwrap();
+                let (attest_blob, nonce) = auto_attestation_blob_with_count(
+                    &tbid_str,
+                    i - 1,
+                    &keypairs[(i - 1) as usize].0,
+                    i,
+                    &keypairs[i as usize].0,
+                    0,
+                )
+                .unwrap();
+                let fwd =
+                    ed25519_sign_with_handle(&keypairs[(i - 1) as usize].1, &attest_blob).unwrap();
+                let bwd = ed25519_sign_with_handle(&keypairs[i as usize].1, &attest_blob).unwrap();
                 (fwd.bytes.to_vec(), bwd.bytes.to_vec(), nonce)
             };
 
@@ -428,10 +478,13 @@ mod tests {
                 external_attestations: Vec::new(),
                 tb_version: 0,
                 tbid: Tbid::default(),
-            }).unwrap();
+            })
+            .unwrap();
         }
 
-        let results = cal.integrity_check(server.as_ref(), &tbid_str, Some(1), Some(3)).unwrap();
+        let results = cal
+            .integrity_check(server.as_ref(), &tbid_str, Some(1), Some(3))
+            .unwrap();
         assert_eq!(results.len(), 2);
         assert!(results.iter().all(|&v| v));
     }
@@ -454,7 +507,10 @@ mod tests {
         cal.save(path).unwrap();
 
         // .tmp file must not exist after successful save
-        assert!(!Path::new(&tmp_path).exists(), ".tmp should be cleaned up after atomic save");
+        assert!(
+            !Path::new(&tmp_path).exists(),
+            ".tmp should be cleaned up after atomic save"
+        );
 
         // Main file must exist and be valid
         let loaded = Calendar::load(path).unwrap();
@@ -483,7 +539,10 @@ mod tests {
         // Load should recover from .tmp
         let recovered = Calendar::load(path).unwrap();
         assert_eq!(recovered.latest(), Some(2), "should recover newer .tmp");
-        assert!(!Path::new(&tmp_path).exists(), ".tmp should be cleaned up after recovery");
+        assert!(
+            !Path::new(&tmp_path).exists(),
+            ".tmp should be cleaned up after recovery"
+        );
 
         std::fs::remove_file(path).ok();
     }
@@ -507,8 +566,15 @@ mod tests {
 
         // Load should prefer main file
         let loaded = Calendar::load(path).unwrap();
-        assert_eq!(loaded.latest(), Some(3), "should prefer main file over stale .tmp");
-        assert!(!Path::new(&tmp_path).exists(), "stale .tmp should be cleaned up");
+        assert_eq!(
+            loaded.latest(),
+            Some(3),
+            "should prefer main file over stale .tmp"
+        );
+        assert!(
+            !Path::new(&tmp_path).exists(),
+            "stale .tmp should be cleaned up"
+        );
 
         std::fs::remove_file(path).ok();
     }
@@ -528,7 +594,10 @@ mod tests {
         // Load should ignore corrupt .tmp and load main file, removing the corrupt .tmp
         let loaded = Calendar::load(path).unwrap();
         assert_eq!(loaded.latest(), Some(1));
-        assert!(!Path::new(&tmp_path).exists(), "corrupt .tmp must be removed by crash-recovery scan");
+        assert!(
+            !Path::new(&tmp_path).exists(),
+            "corrupt .tmp must be removed by crash-recovery scan"
+        );
 
         std::fs::remove_file(path).ok();
     }
@@ -540,7 +609,8 @@ mod tests {
         cal.append(make_tick(1)).unwrap();
         cal.save(path).unwrap();
 
-        let server = crypto_server::new_software(crate::crypto_server::ForetiasCurve::Ed25519).unwrap();
+        let server =
+            crypto_server::new_software(crate::crypto_server::ForetiasCurve::Ed25519).unwrap();
         let loaded = Calendar::load_and_verify(path, server.as_ref(), "test", None, None);
         // Single tick calendar has no pairs to verify, so it passes
         assert!(loaded.is_ok());
@@ -551,11 +621,9 @@ mod tests {
 
     #[test]
     fn load_and_verify_rejects_corrupted_calendar() {
-        use crate::core::identity::generate_ed25519_keypair;
-        use crate::core::signing::ed25519_sign;
-        use crate::core::bindings::ForetiasPrivKey32;
+        use crate::core::identity::{generate_ed25519_keypair, PrivKeyHandle};
+        use crate::core::signing::ed25519_sign_with_handle;
         use crate::foretias::tick::auto_attestation_blob_with_count;
-        use zeroize::Zeroizing;
 
         let path = "/tmp/foretias-test-load-verify-corrupt.json";
         let tbid = Tbid::from_raw([0xBB; 96]);
@@ -565,11 +633,12 @@ mod tests {
         // Generate two keypairs
         let (pk1, sk1) = generate_ed25519_keypair().unwrap();
         let (pk2, _sk2) = generate_ed25519_keypair().unwrap();
-        let sk1 = Zeroizing::new(sk1.bytes);
+        let sk1_handle = PrivKeyHandle::from_seed(&sk1.bytes).unwrap();
 
         // Tick 1 with valid auto-attestation
-        let (blob1, nonce1) = auto_attestation_blob_with_count(&tbid_str, 1, &pk1.bytes, 1, &pk1.bytes, 0).unwrap();
-        let sig1 = ed25519_sign(&ForetiasPrivKey32 { bytes: *sk1 }, &blob1).unwrap();
+        let (blob1, nonce1) =
+            auto_attestation_blob_with_count(&tbid_str, 1, &pk1.bytes, 1, &pk1.bytes, 0).unwrap();
+        let sig1 = ed25519_sign_with_handle(&sk1_handle, &blob1).unwrap();
 
         cal.append(ChrononRecord {
             chronon_number: 1,
@@ -582,12 +651,14 @@ mod tests {
             external_attestations: Vec::new(),
             tb_version: 0,
             tbid: Tbid::default(),
-        }).unwrap();
+        })
+        .unwrap();
 
         // Tick 2 with TAMPERED forward foretis (signed with wrong key)
-        let (blob2, nonce2) = auto_attestation_blob_with_count(&tbid_str, 1, &pk1.bytes, 2, &pk2.bytes, 0).unwrap();
+        let (blob2, nonce2) =
+            auto_attestation_blob_with_count(&tbid_str, 1, &pk1.bytes, 2, &pk2.bytes, 0).unwrap();
         // Sign with tick 1's key for forward, but use garbage for backward
-        let fwd_sig = ed25519_sign(&ForetiasPrivKey32 { bytes: *sk1 }, &blob2).unwrap();
+        let fwd_sig = ed25519_sign_with_handle(&sk1_handle, &blob2).unwrap();
         let mut backward_sig = fwd_sig.bytes.to_vec();
         backward_sig[0] ^= 0xFF; // tamper
 
@@ -602,11 +673,13 @@ mod tests {
             external_attestations: Vec::new(),
             tb_version: 0,
             tbid: Tbid::default(),
-        }).unwrap();
+        })
+        .unwrap();
 
         cal.save(path).unwrap();
 
-        let server = crypto_server::new_software(crate::crypto_server::ForetiasCurve::Ed25519).unwrap();
+        let server =
+            crypto_server::new_software(crate::crypto_server::ForetiasCurve::Ed25519).unwrap();
         let loaded = Calendar::load_and_verify(path, server.as_ref(), &tbid_str, None, None);
         // Tampered backward signature should cause integrity check failure
         assert!(loaded.is_err());

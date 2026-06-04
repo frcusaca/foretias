@@ -47,21 +47,25 @@ pub fn ed25519_verify(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::identity::generate_ed25519_keypair;
+    use crate::core::identity::{generate_ed25519_keypair, PrivKeyHandle};
 
     #[test]
-    fn ed25519_sign_produces_valid_signature() {
+    fn ed25519_sign_with_handle_produces_valid_signature() {
+        PrivKeyHandle::init();
         let (_pub_key, priv_key) = generate_ed25519_keypair().unwrap();
+        let handle = PrivKeyHandle::from_seed(&priv_key.bytes).unwrap();
         let msg = b"test message for signing";
-        let sig = ed25519_sign(&priv_key, msg).unwrap();
+        let sig = ed25519_sign_with_handle(&handle, msg).unwrap();
         assert!(!sig.bytes.iter().all(|&b| b == 0));
     }
 
     #[test]
     fn ed25519_signatures_are_different_for_different_messages() {
+        PrivKeyHandle::init();
         let (_pub_key, priv_key) = generate_ed25519_keypair().unwrap();
-        let sig1 = ed25519_sign(&priv_key, b"msg1").unwrap();
-        let sig2 = ed25519_sign(&priv_key, b"msg2").unwrap();
+        let handle = PrivKeyHandle::from_seed(&priv_key.bytes).unwrap();
+        let sig1 = ed25519_sign_with_handle(&handle, b"msg1").unwrap();
+        let sig2 = ed25519_sign_with_handle(&handle, b"msg2").unwrap();
         assert_ne!(sig1.bytes, sig2.bytes);
     }
 }
