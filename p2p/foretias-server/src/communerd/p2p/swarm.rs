@@ -385,9 +385,9 @@ async fn swarm_loop(
                             tracing::debug!(peer = %event.peer, rtt = ?rtt, "libp2p ping");
                         }
                     }
-                    SwarmEvent::Behaviour(ForetiasBehaviourEvent::Kad(event)) => {
-                        if let kad::Event::OutboundQueryProgressed { id, result, .. } = event {
-                           match result {
+                    SwarmEvent::Behaviour(ForetiasBehaviourEvent::Kad(
+                        kad::Event::OutboundQueryProgressed { id, result, .. },
+                    )) => match result {
                                kad::QueryResult::Bootstrap(Ok(_)) => {
                                    let _ = tx.send(NetworkEvent::DhtBootstrapComplete);
                                    tracing::info!("DHT bootstrap complete");
@@ -436,10 +436,8 @@ async fn swarm_loop(
                                         tracing::info!(peer = %peer_id, "DHT: discovered peer via providers");
                                     }
                                 }
-                                _ => {}
+                                 _ => {}
                             }
-                        }
-                     }
                       SwarmEvent::Behaviour(ForetiasBehaviourEvent::RequestResponse(event)) => {
                           match event {
                               request_response::Event::Message { peer, message, .. } => {

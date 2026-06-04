@@ -2,17 +2,23 @@
 
 use std::collections::HashMap;
 
-use chacha20poly1305::{ChaCha20Poly1305, Nonce, aead::{Aead, KeyInit}};
+use chacha20poly1305::{
+    aead::{Aead, KeyInit},
+    ChaCha20Poly1305, Nonce,
+};
 use zeroize::Zeroizing;
 
+use super::{
+    CryptoServerCapabilities, ForetiasCurve, FrostOps, HashOps, IdentityOps, KexOps, ProofOps,
+    PublicKeyBytes, RngOps, SealOps, SealedBlob, SignOps, VerifyOps,
+};
 use crate::core::bindings::*;
 use crate::core::identity::PrivKeyHandle;
 use crate::crypto_server::kem_mlkem;
-use crate::crypto_server::signing_sphincs;
 use crate::crypto_server::signing_dilithium;
+use crate::crypto_server::signing_sphincs;
 use crate::error::CryptoError;
 use crate::foretias::types::{SignatureAlgorithm, SignatureBytes};
-use super::{CryptoServerCapabilities, ForetiasCurve, PublicKeyBytes, SealedBlob, SignOps, VerifyOps, KexOps, HashOps, SealOps, RngOps, IdentityOps, FrostOps, ProofOps};
 
 /// Derive seal key via HKDF-SHA256 over the Ed25519 seed.
 /// The seed never leaves C memory; the derivation happens inside C11.
@@ -54,7 +60,9 @@ impl SoftwareCryptoServer {
             ForetiasCurve::Ed25519 => {
                 let handle = PrivKeyHandle::generate()?;
                 let pub_key_bytes: [u8; 32] = handle.public_key()?;
-                let pub_key = ForetiasPubKey32 { bytes: pub_key_bytes };
+                let pub_key = ForetiasPubKey32 {
+                    bytes: pub_key_bytes,
+                };
                 let peer_id = crate::core::identity::derive_ed25519_peer_id(&pub_key)?;
                 let seal_key = derive_seal_key(&handle)?;
                 let sphincs_keys = signing_sphincs::sphincs_keypair()?;
@@ -87,9 +95,7 @@ impl SoftwareCryptoServer {
                     mlkem_secret_key: Some(Zeroizing::new(mlkem_secret)),
                 })
             }
-            ForetiasCurve::P256 => {
-                Err(CryptoError::Unsupported("P-256 not implemented yet"))
-            }
+            ForetiasCurve::P256 => Err(CryptoError::Unsupported("P-256 not implemented yet")),
         }
     }
 
@@ -97,7 +103,9 @@ impl SoftwareCryptoServer {
         PrivKeyHandle::init();
         let handle = PrivKeyHandle::from_seed(seed)?;
         let pub_key_bytes: [u8; 32] = handle.public_key()?;
-        let pub_key = ForetiasPubKey32 { bytes: pub_key_bytes };
+        let pub_key = ForetiasPubKey32 {
+            bytes: pub_key_bytes,
+        };
         let peer_id = crate::core::identity::derive_ed25519_peer_id(&pub_key)?;
         let seal_key = derive_seal_key(&handle)?;
         let sphincs_keys = signing_sphincs::sphincs_keypair()?;
@@ -149,24 +157,34 @@ impl SignOps for SoftwareCryptoServer {
         SignatureAlgorithm::Ed25519
     }
 
-    fn sign_with(&self, msg: &[u8], alg: SignatureAlgorithm) -> Result<SignatureBytes, CryptoError> {
+    fn sign_with(
+        &self,
+        msg: &[u8],
+        alg: SignatureAlgorithm,
+    ) -> Result<SignatureBytes, CryptoError> {
         match alg {
             SignatureAlgorithm::Ed25519 => {
                 let sig = self.sign(msg)?;
                 Ok(sig.bytes.to_vec().into())
             }
             SignatureAlgorithm::SPHINCS_SHA2_128S => {
-                let secret = self.sphincs_secret_key.as_ref()
+                let secret = self
+                    .sphincs_secret_key
+                    .as_ref()
                     .ok_or(CryptoError::BadKey)?;
                 signing_sphincs::sphincs_sign(secret, msg)
             }
             SignatureAlgorithm::Dilithium3 => {
-                let secret = self.dilithium_secret_key.as_ref()
+                let secret = self
+                    .dilithium_secret_key
+                    .as_ref()
                     .ok_or(CryptoError::BadKey)?;
                 signing_dilithium::dilithium3_sign(secret, msg)
             }
             SignatureAlgorithm::SLH_DSA_SHA2_256F => {
-                let secret = self.sphincs_sha2_256f_secret_key.as_ref()
+                let secret = self
+                    .sphincs_sha2_256f_secret_key
+                    .as_ref()
                     .ok_or(CryptoError::BadKey)?;
                 signing_sphincs::sphincs_sha2_256f_sign(secret, msg)
             }
@@ -175,32 +193,59 @@ impl SignOps for SoftwareCryptoServer {
 }
 
 impl VerifyOps for SoftwareCryptoServer {
-    fn verify_ed25519(&self, pub_key: &ForetiasPubKey32, msg: &[u8], sig: &ForetiasSig64) -> Result<bool, CryptoError> {
+    fn verify_ed25519(
+        &self,
+        pub_key: &ForetiasPubKey32,
+        msg: &[u8],
+        sig: &ForetiasSig64,
+    ) -> Result<bool, CryptoError> {
         crate::core::signing::ed25519_verify(pub_key, msg, sig)
     }
 
-    fn verify_p256(&self, _pub_key: &ForetiasPubKey33, _msg: &[u8], _sig: &ForetiasSig64) -> Result<bool, CryptoError> {
+    fn verify_p256(
+        &self,
+        _pub_key: &ForetiasPubKey33,
+        _msg: &[u8],
+        _sig: &ForetiasSig64,
+    ) -> Result<bool, CryptoError> {
         Err(CryptoError::Unsupported("not supported"))
     }
 
-    fn verify_with(&self, pub_key: &[u8], alg_id: &str, msg: &[u8], sig: &[u8]) -> Result<bool, CryptoError> {
+    fn verify_with(
+        &self,
+        pub_key: &[u8],
+        alg_id: &str,
+        msg: &[u8],
+        sig: &[u8],
+    ) -> Result<bool, CryptoError> {
         match SignatureAlgorithm::from_id_string(alg_id)? {
             SignatureAlgorithm::Ed25519 => {
-                let pk_bytes: [u8; 32] = pub_key[..32].try_into()
-                    .map_err(|_| CryptoError::BadKey)?;
-                let sig_bytes: [u8; 64] = sig[..64].try_into()
+                let pk_bytes: [u8; 32] =
+                    pub_key[..32].try_into().map_err(|_| CryptoError::BadKey)?;
+                let sig_bytes: [u8; 64] = sig[..64]
+                    .try_into()
                     .map_err(|_| CryptoError::BadSignature)?;
-                self.verify_ed25519(&ForetiasPubKey32 { bytes: pk_bytes }, msg, &ForetiasSig64 { bytes: sig_bytes })
+                self.verify_ed25519(
+                    &ForetiasPubKey32 { bytes: pk_bytes },
+                    msg,
+                    &ForetiasSig64 { bytes: sig_bytes },
+                )
             }
-            SignatureAlgorithm::SPHINCS_SHA2_128S => {
-                signing_sphincs::sphincs_verify(&SignatureBytes::from(pub_key.to_vec()), msg, &SignatureBytes::from(sig.to_vec()))
-            }
-            SignatureAlgorithm::Dilithium3 => {
-                signing_dilithium::dilithium3_verify(&SignatureBytes::from(pub_key.to_vec()), msg, &SignatureBytes::from(sig.to_vec()))
-            }
-            SignatureAlgorithm::SLH_DSA_SHA2_256F => {
-                signing_sphincs::sphincs_sha2_256f_verify(&SignatureBytes::from(pub_key.to_vec()), msg, &SignatureBytes::from(sig.to_vec()))
-            }
+            SignatureAlgorithm::SPHINCS_SHA2_128S => signing_sphincs::sphincs_verify(
+                &SignatureBytes::from(pub_key.to_vec()),
+                msg,
+                &SignatureBytes::from(sig.to_vec()),
+            ),
+            SignatureAlgorithm::Dilithium3 => signing_dilithium::dilithium3_verify(
+                &SignatureBytes::from(pub_key.to_vec()),
+                msg,
+                &SignatureBytes::from(sig.to_vec()),
+            ),
+            SignatureAlgorithm::SLH_DSA_SHA2_256F => signing_sphincs::sphincs_sha2_256f_verify(
+                &SignatureBytes::from(pub_key.to_vec()),
+                msg,
+                &SignatureBytes::from(sig.to_vec()),
+            ),
         }
     }
 }
@@ -231,21 +276,20 @@ impl SealOps for SoftwareCryptoServer {
             .map_err(|_| CryptoError::Internal(1))?;
         let mut nonce = [0u8; 12];
         crate::core::rng::random_bytes(&mut nonce)?;
-        let ct = cipher.encrypt(
-            Nonce::from_slice(&nonce),
-            data.as_ref(),
-        )
+        let ct = cipher
+            .encrypt(Nonce::from_slice(&nonce), data.as_ref())
             .map_err(|_| CryptoError::Internal(1))?;
-        Ok(SealedBlob { ciphertext: ct.into(), nonce: nonce.to_vec().into() })
+        Ok(SealedBlob {
+            ciphertext: ct.into(),
+            nonce: nonce.to_vec().into(),
+        })
     }
 
     fn unseal_for_self(&self, blob: &SealedBlob) -> Result<Vec<u8>, CryptoError> {
         let cipher = ChaCha20Poly1305::new_from_slice(&*self.seal_key)
             .map_err(|_| CryptoError::Internal(1))?;
-        let pt = cipher.decrypt(
-            Nonce::from_slice(&blob.nonce),
-            blob.ciphertext.as_ref(),
-        )
+        let pt = cipher
+            .decrypt(Nonce::from_slice(&blob.nonce), blob.ciphertext.as_ref())
             .map_err(|_| CryptoError::BadSignature)?;
         Ok(pt)
     }
@@ -258,9 +302,15 @@ impl RngOps for SoftwareCryptoServer {
 }
 
 impl IdentityOps for SoftwareCryptoServer {
-    fn public_key(&self) -> PublicKeyBytes { self.pub_key }
-    fn peer_id(&self) -> ForetiasPeerID { self.peer_id }
-    fn curve(&self) -> ForetiasCurve { self.curve }
+    fn public_key(&self) -> PublicKeyBytes {
+        self.pub_key
+    }
+    fn peer_id(&self) -> ForetiasPeerID {
+        self.peer_id
+    }
+    fn curve(&self) -> ForetiasCurve {
+        self.curve
+    }
 
     fn capabilities(&self) -> CryptoServerCapabilities {
         CryptoServerCapabilities {
@@ -277,12 +327,20 @@ impl IdentityOps for SoftwareCryptoServer {
 
 impl FrostOps for SoftwareCryptoServer {
     fn store_frost_share(&self, committee_id: &str, share: &[u8]) -> Result<(), CryptoError> {
-        self.frost_shares.lock().insert(committee_id.to_string(), Zeroizing::new(share.to_vec()));
+        self.frost_shares
+            .lock()
+            .insert(committee_id.to_string(), Zeroizing::new(share.to_vec()));
         Ok(())
     }
 
-    fn frost_sign_partial(&self, _committee_id: &str, _session: &[u8]) -> Result<Vec<u8>, CryptoError> {
-        Err(CryptoError::Unsupported("FROST signing not supported in software backend"))
+    fn frost_sign_partial(
+        &self,
+        _committee_id: &str,
+        _session: &[u8],
+    ) -> Result<Vec<u8>, CryptoError> {
+        Err(CryptoError::Unsupported(
+            "FROST signing not supported in software backend",
+        ))
     }
 }
 

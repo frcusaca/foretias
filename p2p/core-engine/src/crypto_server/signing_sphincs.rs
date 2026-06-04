@@ -20,9 +20,7 @@ pub fn sphincs_keypair() -> Result<(SignatureBytes, SignatureBytes), CryptoError
     secret.plaintext_len = FORETIAS_SIG_MAX_SECRET_BYTES as usize;
     let mut public: ForetiasPubKeyVar = unsafe { std::mem::zeroed() };
     public.len = FORETIAS_SIG_MAX_PUBKEY_BYTES as usize;
-    let rc = unsafe {
-        foretias_sphincs_sha2_128s_keypair(&mut secret, &mut public)
-    };
+    let rc = unsafe { foretias_sphincs_sha2_128s_keypair(&mut secret, &mut public) };
     c_result_to_error(rc)?;
     let ct_len = secret.plaintext_len + 16;
     let mut secret_bytes = Vec::with_capacity(ct_len + 24);
@@ -34,7 +32,10 @@ pub fn sphincs_keypair() -> Result<(SignatureBytes, SignatureBytes), CryptoError
 
 /// Sign a message with SPHINCS+ SHA2-128s. Returns the signature bytes.
 /// Secret is encrypted ciphertext + nonce (from sphincs_keypair).
-pub fn sphincs_sign(secret_key: &SignatureBytes, msg: &[u8]) -> Result<SignatureBytes, CryptoError> {
+pub fn sphincs_sign(
+    secret_key: &SignatureBytes,
+    msg: &[u8],
+) -> Result<SignatureBytes, CryptoError> {
     let mut secret: ForetiasSecretKeyVar = unsafe { std::mem::zeroed() };
     let nonce_start = secret_key.len() - 24;
     let ct_len = nonce_start;
@@ -43,9 +44,7 @@ pub fn sphincs_sign(secret_key: &SignatureBytes, msg: &[u8]) -> Result<Signature
     secret.plaintext_len = ct_len - 16;
     let mut sig: ForetiasSigVar = unsafe { std::mem::zeroed() };
     sig.len = FORETIAS_SIG_MAX_SIG_BYTES as usize;
-    let rc = unsafe {
-        foretias_sphincs_sha2_128s_sign(&secret, msg.as_ptr(), msg.len(), &mut sig)
-    };
+    let rc = unsafe { foretias_sphincs_sha2_128s_sign(&secret, msg.as_ptr(), msg.len(), &mut sig) };
     c_result_to_error(rc)?;
     let sig_bytes = sig.bytes[..sig.len].to_vec();
     Ok(sig_bytes.into())
@@ -85,9 +84,7 @@ pub fn sphincs_sha2_256f_keypair() -> Result<(SignatureBytes, SignatureBytes), C
     secret.plaintext_len = FORETIAS_SIG_MAX_SECRET_BYTES as usize;
     let mut public: ForetiasPubKeyVar = unsafe { std::mem::zeroed() };
     public.len = FORETIAS_SIG_MAX_PUBKEY_BYTES as usize;
-    let rc = unsafe {
-        foretias_sphincs_sha2_256f_keypair(&mut secret, &mut public)
-    };
+    let rc = unsafe { foretias_sphincs_sha2_256f_keypair(&mut secret, &mut public) };
     c_result_to_error(rc)?;
     let ct_len = secret.plaintext_len + 16;
     let mut secret_bytes = Vec::with_capacity(ct_len + 24);
@@ -111,9 +108,7 @@ pub fn sphincs_sha2_256f_sign(
     secret.plaintext_len = ct_len - 16;
     let mut sig: ForetiasSigVar = unsafe { std::mem::zeroed() };
     sig.len = FORETIAS_SIG_MAX_SIG_BYTES as usize;
-    let rc = unsafe {
-        foretias_sphincs_sha2_256f_sign(&secret, msg.as_ptr(), msg.len(), &mut sig)
-    };
+    let rc = unsafe { foretias_sphincs_sha2_256f_sign(&secret, msg.as_ptr(), msg.len(), &mut sig) };
     c_result_to_error(rc)?;
     let sig_bytes = sig.bytes[..sig.len].to_vec();
     Ok(sig_bytes.into())

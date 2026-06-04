@@ -1166,9 +1166,7 @@ impl Communerd {
         if let Some(record) = self.lookup_tbid_cached(tbid_hex) {
             return Some(record);
         }
-        let Some(cmd_tx) = self.p2p_cmd_tx.get() else {
-            return None;
-        };
+        let cmd_tx = self.p2p_cmd_tx.get()?;
         let key = kad::RecordKey::new(&format!("/foretias/{}/tbid/{}/v1", namespace, tbid_hex));
         let (tx, rx) = tokio::sync::oneshot::channel();
         self.pending_lookups.lock().insert(key.clone(), tx);
