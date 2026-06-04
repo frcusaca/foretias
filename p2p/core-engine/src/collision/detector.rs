@@ -2,9 +2,9 @@
 
 use std::collections::VecDeque;
 
+use crate::collision::heartbeat::Heartbeat;
 use crate::core::bindings::ForetiasPubKey32;
 use crate::crypto_server::CryptoServer;
-use crate::collision::heartbeat::Heartbeat;
 
 /// Event emitted when a collision is confirmed.
 #[derive(Debug, Clone)]
@@ -17,7 +17,7 @@ pub enum CollisionEvent {
 pub struct CollisionDetector {
     my_peer_id: String,
     my_pub_key: ForetiasPubKey32,
-    my_nonces:  parking_lot::Mutex<VecDeque<[u8; 16]>>,
+    my_nonces: parking_lot::Mutex<VecDeque<[u8; 16]>>,
     nonce_window: usize,
 }
 
@@ -55,27 +55,36 @@ impl CollisionDetector {
 
         let sig_bytes: [u8; 64] = hb.signature.get(..64)?.try_into().ok()?;
         let sig = crate::core::bindings::ForetiasSig64 { bytes: sig_bytes };
-        let valid = crypto.verify_ed25519(&self.my_pub_key, &hb.canonical(), &sig).ok()?;
+        let valid = crypto
+            .verify_ed25519(&self.my_pub_key, &hb.canonical(), &sig)
+            .ok()?;
         if !valid {
             return None;
         }
 
-        Some(CollisionEvent::Confirmed { foreign_heartbeat: hb.clone() })
+        Some(CollisionEvent::Confirmed {
+            foreign_heartbeat: hb.clone(),
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::identity::generate_ed25519_keypair;
     use crate::crypto_server;
     use crate::crypto_server::ForetiasCurve;
-    use crate::core::identity::generate_ed25519_keypair;
 
     fn make_server() -> Box<dyn CryptoServer> {
         crypto_server::new_software(ForetiasCurve::Ed25519).unwrap()
     }
 
-    fn build_heartbeat(peer_id: &str, nonce: [u8; 16], server: &dyn CryptoServer, timestamp_ns: u64) -> Heartbeat {
+    fn build_heartbeat(
+        peer_id: &str,
+        nonce: [u8; 16],
+        server: &dyn CryptoServer,
+        timestamp_ns: u64,
+    ) -> Heartbeat {
         let mut hb = Heartbeat {
             peer_id: peer_id.to_string(),
             timestamp_ns,
@@ -133,6 +142,8 @@ mod tests {
 
     #[test]
     fn detector_confirms_collision() {
+        use crate::core::identity::PrivKeyHandle;
+
         let server = make_server();
         let (pub_key, priv_key) = generate_ed25519_keypair().unwrap();
         let detector = CollisionDetector::new("my-peer".to_string(), pub_key, 10);
@@ -147,11 +158,8 @@ mod tests {
             curve: 1,
             signature: vec![].into(),
         };
-        let _sig_bytes: [u8; 32] = priv_key.bytes;
-        let sig = crate::core::signing::ed25519_sign(
-            &crate::core::bindings::ForetiasPrivKey32 { bytes: priv_key.bytes },
-            &hb.canonical(),
-        ).unwrap();
+        let handle = PrivKeyHandle::from_seed(&priv_key.bytes).unwrap();
+        let sig = crate::core::signing::ed25519_sign_with_handle(&handle, &hb.canonical()).unwrap();
         *hb.signature = sig.bytes.to_vec();
 
         let result = detector.on_heartbeat(&hb, server.as_ref());
