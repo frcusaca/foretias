@@ -1,0 +1,21 @@
+name: Clippy
+
+on: [push, pull_request]
+
+jobs:
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Install system dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential cmake clang libsodium-dev libssl-dev
+      - name: Run Clippy
+        working-directory: p2p
+        run: cargo clippy --workspace --all-targets -- -D warnings
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: 10
