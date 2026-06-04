@@ -2,10 +2,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::p2p::{CommunerdConfig, DHTConfig, MutualAttestConfig};
-use super::chronomatter::{ChronomatterConfig, KeyRotationConfig};
 use super::calendar::{CalendarConfig, EncryptionConfig};
+use super::chronomatter::{ChronomatterConfig, KeyRotationConfig};
 use super::node::NodeConfig;
+use super::p2p::{CommunerdConfig, DHTConfig, MutualAttestConfig};
 
 /// Logging configuration for the TimeFamily logger.
 ///
@@ -99,22 +99,6 @@ impl Default for TimeFamilyConfig {
     }
 }
 
-impl TimeFamilyConfig {
-    /// Load from a JSON file path, falling back to defaults on error.
-    pub fn load(path: &str) -> Self {
-        std::fs::read_to_string(path)
-            .ok()
-            .and_then(|s| serde_json::from_str(&s).ok())
-            .unwrap_or_default()
-    }
-
-    /// Returns the default path: ~/.config/foretias/foretias.json
-    pub fn default_path() -> String {
-        std::env::var("HOME")
-            .map(|h| format!("{}/.config/foretias/foretias.json", h))
-            .unwrap_or_else(|_| ".config/foretias/foretias.json".to_string())
-    }
-
 /// CLI and config-file parameters for building a TimeFamilyConfig.
 #[derive(Debug, Clone)]
 pub struct TimeFamilyCliConfig {
@@ -136,6 +120,21 @@ pub struct TimeFamilyCliConfig {
 }
 
 impl TimeFamilyConfig {
+    /// Load from a JSON file path, falling back to defaults on error.
+    pub fn load(path: &str) -> Self {
+        std::fs::read_to_string(path)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default()
+    }
+
+    /// Returns the default path: ~/.config/foretias/foretias.json
+    pub fn default_path() -> String {
+        std::env::var("HOME")
+            .map(|h| format!("{}/.config/foretias/foretias.json", h))
+            .unwrap_or_else(|_| ".config/foretias/foretias.json".to_string())
+    }
+
     /// Build a TimeFamilyConfig from CLI arguments, optionally merging with a config file.
     pub fn from_cli_and_file(cli: TimeFamilyCliConfig) -> Self {
         let mut cfg = if let Some(path) = cli.config_file_path.as_deref() {
