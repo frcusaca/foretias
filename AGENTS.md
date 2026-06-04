@@ -563,6 +563,30 @@ Major: Refactor CLI, Phase: Discussion with Human--complete
 opencode 1.14.39, Qwen3.6-27B-AWQ-BF16-INT4
 ```
 
+### Code Quality Tooling
+
+The project uses the following code quality tools and configurations:
+
+| Tool | Config | Baseline | CI |
+|------|--------|----------|----|
+| **Clippy** | `p2p/clippy.toml` | `docs/security/clippy-baseline.md` | `.github/workflows/clippy.yml` |
+| **rustfmt** | `p2p/rustfmt.toml` | — | `.github/workflows/rustfmt.yml` |
+| **cargo-geiger** | — | `docs/security/cargo-geiger-baseline.md` | — |
+| **.editorconfig** | `.editorconfig` | — | — |
+
+**Before committing**, run:
+```bash
+cd p2p && cargo clippy --workspace --all-targets  # Must pass (zero warnings)
+cd p2p && cargo fmt --check                       # Must pass (no formatting changes)
+```
+
+**Clippy configuration:** `too-many-lines-threshold = 100`, `too-many-arguments-threshold = 7`
+**rustfmt configuration:** `max_width = 100`, `tab_spaces = 4`, `edition = "2021"`
+**cargo-geiger baseline:** foretias-server has 302/1,075 unsafe functions (expected — libp2p + FFI). foretias-core and foretias-client own code has 0/0 unsafe.
+
+**Known flaky tests:**
+- `snapshot_suite::tests::compare_mismatch_when_different` — PID collision in parallel runs. Passes when run individually.
+
 ## Development Rules
 
 **NEVER** start file changes for project Phase or larger WHEN any tests are broken.
