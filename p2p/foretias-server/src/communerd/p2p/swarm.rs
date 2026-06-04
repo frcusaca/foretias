@@ -386,62 +386,59 @@ async fn swarm_loop(
                         }
                     }
                     SwarmEvent::Behaviour(ForetiasBehaviourEvent::Kad(event)) => {
-                        match event {
-                            kad::Event::OutboundQueryProgressed { id, result, .. } => {
-                                match result {
-                                    kad::QueryResult::Bootstrap(Ok(_)) => {
-                                        let _ = tx.send(NetworkEvent::DhtBootstrapComplete);
-                                        tracing::info!("DHT bootstrap complete");
+                        if let kad::Event::OutboundQueryProgressed { id, result, .. } = event {
+                           match result {
+                               kad::QueryResult::Bootstrap(Ok(_)) => {
+                                   let _ = tx.send(NetworkEvent::DhtBootstrapComplete);
+                                   tracing::info!("DHT bootstrap complete");
+                               }
+                               kad::QueryResult::GetRecord(Ok(kad::GetRecordOk::FoundRecord(kad::PeerRecord { record, .. }))) => {
+                                   if let Some(entry) = pending_get_record.get_mut(&id) {
+                                       entry.1.push(record);
+                                   }
+                               }
+                               kad::QueryResult::GetRecord(Ok(kad::GetRecordOk::FinishedWithNoAdditionalRecord { .. })) => {
+                                   if let Some((key, records)) = pending_get_record.remove(&id) {
+                                       let _ = tx.send(NetworkEvent::RecordRetrieved {
+                                           key,
+                                           records,
+                                       });
+                                       tracing::info!("DHT: GetRecord query finished");
+                                   }
+                               }
+                               kad::QueryResult::PutRecord(Ok(kad::PutRecordOk { .. })) => {
+                                   if let Some(k) = pending_put_record.remove(&id) {
+                                       let _ = tx.send(NetworkEvent::RecordPutOk { key: k });
+                                       tracing::info!("DHT: PutRecord succeeded");
+                                   }
+                               }
+                               kad::QueryResult::PutRecord(Err(e)) => {
+                                   if let Some(k) = pending_put_record.remove(&id) {
+                                       let _ = tx.send(NetworkEvent::RecordPutError {
+                                           key: k,
+                                           error: e.to_string(),
+                                       });
+                                       tracing::warn!(?e, "DHT: PutRecord failed");
+                                   }
+                               }
+                               kad::QueryResult::GetRecord(Err(e)) => {
+                                   if let Some((key, _)) = pending_get_record.remove(&id) {
+                                       tracing::warn!(?e, key = ?key.to_vec(), "DHT: GetRecord query failed");
+                                   }
+                               }
+                                kad::QueryResult::GetProviders(Ok(kad::GetProvidersOk::FoundProviders { providers, .. })) => {
+                                    for peer_id in providers {
+                                        let addresses = vec![];
+                                        let _ = tx.send(NetworkEvent::DhtPeerDiscovered {
+                                            peer_id,
+                                            addresses,
+                                        });
+                                        tracing::info!(peer = %peer_id, "DHT: discovered peer via providers");
                                     }
-                                    kad::QueryResult::GetRecord(Ok(kad::GetRecordOk::FoundRecord(kad::PeerRecord { record, .. }))) => {
-                                        if let Some(entry) = pending_get_record.get_mut(&id) {
-                                            entry.1.push(record);
-                                        }
-                                    }
-                                    kad::QueryResult::GetRecord(Ok(kad::GetRecordOk::FinishedWithNoAdditionalRecord { .. })) => {
-                                        if let Some((key, records)) = pending_get_record.remove(&id) {
-                                            let _ = tx.send(NetworkEvent::RecordRetrieved {
-                                                key,
-                                                records,
-                                            });
-                                            tracing::info!("DHT: GetRecord query finished");
-                                        }
-                                    }
-                                    kad::QueryResult::PutRecord(Ok(kad::PutRecordOk { .. })) => {
-                                        if let Some(k) = pending_put_record.remove(&id) {
-                                            let _ = tx.send(NetworkEvent::RecordPutOk { key: k });
-                                            tracing::info!("DHT: PutRecord succeeded");
-                                        }
-                                    }
-                                    kad::QueryResult::PutRecord(Err(e)) => {
-                                        if let Some(k) = pending_put_record.remove(&id) {
-                                            let _ = tx.send(NetworkEvent::RecordPutError {
-                                                key: k,
-                                                error: e.to_string(),
-                                            });
-                                            tracing::warn!(?e, "DHT: PutRecord failed");
-                                        }
-                                    }
-                                    kad::QueryResult::GetRecord(Err(e)) => {
-                                        if let Some((key, _)) = pending_get_record.remove(&id) {
-                                            tracing::warn!(?e, key = ?key.to_vec(), "DHT: GetRecord query failed");
-                                        }
-                                    }
-                                     kad::QueryResult::GetProviders(Ok(kad::GetProvidersOk::FoundProviders { providers, .. })) => {
-                                         for peer_id in providers {
-                                             let addresses = vec![];
-                                             let _ = tx.send(NetworkEvent::DhtPeerDiscovered {
-                                                 peer_id,
-                                                 addresses,
-                                             });
-                                             tracing::info!(peer = %peer_id, "DHT: discovered peer via providers");
-                                         }
-                                     }
-                                     _ => {}
-                                 }
-                             }
-                             _ => {}
-                         }
+                                }
+                                _ => {}
+                            }
+                        }
                      }
                       SwarmEvent::Behaviour(ForetiasBehaviourEvent::RequestResponse(event)) => {
                           match event {

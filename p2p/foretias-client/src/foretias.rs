@@ -378,7 +378,7 @@ impl Foretias {
                     foretis,
                     signature,
                     signature_algorithm,
-                    &content,
+                    content,
                     calendar.as_ref(),
                 )?;
                 Ok(result)
