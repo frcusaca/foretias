@@ -195,9 +195,9 @@ pub trait ProofOps: Send + Sync {
 /// # Blanket implementation
 ///
 /// Any type implementing `SignOps + VerifyOps + KexOps + HashOps + SealOps
-/// + RngOps + IdentityOps + FrostOps + ProofOps` automatically satisfies
-/// `CryptoServer` via the blanket impl below.  Implementors should implement
-/// each sub-trait separately for discoverability and to ring-fence concerns.
+/// + RngOps + IdentityOps + FrostOps + ProofOps` automatically satisfies `CryptoServer`
+/// via the blanket impl below. Implementors should implement each sub-trait separately for
+/// discoverability and to ring-fence concerns.
 pub trait CryptoServer:
     SignOps + VerifyOps + KexOps + HashOps + SealOps + RngOps + IdentityOps + FrostOps + ProofOps
 {
