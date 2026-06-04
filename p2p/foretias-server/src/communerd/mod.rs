@@ -94,6 +94,7 @@ pub struct GossipLoopConfig {
 
 impl GossipLoopConfig {
     /// Create a new GossipLoopConfig from the given parameters.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         events: tokio::sync::mpsc::UnboundedReceiver<NetworkEvent>,
         cmd_tx: Option<tokio::sync::mpsc::UnboundedSender<SwarmCommand>>,
@@ -147,6 +148,7 @@ pub struct RegistrationConfig {
 
 impl RegistrationConfig {
     /// Create a new RegistrationConfig from the given parameters.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         cmd_tx: tokio::sync::mpsc::UnboundedSender<SwarmCommand>,
         namespace: Arc<parking_lot::Mutex<String>>,
