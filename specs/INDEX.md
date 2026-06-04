@@ -19,7 +19,7 @@
 
 | File | Open | Done | Status |
 |------|------|------|--------|
-| `specs/POST7_AUDIT_CLEANUP_PLAN.md` | 0 | 45 | **COMPLETE** — all 5 phases done |
+| `specs/POST7_AUDIT_CLEANUP_PLAN.md` | 0 | 94 | **COMPLETE** — all 5 phases done |
 | `specs/POST7_AUDIT_CLEANUP_SPEC.md` | — | — | Spec (paired) |
 
 **Completed 2026-06-02:**
@@ -69,10 +69,15 @@
 
 | File | Open | Done | Status |
 |------|------|------|--------|
-| `specs/COMBINED_GROUP4_PLAN.md` | 0 | 121 | **COMPLETE** — all 5 streams implemented |
+| `specs/COMBINED_GROUP4_PLAN.md` | 3 | 118 | **COMPLETE** — 3 items deferred (see below) |
 | `specs/COMBINED_GROUP4_SPEC.md` | — | — | Spec (paired, revised) |
 | `specs/CALENDAR_ACTIVE_MIRRORING_PLAN.md` | 18 | 0 | **DEPRECATED** → superseded by Group 4 |
 | `specs/CALENDAR_PROOF_OF_STORAGE_PLAN.md` | 26 | 0 | **DEPRECATED** → superseded by Group 4 |
+
+**Deferred (3 items):**
+- `StartStream` handler — live calendar streaming to mirrors (Phase 4b.4c)
+- `MirrorDispatcher` extension for mutual attestation — handlers call `communerd.line_for_tbid()` directly
+- `MirrorDispatcher` extension for chronon retrieval — same reason |
 
 **Completed 2026-06-02:**
 - **4a:** ✅ Libp2p unit tests
@@ -123,13 +128,13 @@
 
 | File | Open | Done | Status |
 |------|------|------|--------|
-| `specs/COMBINED_GROUP5_PLAN.md` | 10 | 20 | Partially complete |
+| `specs/COMBINED_GROUP5_PLAN.md` | 30 | 20 | Partially complete |
 
 **Status:**
 - g5-b (crash recovery): ✅ merged
 - g5-d (AGENTS.md): ✅ merged
 - g5-a (clock injection): ✅ merged
-- g5-c (JSON-RPC auth): **BLOCKED** — Option B (mTLS) chosen, needs dedicated spec/plan. Cannot proceed without human decision on mTLS implementation details.
+- g5-c (JSON-RPC auth): **BLOCKED** — Option B (mTLS) chosen, needs dedicated spec/plan
 
 ---
 
@@ -295,3 +300,5 @@ Group 2 (pre-flight)
 |----------|------|--------|
 | **1** | Group 5 g5-c | Human decision on JSON-RPC auth (mTLS) — blocked, needs dedicated spec |
 | **2** | Group 4 StartStream | Implement live calendar streaming to mirrors (deferred — Phase 4b.4c) |
+| **3** | Peering v1 | 8 items blocked on bindings reintroduction |
+| **4** | Code Quality Tooling | 71 items, low priority, not started |
