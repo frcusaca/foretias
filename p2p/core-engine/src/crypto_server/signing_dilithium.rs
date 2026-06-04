@@ -10,21 +10,25 @@ pub fn dilithium3_keypair() -> Result<(SignatureBytes, SignatureBytes), CryptoEr
     secret.plaintext_len = FORETIAS_SIG_MAX_SECRET_BYTES as usize;
     let mut public: ForetiasPubKeyVar = unsafe { std::mem::zeroed() };
     public.len = FORETIAS_SIG_MAX_PUBKEY_BYTES as usize;
-    let rc = unsafe {
-        foretias_dilithium3_keypair(&mut secret, &mut public)
-    };
+    let rc = unsafe { foretias_dilithium3_keypair(&mut secret, &mut public) };
     c_result_to_error(rc)?;
     let ct_len = secret.plaintext_len + 16;
     let mut secret_bytes = Vec::with_capacity(ct_len + 24);
     secret_bytes.extend_from_slice(&secret.encrypted_bytes[..ct_len]);
     secret_bytes.extend_from_slice(&secret.nonce);
     let public_bytes = public.bytes[..public.len].to_vec();
-    Ok((SignatureBytes::from(public_bytes), SignatureBytes::from(secret_bytes)))
+    Ok((
+        SignatureBytes::from(public_bytes),
+        SignatureBytes::from(secret_bytes),
+    ))
 }
 
 /// Sign a message with Dilithium3. Returns the signature bytes.
 /// Secret is encrypted ciphertext + nonce (from dilithium3_keypair).
-pub fn dilithium3_sign(secret_key: &SignatureBytes, msg: &[u8]) -> Result<SignatureBytes, CryptoError> {
+pub fn dilithium3_sign(
+    secret_key: &SignatureBytes,
+    msg: &[u8],
+) -> Result<SignatureBytes, CryptoError> {
     let mut secret: ForetiasSecretKeyVar = unsafe { std::mem::zeroed() };
     let nonce_start = secret_key.len() - 24;
     let ct_len = nonce_start;
@@ -33,9 +37,7 @@ pub fn dilithium3_sign(secret_key: &SignatureBytes, msg: &[u8]) -> Result<Signat
     secret.plaintext_len = ct_len - 16;
     let mut sig: ForetiasSigVar = unsafe { std::mem::zeroed() };
     sig.len = FORETIAS_SIG_MAX_SIG_BYTES as usize;
-    let rc = unsafe {
-        foretias_dilithium3_sign(&secret, msg.as_ptr(), msg.len(), &mut sig)
-    };
+    let rc = unsafe { foretias_dilithium3_sign(&secret, msg.as_ptr(), msg.len(), &mut sig) };
     c_result_to_error(rc)?;
     let sig_bytes = sig.bytes[..sig.len].to_vec();
     Ok(sig_bytes.into())
@@ -53,9 +55,8 @@ pub fn dilithium3_verify(
     let mut sig_var: ForetiasSigVar = unsafe { std::mem::zeroed() };
     sig_var.bytes[..sig.len()].copy_from_slice(sig);
     sig_var.len = sig.len();
-    let rc = unsafe {
-        foretias_dilithium3_verify(&public_key_var, msg.as_ptr(), msg.len(), &sig_var)
-    };
+    let rc =
+        unsafe { foretias_dilithium3_verify(&public_key_var, msg.as_ptr(), msg.len(), &sig_var) };
     if rc == 0 {
         Ok(true)
     } else if rc == -1 {

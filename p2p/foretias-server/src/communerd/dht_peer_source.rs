@@ -107,13 +107,19 @@ mod tests {
     use super::*;
 
     fn make_addr(peer_id: PeerId) -> PeerAddr {
-        PeerAddr { json_rpc: "127.0.0.1:4001".into(), peer_id: Some(peer_id), last_seen_ns: 0 }
+        PeerAddr {
+            json_rpc: "127.0.0.1:4001".into(),
+            peer_id: Some(peer_id),
+            last_seen_ns: 0,
+        }
     }
 
     #[tokio::test]
     async fn dht_peer_source_upsert_remove() {
         let src = DhtPeerSource::default();
-        let pid = libp2p::identity::Keypair::generate_ed25519().public().to_peer_id();
+        let pid = libp2p::identity::Keypair::generate_ed25519()
+            .public()
+            .to_peer_id();
 
         assert!(src.list().await.is_empty());
 
@@ -129,17 +135,29 @@ mod tests {
     #[tokio::test]
     async fn upsert_with_capabilities_indexes_peers() {
         let src = DhtPeerSource::default();
-        let p1 = libp2p::identity::Keypair::generate_ed25519().public().to_peer_id();
-        let p2 = libp2p::identity::Keypair::generate_ed25519().public().to_peer_id();
+        let p1 = libp2p::identity::Keypair::generate_ed25519()
+            .public()
+            .to_peer_id();
+        let p2 = libp2p::identity::Keypair::generate_ed25519()
+            .public()
+            .to_peer_id();
 
         src.upsert_with_capabilities(
             p1,
-            PeerAddr { json_rpc: "127.0.0.1:4001".into(), peer_id: Some(p1), last_seen_ns: 0 },
+            PeerAddr {
+                json_rpc: "127.0.0.1:4001".into(),
+                peer_id: Some(p1),
+                last_seen_ns: 0,
+            },
             vec![PeerCapability::AttestWilling, PeerCapability::MirrorWilling],
         );
         src.upsert_with_capabilities(
             p2,
-            PeerAddr { json_rpc: "127.0.0.1:4002".into(), peer_id: Some(p2), last_seen_ns: 0 },
+            PeerAddr {
+                json_rpc: "127.0.0.1:4002".into(),
+                peer_id: Some(p2),
+                last_seen_ns: 0,
+            },
             vec![PeerCapability::MirrorWilling],
         );
 
@@ -150,37 +168,62 @@ mod tests {
         let mirror = src.list_by_capability(PeerCapability::MirrorWilling).await;
         assert_eq!(mirror.len(), 2);
 
-        let verify = src.list_by_capability(PeerCapability::VerifierWilling).await;
+        let verify = src
+            .list_by_capability(PeerCapability::VerifierWilling)
+            .await;
         assert!(verify.is_empty());
     }
 
     #[tokio::test]
     async fn list_by_capability_filters_correctly() {
         let src = DhtPeerSource::default();
-        let p1 = libp2p::identity::Keypair::generate_ed25519().public().to_peer_id();
-        let p2 = libp2p::identity::Keypair::generate_ed25519().public().to_peer_id();
-        let p3 = libp2p::identity::Keypair::generate_ed25519().public().to_peer_id();
+        let p1 = libp2p::identity::Keypair::generate_ed25519()
+            .public()
+            .to_peer_id();
+        let p2 = libp2p::identity::Keypair::generate_ed25519()
+            .public()
+            .to_peer_id();
+        let p3 = libp2p::identity::Keypair::generate_ed25519()
+            .public()
+            .to_peer_id();
 
         src.upsert_with_capabilities(
             p1,
-            PeerAddr { json_rpc: "127.0.0.1:1001".into(), peer_id: Some(p1), last_seen_ns: 0 },
+            PeerAddr {
+                json_rpc: "127.0.0.1:1001".into(),
+                peer_id: Some(p1),
+                last_seen_ns: 0,
+            },
             vec![PeerCapability::AttestWilling],
         );
         src.upsert_with_capabilities(
             p2,
-            PeerAddr { json_rpc: "127.0.0.1:1002".into(), peer_id: Some(p2), last_seen_ns: 0 },
+            PeerAddr {
+                json_rpc: "127.0.0.1:1002".into(),
+                peer_id: Some(p2),
+                last_seen_ns: 0,
+            },
             vec![PeerCapability::VerifierWilling],
         );
         src.upsert_with_capabilities(
             p3,
-            PeerAddr { json_rpc: "127.0.0.1:1003".into(), peer_id: Some(p3), last_seen_ns: 0 },
-            vec![PeerCapability::AttestWilling, PeerCapability::VerifierWilling],
+            PeerAddr {
+                json_rpc: "127.0.0.1:1003".into(),
+                peer_id: Some(p3),
+                last_seen_ns: 0,
+            },
+            vec![
+                PeerCapability::AttestWilling,
+                PeerCapability::VerifierWilling,
+            ],
         );
 
         let attest = src.list_by_capability(PeerCapability::AttestWilling).await;
         assert_eq!(attest.len(), 2);
 
-        let verify = src.list_by_capability(PeerCapability::VerifierWilling).await;
+        let verify = src
+            .list_by_capability(PeerCapability::VerifierWilling)
+            .await;
         assert_eq!(verify.len(), 2);
 
         let mirror = src.list_by_capability(PeerCapability::MirrorWilling).await;
@@ -190,17 +233,29 @@ mod tests {
     #[tokio::test]
     async fn remove_clears_capability_index() {
         let src = DhtPeerSource::default();
-        let p1 = libp2p::identity::Keypair::generate_ed25519().public().to_peer_id();
-        let p2 = libp2p::identity::Keypair::generate_ed25519().public().to_peer_id();
+        let p1 = libp2p::identity::Keypair::generate_ed25519()
+            .public()
+            .to_peer_id();
+        let p2 = libp2p::identity::Keypair::generate_ed25519()
+            .public()
+            .to_peer_id();
 
         src.upsert_with_capabilities(
             p1,
-            PeerAddr { json_rpc: "127.0.0.1:5001".into(), peer_id: Some(p1), last_seen_ns: 0 },
+            PeerAddr {
+                json_rpc: "127.0.0.1:5001".into(),
+                peer_id: Some(p1),
+                last_seen_ns: 0,
+            },
             vec![PeerCapability::AttestWilling, PeerCapability::MirrorWilling],
         );
         src.upsert_with_capabilities(
             p2,
-            PeerAddr { json_rpc: "127.0.0.1:5002".into(), peer_id: Some(p2), last_seen_ns: 0 },
+            PeerAddr {
+                json_rpc: "127.0.0.1:5002".into(),
+                peer_id: Some(p2),
+                last_seen_ns: 0,
+            },
             vec![PeerCapability::AttestWilling],
         );
 
@@ -220,7 +275,9 @@ mod tests {
     #[tokio::test]
     async fn upsert_backward_compat_defaults_to_attest_willing() {
         let src = DhtPeerSource::default();
-        let pid = libp2p::identity::Keypair::generate_ed25519().public().to_peer_id();
+        let pid = libp2p::identity::Keypair::generate_ed25519()
+            .public()
+            .to_peer_id();
 
         src.upsert(pid, make_addr(pid));
 
@@ -230,7 +287,9 @@ mod tests {
         let mirror = src.list_by_capability(PeerCapability::MirrorWilling).await;
         assert!(mirror.is_empty());
 
-        let verify = src.list_by_capability(PeerCapability::VerifierWilling).await;
+        let verify = src
+            .list_by_capability(PeerCapability::VerifierWilling)
+            .await;
         assert!(verify.is_empty());
     }
 }

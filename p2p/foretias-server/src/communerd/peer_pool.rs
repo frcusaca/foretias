@@ -62,16 +62,22 @@ impl PeerPool {
     /// Start background liveness ping loop.
     pub async fn start_liveness_pings(self) {
         if self.peers.read().await.is_empty() {
-            warn!(component = "communerd", "no peers configured, liveness pings disabled");
+            warn!(
+                component = "communerd",
+                "no peers configured, liveness pings disabled"
+            );
             return;
         }
 
-        info!(component = "communerd", "liveness ping loop started, interval={}s, peers={}",
-            self.ping_interval_secs, self.peers.read().await.len());
+        info!(
+            component = "communerd",
+            "liveness ping loop started, interval={}s, peers={}",
+            self.ping_interval_secs,
+            self.peers.read().await.len()
+        );
 
-        let mut interval = tokio::time::interval(Duration::from_secs(
-            self.ping_interval_secs.max(1),
-        ));
+        let mut interval =
+            tokio::time::interval(Duration::from_secs(self.ping_interval_secs.max(1)));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
         loop {
@@ -87,7 +93,11 @@ impl PeerPool {
                     }
                 }
             }
-            debug!(component = "communerd", peer_count = peers.len(), "communerd: heartbeat");
+            debug!(
+                component = "communerd",
+                peer_count = peers.len(),
+                "communerd: heartbeat"
+            );
         }
     }
 }
@@ -116,11 +126,17 @@ mod tests {
             _peer: &PeerAddr,
             _tick_start: u64,
             _count: u64,
-        ) -> Result<Vec<foretias_core::foretias::ChrononRecord>, crate::communerd::transport::TransportError> {
+        ) -> Result<
+            Vec<foretias_core::foretias::ChrononRecord>,
+            crate::communerd::transport::TransportError,
+        > {
             Ok(Vec::new())
         }
 
-        async fn ping(&self, _peer: &PeerAddr) -> Result<(), crate::communerd::transport::TransportError> {
+        async fn ping(
+            &self,
+            _peer: &PeerAddr,
+        ) -> Result<(), crate::communerd::transport::TransportError> {
             Ok(())
         }
 
@@ -139,12 +155,13 @@ mod tests {
     fn peer_pool_add_and_get() {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
-            let pool = PeerPool::new(
-                Vec::new(),
-                Arc::new(DummyTransport),
-                30,
-            );
-            pool.add_peer(PeerAddr { json_rpc: "127.0.0.1:4001".into(), peer_id: None, last_seen_ns: 0 }).await;
+            let pool = PeerPool::new(Vec::new(), Arc::new(DummyTransport), 30);
+            pool.add_peer(PeerAddr {
+                json_rpc: "127.0.0.1:4001".into(),
+                peer_id: None,
+                last_seen_ns: 0,
+            })
+            .await;
             let peers = pool.get_peers().await;
             assert_eq!(peers.len(), 1);
             assert_eq!(peers[0].json_rpc, "127.0.0.1:4001");
@@ -156,11 +173,20 @@ mod tests {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             let pool = PeerPool::new(
-                vec![PeerAddr { json_rpc: "127.0.0.1:4001".into(), peer_id: None, last_seen_ns: 0 }],
+                vec![PeerAddr {
+                    json_rpc: "127.0.0.1:4001".into(),
+                    peer_id: None,
+                    last_seen_ns: 0,
+                }],
                 Arc::new(DummyTransport),
                 30,
             );
-            pool.remove_peer(&PeerAddr { json_rpc: "127.0.0.1:4001".into(), peer_id: None, last_seen_ns: 0 }).await;
+            pool.remove_peer(&PeerAddr {
+                json_rpc: "127.0.0.1:4001".into(),
+                peer_id: None,
+                last_seen_ns: 0,
+            })
+            .await;
             let peers = pool.get_peers().await;
             assert!(peers.is_empty());
         });
@@ -171,11 +197,20 @@ mod tests {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             let pool = PeerPool::new(
-                vec![PeerAddr { json_rpc: "127.0.0.1:4001".into(), peer_id: None, last_seen_ns: 0 }],
+                vec![PeerAddr {
+                    json_rpc: "127.0.0.1:4001".into(),
+                    peer_id: None,
+                    last_seen_ns: 0,
+                }],
                 Arc::new(DummyTransport),
                 30,
             );
-            pool.add_peer(PeerAddr { json_rpc: "127.0.0.1:4001".into(), peer_id: None, last_seen_ns: 0 }).await;
+            pool.add_peer(PeerAddr {
+                json_rpc: "127.0.0.1:4001".into(),
+                peer_id: None,
+                last_seen_ns: 0,
+            })
+            .await;
             assert_eq!(pool.get_peers().await.len(), 1);
         });
     }

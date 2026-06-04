@@ -6,7 +6,7 @@
 //! When `p2p_enabled: false`, the server operates as a Level 2 node (PtP only, backed by `CommunerdServer`).
 //! When `p2p_enabled: true`, the server operates as a Level 3 node (full mesh, backed by `CommunerdP2P`).
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use foretias_client::P2pConfig;
 
@@ -98,10 +98,10 @@ impl ForetiasServerConfig {
     }
 
     /// Extract the persist path (from server config, falls back to contained config).
-    pub fn persist_path(&self) -> Option<&PathBuf> {
+    pub fn persist_path(&self) -> Option<&Path> {
         self.persist_path
-            .as_ref()
-            .or_else(|| self.p2p.ptp.standalone.persist_path.as_ref())
+            .as_deref()
+            .or(self.p2p.ptp.standalone.persist_path.as_deref())
     }
 }
 
@@ -144,8 +144,7 @@ mod tests {
 
     #[test]
     fn server_config_dispatch_methods() {
-        let cfg = ForetiasServerConfig::new("dispatch", "0.0.0.0:3000")
-            .with_chronon(5_000_000_000);
+        let cfg = ForetiasServerConfig::new("dispatch", "0.0.0.0:3000").with_chronon(5_000_000_000);
         assert_eq!(cfg.chronon_ns(), 5_000_000_000);
         assert_eq!(cfg.tbn(), "dispatch");
     }

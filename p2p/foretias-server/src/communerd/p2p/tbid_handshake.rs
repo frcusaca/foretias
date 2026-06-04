@@ -46,11 +46,23 @@ pub struct TbidHandshake {
 
 impl TbidHandshake {
     pub fn new(crypto: Arc<dyn CryptoServer>, local_tbid: Tbid) -> Self {
-        Self { crypto, local_tbid, clock: Arc::new(SystemClock) }
+        Self {
+            crypto,
+            local_tbid,
+            clock: Arc::new(SystemClock),
+        }
     }
 
-    pub fn with_clock(crypto: Arc<dyn CryptoServer>, local_tbid: Tbid, clock: Arc<dyn Clock>) -> Self {
-        Self { crypto, local_tbid, clock }
+    pub fn with_clock(
+        crypto: Arc<dyn CryptoServer>,
+        local_tbid: Tbid,
+        clock: Arc<dyn Clock>,
+    ) -> Self {
+        Self {
+            crypto,
+            local_tbid,
+            clock,
+        }
     }
 
     pub fn generate_request(&self) -> TbidProofRequest {
@@ -78,7 +90,9 @@ impl TbidHandshake {
         signed_payload.extend_from_slice(&request.nonce);
         signed_payload.extend_from_slice(&timestamp.to_be_bytes());
 
-        let sig = self.crypto.sign(&signed_payload)
+        let sig = self
+            .crypto
+            .sign(&signed_payload)
             .map_err(|e| NodeError::Internal(e.to_string()))?;
         let signature: [u8; 64] = sig.bytes;
 
@@ -98,15 +112,22 @@ impl TbidHandshake {
     ) -> TbidProofResult {
         let public_key: [u8; 32] = match response.public_key.as_slice().try_into() {
             Ok(pk) => pk,
-            Err(_) => return TbidProofResult::Failed {
-                reason: "public key is not 32 bytes".into(),
-            },
+            Err(_) => {
+                return TbidProofResult::Failed {
+                    reason: "public key is not 32 bytes".into(),
+                }
+            }
         };
-        let valid = self.crypto.verify_ed25519(
-            &foretias_core::core::bindings::ForetiasPubKey32 { bytes: public_key },
-            &response.signed_payload,
-            &foretias_core::core::bindings::ForetiasSig64 { bytes: response.signature },
-        ).unwrap_or(false);
+        let valid = self
+            .crypto
+            .verify_ed25519(
+                &foretias_core::core::bindings::ForetiasPubKey32 { bytes: public_key },
+                &response.signed_payload,
+                &foretias_core::core::bindings::ForetiasSig64 {
+                    bytes: response.signature,
+                },
+            )
+            .unwrap_or(false);
 
         if !valid {
             return TbidProofResult::Failed {
@@ -123,12 +144,15 @@ impl TbidHandshake {
                 reason: "malformed signed_payload (too short for nonce)".into(),
             };
         }
-        let payload_nonce: [u8; 32] = match response.signed_payload[nonce_offset..nonce_offset + 32].try_into() {
-            Ok(n) => n,
-            Err(_) => return TbidProofResult::Failed {
-                reason: "malformed signed_payload nonce slice".into(),
-            },
-        };
+        let payload_nonce: [u8; 32] =
+            match response.signed_payload[nonce_offset..nonce_offset + 32].try_into() {
+                Ok(n) => n,
+                Err(_) => {
+                    return TbidProofResult::Failed {
+                        reason: "malformed signed_payload nonce slice".into(),
+                    }
+                }
+            };
         if payload_nonce != *expected_nonce {
             return TbidProofResult::Failed {
                 reason: "nonce mismatch".into(),
@@ -148,9 +172,7 @@ mod tests {
     use foretias_core::crypto_server::{new_software, ForetiasCurve};
 
     fn test_crypto() -> Arc<dyn CryptoServer> {
-        Arc::from(
-            new_software(ForetiasCurve::Ed25519).expect("create software crypto"),
-        )
+        Arc::from(new_software(ForetiasCurve::Ed25519).expect("create software crypto"))
     }
 
     fn test_handshake() -> (TbidHandshake, Tbid) {
@@ -182,7 +204,9 @@ mod tests {
         let h2 = TbidHandshake::new(crypto2, Tbid::from_raw([0xCD; 96]));
 
         let request = h1.generate_request();
-        let peer_id = libp2p::identity::Keypair::generate_ed25519().public().to_peer_id();
+        let peer_id = libp2p::identity::Keypair::generate_ed25519()
+            .public()
+            .to_peer_id();
 
         let response = h2.create_proof(&request, peer_id).await.unwrap();
         let wrong_nonce = [0xFF; 32];
@@ -198,7 +222,9 @@ mod tests {
         let h2 = TbidHandshake::new(crypto2, Tbid::from_raw([0xCD; 96]));
 
         let request = h1.generate_request();
-        let peer_id = libp2p::identity::Keypair::generate_ed25519().public().to_peer_id();
+        let peer_id = libp2p::identity::Keypair::generate_ed25519()
+            .public()
+            .to_peer_id();
 
         let mut response = h2.create_proof(&request, peer_id).await.unwrap();
         response.signed_payload[0] ^= 0xFF;
@@ -218,7 +244,9 @@ mod tests {
         let h2 = TbidHandshake::new(Arc::clone(&crypto2), Tbid::from_raw([0xCD; 96]));
 
         let request = h1.generate_request();
-        let peer_id = libp2p::identity::Keypair::generate_ed25519().public().to_peer_id();
+        let peer_id = libp2p::identity::Keypair::generate_ed25519()
+            .public()
+            .to_peer_id();
 
         // Build a syntactically signed but semantically too-short payload.
         // signed_payload is 50 bytes; nonce_offset alone (96 + peer_id len) exceeds it.

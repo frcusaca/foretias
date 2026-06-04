@@ -8,14 +8,14 @@
 
 use std::sync::Arc;
 
-use super::Communerd;
-use super::transport::PeerAddr;
-use super::p2p::swarm::{CommunerdRpcHandler, SwarmCommand};
-use foretias_core::foretias::clean_auth::CleanAuthenticated;
-use foretias_core::foretias::tick::{Foretis, ChrononRecord};
 use super::communerdette::CommunerdetteError;
+use super::p2p::swarm::{CommunerdRpcHandler, SwarmCommand};
+use super::transport::PeerAddr;
+use super::Communerd;
 use foretias_core::config::CommunerdConfig;
 use foretias_core::error::NodeError;
+use foretias_core::foretias::clean_auth::CleanAuthenticated;
+use foretias_core::foretias::tick::{ChrononRecord, Foretis};
 use libp2p;
 
 /// Server tier — contains CommunerdReader capabilities + TCP listener.
@@ -40,11 +40,17 @@ impl CommunerdServer {
 
     /// Start liveness pings to configured peers.
     pub fn start_liveness_pings(&self) {
-        #[allow(deprecated)] self.inner.start_liveness_pings();
+        #[allow(deprecated)]
+        self.inner.start_liveness_pings();
     }
 
     /// Route a stamp through Communerdette — returns `CleanAuthenticated<Foretis>`.
-    pub async fn route_stamp(&self, target_tbid: &str, content_hex: &str, echo: &str) -> Result<CleanAuthenticated<Foretis>, CommunerdetteError> {
+    pub async fn route_stamp(
+        &self,
+        target_tbid: &str,
+        content_hex: &str,
+        echo: &str,
+    ) -> Result<CleanAuthenticated<Foretis>, CommunerdetteError> {
         self.inner.route_stamp(target_tbid, content_hex, echo).await
     }
 
@@ -56,11 +62,18 @@ impl CommunerdServer {
         serialization: foretias_core::foretias::tick::SerializationAlgorithm,
         echo: &str,
     ) -> Result<CleanAuthenticated<Foretis>, CommunerdetteError> {
-        self.inner.stamp_chronon(target_tbid, content, serialization, echo).await
+        self.inner
+            .stamp_chronon(target_tbid, content, serialization, echo)
+            .await
     }
 
     /// Fetch calendar slice from a remote peer.
-    pub async fn get_calendar_slice(&self, peer: &PeerAddr, tick_start: u64, count: u64) -> Result<Vec<ChrononRecord>, super::transport::TransportError> {
+    pub async fn get_calendar_slice(
+        &self,
+        peer: &PeerAddr,
+        tick_start: u64,
+        count: u64,
+    ) -> Result<Vec<ChrononRecord>, super::transport::TransportError> {
         self.inner.get_calendar_slice(peer, tick_start, count).await
     }
 
@@ -118,7 +131,9 @@ impl CommunerdP2P {
         json_rpc_addr: Option<&str>,
         rpc_handler: Option<Arc<dyn CommunerdRpcHandler>>,
     ) -> Result<(), NodeError> {
-        self.inner().enable_p2p(listen, dials, namespace, json_rpc_addr, rpc_handler).await
+        self.inner()
+            .enable_p2p(listen, dials, namespace, json_rpc_addr, rpc_handler)
+            .await
     }
 
     /// Bootstrap DHT with known bootstrap peers.
@@ -136,7 +151,16 @@ impl CommunerdP2P {
         json_rpc_addr: &str,
         max_peers: usize,
     ) -> Result<(), NodeError> {
-        self.inner().register_and_discover(known_servers, namespace, tbid, chronon_ns, json_rpc_addr, max_peers).await
+        self.inner()
+            .register_and_discover(
+                known_servers,
+                namespace,
+                tbid,
+                chronon_ns,
+                json_rpc_addr,
+                max_peers,
+            )
+            .await
     }
 
     /// Local peer ID (available after P2P is enabled).
@@ -160,8 +184,15 @@ impl CommunerdP2P {
     }
 
     /// Route a stamp through Communerdette — returns `CleanAuthenticated<Foretis>`.
-    pub async fn route_stamp(&self, target_tbid: &str, content_hex: &str, echo: &str) -> Result<CleanAuthenticated<Foretis>, CommunerdetteError> {
-        self.server.route_stamp(target_tbid, content_hex, echo).await
+    pub async fn route_stamp(
+        &self,
+        target_tbid: &str,
+        content_hex: &str,
+        echo: &str,
+    ) -> Result<CleanAuthenticated<Foretis>, CommunerdetteError> {
+        self.server
+            .route_stamp(target_tbid, content_hex, echo)
+            .await
     }
 
     /// Route a stamp through Communerdette with serialization control.
@@ -172,12 +203,21 @@ impl CommunerdP2P {
         serialization: foretias_core::foretias::tick::SerializationAlgorithm,
         echo: &str,
     ) -> Result<CleanAuthenticated<Foretis>, CommunerdetteError> {
-        self.server.stamp_chronon(target_tbid, content, serialization, echo).await
+        self.server
+            .stamp_chronon(target_tbid, content, serialization, echo)
+            .await
     }
 
     /// Fetch calendar slice from a remote peer.
-    pub async fn get_calendar_slice(&self, peer: &PeerAddr, tick_start: u64, count: u64) -> Result<Vec<ChrononRecord>, super::transport::TransportError> {
-        self.server.get_calendar_slice(peer, tick_start, count).await
+    pub async fn get_calendar_slice(
+        &self,
+        peer: &PeerAddr,
+        tick_start: u64,
+        count: u64,
+    ) -> Result<Vec<ChrononRecord>, super::transport::TransportError> {
+        self.server
+            .get_calendar_slice(peer, tick_start, count)
+            .await
     }
 
     /// Get configured peers.
@@ -191,7 +231,11 @@ impl CommunerdP2P {
     }
 
     /// Lookup TBID in DHT.
-    pub async fn lookup_tbid(&self, tbid_hex: &str, namespace: &str) -> Option<super::PeerRegistrationRecord> {
+    pub async fn lookup_tbid(
+        &self,
+        tbid_hex: &str,
+        namespace: &str,
+    ) -> Option<super::PeerRegistrationRecord> {
         self.inner().lookup_tbid(tbid_hex, namespace).await
     }
 

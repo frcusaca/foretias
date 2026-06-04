@@ -70,13 +70,7 @@ impl Evaluator for ServerStampEvaluator {
                 .map_err(|e| format!("Failed to deserialize algorithm: {}", e))?;
             let result = server
                 .chronomatter()
-                .verify(
-                    &foretis,
-                    &sig,
-                    &alg,
-                    &msg.as_bytes().to_vec(),
-                    server.calendar(),
-                )
+                .verify(&foretis, &sig, &alg, msg.as_bytes(), server.calendar())
                 .map_err(|e| format!("Verify failed for '{}': {}", msg, e))?;
             verifications.push(serde_json::json!({
                 "message": msg,
@@ -105,7 +99,7 @@ impl Evaluator for ServerStampEvaluator {
         let result_str = serde_json::to_string_pretty(&result)
             .map_err(|e| format!("Failed to serialize result: {}", e))?;
 
-        Ok(build_snapshot("", &input_str, &[result_str], test_name).map_err(|e| e.to_string())?)
+        build_snapshot("", &input_str, &[result_str], test_name).map_err(|e| e.to_string())
     }
 }
 

@@ -14,6 +14,12 @@ pub struct ProbityStore {
     max_reports_per_peer: usize,
 }
 
+impl Default for ProbityStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ProbityStore {
     pub fn new() -> Self {
         Self::with_config(UShapeConfig::default(), 500)

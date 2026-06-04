@@ -1,12 +1,11 @@
+use std::io::Read;
 /// REQ-Z8.5: Assert no contiguous hex string >= 64 chars appears in CLI output.
 ///
 /// A 64-char hex string corresponds to 32+ bytes of raw material, which
 /// would indicate a leaked Ed25519 seed, private key, or similar secret.
-
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Duration;
-use std::io::Read;
 
 fn find_available_port() -> u16 {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -73,7 +72,9 @@ fn no_secret_hex_in_serve_stdout() {
     });
 
     if !wait_for_server(&addr, 15) {
-        // Server didn't start; skip test
+        // Server didn't start; clean up and skip test
+        let _ = server.kill();
+        let _ = server.wait();
         return;
     }
 
@@ -117,6 +118,8 @@ fn no_secret_hex_in_stamp_output() {
     let _stderr = server.stderr.take();
 
     if !wait_for_server(&addr, 15) {
+        let _ = server.kill();
+        let _ = server.wait();
         return;
     }
 
@@ -131,7 +134,7 @@ fn no_secret_hex_in_stamp_output() {
 
     assert!(stamp_result.status.success(), "stamp failed");
 
-    let stdout_text = String::from_utf8_lossy(&stamp_result.stdout);
+    let _stdout_text = String::from_utf8_lossy(&stamp_result.stdout);
     let stderr_text = String::from_utf8_lossy(&stamp_result.stderr);
 
     // stamp stdout is JSON with content_hash (64-char hex) — this is a hash, not a secret.

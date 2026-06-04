@@ -180,9 +180,7 @@ impl SnapshotSuite {
             + input_fence_start
             + 1;
         let input = lines[input_fence_start + 1..input_fence_end]
-            .iter()
-            .copied()
-            .collect::<Vec<_>>()
+            .to_vec()
             .join("\n");
 
         // Find RESULT: block(s)
@@ -202,9 +200,7 @@ impl SnapshotSuite {
             + result_fence_start
             + 1;
         let result = lines[result_fence_start + 1..result_fence_end]
-            .iter()
-            .copied()
-            .collect::<Vec<_>>()
+            .to_vec()
             .join("\n");
 
         // Find COMMENTS: block
@@ -224,9 +220,7 @@ impl SnapshotSuite {
             + comments_fence_start
             + 1;
         let comments = lines[comments_fence_start + 1..comments_fence_end]
-            .iter()
-            .copied()
-            .collect::<Vec<_>>()
+            .to_vec()
             .join("\n");
 
         Some((input, vec![result], comments))
@@ -271,11 +265,12 @@ pub fn build_snapshot(
 ) -> Result<String, SnapshotSignatureError> {
     let sig = sign_snapshot(passphrase, input, results, comments)?;
 
-    let mut lines = Vec::new();
-    lines.push("INPUT:".to_string());
-    lines.push("```json".to_string());
-    lines.push(input.trim_end().to_string());
-    lines.push("```".to_string());
+    let mut lines = vec![
+        "INPUT:".to_string(),
+        "```json".to_string(),
+        input.trim_end().to_string(),
+        "```".to_string(),
+    ];
 
     for (i, result) in results.iter().enumerate() {
         lines.push(format!("[{}] RESULT:", i));

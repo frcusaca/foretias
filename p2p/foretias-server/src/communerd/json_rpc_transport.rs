@@ -49,14 +49,18 @@ impl PeerTransport for JsonRpcTransport {
             "cal_chronon_start": tick_start,
             "count": count,
         });
-        let result = self.json_rpc_call(peer, "get_calendar_slice", params).await?;
+        let result = self
+            .json_rpc_call(peer, "get_calendar_slice", params)
+            .await?;
         let records: Vec<ChrononRecord> =
             serde_json::from_value(result).map_err(|e| TransportError::Decode(e.to_string()))?;
         Ok(records)
     }
 
     async fn ping(&self, peer: &PeerAddr) -> Result<(), TransportError> {
-        let _ = self.json_rpc_call(peer, "ping", serde_json::json!({})).await?;
+        let _ = self
+            .json_rpc_call(peer, "ping", serde_json::json!({}))
+            .await?;
         Ok(())
     }
 
@@ -67,11 +71,16 @@ impl PeerTransport for JsonRpcTransport {
         channel_id: &str,
         requester_tbid_hex: &str,
     ) -> Result<serde_json::Value, TransportError> {
-        self.json_rpc_call(peer, "channel_bind_challenge", serde_json::json!({
-            "nonce": nonce_hex,
-            "channel_id": channel_id,
-            "requester_tbid": requester_tbid_hex,
-        })).await
+        self.json_rpc_call(
+            peer,
+            "channel_bind_challenge",
+            serde_json::json!({
+                "nonce": nonce_hex,
+                "channel_id": channel_id,
+                "requester_tbid": requester_tbid_hex,
+            }),
+        )
+        .await
     }
 }
 
@@ -118,46 +127,59 @@ impl JsonRpcTransport {
 
                     let (_pub_key, priv_key) = generate_ed25519_keypair()
                         .map_err(|e| TransportError::Connect(e.to_string()))?;
-                    let (mut session, stream) = noise::noise_handshake(stream, &priv_key.bytes, None, true).await
-                        .map_err(|e| TransportError::Connect(e.to_string()))?;
+                    let (mut session, stream) =
+                        noise::noise_handshake(stream, &priv_key.bytes, None, true)
+                            .await
+                            .map_err(|e| TransportError::Connect(e.to_string()))?;
 
                     let (reader, mut writer) = stream.into_split();
                     let mut reader = tokio::io::BufReader::new(reader);
 
-                    let ct = session.send(&request_bytes)
+                    let ct = session
+                        .send(&request_bytes)
                         .map_err(|e| TransportError::Connect(e.to_string()))?;
                     let ct_len = (ct.len() as u32).to_le_bytes();
-                    writer.write_all(&ct_len).await
+                    writer
+                        .write_all(&ct_len)
+                        .await
                         .map_err(|e| TransportError::Connect(e.to_string()))?;
-                    writer.write_all(&ct).await
+                    writer
+                        .write_all(&ct)
+                        .await
                         .map_err(|e| TransportError::Connect(e.to_string()))?;
-                    writer.flush().await
+                    writer
+                        .flush()
+                        .await
                         .map_err(|e| TransportError::Connect(e.to_string()))?;
 
                     let mut len_buf = [0u8; 4];
-                    tokio::io::AsyncReadExt::read_exact(&mut reader, &mut len_buf).await
+                    tokio::io::AsyncReadExt::read_exact(&mut reader, &mut len_buf)
+                        .await
                         .map_err(|e| TransportError::Connect(e.to_string()))?;
                     let resp_len = u32::from_le_bytes(len_buf) as usize;
                     let mut resp_buf = vec![0u8; resp_len];
-                    tokio::io::AsyncReadExt::read_exact(&mut reader, &mut resp_buf).await
+                    tokio::io::AsyncReadExt::read_exact(&mut reader, &mut resp_buf)
+                        .await
                         .map_err(|e| TransportError::Connect(e.to_string()))?;
 
-                    let plaintext = session.recv(&resp_buf)
+                    let plaintext = session
+                        .recv(&resp_buf)
                         .map_err(|e| TransportError::Decode(e.to_string()))?;
-                    let response: serde_json::Value =
-                        serde_json::from_slice(&plaintext)
-                            .map_err(|e| TransportError::Decode(e.to_string()))?;
+                    let response: serde_json::Value = serde_json::from_slice(&plaintext)
+                        .map_err(|e| TransportError::Decode(e.to_string()))?;
 
                     if let Some(err) = response.get("error") {
                         let code = err.get("code").and_then(|c| c.as_i64()).unwrap_or(-1) as i32;
-                        let message = err.get("message")
+                        let message = err
+                            .get("message")
                             .and_then(|m| m.as_str())
                             .unwrap_or("unknown")
                             .to_string();
                         return Err(TransportError::Rpc { code, message });
                     }
 
-                    response.get("result")
+                    response
+                        .get("result")
                         .cloned()
                         .ok_or_else(|| TransportError::Decode("missing result".to_string()))
                 })

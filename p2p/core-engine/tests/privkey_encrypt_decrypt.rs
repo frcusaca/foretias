@@ -85,7 +85,7 @@ fn test_encrypt_decrypt_roundtrip_4112() {
 fn test_decrypt_wrong_nonce_fails() {
     ensure_kek();
 
-    let plaintext = vec![0u8; 32];
+    let plaintext = [0u8; 32];
     let mut ciphertext = vec![0u8; 48];
     let mut nonce = [0u8; 24];
     let mut decrypted = vec![0u8; 32];
@@ -108,7 +108,7 @@ fn test_decrypt_wrong_nonce_fails() {
 fn test_decrypt_tampered_ciphertext_fails() {
     ensure_kek();
 
-    let plaintext = vec![0u8; 32];
+    let plaintext = [0u8; 32];
     let mut ciphertext = vec![0u8; 48];
     let mut nonce = [0u8; 24];
     let mut decrypted = vec![0u8; 32];

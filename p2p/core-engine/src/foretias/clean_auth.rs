@@ -757,7 +757,7 @@ impl UnverifiedSignatureEnvelope<Foretis> {
         let valid = super::tick::verify(
             crypto,
             foretis,
-            &self.signatures.first().map(|s| &s.sig[..]).unwrap_or(&[]),
+            self.signatures.first().map(|s| &s.sig[..]).unwrap_or(&[]),
             self.signatures
                 .first()
                 .map(|s| match s.algorithm {
@@ -768,7 +768,7 @@ impl UnverifiedSignatureEnvelope<Foretis> {
             content,
             &CalendarLookupFromCleanRecord(record),
         )
-        .map_err(|e| CleanAuthError::Crypto(e))?;
+        .map_err(CleanAuthError::Crypto)?;
         if !valid {
             return Err(CleanAuthError::InvalidSignature);
         }

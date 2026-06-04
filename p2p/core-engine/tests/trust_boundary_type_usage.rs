@@ -181,7 +181,7 @@ fn collect_ast_usages(workspace_root: &Path) -> (Vec<LocationEntry>, Vec<RawOccu
                 let path = entry.path();
                 if path.is_dir() {
                     stack.push(path);
-                } else if path.extension().map_or(false, |e| e == "rs") {
+                } else if path.extension().is_some_and(|e| e == "rs") {
                     let Ok(src) = std::fs::read_to_string(&path) else {
                         continue;
                     };
@@ -545,7 +545,7 @@ fn invoke_rustdoc_json(crate_path: &Path) -> Result<Crate, String> {
     // Try nightly first (needed for --output-format json / -Z unstable-options)
     let output = Command::new("cargo")
         .current_dir(crate_path)
-        .args(&[
+        .args([
             "+nightly",
             "rustdoc",
             "-Z",
@@ -802,7 +802,7 @@ fn check_gate_bodies_in_workspace(workspace: &Path) -> Vec<String> {
                 let path = entry.path();
                 if path.is_dir() {
                     stack.push(path);
-                } else if path.extension().map_or(false, |e| e == "rs") {
+                } else if path.extension().is_some_and(|e| e == "rs") {
                     let Ok(src) = std::fs::read_to_string(&path) else {
                         continue;
                     };

@@ -1004,7 +1004,7 @@ async fn toppoli_l3_stamp() {
 
     let peer0 = f.harness.peer(0).server();
     let peer1_tbid = f.harness.peer(1).server().get_tbid();
-    let peer1_addr = f.harness.peer(1).addr.clone();
+    let _peer1_addr = f.harness.peer(1).addr.clone();
 
     let ok = f.harness.wait_until(|h| h.running_count() == 2, 5_000).await;
     assert!(ok, "peers should be running");

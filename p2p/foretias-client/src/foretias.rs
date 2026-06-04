@@ -8,7 +8,7 @@
 //! All three levels expose the same operation surface: `stamp`, `verify`,
 //! `prove_verification`, `calendar_slice`, plus identity accessors.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -17,11 +17,11 @@ use foretias_core::clock::Clock;
 use foretias_core::crypto_server::{self, CryptoServer, ForetiasCurve};
 use foretias_core::error::{CryptoError, NodeError};
 use foretias_core::foretias::callbacks::TickObserver;
-use foretias_core::foretias::tick::{CalendarLookup, Foretis, ChrononRecord};
+use foretias_core::foretias::tick::{CalendarLookup, ChrononRecord, Foretis};
 use foretias_core::foretias::types::Tbid;
 
 use crate::calendar::Calendar;
-use crate::config::{ForetiasConfig, StandaloneConfig, PtpConfig, P2pConfig};
+use crate::config::{ForetiasConfig, P2pConfig, PtpConfig, StandaloneConfig};
 use crate::noise_ptp::{noise_json_rpc, PtPError};
 
 /// Error type for Foretias operations.
@@ -73,7 +73,9 @@ impl From<PtPError> for ForetiasError {
             PtPError::Timeout => ForetiasError::Network("PtP request timeout".into()),
             PtPError::Noise(msg) => ForetiasError::Network(msg),
             PtPError::Decode(msg) => ForetiasError::Network(msg),
-            PtPError::Rpc { code, message } => ForetiasError::Network(format!("RPC {}: {}", code, message)),
+            PtPError::Rpc { code, message } => {
+                ForetiasError::Network(format!("RPC {}: {}", code, message))
+            }
         }
     }
 }
@@ -158,7 +160,11 @@ impl Foretias {
         let chronon_ns = 60_000_000_000u64;
         let calendar = Arc::new(Calendar::new(Tbid::default(), &tbn));
         let crypto = Arc::from(crypto_server::new_software(ForetiasCurve::Ed25519)?);
-        let mut cm = Chronomatter::new(chronon_ns, Arc::clone(&calendar) as Arc<dyn TickObserver>, crypto)?;
+        let mut cm = Chronomatter::new(
+            chronon_ns,
+            Arc::clone(&calendar) as Arc<dyn TickObserver>,
+            crypto,
+        )?;
 
         struct NoOpMutualAttest;
         impl foretias_core::foretias::callbacks::MutualAttestObserver for NoOpMutualAttest {
@@ -166,7 +172,8 @@ impl Foretias {
             fn on_mutual_attest_ok(&self) {}
             fn on_mutual_attest_failed(&self) {}
         }
-        cm.set_mutual_attest_observer(Arc::new(NoOpMutualAttest) as Arc<dyn foretias_core::foretias::callbacks::MutualAttestObserver>);
+        cm.set_mutual_attest_observer(Arc::new(NoOpMutualAttest)
+            as Arc<dyn foretias_core::foretias::callbacks::MutualAttestObserver>);
 
         let (tbid, tbn_from_cm) = (cm.get_tbid(), cm.get_tbn().to_string());
         let binding = calendar.inner();
@@ -174,7 +181,8 @@ impl Foretias {
         cal_inner.tbid = tbid;
         cal_inner.tbn = tbn_from_cm;
 
-        let crypto: Arc<dyn CryptoServer> = Arc::from(crypto_server::new_software(ForetiasCurve::Ed25519)?);
+        let crypto: Arc<dyn CryptoServer> =
+            Arc::from(crypto_server::new_software(ForetiasCurve::Ed25519)?);
         let state = StandaloneState {
             chronomatter: Arc::new(cm),
             calendar,
@@ -190,21 +198,30 @@ impl Foretias {
 
     pub fn from_persist(path: PathBuf) -> Result<Self, ForetiasError> {
         let path_str = path.to_string_lossy().to_string();
-        let crypto: Arc<dyn CryptoServer> = Arc::from(crypto_server::new_software(ForetiasCurve::Ed25519)?);
+        let crypto: Arc<dyn CryptoServer> =
+            Arc::from(crypto_server::new_software(ForetiasCurve::Ed25519)?);
 
         struct NoOpObserver;
         impl TickObserver for NoOpObserver {
-            fn on_tick_advance(&self, _chronon_number: foretias_core::foretias::types::TickNumber, _public_key: &[u8], _tick_record: &ChrononRecord) {}
+            fn on_tick_advance(
+                &self,
+                _chronon_number: foretias_core::foretias::types::TickNumber,
+                _public_key: &[u8],
+                _tick_record: &ChrononRecord,
+            ) {
+            }
         }
 
-        let mut cm = Chronomatter::from_calendar(&path_str, crypto.clone(), Arc::new(NoOpObserver))?;
+        let mut cm =
+            Chronomatter::from_calendar(&path_str, crypto.clone(), Arc::new(NoOpObserver))?;
         struct NoOpMutualAttest;
         impl foretias_core::foretias::callbacks::MutualAttestObserver for NoOpMutualAttest {
             fn on_mutual_attest_sent(&self) {}
             fn on_mutual_attest_ok(&self) {}
             fn on_mutual_attest_failed(&self) {}
         }
-        cm.set_mutual_attest_observer(Arc::new(NoOpMutualAttest) as Arc<dyn foretias_core::foretias::callbacks::MutualAttestObserver>);
+        cm.set_mutual_attest_observer(Arc::new(NoOpMutualAttest)
+            as Arc<dyn foretias_core::foretias::callbacks::MutualAttestObserver>);
 
         let calendar = Arc::new(Calendar::from_persisted(&path_str)?);
         let state = StandaloneState {
@@ -239,7 +256,11 @@ impl Foretias {
         })
     }
 
-    pub fn connect_one(tbn: String, peer_addr: String, persist_path: Option<PathBuf>) -> Result<Self, ForetiasError> {
+    pub fn connect_one(
+        tbn: String,
+        peer_addr: String,
+        persist_path: Option<PathBuf>,
+    ) -> Result<Self, ForetiasError> {
         Self::connect(tbn, vec![peer_addr], 30, persist_path)
     }
 
@@ -296,10 +317,7 @@ impl Foretias {
             dht_namespace: cfg.dht_namespace,
             persist_path: cfg.ptp.standalone.persist_path.clone(),
         };
-        let state = P2pState {
-            ptp,
-            p2p_config,
-        };
+        let state = P2pState { ptp, p2p_config };
         Ok(Self {
             level: ClientLevel::P2p,
             inner: ForetiasInner::P2p(state),
@@ -307,7 +325,11 @@ impl Foretias {
         })
     }
 
-    pub async fn stamp(&self, content: &[u8], echo: String) -> Result<(Foretis, Vec<u8>, String), ForetiasError> {
+    pub async fn stamp(
+        &self,
+        content: &[u8],
+        echo: String,
+    ) -> Result<(Foretis, Vec<u8>, String), ForetiasError> {
         let echo = if echo.is_empty() {
             Self::client_echo()
         } else {
@@ -319,7 +341,11 @@ impl Foretias {
         }
     }
 
-    async fn stamp_standalone(&self, content: &[u8], echo: &str) -> Result<(Foretis, Vec<u8>, String), ForetiasError> {
+    async fn stamp_standalone(
+        &self,
+        content: &[u8],
+        echo: &str,
+    ) -> Result<(Foretis, Vec<u8>, String), ForetiasError> {
         let cm = self.inner.chronomatter();
         if cm.is_dormant() {
             return Err(ForetiasError::Dormant(
@@ -330,18 +356,37 @@ impl Foretias {
         if let Some(ref path) = self.persist_path {
             let _ = self.save_calendar(path);
         }
-        Ok((stamped.foretis, stamped.signature_bytes, stamped.signature_algorithm))
+        Ok((
+            stamped.foretis,
+            stamped.signature_bytes,
+            stamped.signature_algorithm,
+        ))
     }
 
-    pub async fn verify(&self, content: &[u8], foretis: &Foretis, signature: &[u8], signature_algorithm: &str) -> Result<bool, ForetiasError> {
+    pub async fn verify(
+        &self,
+        content: &[u8],
+        foretis: &Foretis,
+        signature: &[u8],
+        signature_algorithm: &str,
+    ) -> Result<bool, ForetiasError> {
         match self.level {
             ClientLevel::Standalone => {
                 let cm = self.inner.chronomatter();
                 let calendar = self.inner.calendar();
-                let result = cm.verify(foretis, signature, signature_algorithm, &content.to_vec(), calendar.as_ref())?;
+                let result = cm.verify(
+                    foretis,
+                    signature,
+                    signature_algorithm,
+                    content,
+                    calendar.as_ref(),
+                )?;
                 Ok(result)
             }
-            ClientLevel::Ptp | ClientLevel::P2p => self.verify_remote(content, foretis, signature, signature_algorithm).await,
+            ClientLevel::Ptp | ClientLevel::P2p => {
+                self.verify_remote(content, foretis, signature, signature_algorithm)
+                    .await
+            }
         }
     }
 
@@ -356,20 +401,27 @@ impl Foretias {
         let records = self.calendar_slice(chronon_number, 2).await?;
         if records.is_empty() {
             return Err(ForetiasError::Network(format!(
-                "no calendar records found for chronon {}", chronon_number
+                "no calendar records found for chronon {}",
+                chronon_number
             )));
         }
 
-        let crypto = crypto_server::new_software(ForetiasCurve::Ed25519)
-            .map_err(ForetiasError::from)?;
+        let crypto =
+            crypto_server::new_software(ForetiasCurve::Ed25519).map_err(ForetiasError::from)?;
         let fetched_cal = FetchedCalendar {
             record: records[0].clone(),
             tbid: foretis.tbid,
             tbn: foretis.tbn.clone(),
         };
         let verified = foretias_core::foretias::tick::verify(
-            &*crypto, foretis, signature, signature_algorithm, content, &fetched_cal,
-        ).map_err(ForetiasError::from)?;
+            &*crypto,
+            foretis,
+            signature,
+            signature_algorithm,
+            content,
+            &fetched_cal,
+        )
+        .map_err(ForetiasError::from)?;
 
         Ok(VerificationReport {
             verified,
@@ -435,7 +487,7 @@ impl Foretias {
         self.inner.chronomatter().current_tick()
     }
 
-    fn save_calendar(&self, path: &PathBuf) -> Result<(), ForetiasError> {
+    fn save_calendar(&self, path: &Path) -> Result<(), ForetiasError> {
         let calendar = self.inner.calendar();
         let path_str = path.to_string_lossy().to_string();
         calendar.save(&path_str)?;
@@ -446,20 +498,26 @@ impl Foretias {
         let chronon_ns = 60_000_000_000u64;
         let calendar = Arc::new(Calendar::new(Tbid::default(), tbn));
         let crypto = Arc::from(crypto_server::new_software(ForetiasCurve::Ed25519)?);
-        let mut cm = Chronomatter::new(chronon_ns, Arc::clone(&calendar) as Arc<dyn TickObserver>, crypto)?;
+        let mut cm = Chronomatter::new(
+            chronon_ns,
+            Arc::clone(&calendar) as Arc<dyn TickObserver>,
+            crypto,
+        )?;
         struct NoOpMutualAttest;
         impl foretias_core::foretias::callbacks::MutualAttestObserver for NoOpMutualAttest {
             fn on_mutual_attest_sent(&self) {}
             fn on_mutual_attest_ok(&self) {}
             fn on_mutual_attest_failed(&self) {}
         }
-        cm.set_mutual_attest_observer(Arc::new(NoOpMutualAttest) as Arc<dyn foretias_core::foretias::callbacks::MutualAttestObserver>);
+        cm.set_mutual_attest_observer(Arc::new(NoOpMutualAttest)
+            as Arc<dyn foretias_core::foretias::callbacks::MutualAttestObserver>);
         let (tbid, tbn_from_cm) = (cm.get_tbid(), cm.get_tbn().to_string());
         let binding = calendar.inner();
         let mut cal_inner = binding.write();
         cal_inner.tbid = tbid;
         cal_inner.tbn = tbn_from_cm;
-        let crypto: Arc<dyn CryptoServer> = Arc::from(crypto_server::new_software(ForetiasCurve::Ed25519)?);
+        let crypto: Arc<dyn CryptoServer> =
+            Arc::from(crypto_server::new_software(ForetiasCurve::Ed25519)?);
         Ok(StandaloneState {
             chronomatter: Arc::new(cm),
             calendar,
@@ -484,7 +542,11 @@ impl Foretias {
         Duration::from_secs(secs)
     }
 
-    async fn stamp_remote(&self, content: &[u8], echo: &str) -> Result<(Foretis, Vec<u8>, String), ForetiasError> {
+    async fn stamp_remote(
+        &self,
+        content: &[u8],
+        echo: &str,
+    ) -> Result<(Foretis, Vec<u8>, String), ForetiasError> {
         let Some(peer) = self.primary_peer() else {
             return Err(ForetiasError::Network("no peer configured".into()));
         };
@@ -495,15 +557,31 @@ impl Foretias {
         });
         let result = noise_json_rpc(peer, "stamp", params, self.timeout()).await?;
         // v2: server returns {foretis, signature, signature_algorithm}
-        let foretis: Foretis = serde_json::from_value(result.get("foretis").cloned().unwrap_or(result.clone()))
-            .map_err(|e| ForetiasError::Network(format!("stamp deserialization failed: {}", e)))?;
-        let sig_hex = result.get("signature").and_then(|v| v.as_str()).unwrap_or("");
+        let foretis: Foretis =
+            serde_json::from_value(result.get("foretis").cloned().unwrap_or(result.clone()))
+                .map_err(|e| {
+                    ForetiasError::Network(format!("stamp deserialization failed: {}", e))
+                })?;
+        let sig_hex = result
+            .get("signature")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let signature = hex::decode(sig_hex).unwrap_or_default();
-        let sig_alg = result.get("signature_algorithm").and_then(|v| v.as_str()).unwrap_or("Ed25519").to_string();
+        let sig_alg = result
+            .get("signature_algorithm")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Ed25519")
+            .to_string();
         Ok((foretis, signature, sig_alg))
     }
 
-    async fn verify_remote(&self, content: &[u8], foretis: &Foretis, signature: &[u8], signature_algorithm: &str) -> Result<bool, ForetiasError> {
+    async fn verify_remote(
+        &self,
+        content: &[u8],
+        foretis: &Foretis,
+        signature: &[u8],
+        signature_algorithm: &str,
+    ) -> Result<bool, ForetiasError> {
         let Some(peer) = self.primary_peer() else {
             return Err(ForetiasError::Network("no peer configured".into()));
         };
@@ -515,13 +593,18 @@ impl Foretias {
             "signature_algorithm": signature_algorithm,
         });
         let result = noise_json_rpc(peer, "verify", params, self.timeout()).await?;
-        let valid = result.get("valid")
+        let valid = result
+            .get("valid")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
         Ok(valid)
     }
 
-    async fn calendar_slice_remote(&self, start: u64, count: u64) -> Result<Vec<ChrononRecord>, ForetiasError> {
+    async fn calendar_slice_remote(
+        &self,
+        start: u64,
+        count: u64,
+    ) -> Result<Vec<ChrononRecord>, ForetiasError> {
         let Some(peer) = self.primary_peer() else {
             return Err(ForetiasError::Network("no peer configured".into()));
         };
@@ -530,8 +613,9 @@ impl Foretias {
             "count": count,
         });
         let result = noise_json_rpc(peer, "get_calendar_slice", params, self.timeout()).await?;
-        let records: Vec<ChrononRecord> = serde_json::from_value(result)
-            .map_err(|e| ForetiasError::Network(format!("calendar slice deserialization failed: {}", e)))?;
+        let records: Vec<ChrononRecord> = serde_json::from_value(result).map_err(|e| {
+            ForetiasError::Network(format!("calendar slice deserialization failed: {}", e))
+        })?;
         Ok(records)
     }
 
@@ -597,7 +681,10 @@ mod tests {
         let client = Foretias::new("stamp-test".into(), None).unwrap();
         let rt = tokio::runtime::Runtime::new().unwrap();
         let (foretis, sig, _alg) = rt.block_on(async {
-            client.stamp(b"hello world", "test-echo".into()).await.unwrap()
+            client
+                .stamp(b"hello world", "test-echo".into())
+                .await
+                .unwrap()
         });
         assert_eq!(foretis.chronon_number, 1);
         assert_eq!(foretis.echo, "test-echo");
@@ -624,7 +711,10 @@ mod tests {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             let (foretis, sig, alg) = client.stamp(b"original", "echo".into()).await.unwrap();
-            let verified = client.verify(b"tampered", &foretis, &sig, &alg).await.unwrap();
+            let verified = client
+                .verify(b"tampered", &foretis, &sig, &alg)
+                .await
+                .unwrap();
             assert!(!verified, "wrong content should fail verification");
         });
     }
@@ -685,13 +775,14 @@ mod tests {
         let client = Foretias::new("dormant-source".into(), Some(path.clone())).unwrap();
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
-            let _ = client.stamp(b"before dormant", "echo".into()).await.unwrap();
+            let _ = client
+                .stamp(b"before dormant", "echo".into())
+                .await
+                .unwrap();
         });
         let dormant = Foretias::from_persist(path.clone()).unwrap();
         assert!(dormant.status().is_dormant);
-        let result = rt.block_on(async {
-            dormant.stamp(b"should fail", "echo".into()).await
-        });
+        let result = rt.block_on(async { dormant.stamp(b"should fail", "echo".into()).await });
         assert!(matches!(result, Err(ForetiasError::Dormant(_))));
         std::fs::remove_file(path).ok();
     }
@@ -718,12 +809,21 @@ mod tests {
         rt.block_on(async {
             let content = b"verify with proof test";
             let (foretis, sig, alg) = client.stamp(content, "echo".into()).await.unwrap();
-            let report = client.verify_with_proof(content, &foretis, &sig, &alg).await.unwrap();
+            let report = client
+                .verify_with_proof(content, &foretis, &sig, &alg)
+                .await
+                .unwrap();
             assert!(report.verified, "valid stamp should verify with proof");
             assert_eq!(report.chronon_number, foretis.chronon_number);
-            assert!(!report.calendar_records.is_empty(), "report must include calendar records");
+            assert!(
+                !report.calendar_records.is_empty(),
+                "report must include calendar records"
+            );
             assert_eq!(report.calendar_records.len(), 1);
-            assert_eq!(report.calendar_records[0].chronon_number, foretis.chronon_number);
+            assert_eq!(
+                report.calendar_records[0].chronon_number,
+                foretis.chronon_number
+            );
             assert_eq!(report.foretis.chronon_number, foretis.chronon_number);
             assert_eq!(report.method, "verify_with_proof");
         });
@@ -734,8 +834,14 @@ mod tests {
         let client = Foretias::new("vwp-wrong-content".into(), None).unwrap();
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
-            let (foretis, sig, alg) = client.stamp(b"original content", "echo".into()).await.unwrap();
-            let report = client.verify_with_proof(b"tampered content", &foretis, &sig, &alg).await.unwrap();
+            let (foretis, sig, alg) = client
+                .stamp(b"original content", "echo".into())
+                .await
+                .unwrap();
+            let report = client
+                .verify_with_proof(b"tampered content", &foretis, &sig, &alg)
+                .await
+                .unwrap();
             assert!(!report.verified, "wrong content should fail verification");
         });
     }
@@ -747,7 +853,10 @@ mod tests {
         rt.block_on(async {
             let content = b"structure test";
             let (foretis, sig, alg) = client.stamp(content, "echo".into()).await.unwrap();
-            let report = client.verify_with_proof(content, &foretis, &sig, &alg).await.unwrap();
+            let report = client
+                .verify_with_proof(content, &foretis, &sig, &alg)
+                .await
+                .unwrap();
             assert!(report.verified);
             assert!(report.chronon_number > 0, "chronon_number must be positive");
             assert_eq!(report.calendar_records.len(), 1);
@@ -763,7 +872,10 @@ mod tests {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             let (foretis, sig, alg) = client.stamp(b"content", "echo".into()).await.unwrap();
-            let report = client.verify_with_proof(b"content", &foretis, &sig, &alg).await.unwrap();
+            let report = client
+                .verify_with_proof(b"content", &foretis, &sig, &alg)
+                .await
+                .unwrap();
             assert!(report.verified);
         });
     }
@@ -776,8 +888,14 @@ mod tests {
             let (f1, sig1, alg1) = client.stamp(b"first stamp", "echo1".into()).await.unwrap();
             let (f2, sig2, alg2) = client.stamp(b"second stamp", "echo2".into()).await.unwrap();
             assert_ne!(f1.chronon_number, f2.chronon_number);
-            let r1 = client.verify_with_proof(b"first stamp", &f1, &sig1, &alg1).await.unwrap();
-            let r2 = client.verify_with_proof(b"second stamp", &f2, &sig2, &alg2).await.unwrap();
+            let r1 = client
+                .verify_with_proof(b"first stamp", &f1, &sig1, &alg1)
+                .await
+                .unwrap();
+            let r2 = client
+                .verify_with_proof(b"second stamp", &f2, &sig2, &alg2)
+                .await
+                .unwrap();
             assert!(r1.verified);
             assert!(r2.verified);
             assert_eq!(r1.calendar_records[0].chronon_number, f1.chronon_number);

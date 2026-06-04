@@ -258,8 +258,8 @@ async fn test_two_nodes_mutual_attest() {
     assert!(!server_a.is_dormant());
     assert!(!server_b.is_dormant());
 
-    let _ = handle_a.abort();
-    let _ = handle_b.abort();
+    handle_a.abort();
+    handle_b.abort();
 
     server_a.stop_daemon_arc();
     server_b.stop_daemon_arc();
@@ -304,7 +304,7 @@ async fn test_peer_unreachable_does_not_crash() {
         .expect("Local stamp should work despite unreachable peer");
     assert!(stamped.foretis.chronon_number > 0);
 
-    let _ = handle.abort();
+    handle.abort();
     server.stop_daemon_arc();
 }
 
@@ -385,7 +385,7 @@ async fn two_swarms_connect_and_identify() {
     let ma_b: libp2p::Multiaddr = format!("/ip4/127.0.0.1/tcp/{}", port_b).parse().unwrap();
 
     let mut handle_a = build_and_spawn_swarm(Some(ma_a.clone()), vec![], "mainnet", None, None).await.unwrap();
-    let peer_id_a = handle_a.local_peer_id.clone();
+    let peer_id_a = handle_a.local_peer_id;
 
     let dial_a: libp2p::Multiaddr = format!("{}/p2p/{}", ma_a, peer_id_a).parse().unwrap();
     let mut handle_b = build_and_spawn_swarm(Some(ma_b), vec![dial_a], "mainnet", None, None).await.unwrap();
@@ -560,19 +560,16 @@ async fn dht_discovery_three_nodes() {
     let deadline = std::time::Instant::now() + Duration::from_secs(15);
     while std::time::Instant::now() < deadline {
         while let Ok(Some(event)) = tokio::time::timeout(Duration::from_millis(50), handle_c.events.recv()).await {
-            match event {
-                NetworkEvent::RecordRetrieved { records, .. } => {
-                    for r in records {
-                        // Note: libp2p-kad overwrites record.publisher with the storing
-                        // node's PeerId during replication. The original publisher is
-                        // only preserved on the node that called put_record. We check
-                        // the record value instead, which contains peer_id_a bytes.
-                        if r.value == peer_id_a.to_bytes() {
-                            c_discovered_a = true;
-                        }
+            if let NetworkEvent::RecordRetrieved { records, .. } = event {
+                for r in records {
+                    // Note: libp2p-kad overwrites record.publisher with the storing
+                    // node's PeerId during replication. The original publisher is
+                    // only preserved on the node that called put_record. We check
+                    // the record value instead, which contains peer_id_a bytes.
+                    if r.value == peer_id_a.to_bytes() {
+                        c_discovered_a = true;
                     }
                 }
-                _ => {}
             }
         }
         if c_discovered_a { break; }
@@ -726,7 +723,7 @@ async fn test_libp2p_direct_rpc() {
     )
     .await
     .unwrap();
-    let peer_id_a = handle_a.local_peer_id.clone();
+    let peer_id_a = handle_a.local_peer_id;
 
     let handler_b = std::sync::Arc::new(EchoRpcHandler);
     let dial_a: libp2p::Multiaddr = format!("{}/p2p/{}", ma_a, peer_id_a).parse().unwrap();
@@ -806,7 +803,7 @@ async fn test_libp2p_direct_rpc() {
     assert_eq!(resp_val["method"], "ping");
     assert_eq!(resp_val["params"]["from"], "peer_b");
 
-    let peer_id_b = handle_b.local_peer_id.clone();
+    let peer_id_b = handle_b.local_peer_id;
     let request = serde_json::json!({
         "jsonrpc": "2.0",
         "method": "echo",

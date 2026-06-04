@@ -9,12 +9,12 @@
 //!
 //! The TBID (application identity) is separate and managed by the C11 enclave.
 
-pub mod tbid_handshake;
-pub mod swarm;
 pub mod behaviour;
-pub mod rpc_protocol;
 pub mod events;
 pub mod gossip;
+pub mod rpc_protocol;
+pub mod swarm;
+pub mod tbid_handshake;
 
 use libp2p::identity::{Keypair, PublicKey};
 

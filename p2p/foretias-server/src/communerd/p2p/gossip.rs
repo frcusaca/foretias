@@ -1,10 +1,10 @@
 //! GossipSub topic construction and publish helpers for probity reports and heartbeats.
 
-use libp2p::gossipsub::IdentTopic;
-use foretias_core::error::NodeError;
-use foretias_core::collision::Heartbeat;
-use crate::probity::ProbityReport;
 use super::behaviour::ForetiasBehaviour;
+use crate::probity::ProbityReport;
+use foretias_core::collision::Heartbeat;
+use foretias_core::error::NodeError;
+use libp2p::gossipsub::IdentTopic;
 
 /// Probity gossip topic — per-namespace isolation.
 pub fn probity_topic(namespace: &str) -> IdentTopic {
@@ -18,13 +18,15 @@ pub fn heartbeat_topic(namespace: &str) -> IdentTopic {
 
 /// Publish a probity report to the gossip network.
 pub fn publish_probity_report(
-    swarm:     &mut libp2p::Swarm<ForetiasBehaviour>,
-    report:    &ProbityReport,
+    swarm: &mut libp2p::Swarm<ForetiasBehaviour>,
+    report: &ProbityReport,
     namespace: &str,
 ) -> Result<(), NodeError> {
     let bytes = serde_json::to_vec(report)
         .map_err(|e| NodeError::Internal(format!("ProbityReport serialization: {e}")))?;
-    swarm.behaviour_mut().gossip
+    swarm
+        .behaviour_mut()
+        .gossip
         .publish(probity_topic(namespace), bytes)
         .map_err(|e| NodeError::Internal(format!("gossip publish: {e}")))?;
     Ok(())
@@ -32,13 +34,15 @@ pub fn publish_probity_report(
 
 /// Publish a signed heartbeat to the gossip network.
 pub fn publish_heartbeat(
-    swarm:    &mut libp2p::Swarm<ForetiasBehaviour>,
-    hb:       &Heartbeat,
+    swarm: &mut libp2p::Swarm<ForetiasBehaviour>,
+    hb: &Heartbeat,
     namespace: &str,
 ) -> Result<(), NodeError> {
     let bytes = serde_json::to_vec(hb)
         .map_err(|e| NodeError::Internal(format!("Heartbeat serialization: {e}")))?;
-    swarm.behaviour_mut().gossip
+    swarm
+        .behaviour_mut()
+        .gossip
         .publish(heartbeat_topic(namespace), bytes)
         .map_err(|e| NodeError::Internal(format!("gossip publish heartbeat: {e}")))?;
     Ok(())

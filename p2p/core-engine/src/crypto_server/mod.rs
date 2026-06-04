@@ -92,15 +92,24 @@ pub trait SignOps: Send + Sync {
 /// Verification operations.
 pub trait VerifyOps: Send + Sync {
     /// Verifies an Ed25519 signature against a public key and message.
-    fn verify_ed25519(&self, pub_key: &ForetiasPubKey32, msg: &[u8], sig: &ForetiasSig64)
-        -> Result<bool, CryptoError>;
+    fn verify_ed25519(
+        &self,
+        pub_key: &ForetiasPubKey32,
+        msg: &[u8],
+        sig: &ForetiasSig64,
+    ) -> Result<bool, CryptoError>;
 
     /// Verifies a P-256 signature against a public key and message.
-    fn verify_p256(&self, pub_key: &ForetiasPubKey33, msg: &[u8], sig: &ForetiasSig64)
-        -> Result<bool, CryptoError>;
+    fn verify_p256(
+        &self,
+        pub_key: &ForetiasPubKey33,
+        msg: &[u8],
+        sig: &ForetiasSig64,
+    ) -> Result<bool, CryptoError>;
 
     /// Verifies a signature given the algorithm ID.
-    fn verify_with(&self,
+    fn verify_with(
+        &self,
         pub_key: &[u8],
         alg_id: &str,
         msg: &[u8],
@@ -163,8 +172,11 @@ pub trait FrostOps: Send + Sync {
     /// Stores a FROST threshold signing share for the given committee.
     fn store_frost_share(&self, committee_id: &str, share: &[u8]) -> Result<(), CryptoError>;
     /// Produces a partial FROST signature for the given committee and session.
-    fn frost_sign_partial(&self, committee_id: &str, session_state: &[u8])
-        -> Result<Vec<u8>, CryptoError>;
+    fn frost_sign_partial(
+        &self,
+        committee_id: &str,
+        session_state: &[u8],
+    ) -> Result<Vec<u8>, CryptoError>;
 }
 
 /// Self-proof (attestation) operations.
@@ -182,27 +194,33 @@ pub trait ProofOps: Send + Sync {
 ///
 /// # Blanket implementation
 ///
-/// Any type implementing `SignOps + VerifyOps + KexOps + HashOps + SealOps + RngOps
-/// + IdentityOps + FrostOps + ProofOps` automatically satisfies `CryptoServer` via
-/// the blanket impl below.  Implementors should implement each sub-trait separately
-/// for discoverability and to ring-fence concerns.
+/// Any type implementing `SignOps + VerifyOps + KexOps + HashOps + SealOps
+/// + RngOps + IdentityOps + FrostOps + ProofOps` automatically satisfies `CryptoServer`
+///   via the blanket impl below. Implementors should implement each sub-trait separately for
+///   discoverability and to ring-fence concerns.
 pub trait CryptoServer:
-    SignOps + VerifyOps + KexOps + HashOps + SealOps
-    + RngOps + IdentityOps + FrostOps + ProofOps
+    SignOps + VerifyOps + KexOps + HashOps + SealOps + RngOps + IdentityOps + FrostOps + ProofOps
 {
 }
 
 impl<T> CryptoServer for T where
-    T: SignOps + VerifyOps + KexOps + HashOps + SealOps
-     + RngOps + IdentityOps + FrostOps + ProofOps
+    T: SignOps
+        + VerifyOps
+        + KexOps
+        + HashOps
+        + SealOps
+        + RngOps
+        + IdentityOps
+        + FrostOps
+        + ProofOps
 {
 }
 
-pub mod software;
-pub mod signing_sphincs;
-pub mod signing_tbid;
 pub mod kem_mlkem;
 pub mod signing_dilithium;
+pub mod signing_sphincs;
+pub mod signing_tbid;
+pub mod software;
 
 /// Creates a software-backed crypto server using the specified curve.
 pub fn new_software(curve: ForetiasCurve) -> Result<Box<dyn CryptoServer>, CryptoError> {

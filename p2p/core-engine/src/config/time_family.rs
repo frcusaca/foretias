@@ -2,10 +2,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::p2p::{CommunerdConfig, DHTConfig, MutualAttestConfig};
-use super::chronomatter::{ChronomatterConfig, KeyRotationConfig};
 use super::calendar::{CalendarConfig, EncryptionConfig};
+use super::chronomatter::{ChronomatterConfig, KeyRotationConfig};
 use super::node::NodeConfig;
+use super::p2p::{CommunerdConfig, DHTConfig, MutualAttestConfig};
 
 /// Logging configuration for the TimeFamily logger.
 ///
@@ -99,6 +99,26 @@ impl Default for TimeFamilyConfig {
     }
 }
 
+/// CLI and config-file parameters for building a TimeFamilyConfig.
+#[derive(Debug, Clone)]
+pub struct TimeFamilyCliConfig {
+    pub listen_addr: String,
+    pub chronon_ns: u64,
+    pub persist_path: Option<std::path::PathBuf>,
+    pub dormant: bool,
+    pub peers: Vec<String>,
+    pub auto_attest_every_n: u64,
+    pub request_timeout_secs: u64,
+    pub p2p_listen: Option<String>,
+    pub p2p_port_range: [u16; 2],
+    pub p2p_dial: Vec<String>,
+    pub known_servers: Vec<String>,
+    pub dht_namespace: String,
+    pub dht_bootstrap: Vec<String>,
+    pub max_discovered_peers: usize,
+    pub config_file_path: Option<String>,
+}
+
 impl TimeFamilyConfig {
     /// Load from a JSON file path, falling back to defaults on error.
     pub fn load(path: &str) -> Self {
@@ -116,47 +136,31 @@ impl TimeFamilyConfig {
     }
 
     /// Build a TimeFamilyConfig from CLI arguments, optionally merging with a config file.
-    pub fn from_cli_and_file(
-        listen_addr: &str,
-        chronon_ns: u64,
-        persist_path: Option<std::path::PathBuf>,
-        dormant: bool,
-        peers: Vec<String>,
-        auto_attest_every_n: u64,
-        request_timeout_secs: u64,
-        p2p_listen: Option<String>,
-        p2p_port_range: [u16; 2],
-        p2p_dial: Vec<String>,
-        known_servers: Vec<String>,
-        dht_namespace: &str,
-        dht_bootstrap: Vec<String>,
-        max_discovered_peers: usize,
-        config_file_path: Option<&str>,
-    ) -> Self {
-        let mut cfg = if let Some(path) = config_file_path {
+    pub fn from_cli_and_file(cli: TimeFamilyCliConfig) -> Self {
+        let mut cfg = if let Some(path) = cli.config_file_path.as_deref() {
             Self::load(path)
         } else {
             Self::default()
         };
 
-        cfg.chronomatter.chronon_ns = chronon_ns;
-        cfg.chronomatter.dormant = dormant;
+        cfg.chronomatter.chronon_ns = cli.chronon_ns;
+        cfg.chronomatter.dormant = cli.dormant;
 
-        cfg.listen_addr = listen_addr.to_string();
+        cfg.listen_addr = cli.listen_addr;
 
-        cfg.communerd.mutual_attest.peers = peers;
-        cfg.communerd.mutual_attest.every_n_chronons = auto_attest_every_n;
-        cfg.communerd.mutual_attest.request_timeout_secs = request_timeout_secs;
+        cfg.communerd.mutual_attest.peers = cli.peers;
+        cfg.communerd.mutual_attest.every_n_chronons = cli.auto_attest_every_n;
+        cfg.communerd.mutual_attest.request_timeout_secs = cli.request_timeout_secs;
 
-        cfg.communerd.p2p_listen = p2p_listen;
-        cfg.communerd.p2p_port_range = p2p_port_range;
-        cfg.communerd.p2p_dial = p2p_dial;
-        cfg.communerd.known_servers = known_servers;
-        cfg.communerd.max_discovered_peers = max_discovered_peers;
-        cfg.communerd.dht.namespace = dht_namespace.to_string();
-        cfg.communerd.dht.bootstrap = dht_bootstrap;
+        cfg.communerd.p2p_listen = cli.p2p_listen;
+        cfg.communerd.p2p_port_range = cli.p2p_port_range;
+        cfg.communerd.p2p_dial = cli.p2p_dial;
+        cfg.communerd.known_servers = cli.known_servers;
+        cfg.communerd.max_discovered_peers = cli.max_discovered_peers;
+        cfg.communerd.dht.namespace = cli.dht_namespace;
+        cfg.communerd.dht.bootstrap = cli.dht_bootstrap;
 
-        if let Some(p) = persist_path {
+        if let Some(p) = cli.persist_path {
             if cfg.calendars.is_empty() {
                 cfg.calendars.push(CalendarConfig::default());
             }

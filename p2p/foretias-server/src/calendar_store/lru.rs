@@ -38,17 +38,14 @@ pub enum CalendarBin {
 /// - `Everything`: Store calendars for every peer (expensive, complete).
 /// - `MyOwn`: Store only our own calendar (and our liege's).
 /// - `MyOwnPlusLru`: MyOwn + LRU cache of recently-used peers' calendars.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub enum CalendarStoragePolicy {
     Everything,
+    #[default]
     MyOwn,
-    MyOwnPlusLru { max_bytes_total: u64 },
-}
-
-impl Default for CalendarStoragePolicy {
-    fn default() -> Self {
-        CalendarStoragePolicy::MyOwn
-    }
+    MyOwnPlusLru {
+        max_bytes_total: u64,
+    },
 }
 
 /// Metadata for a single calendar record in the LRU cache.

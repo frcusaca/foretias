@@ -1,13 +1,11 @@
 use serde_json::Value;
 
-use foretias_core::error::NodeError;
-use foretias_core::foretias::clean_auth::{
-    CleanAuthenticated, UnverifiedSignatureEnvelope,
-};
-use foretias_core::foretias::tick::{CalendarLookup, ChrononRecord, Foretis};
 use super::jsonrpc::{self, JsonRpcResponse};
-use crate::metrics::MetricField;
 use super::TimeFamilyServer;
+use crate::metrics::MetricField;
+use foretias_core::error::NodeError;
+use foretias_core::foretias::clean_auth::{CleanAuthenticated, UnverifiedSignatureEnvelope};
+use foretias_core::foretias::tick::{CalendarLookup, ChrononRecord, Foretis};
 
 const MAX_CONTENT_BYTES: usize = 1_073_741_824;
 const MAX_CALENDAR_SLICE_COUNT: usize = 10_000;
@@ -20,7 +18,12 @@ fn resp_success(server: &TimeFamilyServer, id: Option<Value>, result: Value) -> 
     }
 }
 
-fn resp_error(server: &TimeFamilyServer, id: Option<Value>, code: i32, message: String) -> JsonRpcResponse {
+fn resp_error(
+    server: &TimeFamilyServer,
+    id: Option<Value>,
+    code: i32,
+    message: String,
+) -> JsonRpcResponse {
     if server.is_dormant() {
         jsonrpc::JsonRpcResponse::dormant_error(id, code, message)
     } else {
@@ -33,30 +36,49 @@ pub fn handle_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse
 
     let content_hex = match params.get("content").and_then(|v| v.as_str()) {
         Some(h) => h.to_string(),
-        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            "missing or invalid 'content' (hex string)".into()),
+        None => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                "missing or invalid 'content' (hex string)".into(),
+            )
+        }
     };
 
     let content = match hex::decode(&content_hex) {
         Ok(b) => b,
-        Err(e) => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            format!("invalid hex: {}", e)),
+        Err(e) => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                format!("invalid hex: {}", e),
+            )
+        }
     };
 
     if content.len() > MAX_CONTENT_BYTES {
-        return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            format!("content exceeds maximum size of {} bytes", MAX_CONTENT_BYTES));
+        return resp_error(
+            server,
+            id,
+            jsonrpc::INVALID_PARAMS,
+            format!(
+                "content exceeds maximum size of {} bytes",
+                MAX_CONTENT_BYTES
+            ),
+        );
     }
 
-    let echo = params.get("echo")
+    let echo = params
+        .get("echo")
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
 
     let cm = server.chronomatter();
     if server.is_dormant() {
-        return resp_error(server, id, jsonrpc::DORMANT_ERROR,
-            "node is dormant".into());
+        return resp_error(server, id, jsonrpc::DORMANT_ERROR, "node is dormant".into());
     }
     match cm.stamp(content, echo) {
         Ok(stamped) => {
@@ -64,14 +86,22 @@ pub fn handle_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse
             if let Err(e) = server.save() {
                 tracing::warn!("failed to persist calendar after stamp: {}", e);
             }
-            resp_success(server, id, serde_json::json!({
-                "foretis": stamped.foretis,
-                "signature": hex::encode(&stamped.signature_bytes),
-                "signature_algorithm": stamped.signature_algorithm,
-            }))
+            resp_success(
+                server,
+                id,
+                serde_json::json!({
+                    "foretis": stamped.foretis,
+                    "signature": hex::encode(&stamped.signature_bytes),
+                    "signature_algorithm": stamped.signature_algorithm,
+                }),
+            )
         }
-        Err(e) => resp_error(server, id, jsonrpc::INTERNAL_ERROR,
-            format!("stamp failed: {}", e)),
+        Err(e) => resp_error(
+            server,
+            id,
+            jsonrpc::INTERNAL_ERROR,
+            format!("stamp failed: {}", e),
+        ),
     }
 }
 
@@ -80,28 +110,54 @@ pub fn handle_route_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcRe
 
     let target_tbid = match params.get("target_tbid").and_then(|v| v.as_str()) {
         Some(h) => h.to_string(),
-        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            "missing or invalid 'target_tbid' (hex string)".into()),
+        None => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                "missing or invalid 'target_tbid' (hex string)".into(),
+            )
+        }
     };
 
     let content_hex = match params.get("content").and_then(|v| v.as_str()) {
         Some(h) => h.to_string(),
-        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            "missing or invalid 'content' (hex string)".into()),
+        None => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                "missing or invalid 'content' (hex string)".into(),
+            )
+        }
     };
 
     let content = match hex::decode(&content_hex) {
         Ok(b) => b,
-        Err(e) => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            format!("invalid hex: {}", e)),
+        Err(e) => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                format!("invalid hex: {}", e),
+            )
+        }
     };
 
     if content.len() > MAX_CONTENT_BYTES {
-        return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            format!("content exceeds maximum size of {} bytes", MAX_CONTENT_BYTES));
+        return resp_error(
+            server,
+            id,
+            jsonrpc::INVALID_PARAMS,
+            format!(
+                "content exceeds maximum size of {} bytes",
+                MAX_CONTENT_BYTES
+            ),
+        );
     }
 
-    let echo = params.get("echo")
+    let echo = params
+        .get("echo")
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
@@ -112,13 +168,17 @@ pub fn handle_route_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcRe
     }
 
     let Some(cm) = server.communerd() else {
-        return resp_error(server, id, jsonrpc::INTERNAL_ERROR,
-            "p2p not enabled".into());
+        return resp_error(
+            server,
+            id,
+            jsonrpc::INTERNAL_ERROR,
+            "p2p not enabled".into(),
+        );
     };
 
-    match tokio::runtime::Handle::current().block_on(async {
-        cm.route_stamp(&target_tbid, &content_hex, &echo).await
-    }) {
+    match tokio::runtime::Handle::current()
+        .block_on(async { cm.route_stamp(&target_tbid, &content_hex, &echo).await })
+    {
         Ok(ca_foretis) => {
             server.metrics().inc(MetricField::StampsTotal);
             if let Err(e) = server.save() {
@@ -126,20 +186,30 @@ pub fn handle_route_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcRe
             }
             // Extract signature metadata before consuming the wrapper, then return the
             // same envelope shape as handle_stamp for response-shape consistency.
-            let sig_hex = ca_foretis.signature_bytes()
-                .map(|b| hex::encode(b))
+            let sig_hex = ca_foretis
+                .signature_bytes()
+                .map(hex::encode)
                 .unwrap_or_default();
-            let sig_alg = ca_foretis.signature_algorithm()
+            let sig_alg = ca_foretis
+                .signature_algorithm()
                 .unwrap_or("Ed25519")
                 .to_string();
-            resp_success(server, id, serde_json::json!({
-                "foretis": ca_foretis.into_inner(),
-                "signature": sig_hex,
-                "signature_algorithm": sig_alg,
-            }))
+            resp_success(
+                server,
+                id,
+                serde_json::json!({
+                    "foretis": ca_foretis.into_inner(),
+                    "signature": sig_hex,
+                    "signature_algorithm": sig_alg,
+                }),
+            )
         }
-        Err(e) => resp_error(server, id, jsonrpc::INTERNAL_ERROR,
-            format!("route stamp failed: {}", e)),
+        Err(e) => resp_error(
+            server,
+            id,
+            jsonrpc::INTERNAL_ERROR,
+            format!("route stamp failed: {}", e),
+        ),
     }
 }
 
@@ -148,38 +218,78 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
 
     let content_hex = match params.get("content").and_then(|v| v.as_str()) {
         Some(h) => h.to_string(),
-        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            "missing 'content'".into()),
+        None => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                "missing 'content'".into(),
+            )
+        }
     };
 
     let foretis_value = match params.get("foretis") {
         Some(v) => v.clone(),
-        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            "missing or invalid 'foretis'".into()),
+        None => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                "missing or invalid 'foretis'".into(),
+            )
+        }
     };
 
-    let signature_hex = params.get("signature").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let signature_algorithm = params.get("signature_algorithm").and_then(|v| v.as_str()).unwrap_or("Ed25519").to_string();
+    let signature_hex = params
+        .get("signature")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let signature_algorithm = params
+        .get("signature_algorithm")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Ed25519")
+        .to_string();
     let signature = hex::decode(&signature_hex).unwrap_or_default();
 
     let content = match hex::decode(&content_hex) {
         Ok(b) => b,
-        Err(e) => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            format!("invalid hex: {}", e)),
+        Err(e) => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                format!("invalid hex: {}", e),
+            )
+        }
     };
 
     if content.len() > MAX_CONTENT_BYTES {
-        return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            format!("content exceeds maximum size of {} bytes", MAX_CONTENT_BYTES));
+        return resp_error(
+            server,
+            id,
+            jsonrpc::INVALID_PARAMS,
+            format!(
+                "content exceeds maximum size of {} bytes",
+                MAX_CONTENT_BYTES
+            ),
+        );
     }
 
     let foretis: Foretis = match serde_json::from_value(foretis_value.clone()) {
         Ok(f) => f,
-        Err(e) => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            format!("failed to parse foretis: {}", e)),
+        Err(e) => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                format!("failed to parse foretis: {}", e),
+            )
+        }
     };
 
-    let cross_node = params.get("cross_node")
+    let cross_node = params
+        .get("cross_node")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
@@ -188,41 +298,75 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
     let calendar = server.calendar().inner();
     let cal_read = calendar.read();
     let local_valid = if let Ok(recs) = cal_read.get(foretis.chronon_number, 1) {
-        !recs.is_empty() && foretias_core::foretias::tick::verify(
-            crypto.as_ref(), &foretis, &signature, &signature_algorithm, &content, &*cal_read,
-        ).unwrap_or(false)
+        !recs.is_empty()
+            && foretias_core::foretias::tick::verify(
+                crypto.as_ref(),
+                &foretis,
+                &signature,
+                &signature_algorithm,
+                &content,
+                &*cal_read,
+            )
+            .unwrap_or(false)
     } else {
         false
     };
     drop(cal_read);
 
     if local_valid {
-        return resp_success(server, id, serde_json::json!({"valid": true, "method": "local"}));
+        return resp_success(
+            server,
+            id,
+            serde_json::json!({"valid": true, "method": "local"}),
+        );
     }
 
     // Local calendar miss — if cross_node is enabled, try DHT lookup
     if !cross_node {
-        return resp_success(server, id, serde_json::json!({"valid": false, "method": "local", "note": "foretis.tbid not found in local calendar"}));
+        return resp_success(
+            server,
+            id,
+            serde_json::json!({"valid": false, "method": "local", "note": "foretis.tbid not found in local calendar"}),
+        );
     }
 
     let foretis_tbid_hex = foretis.tbid.to_hex();
     if foretis.tbid == server.get_tbid() {
-        return resp_success(server, id, serde_json::json!({"valid": false, "method": "local", "note": "own TBID but calendar miss"}));
+        return resp_success(
+            server,
+            id,
+            serde_json::json!({"valid": false, "method": "local", "note": "own TBID but calendar miss"}),
+        );
     }
 
     // Cross-node verification: construct envelope and use existing path
-    let unproc_foretis = match UnverifiedSignatureEnvelope::<Foretis>::from_json_value(foretis_value) {
-        Ok(f) => f,
-        Err(e) => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            format!("failed to parse foretis: {}", e)),
-    };
+    let unproc_foretis =
+        match UnverifiedSignatureEnvelope::<Foretis>::from_json_value(foretis_value) {
+            Ok(f) => f,
+            Err(e) => {
+                return resp_error(
+                    server,
+                    id,
+                    jsonrpc::INVALID_PARAMS,
+                    format!("failed to parse foretis: {}", e),
+                )
+            }
+        };
 
     match tokio::runtime::Handle::current().block_on(async {
         cross_node_verify(server, &unproc_foretis, &content, &foretis_tbid_hex).await
     }) {
-        Ok(valid) => resp_success(server, id, serde_json::json!({"valid": valid, "method": "cross_node"})),
-        Err(e) => resp_error(server, id, jsonrpc::INTERNAL_ERROR,
-            format!("cross-node verify failed: {}", e)),
+        Ok(valid) => resp_success(
+            server,
+            id,
+            serde_json::json!({"valid": valid, "method": "cross_node"}),
+        ),
+        Err(e) => resp_error(
+            server,
+            id,
+            jsonrpc::INTERNAL_ERROR,
+            format!("cross-node verify failed: {}", e),
+        ),
     }
 }
 
@@ -242,11 +386,13 @@ async fn cross_node_verify(
     // No manual DHT lookup, no PeerAddr construction, no from_trusted bypass.
     let tbid = foretias_core::foretias::types::Tbid::from_hex(foretis_tbid_hex)
         .map_err(|e| NodeError::Internal(format!("bad TBID hex: {e}")))?;
-    let tick: foretias_core::foretias::clean_auth::CleanAuthenticated<foretias_core::foretias::tick::ChrononRecord> =
-        com.line_for_tbid(tbid)
-            .get_tick(foretis_ref.chronon_number)
-            .await
-            .map_err(|e| NodeError::Internal(format!("get_tick failed: {e:?}")))?;
+    let tick: foretias_core::foretias::clean_auth::CleanAuthenticated<
+        foretias_core::foretias::tick::ChrononRecord,
+    > = com
+        .line_for_tbid(tbid)
+        .get_tick(foretis_ref.chronon_number)
+        .await
+        .map_err(|e| NodeError::Internal(format!("get_tick failed: {e:?}")))?;
 
     let crypto = server.chronomatter().crypto_server();
     let valid = unproc_foretis
@@ -262,27 +408,35 @@ pub fn handle_get_calendar_slice(server: &TimeFamilyServer, params: Value) -> Js
     let id = params.get("id").cloned();
 
     // Accept both new name and legacy name for wire-format compat
-    let cal_chronon_start = params.get("cal_chronon_start")
+    let cal_chronon_start = params
+        .get("cal_chronon_start")
         .or_else(|| params.get("cal_tick_start"))
         .and_then(|v| v.as_u64())
         .unwrap_or(0);
 
-    let count = params.get("count")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(10) as usize;
+    let count = params.get("count").and_then(|v| v.as_u64()).unwrap_or(10) as usize;
 
     if count > MAX_CALENDAR_SLICE_COUNT {
-        return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            format!("count exceeds maximum of {}", MAX_CALENDAR_SLICE_COUNT));
+        return resp_error(
+            server,
+            id,
+            jsonrpc::INVALID_PARAMS,
+            format!("count exceeds maximum of {}", MAX_CALENDAR_SLICE_COUNT),
+        );
     }
 
     let calendar = server.calendar().inner();
     let cal = calendar.read();
-    let records = cal.get(cal_chronon_start, count)
+    let records = cal
+        .get(cal_chronon_start, count)
         .map_err(|e| NodeError::Internal(format!("calendar lookup failed: {}", e)));
 
     match records {
-        Ok(recs) => resp_success(server, id, serde_json::to_value(&recs).unwrap_or(Value::Null)),
+        Ok(recs) => resp_success(
+            server,
+            id,
+            serde_json::to_value(&recs).unwrap_or(Value::Null),
+        ),
         Err(e) => resp_error(server, id, jsonrpc::INTERNAL_ERROR, format!("{}", e)),
     }
 }
@@ -297,14 +451,22 @@ pub fn handle_integrity_check(server: &TimeFamilyServer, params: Value) -> JsonR
     match cm.integrity_check(&*server.calendar().inner().read(), start, end) {
         Ok(results) => {
             let all_valid = results.iter().all(|&v| v);
-            resp_success(server, id, serde_json::json!({
-                "all_valid": all_valid,
-                "pair_results": results,
-                "pairs_checked": results.len(),
-            }))
+            resp_success(
+                server,
+                id,
+                serde_json::json!({
+                    "all_valid": all_valid,
+                    "pair_results": results,
+                    "pairs_checked": results.len(),
+                }),
+            )
         }
-        Err(e) => resp_error(server, id, jsonrpc::INTERNAL_ERROR,
-            format!("integrity check failed: {}", e)),
+        Err(e) => resp_error(
+            server,
+            id,
+            jsonrpc::INTERNAL_ERROR,
+            format!("integrity check failed: {}", e),
+        ),
     }
 }
 
@@ -328,7 +490,9 @@ pub fn handle_channel_bind_challenge(server: &TimeFamilyServer, params: Value) -
     };
     let channel_id = match params.get("channel_id").and_then(|v| v.as_str()) {
         Some(s) => s.to_string(),
-        None => return jsonrpc::JsonRpcResponse::error(id, -32602, "missing channel_id".to_string()),
+        None => {
+            return jsonrpc::JsonRpcResponse::error(id, -32602, "missing channel_id".to_string())
+        }
     };
 
     let responder_tbid_hex = server.get_tbid().to_hex();
@@ -346,7 +510,9 @@ pub fn handle_channel_bind_challenge(server: &TimeFamilyServer, params: Value) -
     // Dual-sign with the TBID secret key (Ed25519 || SLH-DSA, 49920 bytes total)
     let combined_sig = match server.sign_tbid_message(&msg) {
         Ok(s) => s,
-        Err(e) => return jsonrpc::JsonRpcResponse::error(id, -32000, format!("signing failed: {e}")),
+        Err(e) => {
+            return jsonrpc::JsonRpcResponse::error(id, -32000, format!("signing failed: {e}"))
+        }
     };
     let sig_bytes = combined_sig.as_bytes();
     if sig_bytes.len() < 64 {
@@ -356,13 +522,16 @@ pub fn handle_channel_bind_challenge(server: &TimeFamilyServer, params: Value) -
     let fast_sig = hex::encode(&sig_bytes[..64]);
     let slow_sig = hex::encode(&sig_bytes[64..]);
 
-    jsonrpc::JsonRpcResponse::success(id, serde_json::json!({
-        "responder_tbid": responder_tbid_hex,
-        "nonce_echo": nonce_hex,
-        "channel_id": channel_id,
-        "fast_sig": fast_sig,
-        "slow_sig": slow_sig,
-    }))
+    jsonrpc::JsonRpcResponse::success(
+        id,
+        serde_json::json!({
+            "responder_tbid": responder_tbid_hex,
+            "nonce_echo": nonce_hex,
+            "channel_id": channel_id,
+            "fast_sig": fast_sig,
+            "slow_sig": slow_sig,
+        }),
+    )
 }
 
 /// Handle `authenticated_ping` — Phase 12.3 L2 liveness.
@@ -374,11 +543,15 @@ pub fn handle_authenticated_ping(server: &TimeFamilyServer, params: Value) -> Js
     let id = params.get("id").cloned();
     let challenge_hex = match params.get("challenge").and_then(|v| v.as_str()) {
         Some(s) => s.to_string(),
-        None => return jsonrpc::JsonRpcResponse::error(id, -32602, "missing challenge".to_string()),
+        None => {
+            return jsonrpc::JsonRpcResponse::error(id, -32602, "missing challenge".to_string())
+        }
     };
     let challenge = match hex::decode(&challenge_hex) {
         Ok(b) => b,
-        Err(_) => return jsonrpc::JsonRpcResponse::error(id, -32602, "challenge not hex".to_string()),
+        Err(_) => {
+            return jsonrpc::JsonRpcResponse::error(id, -32602, "challenge not hex".to_string())
+        }
     };
     let responder_tbid_hex = server.get_tbid().to_hex();
     let mut msg = Vec::new();
@@ -388,7 +561,9 @@ pub fn handle_authenticated_ping(server: &TimeFamilyServer, params: Value) -> Js
     // Sign with both keys; extract Ed25519 (fast-key) portion (first 64 bytes)
     let combined_sig = match server.sign_tbid_message(&msg) {
         Ok(s) => s,
-        Err(e) => return jsonrpc::JsonRpcResponse::error(id, -32000, format!("signing failed: {e}")),
+        Err(e) => {
+            return jsonrpc::JsonRpcResponse::error(id, -32000, format!("signing failed: {e}"))
+        }
     };
     let sig_bytes = combined_sig.as_bytes();
     if sig_bytes.len() < 64 {
@@ -396,90 +571,120 @@ pub fn handle_authenticated_ping(server: &TimeFamilyServer, params: Value) -> Js
     }
     let fast_sig_hex = hex::encode(&sig_bytes[..64]);
 
-    jsonrpc::JsonRpcResponse::success(id, serde_json::json!({
-        "responder_tbid": responder_tbid_hex,
-        "challenge_echo": challenge_hex,
-        "signature": fast_sig_hex,
-        "signature_algorithm": "Ed25519",
-    }))
+    jsonrpc::JsonRpcResponse::success(
+        id,
+        serde_json::json!({
+            "responder_tbid": responder_tbid_hex,
+            "challenge_echo": challenge_hex,
+            "signature": fast_sig_hex,
+            "signature_algorithm": "Ed25519",
+        }),
+    )
 }
 
 pub fn handle_status(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
     let id = params.get("id").cloned();
-    let peer_count = server.communerd()
-        .map(|c| {
-            tokio::runtime::Handle::current()
-                .block_on(async { c.get_peers().await.len() })
-        })
+    let peer_count = server
+        .communerd()
+        .map(|c| tokio::runtime::Handle::current().block_on(async { c.get_peers().await.len() }))
         .unwrap_or(0);
-    resp_success(server, id, serde_json::json!({
-        "tbid": server.get_tbid().to_hex(),
-        "tbn": server.get_tbn(),
-        "tick_count": server.current_tick(),
-        "peer_count": peer_count,
-        "dormant": server.is_dormant(),
-    }))
+    resp_success(
+        server,
+        id,
+        serde_json::json!({
+            "tbid": server.get_tbid().to_hex(),
+            "tbn": server.get_tbn(),
+            "tick_count": server.current_tick(),
+            "peer_count": peer_count,
+            "dormant": server.is_dormant(),
+        }),
+    )
 }
 
 pub fn handle_collision_status(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
     let id = params.get("id").cloned();
     let metrics = server.metrics();
-    resp_success(server, id, serde_json::json!({
-        "dormant": server.is_dormant(),
-        "heartbeats_sent": metrics.heartbeats_sent.load(std::sync::atomic::Ordering::Relaxed),
-        "heartbeats_received": metrics.heartbeats_received.load(std::sync::atomic::Ordering::Relaxed),
-        "collisions_detected": metrics.collisions_detected.load(std::sync::atomic::Ordering::Relaxed),
-        "dormant_transitions": metrics.dormant_transitions.load(std::sync::atomic::Ordering::Relaxed),
-    }))
+    resp_success(
+        server,
+        id,
+        serde_json::json!({
+            "dormant": server.is_dormant(),
+            "heartbeats_sent": metrics.heartbeats_sent.load(std::sync::atomic::Ordering::Relaxed),
+            "heartbeats_received": metrics.heartbeats_received.load(std::sync::atomic::Ordering::Relaxed),
+            "collisions_detected": metrics.collisions_detected.load(std::sync::atomic::Ordering::Relaxed),
+            "dormant_transitions": metrics.dormant_transitions.load(std::sync::atomic::Ordering::Relaxed),
+        }),
+    )
 }
 
 pub fn handle_get_peer_score(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
     let id = params.get("id").cloned();
     let peer_id = match params.get("peer_id").and_then(|v| v.as_str()) {
         Some(p) => p.to_string(),
-        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            "missing 'peer_id'".into()),
+        None => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                "missing 'peer_id'".into(),
+            )
+        }
     };
     if let Some(com) = server.communerd() {
         let (score, count) = com.get_peer_score(&peer_id);
-        resp_success(server, id, serde_json::json!({
-            "peer_id": peer_id,
-            "score": score,
-            "report_count": count,
-        }))
+        resp_success(
+            server,
+            id,
+            serde_json::json!({
+                "peer_id": peer_id,
+                "score": score,
+                "report_count": count,
+            }),
+        )
     } else {
-        resp_error(server, id, jsonrpc::INTERNAL_ERROR,
-            "p2p not enabled".into())
+        resp_error(
+            server,
+            id,
+            jsonrpc::INTERNAL_ERROR,
+            "p2p not enabled".into(),
+        )
     }
 }
 
 pub fn handle_get_latest_epoch(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
     let id = params.get("id").cloned();
     // FROST epoch data not yet implemented — return an error so callers handle the unimplemented state
-    resp_error(server, id, jsonrpc::INTERNAL_ERROR, "FROST epoch data not yet implemented".into())
+    resp_error(
+        server,
+        id,
+        jsonrpc::INTERNAL_ERROR,
+        "FROST epoch data not yet implemented".into(),
+    )
 }
 
 pub fn handle_verify_epoch_snapshot(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
     let id = params.get("id").cloned();
     // FROST epoch verification not yet implemented — always return invalid so callers handle the unimplemented state
-    resp_success(server, id, serde_json::json!({
-        "valid": false,
-        "reason": "FROST epoch verification not yet implemented",
-    }))
+    resp_success(
+        server,
+        id,
+        serde_json::json!({
+            "valid": false,
+            "reason": "FROST epoch verification not yet implemented",
+        }),
+    )
 }
 
 pub fn handle_mirror_request(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
     let id = params.get("id").cloned();
     let tbid = match params.get("tbid").and_then(|v| v.as_str()) {
         Some(t) => t.to_string(),
-        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            "missing 'tbid'".into()),
+        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS, "missing 'tbid'".into()),
     };
 
     let mirror_store = server.mirror_store();
     if !mirror_store.can_accept_mirror(&tbid) {
-        return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            "mirror_reject".into());
+        return resp_error(server, id, jsonrpc::INVALID_PARAMS, "mirror_reject".into());
     }
 
     let cal = server.calendar().inner();
@@ -489,63 +694,93 @@ pub fn handle_mirror_request(server: &TimeFamilyServer, params: Value) -> JsonRp
     let hash_sanity = crate::calendar::compute_hash_sanity(&cal_read.ticks);
     drop(cal_read);
 
-    resp_success(server, id, serde_json::json!({
-        "status": "accept",
-        "tick_count": tick_count,
-        "latest_tick": latest_tick,
-        "hash_sanity": hash_sanity,
-    }))
+    resp_success(
+        server,
+        id,
+        serde_json::json!({
+            "status": "accept",
+            "tick_count": tick_count,
+            "latest_tick": latest_tick,
+            "hash_sanity": hash_sanity,
+        }),
+    )
 }
 
 pub fn handle_mirror_accept(_server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
     let id = params.get("id").cloned();
-    let tbid = params.get("tbid").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let tick_count = params.get("tick_count").and_then(|v| v.as_u64()).unwrap_or(0);
-    let latest_tick = params.get("latest_tick").and_then(|v| v.as_u64()).unwrap_or(0);
-    let hash_sanity = params.get("hash_sanity").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let tbid = params
+        .get("tbid")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let tick_count = params
+        .get("tick_count")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let latest_tick = params
+        .get("latest_tick")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let hash_sanity = params
+        .get("hash_sanity")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
 
     let mirror_store = _server.mirror_store();
     mirror_store.mirrored_tbids();
 
-    resp_success(_server, id, serde_json::json!({
-        "status": "accepted",
-        "tbid": tbid,
-        "tick_count": tick_count,
-        "latest_tick": latest_tick,
-        "hash_sanity": hash_sanity,
-    }))
+    resp_success(
+        _server,
+        id,
+        serde_json::json!({
+            "status": "accepted",
+            "tbid": tbid,
+            "tick_count": tick_count,
+            "latest_tick": latest_tick,
+            "hash_sanity": hash_sanity,
+        }),
+    )
 }
 
 pub fn handle_ship_batch(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
     let id = params.get("id").cloned();
 
-    let tick_start = params.get("tick_start")
+    let tick_start = params
+        .get("tick_start")
         .and_then(|v| v.as_u64())
         .unwrap_or(0);
 
-    let count = params.get("count")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(10) as usize;
+    let count = params.get("count").and_then(|v| v.as_u64()).unwrap_or(10) as usize;
 
     if count > MAX_CALENDAR_SLICE_COUNT {
-        return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            format!("count exceeds maximum of {}", MAX_CALENDAR_SLICE_COUNT));
+        return resp_error(
+            server,
+            id,
+            jsonrpc::INVALID_PARAMS,
+            format!("count exceeds maximum of {}", MAX_CALENDAR_SLICE_COUNT),
+        );
     }
 
     let cal = server.calendar().inner();
     let cal_read = cal.read();
-    let records = cal_read.get(tick_start, count)
+    let records = cal_read
+        .get(tick_start, count)
         .map_err(|e| NodeError::Internal(format!("calendar lookup failed: {}", e)));
     drop(cal_read);
 
     match records {
         Ok(recs) => {
             let batch_hash = crate::calendar::compute_hash_sanity(&recs);
-            resp_success(server, id, serde_json::json!({
-                "records": recs,
-                "batch_hash": batch_hash,
-                "count": recs.len(),
-            }))
+            resp_success(
+                server,
+                id,
+                serde_json::json!({
+                    "records": recs,
+                    "batch_hash": batch_hash,
+                    "count": recs.len(),
+                }),
+            )
         }
         Err(e) => resp_error(server, id, jsonrpc::INTERNAL_ERROR, format!("{}", e)),
     }
@@ -554,25 +789,42 @@ pub fn handle_ship_batch(server: &TimeFamilyServer, params: Value) -> JsonRpcRes
 pub fn handle_ship_ack(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
     let id = params.get("id").cloned();
 
-    let tbid = params.get("tbid").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let tbid = params
+        .get("tbid")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     let empty_vec: Vec<Value> = vec![];
-    let raw_records = params.get("records").and_then(|v| v.as_array()).unwrap_or(&empty_vec);
+    let raw_records = params
+        .get("records")
+        .and_then(|v| v.as_array())
+        .unwrap_or(&empty_vec);
     let unprocessed: Result<Vec<UnverifiedSignatureEnvelope<ChrononRecord>>, _> = raw_records
         .iter()
         .map(|v| UnverifiedSignatureEnvelope::<ChrononRecord>::from_json_value(v.clone()))
         .collect();
     let unprocessed = match unprocessed {
         Ok(r) => r,
-        Err(e) => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            format!("failed to parse records: {}", e)),
+        Err(e) => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                format!("failed to parse records: {}", e),
+            )
+        }
     };
 
     if unprocessed.is_empty() {
-        return resp_success(server, id, serde_json::json!({
-            "status": "acked",
-            "tbid": tbid,
-            "tick_count": server.mirror_store().mirror_tick_count(&tbid),
-        }));
+        return resp_success(
+            server,
+            id,
+            serde_json::json!({
+                "status": "acked",
+                "tbid": tbid,
+                "tick_count": server.mirror_store().mirror_tick_count(&tbid),
+            }),
+        );
     }
 
     let crypto = server.chronomatter().crypto_server();
@@ -583,21 +835,35 @@ pub fn handle_ship_ack(server: &TimeFamilyServer, params: Value) -> JsonRpcRespo
             if unproc.inner().chronon_number == 1 {
                 unproc.into_clean_authenticated_genesis(crypto.as_ref())
             } else {
-                return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-                    "batch first record is not genesis (chronon_number != 1)".into());
+                return resp_error(
+                    server,
+                    id,
+                    jsonrpc::INVALID_PARAMS,
+                    "batch first record is not genesis (chronon_number != 1)".into(),
+                );
             }
         } else {
             let prev = match verified.last() {
                 Some(p) => p,
-                None => return resp_error(server, id, jsonrpc::INVALID_PARAMS, "chain verification: missing previous record (internal invariant violation)".into()),
+                None => return resp_error(
+                    server,
+                    id,
+                    jsonrpc::INVALID_PARAMS,
+                    "chain verification: missing previous record (internal invariant violation)"
+                        .into(),
+                ),
             };
             unproc.into_clean_authenticated(crypto.as_ref(), prev)
         };
         match clean {
             Ok(v) => verified.push(v),
             Err(e) => {
-                return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-                    format!("chain verification failed at record {}: {}", i, e));
+                return resp_error(
+                    server,
+                    id,
+                    jsonrpc::INVALID_PARAMS,
+                    format!("chain verification failed at record {}: {}", i, e),
+                );
             }
         }
     }
@@ -611,27 +877,50 @@ pub fn handle_ship_ack(server: &TimeFamilyServer, params: Value) -> JsonRpcRespo
 
     let tick_count = mirror_store.mirror_tick_count(&tbid);
 
-    resp_success(server, id, serde_json::json!({
-        "status": "acked",
-        "tbid": tbid,
-        "tick_count": tick_count,
-    }))
+    resp_success(
+        server,
+        id,
+        serde_json::json!({
+            "status": "acked",
+            "tbid": tbid,
+            "tick_count": tick_count,
+        }),
+    )
 }
 
 pub fn handle_stream_tick(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
     let id = params.get("id").cloned();
 
-    let tbid = params.get("tbid").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let chronon_number = params.get("chronon_number").and_then(|v| v.as_u64()).unwrap_or(0);
+    let tbid = params
+        .get("tbid")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let chronon_number = params
+        .get("chronon_number")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
     let unproc = match params.get("record") {
         Some(v) => UnverifiedSignatureEnvelope::<ChrononRecord>::from_json_value(v.clone()),
-        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            "missing 'record'".into()),
+        None => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                "missing 'record'".into(),
+            )
+        }
     };
     let unproc = match unproc {
         Ok(r) => r,
-        Err(e) => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            format!("failed to parse record: {}", e)),
+        Err(e) => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                format!("failed to parse record: {}", e),
+            )
+        }
     };
 
     let crypto = server.chronomatter().crypto_server();
@@ -647,62 +936,94 @@ pub fn handle_stream_tick(server: &TimeFamilyServer, params: Value) -> JsonRpcRe
             if unproc.inner().chronon_number == 1 {
                 unproc.into_clean_authenticated_genesis(crypto.as_ref())
             } else {
-                return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-                    "non-genesis record without predecessor".into());
+                return resp_error(
+                    server,
+                    id,
+                    jsonrpc::INVALID_PARAMS,
+                    "non-genesis record without predecessor".into(),
+                );
             }
         }
     };
     let verified = match verified {
         Ok(v) => v,
-        Err(e) => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            format!("verification failed: {}", e)),
+        Err(e) => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                format!("verification failed: {}", e),
+            )
+        }
     };
 
     if let Err(e) = mirror_store.insert_mirrored(&tbid, verified.into_inner()) {
-        return resp_error(server, id, jsonrpc::INTERNAL_ERROR,
-            format!("mirror insert failed: {}", e));
+        return resp_error(
+            server,
+            id,
+            jsonrpc::INTERNAL_ERROR,
+            format!("mirror insert failed: {}", e),
+        );
     }
 
     let tick_count = mirror_store.mirror_tick_count(&tbid);
 
-    resp_success(server, id, serde_json::json!({
-        "status": "acked",
-        "tbid": tbid,
-        "chronon_number": chronon_number,
-        "tick_count": tick_count,
-    }))
+    resp_success(
+        server,
+        id,
+        serde_json::json!({
+            "status": "acked",
+            "tbid": tbid,
+            "chronon_number": chronon_number,
+            "tick_count": tick_count,
+        }),
+    )
 }
 
 pub fn handle_stream_ack(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
     let id = params.get("id").cloned();
-    let chronon_number = params.get("chronon_number").and_then(|v| v.as_u64()).unwrap_or(0);
+    let chronon_number = params
+        .get("chronon_number")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
 
-    resp_success(server, id, serde_json::json!({
-        "status": "acked",
-        "chronon_number": chronon_number,
-    }))
+    resp_success(
+        server,
+        id,
+        serde_json::json!({
+            "status": "acked",
+            "chronon_number": chronon_number,
+        }),
+    )
 }
 
 pub fn handle_mirror_mutual(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
     let id = params.get("id").cloned();
 
-    let peer_addr = params.get("peer_addr")
+    let peer_addr = params
+        .get("peer_addr")
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
-    let my_tbid = params.get("my_tbid")
+    let my_tbid = params
+        .get("my_tbid")
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
-    let peer_tbid = params.get("peer_tbid")
+    let peer_tbid = params
+        .get("peer_tbid")
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
 
     let mirror_store = server.mirror_store();
     if !mirror_store.can_accept_mirror(&peer_tbid) {
-        return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            "cannot accept mirror: limit exceeded".into());
+        return resp_error(
+            server,
+            id,
+            jsonrpc::INVALID_PARAMS,
+            "cannot accept mirror: limit exceeded".into(),
+        );
     }
 
     let cal = server.calendar().inner();
@@ -712,25 +1033,43 @@ pub fn handle_mirror_mutual(server: &TimeFamilyServer, params: Value) -> JsonRpc
     let my_hash_sanity = crate::calendar::compute_hash_sanity(&cal_read.ticks);
     drop(cal_read);
 
-    resp_success(server, id, serde_json::json!({
-        "status": "ready",
-        "my_addr": &server.listen_addr,
-        "my_tbid": my_tbid,
-        "peer_tbid": peer_tbid,
-        "my_tick_count": my_tick_count,
-        "my_latest_tick": my_latest_tick,
-        "my_hash_sanity": my_hash_sanity,
-        "peer_addr": peer_addr,
-    }))
+    resp_success(
+        server,
+        id,
+        serde_json::json!({
+            "status": "ready",
+            "my_addr": &server.listen_addr,
+            "my_tbid": my_tbid,
+            "peer_tbid": peer_tbid,
+            "my_tick_count": my_tick_count,
+            "my_latest_tick": my_latest_tick,
+            "my_hash_sanity": my_hash_sanity,
+            "peer_addr": peer_addr,
+        }),
+    )
 }
 
 pub fn handle_mirror_reconcile(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
     let id = params.get("id").cloned();
 
-    let tbid = params.get("tbid").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let peer_tick_count = params.get("peer_tick_count").and_then(|v| v.as_u64()).unwrap_or(0);
-    let _peer_latest_tick = params.get("peer_latest_tick").and_then(|v| v.as_u64()).unwrap_or(0);
-    let peer_hash_sanity = params.get("peer_hash_sanity").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let tbid = params
+        .get("tbid")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let peer_tick_count = params
+        .get("peer_tick_count")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let _peer_latest_tick = params
+        .get("peer_latest_tick")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let peer_hash_sanity = params
+        .get("peer_hash_sanity")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
 
     let mirror_store = server.mirror_store();
     let my_info = mirror_store.mirror_info(&tbid);
@@ -801,17 +1140,25 @@ pub fn handle_mirror_announce(server: &TimeFamilyServer, params: Value) -> JsonR
 
     let mirror_store = server.mirror_store();
     if mirror_store.can_accept_mirror(&tbid) {
-        resp_success(server, id, serde_json::json!({
-            "status": "accept",
-            "tbid": tbid,
-            "current_tick_count": mirror_store.mirror_tick_count(&tbid),
-        }))
+        resp_success(
+            server,
+            id,
+            serde_json::json!({
+                "status": "accept",
+                "tbid": tbid,
+                "current_tick_count": mirror_store.mirror_tick_count(&tbid),
+            }),
+        )
     } else {
-        resp_success(server, id, serde_json::json!({
-            "status": "reject",
-            "tbid": tbid,
-            "reason": "mirror capacity exhausted",
-        }))
+        resp_success(
+            server,
+            id,
+            serde_json::json!({
+                "status": "reject",
+                "tbid": tbid,
+                "reason": "mirror capacity exhausted",
+            }),
+        )
     }
 }
 
@@ -844,28 +1191,34 @@ pub fn handle_history_dump_request(server: &TimeFamilyServer, params: Value) -> 
             server,
             id,
             jsonrpc::INVALID_PARAMS,
-            format!(
-                "chronon_end ({chronon_end}) < chronon_start ({chronon_start})"
-            ),
+            format!("chronon_end ({chronon_end}) < chronon_start ({chronon_start})"),
         );
     }
 
     let mirror_store = server.mirror_store();
     if !mirror_store.can_accept_mirror(&tbid) {
-        return resp_success(server, id, serde_json::json!({
-            "status": "reject",
-            "tbid": tbid,
-            "reason": "mirror capacity exhausted",
-        }));
+        return resp_success(
+            server,
+            id,
+            serde_json::json!({
+                "status": "reject",
+                "tbid": tbid,
+                "reason": "mirror capacity exhausted",
+            }),
+        );
     }
 
-    resp_success(server, id, serde_json::json!({
-        "status": "accept",
-        "tbid": tbid,
-        "chronon_start": chronon_start,
-        "chronon_end": chronon_end,
-        "current_tick_count": mirror_store.mirror_tick_count(&tbid),
-    }))
+    resp_success(
+        server,
+        id,
+        serde_json::json!({
+            "status": "accept",
+            "tbid": tbid,
+            "chronon_start": chronon_start,
+            "chronon_end": chronon_end,
+            "current_tick_count": mirror_store.mirror_tick_count(&tbid),
+        }),
+    )
 }
 
 /// `history_dump_ack` — mirror acknowledging a dump request to the source.
@@ -883,11 +1236,15 @@ pub fn handle_history_dump_ack(server: &TimeFamilyServer, params: Value) -> Json
         .and_then(|v| v.as_str())
         .unwrap_or("accept")
         .to_string();
-    resp_success(server, id, serde_json::json!({
-        "status": "noted",
-        "tbid": tbid,
-        "echoed_status": status,
-    }))
+    resp_success(
+        server,
+        id,
+        serde_json::json!({
+            "status": "noted",
+            "tbid": tbid,
+            "echoed_status": status,
+        }),
+    )
 }
 
 /// `history_dump_chunk` — source delivering one chunk of N
@@ -981,12 +1338,16 @@ pub fn handle_history_dump_chunk(server: &TimeFamilyServer, params: Value) -> Js
         }
     }
 
-    resp_success(server, id, serde_json::json!({
-        "status": "ok",
-        "tbid": tbid,
-        "accepted_count": accepted,
-        "tick_count": mirror_store.mirror_tick_count(&tbid),
-    }))
+    resp_success(
+        server,
+        id,
+        serde_json::json!({
+            "status": "ok",
+            "tbid": tbid,
+            "accepted_count": accepted,
+            "tick_count": mirror_store.mirror_tick_count(&tbid),
+        }),
+    )
 }
 
 /// `history_dump_complete` — source marking end-of-stream for a dump.
@@ -1003,12 +1364,16 @@ pub fn handle_history_dump_complete(server: &TimeFamilyServer, params: Value) ->
     let mirror_store = server.mirror_store();
     let tick_count = mirror_store.mirror_tick_count(&tbid);
 
-    resp_success(server, id, serde_json::json!({
-        "status": "complete",
-        "tbid": tbid,
-        "tick_count": tick_count,
-        "claimed_total": claimed_total,
-    }))
+    resp_success(
+        server,
+        id,
+        serde_json::json!({
+            "status": "complete",
+            "tbid": tbid,
+            "tick_count": tick_count,
+            "claimed_total": claimed_total,
+        }),
+    )
 }
 
 /// `mirror_health_check` — liveness probe from source. Mirror echoes the
@@ -1030,12 +1395,16 @@ pub fn handle_mirror_health_check(server: &TimeFamilyServer, params: Value) -> J
     let tick_count = mirror_store.mirror_tick_count(&tbid);
     let info = mirror_store.mirror_info(&tbid);
     let latest = info.as_ref().map(|(_, latest, _)| *latest);
-    resp_success(server, id, serde_json::json!({
-        "alive": true,
-        "tbid": tbid,
-        "tick_count": tick_count,
-        "latest_tick": latest,
-    }))
+    resp_success(
+        server,
+        id,
+        serde_json::json!({
+            "alive": true,
+            "tbid": tbid,
+            "tick_count": tick_count,
+            "latest_tick": latest,
+        }),
+    )
 }
 
 // ── Chronon attestation handlers ───────────────────────────────────────────
@@ -1049,19 +1418,35 @@ pub fn handle_stamp_my_chronon(server: &TimeFamilyServer, params: Value) -> Json
 
     let requester_tbid = match params.get("requester_tbid").and_then(|v| v.as_str()) {
         Some(h) if !h.is_empty() => h.to_string(),
-        _ => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            "missing or empty 'requester_tbid' (hex string)".into()),
+        _ => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                "missing or empty 'requester_tbid' (hex string)".into(),
+            )
+        }
     };
 
     if hex::decode(&requester_tbid).is_err() {
-        return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            "invalid hex in 'requester_tbid'".into());
+        return resp_error(
+            server,
+            id,
+            jsonrpc::INVALID_PARAMS,
+            "invalid hex in 'requester_tbid'".into(),
+        );
     }
 
     let _chronon_number = match params.get("chronon_number").and_then(|v| v.as_u64()) {
         Some(n) => n,
-        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            "missing or invalid 'chronon_number' (u64)".into()),
+        None => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                "missing or invalid 'chronon_number' (u64)".into(),
+            )
+        }
     };
 
     let task = crate::calendar::CalendarTask::DoChrononAttestation {
@@ -1070,8 +1455,12 @@ pub fn handle_stamp_my_chronon(server: &TimeFamilyServer, params: Value) -> Json
 
     match server.calendar().enqueue_task(task) {
         Ok(()) => resp_success(server, id, serde_json::json!({"status": "queued"})),
-        Err(_) => resp_error(server, id, jsonrpc::INTERNAL_ERROR,
-            "task queue not started or closed".into()),
+        Err(_) => resp_error(
+            server,
+            id,
+            jsonrpc::INTERNAL_ERROR,
+            "task queue not started or closed".into(),
+        ),
     }
 }
 
@@ -1084,19 +1473,35 @@ pub fn handle_stamp_my_chronon_block(server: &TimeFamilyServer, params: Value) -
 
     let requester_tbid = match params.get("requester_tbid").and_then(|v| v.as_str()) {
         Some(h) if !h.is_empty() => h.to_string(),
-        _ => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            "missing or empty 'requester_tbid' (hex string)".into()),
+        _ => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                "missing or empty 'requester_tbid' (hex string)".into(),
+            )
+        }
     };
 
     if hex::decode(&requester_tbid).is_err() {
-        return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            "invalid hex in 'requester_tbid'".into());
+        return resp_error(
+            server,
+            id,
+            jsonrpc::INVALID_PARAMS,
+            "invalid hex in 'requester_tbid'".into(),
+        );
     }
 
     let _epoch_number = match params.get("epoch_number").and_then(|v| v.as_u64()) {
         Some(n) => n,
-        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            "missing or invalid 'epoch_number' (u64)".into()),
+        None => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                "missing or invalid 'epoch_number' (u64)".into(),
+            )
+        }
     };
 
     let task = crate::calendar::CalendarTask::DoEpochAttestation {
@@ -1105,8 +1510,12 @@ pub fn handle_stamp_my_chronon_block(server: &TimeFamilyServer, params: Value) -
 
     match server.calendar().enqueue_task(task) {
         Ok(()) => resp_success(server, id, serde_json::json!({"status": "queued"})),
-        Err(_) => resp_error(server, id, jsonrpc::INTERNAL_ERROR,
-            "task queue not started or closed".into()),
+        Err(_) => resp_error(
+            server,
+            id,
+            jsonrpc::INTERNAL_ERROR,
+            "task queue not started or closed".into(),
+        ),
     }
 }
 
@@ -1116,58 +1525,96 @@ pub fn handle_stamp_my_chronon_block(server: &TimeFamilyServer, params: Value) -
 /// chronon range. Returns per-block proofs with Merkle range evidence, or
 /// an error if no CalendarStore is configured or no data covers the range.
 pub fn handle_storage_proof_request(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
-    use crate::calendar_store::{StorageProofRequest as Req};
+    use crate::calendar_store::StorageProofRequest as Req;
 
     let id = params.get("id").cloned();
 
     let tbid = match params.get("tbid").and_then(|v| v.as_str()) {
         Some(t) if !t.is_empty() => t.to_string(),
-        _ => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            "missing or empty 'tbid'".into()),
+        _ => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                "missing or empty 'tbid'".into(),
+            )
+        }
     };
 
     let chronon_start = match params.get("chronon_start").and_then(|v| v.as_u64()) {
         Some(v) => v,
-        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            "missing or invalid 'chronon_start' (u64)".into()),
+        None => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                "missing or invalid 'chronon_start' (u64)".into(),
+            )
+        }
     };
 
     let chronon_end = match params.get("chronon_end").and_then(|v| v.as_u64()) {
         Some(v) => v,
-        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            "missing or invalid 'chronon_end' (u64)".into()),
+        None => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                "missing or invalid 'chronon_end' (u64)".into(),
+            )
+        }
     };
 
     let Some(store) = server.calendar_store() else {
-        return resp_error(server, id, jsonrpc::INTERNAL_ERROR,
-            "no calendar store configured (requires --persist-path)".into());
+        return resp_error(
+            server,
+            id,
+            jsonrpc::INTERNAL_ERROR,
+            "no calendar store configured (requires --persist-path)".into(),
+        );
     };
 
-    let req = Req { tbid, chronon_start, chronon_end };
+    let req = Req {
+        tbid,
+        chronon_start,
+        chronon_end,
+    };
 
     match store.prove_storage(&req) {
         Some(resp) => {
-            let blocks_json: Vec<Value> = resp.blocks.iter().map(|bp| {
-                serde_json::json!({
-                    "block_id": bp.block_id,
-                    "merkle_root": hex::encode(bp.merkle_root),
-                    "leaves": bp.leaves.iter().take(bp.leaf_count)
-                        .map(|l| hex::encode(l)).collect::<Vec<_>>(),
-                    "siblings": bp.siblings.iter().take(bp.sibling_count)
-                        .map(|s| hex::encode(s)).collect::<Vec<_>>(),
-                    "leaf_count": bp.leaf_count,
-                    "sibling_count": bp.sibling_count,
-                    "n": bp.n,
+            let blocks_json: Vec<Value> = resp
+                .blocks
+                .iter()
+                .map(|bp| {
+                    serde_json::json!({
+                        "block_id": bp.block_id,
+                        "merkle_root": hex::encode(bp.merkle_root),
+                        "leaves": bp.leaves.iter().take(bp.leaf_count)
+                            .map(hex::encode).collect::<Vec<_>>(),
+                        "siblings": bp.siblings.iter().take(bp.sibling_count)
+                            .map(hex::encode).collect::<Vec<_>>(),
+                        "leaf_count": bp.leaf_count,
+                        "sibling_count": bp.sibling_count,
+                        "n": bp.n,
+                    })
                 })
-            }).collect();
+                .collect();
 
-            resp_success(server, id, serde_json::json!({
-                "blocks": blocks_json,
-                "coverage_ratio": resp.coverage_ratio,
-            }))
+            resp_success(
+                server,
+                id,
+                serde_json::json!({
+                    "blocks": blocks_json,
+                    "coverage_ratio": resp.coverage_ratio,
+                }),
+            )
         }
-        None => resp_error(server, id, jsonrpc::INTERNAL_ERROR,
-            "no storage proof available for the requested range".into()),
+        None => resp_error(
+            server,
+            id,
+            jsonrpc::INTERNAL_ERROR,
+            "no storage proof available for the requested range".into(),
+        ),
     }
 }
 
@@ -1175,29 +1622,55 @@ pub fn handle_storage_proof_request(server: &TimeFamilyServer, params: Value) ->
 /// request and optional known Merkle roots. Returns whether all block
 /// proofs verified and the coverage ratio.
 pub fn handle_storage_proof_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
-    use crate::calendar_store::{StorageProofRequest as Req, StorageProofResponse as Resp, verify_storage_proof};
+    use crate::calendar_store::{
+        verify_storage_proof, StorageProofRequest as Req, StorageProofResponse as Resp,
+    };
 
     let id = params.get("id").cloned();
 
     let req_val = match params.get("request") {
         Some(v) => v,
-        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            "missing 'request'".into()),
+        None => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                "missing 'request'".into(),
+            )
+        }
     };
     let req_tbid = match req_val.get("tbid").and_then(|v| v.as_str()) {
         Some(t) if !t.is_empty() => t.to_string(),
-        _ => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            "missing or empty 'request.tbid'".into()),
+        _ => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                "missing or empty 'request.tbid'".into(),
+            )
+        }
     };
     let req_start = match req_val.get("chronon_start").and_then(|v| v.as_u64()) {
         Some(v) => v,
-        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            "missing or invalid 'request.chronon_start'".into()),
+        None => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                "missing or invalid 'request.chronon_start'".into(),
+            )
+        }
     };
     let req_end = match req_val.get("chronon_end").and_then(|v| v.as_u64()) {
         Some(v) => v,
-        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            "missing or invalid 'request.chronon_end'".into()),
+        None => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                "missing or invalid 'request.chronon_end'".into(),
+            )
+        }
     };
 
     let req = Req {
@@ -1208,16 +1681,29 @@ pub fn handle_storage_proof_verify(server: &TimeFamilyServer, params: Value) -> 
 
     let resp_val = match params.get("response") {
         Some(v) => v,
-        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            "missing 'response'".into()),
+        None => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                "missing 'response'".into(),
+            )
+        }
     };
-    let coverage_ratio = resp_val.get("coverage_ratio")
+    let coverage_ratio = resp_val
+        .get("coverage_ratio")
         .and_then(|v| v.as_f64())
         .unwrap_or(0.0);
     let blocks_val = match resp_val.get("blocks").and_then(|v| v.as_array()) {
         Some(a) => a,
-        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            "missing or invalid 'response.blocks'".into()),
+        None => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                "missing or invalid 'response.blocks'".into(),
+            )
+        }
     };
 
     let mut blocks = Vec::new();
@@ -1228,19 +1714,32 @@ pub fn handle_storage_proof_verify(server: &TimeFamilyServer, params: Value) -> 
             Some(h) => {
                 let bytes = hex::decode(h).unwrap_or_default();
                 if bytes.len() != 32 {
-                    return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-                        format!("blocks[{i}].merkle_root must be 64-char hex"));
+                    return resp_error(
+                        server,
+                        id,
+                        jsonrpc::INVALID_PARAMS,
+                        format!("blocks[{i}].merkle_root must be 64-char hex"),
+                    );
                 }
                 let mut arr = [0u8; 32];
                 arr.copy_from_slice(&bytes);
                 arr
             }
-            None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-                format!("missing blocks[{i}].merkle_root")),
+            None => {
+                return resp_error(
+                    server,
+                    id,
+                    jsonrpc::INVALID_PARAMS,
+                    format!("missing blocks[{i}].merkle_root"),
+                )
+            }
         };
 
         let leaves_default: Vec<Value> = vec![];
-        let leaves_val = bv.get("leaves").and_then(|v| v.as_array()).unwrap_or(&leaves_default);
+        let leaves_val = bv
+            .get("leaves")
+            .and_then(|v| v.as_array())
+            .unwrap_or(&leaves_default);
         let leaf_count = bv.get("leaf_count").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
         let mut leaves = [[0u8; 32]; 64];
         for (j, lv) in leaves_val.iter().take(leaf_count.min(64)).enumerate() {
@@ -1253,8 +1752,14 @@ pub fn handle_storage_proof_verify(server: &TimeFamilyServer, params: Value) -> 
         }
 
         let siblings_default: Vec<Value> = vec![];
-        let siblings_val = bv.get("siblings").and_then(|v| v.as_array()).unwrap_or(&siblings_default);
-        let sibling_count = bv.get("sibling_count").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+        let siblings_val = bv
+            .get("siblings")
+            .and_then(|v| v.as_array())
+            .unwrap_or(&siblings_default);
+        let sibling_count = bv
+            .get("sibling_count")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize;
         let mut siblings = [[0u8; 32]; 32];
         for (j, sv) in siblings_val.iter().take(sibling_count.min(32)).enumerate() {
             if let Some(h) = sv.as_str() {
@@ -1278,9 +1783,13 @@ pub fn handle_storage_proof_verify(server: &TimeFamilyServer, params: Value) -> 
         });
     }
 
-    let resp = Resp { blocks, coverage_ratio };
+    let resp = Resp {
+        blocks,
+        coverage_ratio,
+    };
 
-    let known_roots_val = params.get("known_roots")
+    let known_roots_val = params
+        .get("known_roots")
         .and_then(|v| v.as_array())
         .cloned()
         .unwrap_or_default();
@@ -1289,8 +1798,12 @@ pub fn handle_storage_proof_verify(server: &TimeFamilyServer, params: Value) -> 
         if let Some(h) = rv.as_str() {
             let bytes = hex::decode(h).unwrap_or_default();
             if bytes.len() != 32 {
-                return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-                    format!("known_roots[{i}] must be 64-char hex"));
+                return resp_error(
+                    server,
+                    id,
+                    jsonrpc::INVALID_PARAMS,
+                    format!("known_roots[{i}] must be 64-char hex"),
+                );
             }
             let mut arr = [0u8; 32];
             arr.copy_from_slice(&bytes);
@@ -1300,10 +1813,14 @@ pub fn handle_storage_proof_verify(server: &TimeFamilyServer, params: Value) -> 
 
     let result = verify_storage_proof(&req, &resp, &known_roots);
 
-    resp_success(server, id, serde_json::json!({
-        "verified": result.verified,
-        "coverage_ratio": result.coverage_ratio,
-    }))
+    resp_success(
+        server,
+        id,
+        serde_json::json!({
+            "verified": result.verified,
+            "coverage_ratio": result.coverage_ratio,
+        }),
+    )
 }
 
 // ── Chronon query handlers ─────────────────────────────────────────────────
@@ -1316,39 +1833,61 @@ pub fn handle_get_chronon(server: &TimeFamilyServer, params: Value) -> JsonRpcRe
 
     let tbid = match params.get("tbid").and_then(|v| v.as_str()) {
         Some(t) if !t.is_empty() => t.to_string(),
-        _ => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            "missing or empty 'tbid'".into()),
+        _ => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                "missing or empty 'tbid'".into(),
+            )
+        }
     };
 
     let chronon_number = match params.get("chronon_number").and_then(|v| v.as_u64()) {
         Some(n) => n,
-        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            "missing or invalid 'chronon_number' (u64)".into()),
+        None => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                "missing or invalid 'chronon_number' (u64)".into(),
+            )
+        }
     };
 
-    let include_attestations = params.get("include_attestations")
+    let include_attestations = params
+        .get("include_attestations")
         .and_then(|v| v.as_bool())
         .unwrap_or(true);
 
     let Some(store) = server.calendar_store() else {
-        return resp_error(server, id, jsonrpc::INTERNAL_ERROR,
-            "no calendar store configured (requires --persist-path)".into());
+        return resp_error(
+            server,
+            id,
+            jsonrpc::INTERNAL_ERROR,
+            "no calendar store configured (requires --persist-path)".into(),
+        );
     };
 
     match store.get_chronon(&tbid, chronon_number, include_attestations) {
         Some(record) => {
-            let record_json = serde_json::to_value(record.inner())
-                .unwrap_or(Value::Null);
-            resp_success(server, id, serde_json::json!({
-                "status": "found",
-                "record": record_json,
-            }))
+            let record_json = serde_json::to_value(record.inner()).unwrap_or(Value::Null);
+            resp_success(
+                server,
+                id,
+                serde_json::json!({
+                    "status": "found",
+                    "record": record_json,
+                }),
+            )
         }
-        None => {
-            resp_success(server, id, serde_json::json!({
+        None => resp_success(
+            server,
+            id,
+            serde_json::json!({
                 "status": "not_found",
-            }))
-        }
+            }),
+        ),
     }
 }
 
@@ -1362,74 +1901,114 @@ pub fn handle_get_chronon_chain(server: &TimeFamilyServer, params: Value) -> Jso
 
     let tbid = match params.get("tbid").and_then(|v| v.as_str()) {
         Some(t) if !t.is_empty() => t.to_string(),
-        _ => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            "missing or empty 'tbid'".into()),
+        _ => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                "missing or empty 'tbid'".into(),
+            )
+        }
     };
 
     let chronon_start = match params.get("chronon_start").and_then(|v| v.as_u64()) {
         Some(n) => n,
-        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            "missing or invalid 'chronon_start' (u64)".into()),
+        None => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                "missing or invalid 'chronon_start' (u64)".into(),
+            )
+        }
     };
 
     let chronon_end = match params.get("chronon_end").and_then(|v| v.as_u64()) {
         Some(n) => n,
-        None => return resp_error(server, id, jsonrpc::INVALID_PARAMS,
-            "missing or invalid 'chronon_end' (u64)".into()),
+        None => {
+            return resp_error(
+                server,
+                id,
+                jsonrpc::INVALID_PARAMS,
+                "missing or invalid 'chronon_end' (u64)".into(),
+            )
+        }
     };
 
-    let include_attestations = params.get("include_attestations")
+    let include_attestations = params
+        .get("include_attestations")
         .and_then(|v| v.as_bool())
         .unwrap_or(true);
 
     let Some(store) = server.calendar_store() else {
-        return resp_error(server, id, jsonrpc::INTERNAL_ERROR,
-            "no calendar store configured (requires --persist-path)".into());
+        return resp_error(
+            server,
+            id,
+            jsonrpc::INTERNAL_ERROR,
+            "no calendar store configured (requires --persist-path)".into(),
+        );
     };
 
     let result = store.get_chronon_chain(&tbid, chronon_start, chronon_end, include_attestations);
 
     match result {
         ChrononChainResult::Complete { records, coverage } => {
-            let records_json: Vec<Value> = records.iter()
+            let records_json: Vec<Value> = records
+                .iter()
                 .map(|r| serde_json::to_value(r.inner()).unwrap_or(Value::Null))
                 .collect();
-            resp_success(server, id, serde_json::json!({
-                "status": "complete",
-                "records": records_json,
-                "coverage": {
-                    "requested": coverage.requested,
-                    "returned": coverage.returned,
-                },
-            }))
+            resp_success(
+                server,
+                id,
+                serde_json::json!({
+                    "status": "complete",
+                    "records": records_json,
+                    "coverage": {
+                        "requested": coverage.requested,
+                        "returned": coverage.returned,
+                    },
+                }),
+            )
         }
-        ChrononChainResult::Partial { records, coverage, gaps } => {
-            let records_json: Vec<Value> = records.iter()
+        ChrononChainResult::Partial {
+            records,
+            coverage,
+            gaps,
+        } => {
+            let records_json: Vec<Value> = records
+                .iter()
                 .map(|r| serde_json::to_value(r.inner()).unwrap_or(Value::Null))
                 .collect();
-            let gaps_json: Vec<Value> = gaps.iter()
+            let gaps_json: Vec<Value> = gaps
+                .iter()
                 .map(|g| serde_json::json!({"start": g.start, "end": g.end}))
                 .collect();
-            resp_success(server, id, serde_json::json!({
-                "status": "partial",
-                "records": records_json,
-                "coverage": {
-                    "requested": coverage.requested,
-                    "returned": coverage.returned,
-                },
-                "gaps": gaps_json,
-            }))
+            resp_success(
+                server,
+                id,
+                serde_json::json!({
+                    "status": "partial",
+                    "records": records_json,
+                    "coverage": {
+                        "requested": coverage.requested,
+                        "returned": coverage.returned,
+                    },
+                    "gaps": gaps_json,
+                }),
+            )
         }
-        ChrononChainResult::None { coverage } => {
-            resp_success(server, id, serde_json::json!({
+        ChrononChainResult::None { coverage } => resp_success(
+            server,
+            id,
+            serde_json::json!({
                 "status": "none",
                 "records": [],
                 "coverage": {
                     "requested": coverage.requested,
                     "returned": coverage.returned,
                 },
-            }))
-        }
+            }),
+        ),
     }
 }
 
@@ -1448,8 +2027,7 @@ mod tests {
     }
 
     fn make_server() -> TimeFamilyServer {
-        TimeFamilyServer::new("127.0.0.1:0", 1_000_000_000)
-            .expect("failed to create server")
+        TimeFamilyServer::new("127.0.0.1:0", 1_000_000_000).expect("failed to create server")
     }
 
     #[test]
@@ -1480,9 +2058,18 @@ mod tests {
         assert!(resp.error.is_none());
         assert!(resp.result.is_some());
         let result = resp.result.unwrap();
-        assert!(result.get("foretis").is_some(), "v2 response must have foretis field");
-        assert!(result.get("signature").is_some(), "v2 response must have signature field");
-        assert!(result.get("signature_algorithm").is_some(), "v2 response must have signature_algorithm field");
+        assert!(
+            result.get("foretis").is_some(),
+            "v2 response must have foretis field"
+        );
+        assert!(
+            result.get("signature").is_some(),
+            "v2 response must have signature field"
+        );
+        assert!(
+            result.get("signature_algorithm").is_some(),
+            "v2 response must have signature_algorithm field"
+        );
         let foretis = result.get("foretis").unwrap();
         assert!(foretis.get("chronon_number").is_some());
         assert!(foretis.get("content_hash").is_some());
@@ -1527,7 +2114,9 @@ mod tests {
             "foretis": "this-is-not-a-foretis-object",
         });
         let resp = handle_verify(&server, params);
-        let err = resp.error.expect("malformed foretis must produce an error response");
+        let err = resp
+            .error
+            .expect("malformed foretis must produce an error response");
         assert_eq!(
             err.code,
             jsonrpc::INVALID_PARAMS,
@@ -1547,8 +2136,18 @@ mod tests {
         let stamp_resp = handle_stamp(&server, stamp_params);
         let stamp_result = stamp_resp.result.unwrap();
         let foretis_json = stamp_result.get("foretis").unwrap().clone();
-        let signature_hex = stamp_result.get("signature").unwrap().as_str().unwrap().to_string();
-        let sig_alg = stamp_result.get("signature_algorithm").unwrap().as_str().unwrap().to_string();
+        let signature_hex = stamp_result
+            .get("signature")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_string();
+        let sig_alg = stamp_result
+            .get("signature_algorithm")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_string();
 
         let verify_params = serde_json::json!({
             "content": hex::encode(b"verify-me"),
@@ -1557,7 +2156,11 @@ mod tests {
             "signature_algorithm": sig_alg,
         });
         let verify_resp = handle_verify(&server, verify_params);
-        assert!(verify_resp.error.is_none(), "verify should succeed: {:?}", verify_resp.error);
+        assert!(
+            verify_resp.error.is_none(),
+            "verify should succeed: {:?}",
+            verify_resp.error
+        );
         let result = verify_resp.result.unwrap();
         assert_eq!(result.get("valid").and_then(|v| v.as_bool()), Some(true));
     }
@@ -1572,8 +2175,18 @@ mod tests {
         let stamp_resp = handle_stamp(&server, stamp_params);
         let stamp_result = stamp_resp.result.unwrap();
         let foretis_json = stamp_result.get("foretis").unwrap().clone();
-        let signature_hex = stamp_result.get("signature").unwrap().as_str().unwrap().to_string();
-        let sig_alg = stamp_result.get("signature_algorithm").unwrap().as_str().unwrap().to_string();
+        let signature_hex = stamp_result
+            .get("signature")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_string();
+        let sig_alg = stamp_result
+            .get("signature_algorithm")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_string();
 
         let verify_params = serde_json::json!({
             "content": hex::encode(b"tampered"),
@@ -1582,7 +2195,11 @@ mod tests {
             "signature_algorithm": sig_alg,
         });
         let verify_resp = handle_verify(&server, verify_params);
-        assert!(verify_resp.error.is_none(), "verify should succeed: {:?}", verify_resp.error);
+        assert!(
+            verify_resp.error.is_none(),
+            "verify should succeed: {:?}",
+            verify_resp.error
+        );
         let result = verify_resp.result.unwrap();
         assert_eq!(result.get("valid").and_then(|v| v.as_bool()), Some(false));
     }
@@ -1620,8 +2237,14 @@ mod tests {
         let resp = handle_integrity_check(&server, params);
         assert!(resp.error.is_none());
         let result = resp.result.unwrap();
-        assert_eq!(result.get("all_valid").and_then(|v| v.as_bool()), Some(true));
-        assert_eq!(result.get("pairs_checked").and_then(|v| v.as_u64()), Some(0));
+        assert_eq!(
+            result.get("all_valid").and_then(|v| v.as_bool()),
+            Some(true)
+        );
+        assert_eq!(
+            result.get("pairs_checked").and_then(|v| v.as_u64()),
+            Some(0)
+        );
     }
 
     #[test]
@@ -1638,8 +2261,14 @@ mod tests {
         let resp = handle_integrity_check(&server, params);
         assert!(resp.error.is_none());
         let result = resp.result.unwrap();
-        assert_eq!(result.get("all_valid").and_then(|v| v.as_bool()), Some(true));
-        assert_eq!(result.get("pairs_checked").and_then(|v| v.as_u64()), Some(2));
+        assert_eq!(
+            result.get("all_valid").and_then(|v| v.as_bool()),
+            Some(true)
+        );
+        assert_eq!(
+            result.get("pairs_checked").and_then(|v| v.as_u64()),
+            Some(2)
+        );
     }
 
     #[test]
@@ -1656,8 +2285,14 @@ mod tests {
         let resp = handle_integrity_check(&server, params);
         assert!(resp.error.is_none());
         let result = resp.result.unwrap();
-        assert_eq!(result.get("all_valid").and_then(|v| v.as_bool()), Some(true));
-        assert_eq!(result.get("pairs_checked").and_then(|v| v.as_u64()), Some(3));
+        assert_eq!(
+            result.get("all_valid").and_then(|v| v.as_bool()),
+            Some(true)
+        );
+        assert_eq!(
+            result.get("pairs_checked").and_then(|v| v.as_u64()),
+            Some(3)
+        );
     }
 
     #[test]
@@ -1694,7 +2329,9 @@ mod tests {
         assert!(resp.result.is_none());
         let error = resp.error.unwrap();
         assert_eq!(error.code, jsonrpc::INTERNAL_ERROR);
-        assert!(error.message.contains("FROST epoch data not yet implemented"));
+        assert!(error
+            .message
+            .contains("FROST epoch data not yet implemented"));
     }
 
     // ── Group 4b: mirror wire handler tests ─────────────────────────────────
@@ -1710,7 +2347,10 @@ mod tests {
         let params = serde_json::json!({ "tbid": sample_tbid_hex() });
         let resp = handle_mirror_announce(&server, params);
         let result = resp.result.expect("expected success on accept");
-        assert_eq!(result.get("status").and_then(|v| v.as_str()), Some("accept"));
+        assert_eq!(
+            result.get("status").and_then(|v| v.as_str()),
+            Some("accept")
+        );
     }
 
     #[test]
@@ -1731,7 +2371,10 @@ mod tests {
         });
         let resp = handle_history_dump_request(&server, params);
         let result = resp.result.expect("expected success");
-        assert_eq!(result.get("status").and_then(|v| v.as_str()), Some("accept"));
+        assert_eq!(
+            result.get("status").and_then(|v| v.as_str()),
+            Some("accept")
+        );
     }
 
     #[test]
@@ -1772,7 +2415,10 @@ mod tests {
         });
         let resp = handle_history_dump_chunk(&server, params);
         let result = resp.result.expect("empty chunk should succeed");
-        assert_eq!(result.get("accepted_count").and_then(|v| v.as_u64()), Some(0));
+        assert_eq!(
+            result.get("accepted_count").and_then(|v| v.as_u64()),
+            Some(0)
+        );
     }
 
     #[test]
@@ -1876,11 +2522,21 @@ mod tests {
             "echo": "route-shape-check"
         });
         let resp = handle_route_stamp(&server, params);
-        assert!(resp.error.is_none(), "self-route should succeed: {:?}", resp.error);
+        assert!(
+            resp.error.is_none(),
+            "self-route should succeed: {:?}",
+            resp.error
+        );
         let result = resp.result.expect("expected result");
         assert!(result.get("foretis").is_some(), "must have foretis field");
-        assert!(result.get("signature").is_some(), "must have signature field");
-        assert!(result.get("signature_algorithm").is_some(), "must have signature_algorithm field");
+        assert!(
+            result.get("signature").is_some(),
+            "must have signature field"
+        );
+        assert!(
+            result.get("signature_algorithm").is_some(),
+            "must have signature_algorithm field"
+        );
         let foretis = result.get("foretis").unwrap();
         assert!(foretis.get("chronon_number").is_some());
         assert!(foretis.get("content_hash").is_some());
@@ -1930,7 +2586,8 @@ mod tests {
     #[test]
     fn handle_storage_proof_verify_missing_response_returns_error() {
         let server = make_server();
-        let params = serde_json::json!({"request": {"tbid": "abc", "chronon_start": 0, "chronon_end": 5}});
+        let params =
+            serde_json::json!({"request": {"tbid": "abc", "chronon_start": 0, "chronon_end": 5}});
         let resp = handle_storage_proof_verify(&server, params);
         let err = resp.error.expect("missing response must error");
         assert_eq!(err.code, jsonrpc::INVALID_PARAMS);
@@ -1952,7 +2609,11 @@ mod tests {
             "known_roots": [],
         });
         let resp = handle_storage_proof_verify(&server, params);
-        assert!(resp.error.is_none(), "empty proof should succeed: {:?}", resp.error);
+        assert!(
+            resp.error.is_none(),
+            "empty proof should succeed: {:?}",
+            resp.error
+        );
         let result = resp.result.unwrap();
         assert_eq!(result.get("verified").and_then(|v| v.as_bool()), Some(true));
     }

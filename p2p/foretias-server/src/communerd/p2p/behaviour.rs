@@ -1,16 +1,18 @@
 //! Foretias libp2p network behaviour.
 
-use libp2p::{identify, ping, kad, gossipsub, request_response, swarm::NetworkBehaviour, StreamProtocol};
+use libp2p::{
+    gossipsub, identify, kad, ping, request_response, swarm::NetworkBehaviour, StreamProtocol,
+};
 use std::iter;
 use std::sync::Arc;
 
 #[derive(NetworkBehaviour)]
 pub struct ForetiasBehaviour {
-    pub identify:          identify::Behaviour,
-    pub ping:              ping::Behaviour,
-    pub kad:               kad::Behaviour<kad::store::MemoryStore>,
-    pub gossip:            gossipsub::Behaviour,
-    pub request_response:  request_response::Behaviour<super::rpc_protocol::ForetiasRpcCodec>,
+    pub identify: identify::Behaviour,
+    pub ping: ping::Behaviour,
+    pub kad: kad::Behaviour<kad::store::MemoryStore>,
+    pub gossip: gossipsub::Behaviour,
+    pub request_response: request_response::Behaviour<super::rpc_protocol::ForetiasRpcCodec>,
 }
 
 impl ForetiasBehaviour {
@@ -26,9 +28,9 @@ impl ForetiasBehaviour {
             None => format!("foretias/{}", env!("CARGO_PKG_VERSION")),
         };
 
-        let kad_protocol = libp2p::StreamProtocol::try_from_owned(
-            format!("/foretias/kad/{}/1.0.0", namespace)
-        ).expect("valid protocol string");
+        let kad_protocol =
+            libp2p::StreamProtocol::try_from_owned(format!("/foretias/kad/{}/1.0.0", namespace))
+                .expect("valid protocol string");
         let mut kad_cfg = kad::Config::new(kad_protocol);
         kad_cfg.set_query_timeout(std::time::Duration::from_secs(30));
 
@@ -44,7 +46,8 @@ impl ForetiasBehaviour {
         let gossip = gossipsub::Behaviour::new(
             gossipsub::MessageAuthenticity::Signed(local_key.clone()),
             gossip_cfg,
-        ).expect("gossipsub init");
+        )
+        .expect("gossipsub init");
 
         let protocols = iter::once((
             StreamProtocol::try_from_owned(format!("/foretias/{}/rpc/1.0.0", namespace))
@@ -63,7 +66,7 @@ impl ForetiasBehaviour {
                     .with_agent_version(agent),
             ),
             ping: ping::Behaviour::new(ping::Config::new()),
-            kad:  kad::Behaviour::with_config(local_peer_id, store, kad_cfg),
+            kad: kad::Behaviour::with_config(local_peer_id, store, kad_cfg),
             gossip,
             request_response,
         }

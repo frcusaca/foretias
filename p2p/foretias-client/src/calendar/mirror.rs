@@ -42,7 +42,7 @@ impl MirrorStore {
     pub fn insert_mirrored(&self, tbid_hex: &str, record: ChrononRecord) -> Result<(), NodeError> {
         let mut mirrors = self.mirrors.write();
         let entry = mirrors.entry(tbid_hex.to_string())
-            .or_insert_with(Vec::new);
+            .or_default();
         if entry.iter().any(|r| r.chronon_number == record.chronon_number) {
             return Ok(());
         }
@@ -54,7 +54,7 @@ impl MirrorStore {
     pub fn get_mirrored(&self, tbid_hex: &str, chronon_number: u64, count: usize) -> Result<Vec<ChrononRecord>, NodeError> {
         let mirrors = self.mirrors.read();
         let records = mirrors.get(tbid_hex)
-            .ok_or_else(|| NodeError::NotFound("mirrored calendar"))?;
+            .ok_or(NodeError::NotFound("mirrored calendar"))?;
         Ok(records.iter()
             .skip_while(|r| r.chronon_number < chronon_number)
             .take(count)

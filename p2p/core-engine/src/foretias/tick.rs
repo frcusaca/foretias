@@ -463,15 +463,11 @@ pub fn verify_pair(
 
             let genesis_valid = if !forward_genesis.is_empty() && genesis_match {
                 let pub_bytes =
-                    crate::foretias::types::SignatureBytes::from(prev.tbid.raw_bytes().clone());
+                    crate::foretias::types::SignatureBytes::from(prev.tbid.raw_bytes());
                 let sig = crate::foretias::types::SignatureBytes::from(forward_genesis.to_vec());
                 crate::crypto_server::signing_tbid::tbid_verify(&pub_bytes, &genesis_blob, &sig)
-                    .map_err(|e| NodeError::Crypto(e))?
-            } else if forward_genesis.is_empty() && curr.tb_version == 0 {
-                true
-            } else {
-                false
-            };
+                    .map_err(NodeError::Crypto)?
+            } else { forward_genesis.is_empty() && curr.tb_version == 0 };
 
             let attest_blob = if !forward_genesis.is_empty() {
                 let mut attest_blob = Vec::with_capacity(
