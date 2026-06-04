@@ -324,7 +324,7 @@ async fn cmd_serve(config: ServeConfig) -> Result<(), Box<dyn std::error::Error>
         None
     };
     let time_family_cfg = TimeFamilyConfig::from_cli_and_file(TimeFamilyCliConfig {
-        listen_addr: addr,
+        listen_addr: addr.clone(),
         chronon_ns,
         persist_path: config.persist_path.clone().map(PathBuf::from),
         dormant: config.start_dormant,
@@ -338,7 +338,7 @@ async fn cmd_serve(config: ServeConfig) -> Result<(), Box<dyn std::error::Error>
         },
         p2p_dial: config.p2p_dial.clone(),
         known_servers: config.known_servers.clone(),
-        dht_namespace: config.dht_namespace,
+        dht_namespace: config.dht_namespace.clone(),
         dht_bootstrap: config.dht_bootstrap.clone(),
         max_discovered_peers: config.max_discovered_peers,
         config_file_path: tfc_path_opt.map(|s| s.to_string()),
@@ -449,7 +449,7 @@ async fn cmd_serve(config: ServeConfig) -> Result<(), Box<dyn std::error::Error>
     println!("  TBN    : {}", server.get_tbn());
     println!("  TBID   : {}", server.get_tbid().to_hex());
     println!("  Config : TimeFamilyConfig v{}", time_family_cfg.version);
-    if start_dormant {
+    if config.start_dormant {
         println!("  Mode   : dormant (verify-only)");
     } else {
         println!("  Chronon: {}", humanize_nanoseconds(chronon_ns));
@@ -462,8 +462,8 @@ async fn cmd_serve(config: ServeConfig) -> Result<(), Box<dyn std::error::Error>
             println!("  PeerId     : {}", peer_id);
         }
     }
-    if !known_servers.is_empty() {
-        println!("  Known Servers : {}", known_servers.join(", "));
+    if !config.known_servers.is_empty() {
+        println!("  Known Servers : {}", config.known_servers.join(", "));
     }
     if let Some(c) = server.communerd() {
         println!("  Peers  : {}", c.config().mutual_attest.peers.join(", "));
