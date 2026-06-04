@@ -7,13 +7,13 @@ use std::sync::Arc;
 use clap::{Parser, Subcommand};
 use serde::Deserialize;
 use tracing_appender::rolling;
-use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt, Layer};
+use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
 
-use foretias_core::config::TimeFamilyConfig;
-use foretias_core::crypto_server;
-use foretias_server::communerd::p2p::swarm::CommunerdRpcHandler;
-use foretias_core::foretias::tick::{ChrononRecord, CalendarLookup};
 use foretias_client::Foretias;
+use foretias_core::config::{TimeFamilyCliConfig, TimeFamilyConfig};
+use foretias_core::crypto_server;
+use foretias_core::foretias::tick::{CalendarLookup, ChrononRecord};
+use foretias_server::communerd::p2p::swarm::CommunerdRpcHandler;
 
 use foretias_server::server::TimeFamilyServer;
 
@@ -248,17 +248,32 @@ fn read_message(msg: Option<String>, msg_file: Option<String>) -> Result<Vec<u8>
     match (msg, msg_file) {
         (Some(m), None) => Ok(m.into_bytes()),
         (None, Some(f)) => std::fs::read(&f),
-        (None, None) => Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Must provide --message or --message-file")),
-        (Some(_), Some(_)) => Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Cannot specify both --message and --message-file")),
+        (None, None) => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Must provide --message or --message-file",
+        )),
+        (Some(_), Some(_)) => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Cannot specify both --message and --message-file",
+        )),
     }
 }
 
-fn read_foretis(foretis: Option<String>, foretis_file: Option<String>) -> Result<String, std::io::Error> {
+fn read_foretis(
+    foretis: Option<String>,
+    foretis_file: Option<String>,
+) -> Result<String, std::io::Error> {
     match (foretis, foretis_file) {
         (Some(j), None) => Ok(j),
         (None, Some(f)) => std::fs::read_to_string(&f),
-        (None, None) => Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Must provide --foretis or --foretis-file")),
-        (Some(_), Some(_)) => Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Cannot specify both --foretis and --foretis-file")),
+        (None, None) => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Must provide --foretis or --foretis-file",
+        )),
+        (Some(_), Some(_)) => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Cannot specify both --foretis and --foretis-file",
+        )),
     }
 }
 
@@ -270,7 +285,9 @@ fn client_echo() -> String {
 
 // ── Subcommands ─────────────────────────────────────────────────────────────
 
-async fn cmd_serve(
+/// Configuration for the `serve` subcommand.
+#[derive(Debug, Clone)]
+struct ServeConfig {
     addr: String,
     chronon_ns: u64,
     persist_path: Option<String>,
@@ -285,17 +302,19 @@ async fn cmd_serve(
     dht_namespace: String,
     dht_bootstrap: Vec<String>,
     max_discovered_peers: usize,
-) -> Result<(), Box<dyn std::error::Error>> {
+}
+
+async fn cmd_serve(config: ServeConfig) -> Result<(), Box<dyn std::error::Error>> {
     let cfg = load_config();
-    let addr = if addr == "127.0.0.1:4001" {
-        cfg.listen_addr.unwrap_or(addr)
+    let addr = if config.addr == "127.0.0.1:4001" {
+        cfg.listen_addr.unwrap_or(config.addr)
     } else {
-        addr
+        config.addr
     };
-    let chronon_ns = if chronon_ns == 60_000_000_000 {
-        cfg.chronon_ns.unwrap_or(chronon_ns)
+    let chronon_ns = if config.chronon_ns == 60_000_000_000 {
+        cfg.chronon_ns.unwrap_or(config.chronon_ns)
     } else {
-        chronon_ns
+        config.chronon_ns
     };
 
     let tfc_path = TimeFamilyConfig::default_path();
@@ -304,90 +323,124 @@ async fn cmd_serve(
     } else {
         None
     };
-    let time_family_cfg = TimeFamilyConfig::from_cli_and_file(
-        &addr,
+    let time_family_cfg = TimeFamilyConfig::from_cli_and_file(TimeFamilyCliConfig {
+        listen_addr: addr,
         chronon_ns,
-        persist_path.clone().map(PathBuf::from),
-        start_dormant,
-        peers.clone(),
-        mutually_attest_every_chronons,
-        request_timeout_secs,
-        p2p_listen.clone(),
-        {
-            let r = parse_port_range(&p2p_port_range)?;
+        persist_path: config.persist_path.clone().map(PathBuf::from),
+        dormant: config.start_dormant,
+        peers: config.peers.clone(),
+        auto_attest_every_n: config.mutually_attest_every_chronons,
+        request_timeout_secs: config.request_timeout_secs,
+        p2p_listen: config.p2p_listen.clone(),
+        p2p_port_range: {
+            let r = parse_port_range(&config.p2p_port_range)?;
             [r.start, r.end]
         },
-        p2p_dial.clone(),
-        known_servers.clone(),
-        &dht_namespace,
-        dht_bootstrap.clone(),
-        max_discovered_peers,
-        tfc_path_opt,
-    );
+        p2p_dial: config.p2p_dial.clone(),
+        known_servers: config.known_servers.clone(),
+        dht_namespace: config.dht_namespace,
+        dht_bootstrap: config.dht_bootstrap.clone(),
+        max_discovered_peers: config.max_discovered_peers,
+        config_file_path: tfc_path_opt.map(|s| s.to_string()),
+    });
 
-    let server: TimeFamilyServer = if start_dormant {
-        let persist = persist_path.ok_or("--persist-path is required for --dormant mode")?;
+    let server: TimeFamilyServer = if config.start_dormant {
+        let persist = config
+            .persist_path
+            .ok_or("--persist-path is required for --dormant mode")?;
         let json_path = PathBuf::from(&persist);
         TimeFamilyServer::from_calendar(
-            json_path.to_str().ok_or_else(|| format!("persist path contains invalid UTF-8: {:?}", json_path))?,
+            json_path
+                .to_str()
+                .ok_or_else(|| format!("persist path contains invalid UTF-8: {:?}", json_path))?,
             &addr,
         )?
     } else {
-        let persist: Option<PathBuf> = persist_path.map(PathBuf::from);
+        let persist: Option<PathBuf> = config.persist_path.map(PathBuf::from);
         TimeFamilyServer::new_with_persist(&addr, chronon_ns, persist)?
     };
 
-    let server = if !peers.is_empty() {
+    let server = if !config.peers.is_empty() {
         Arc::new(server.with_communerd(time_family_cfg.communerd.clone()))
     } else {
         Arc::new(server)
     };
 
-    let port_range = parse_port_range(&p2p_port_range)?;
+    let port_range = parse_port_range(&config.p2p_port_range)?;
 
-    let p2p_listen_addr: Option<libp2p::Multiaddr> = if let Some(ref listen_str) = p2p_listen {
-        Some(listen_str.parse()
-            .map_err(|e| format!("invalid --p2p-listen {}: {}", listen_str, e))?)
-    } else if !known_servers.is_empty() {
+    let p2p_listen_addr: Option<libp2p::Multiaddr> = if let Some(ref listen_str) = config.p2p_listen
+    {
+        Some(
+            listen_str
+                .parse()
+                .map_err(|e| format!("invalid --p2p-listen {}: {}", listen_str, e))?,
+        )
+    } else if !config.known_servers.is_empty() {
         let port = foretias_server::communerd::p2p::swarm::find_free_port(port_range.clone())
-            .map_err(|e| format!("failed to find free port in {}: {}", p2p_port_range, e))?;
-        Some(format!("/ip4/0.0.0.0/tcp/{}", port).parse()
-            .map_err(|e| format!("failed to parse auto listen address: {}", e))?)
+            .map_err(|e| {
+                format!(
+                    "failed to find free port in {}: {}",
+                    config.p2p_port_range, e
+                )
+            })?;
+        Some(
+            format!("/ip4/0.0.0.0/tcp/{}", port)
+                .parse()
+                .map_err(|e| format!("failed to parse auto listen address: {}", e))?,
+        )
     } else {
         None
     };
 
-    let dials: Vec<libp2p::Multiaddr> = p2p_dial.iter()
-        .map(|s| s.parse::<libp2p::Multiaddr>()
-            .map_err(|e| format!("invalid --p2p-dial {}: {}", s, e)))
+    let dials: Vec<libp2p::Multiaddr> = config
+        .p2p_dial
+        .iter()
+        .map(|s| {
+            s.parse::<libp2p::Multiaddr>()
+                .map_err(|e| format!("invalid --p2p-dial {}: {}", s, e))
+        })
         .collect::<Result<Vec<_>, String>>()?;
 
     if let Some(listen_ma) = &p2p_listen_addr {
         if let Some(communerd) = server.communerd() {
             let handler: Arc<dyn CommunerdRpcHandler> = server.clone();
-            communerd.enable_p2p(Some(listen_ma.clone()), dials.clone(), &dht_namespace, Some(&addr), Some(handler)).await
+            communerd
+                .enable_p2p(
+                    Some(listen_ma.clone()),
+                    dials.clone(),
+                    &config.dht_namespace,
+                    Some(&addr),
+                    Some(handler),
+                )
+                .await
                 .map_err(|e| format!("failed to start libp2p swarm: {}", e))?;
         }
     }
 
     if let Some(communerd) = server.communerd() {
-        if !dht_bootstrap.is_empty() {
-            communerd.bootstrap_dht(dht_bootstrap.clone()).await.ok();
+        if !config.dht_bootstrap.is_empty() {
+            communerd
+                .bootstrap_dht(config.dht_bootstrap.clone())
+                .await
+                .ok();
         }
     }
 
     // Wire --known-servers: self-register and discover peers via DHT
     if let Some(communerd) = server.communerd() {
-        if !known_servers.is_empty() {
+        if !config.known_servers.is_empty() {
             let tbid = server.get_tbid();
-            communerd.register_and_discover(
-                known_servers.clone(),
-                &dht_namespace,
-                tbid,
-                chronon_ns,
-                &addr,
-                max_discovered_peers,
-            ).await.ok();
+            communerd
+                .register_and_discover(
+                    config.known_servers.clone(),
+                    &config.dht_namespace,
+                    tbid,
+                    chronon_ns,
+                    &addr,
+                    config.max_discovered_peers,
+                )
+                .await
+                .ok();
         }
     }
 
@@ -414,7 +467,10 @@ async fn cmd_serve(
     }
     if let Some(c) = server.communerd() {
         println!("  Peers  : {}", c.config().mutual_attest.peers.join(", "));
-        println!("  Mutual Attest Every: {} chronons", c.config().mutual_attest.every_n_chronons);
+        println!(
+            "  Mutual Attest Every: {} chronons",
+            c.config().mutual_attest.every_n_chronons
+        );
     }
 
     let handle = server.clone().start()?;
@@ -439,14 +495,24 @@ async fn cmd_serve(
 fn parse_port_range(range_str: &str) -> Result<std::ops::Range<u16>, String> {
     let parts: Vec<&str> = range_str.splitn(2, "..").collect();
     if parts.len() != 2 {
-        return Err(format!("invalid port range '{}', expected format: start..end", range_str));
+        return Err(format!(
+            "invalid port range '{}', expected format: start..end",
+            range_str
+        ));
     }
-    let start: u16 = parts[0].trim().parse()
+    let start: u16 = parts[0]
+        .trim()
+        .parse()
         .map_err(|e| format!("invalid port range start '{}': {}", parts[0], e))?;
-    let end: u16 = parts[1].trim().parse()
+    let end: u16 = parts[1]
+        .trim()
+        .parse()
         .map_err(|e| format!("invalid port range end '{}': {}", parts[1], e))?;
     if start >= end {
-        return Err(format!("port range start ({}) must be less than end ({})", start, end));
+        return Err(format!(
+            "port range start ({}) must be less than end ({})",
+            start, end
+        ));
     }
     Ok(start..end)
 }
@@ -460,11 +526,7 @@ async fn cmd_stamp(
     let content = read_message(message, message_file)?;
     let echo = client_echo();
 
-    let client = Foretias::connect_one(
-        "cli-stamp".into(),
-        server_addr.clone(),
-        None,
-    )?;
+    let client = Foretias::connect_one("cli-stamp".into(), server_addr.clone(), None)?;
 
     let (foretis, sig, sig_alg) = client
         .stamp(&content, echo)
@@ -477,7 +539,8 @@ async fn cmd_stamp(
         "signature_algorithm": sig_alg,
     }))?;
     match stamp_output {
-        Some(path) => std::fs::write(&path, &output).map_err(|e| format!("Failed to write {}: {}", path, e))?,
+        Some(path) => std::fs::write(&path, &output)
+            .map_err(|e| format!("Failed to write {}: {}", path, e))?,
         None => println!("{}", output),
     }
     Ok(())
@@ -496,23 +559,31 @@ async fn cmd_verify(
     let content = read_message(message, message_file)?;
     let stamp_str = read_foretis(foretis, foretis_file)?;
     let stamp_obj: serde_json::Value = serde_json::from_str(&stamp_str)?;
-    let foretis: foretias_core::foretias::tick::Foretis = serde_json::from_value(stamp_obj.get("foretis").cloned().unwrap_or(stamp_obj.clone()))?;
+    let foretis: foretias_core::foretias::tick::Foretis = serde_json::from_value(
+        stamp_obj
+            .get("foretis")
+            .cloned()
+            .unwrap_or(stamp_obj.clone()),
+    )?;
     // v2: prefer CLI --signature, fall back to stamp object's signature field
     let sig_hex = signature.clone().unwrap_or_else(|| {
-        stamp_obj.get("signature").and_then(|v| v.as_str()).unwrap_or("").to_string()
+        stamp_obj
+            .get("signature")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string()
     });
     let signature_bytes = hex::decode(&sig_hex).unwrap_or_default();
     let sig_alg = if signature.is_some() {
         &signature_algorithm
     } else {
-        stamp_obj.get("signature_algorithm").and_then(|v| v.as_str()).unwrap_or("Ed25519")
+        stamp_obj
+            .get("signature_algorithm")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Ed25519")
     };
 
-    let client = Foretias::connect_one(
-        "cli-verify".into(),
-        server_addr.clone(),
-        None,
-    )?;
+    let client = Foretias::connect_one("cli-verify".into(), server_addr.clone(), None)?;
 
     let valid = client
         .verify(&content, &foretis, &signature_bytes, sig_alg)
@@ -526,7 +597,8 @@ async fn cmd_verify(
 
     let output = serde_json::to_string_pretty(&result)?;
     match verify_output {
-        Some(path) => std::fs::write(&path, &output).map_err(|e| format!("Failed to write {}: {}", path, e))?,
+        Some(path) => std::fs::write(&path, &output)
+            .map_err(|e| format!("Failed to write {}: {}", path, e))?,
         None => println!("{}", output),
     }
     Ok(())
@@ -543,16 +615,23 @@ async fn cmd_verify_with_proof(
     let content = read_message(message, message_file)?;
     let stamp_str = read_foretis(foretis, foretis_file)?;
     let stamp_obj: serde_json::Value = serde_json::from_str(&stamp_str)?;
-    let foretis: foretias_core::foretias::tick::Foretis = serde_json::from_value(stamp_obj.get("foretis").cloned().unwrap_or(stamp_obj.clone()))?;
-    let sig_hex = stamp_obj.get("signature").and_then(|v| v.as_str()).unwrap_or("");
-    let signature = hex::decode(sig_hex).unwrap_or_default();
-    let sig_alg = stamp_obj.get("signature_algorithm").and_then(|v| v.as_str()).unwrap_or("Ed25519");
-
-    let client = Foretias::connect_one(
-        "cli-verify-with-proof".into(),
-        server_addr.clone(),
-        None,
+    let foretis: foretias_core::foretias::tick::Foretis = serde_json::from_value(
+        stamp_obj
+            .get("foretis")
+            .cloned()
+            .unwrap_or(stamp_obj.clone()),
     )?;
+    let sig_hex = stamp_obj
+        .get("signature")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let signature = hex::decode(sig_hex).unwrap_or_default();
+    let sig_alg = stamp_obj
+        .get("signature_algorithm")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Ed25519");
+
+    let client = Foretias::connect_one("cli-verify-with-proof".into(), server_addr.clone(), None)?;
 
     let report = client
         .verify_with_proof(&content, &foretis, &signature, sig_alg)
@@ -562,7 +641,8 @@ async fn cmd_verify_with_proof(
     let result = serde_json::to_value(&report)?;
     let output = serde_json::to_string_pretty(&result)?;
     match proof_output {
-        Some(path) => std::fs::write(&path, &output).map_err(|e| format!("Failed to write {}: {}", path, e))?,
+        Some(path) => std::fs::write(&path, &output)
+            .map_err(|e| format!("Failed to write {}: {}", path, e))?,
         None => println!("{}", output),
     }
     Ok(())
@@ -578,10 +658,10 @@ fn cmd_inspect_attestations(calendar_path: String) -> Result<(), Box<dyn std::er
     let calendar: foretias_core::foretias::calendar::Calendar = serde_json::from_str(&contents)
         .map_err(|e| format!("Failed to parse calendar JSON: {}", e))?;
 
-    let crypto = crypto_server::new_software(
-        crypto_server::ForetiasCurve::Ed25519,
-    )?;
-    let cal_lookup = CalendarInspect { calendar: &calendar };
+    let crypto = crypto_server::new_software(crypto_server::ForetiasCurve::Ed25519)?;
+    let cal_lookup = CalendarInspect {
+        calendar: &calendar,
+    };
     let mut total_attestations = 0u64;
     let mut valid_count = 0u64;
     let mut invalid_count = 0u64;
@@ -593,32 +673,45 @@ fn cmd_inspect_attestations(calendar_path: String) -> Result<(), Box<dyn std::er
             let content = match serde_json::to_vec(&tick) {
                 Ok(c) => c,
                 Err(e) => {
-                    println!("tick={} attester={} sig=INVALID (serialize error: {})",
-                        tick.chronon_number, att.attester_tbid, e);
+                    println!(
+                        "tick={} attester={} sig=INVALID (serialize error: {})",
+                        tick.chronon_number, att.attester_tbid, e
+                    );
                     invalid_count += 1;
                     continue;
                 }
             };
 
             let valid = match foretias_core::foretias::tick::verify(
-                &*crypto, &att.foretis, &att.signature, &att.signature_algorithm, &content, &cal_lookup,
+                &*crypto,
+                &att.foretis,
+                &att.signature,
+                &att.signature_algorithm,
+                &content,
+                &cal_lookup,
             ) {
                 Ok(v) => v,
                 Err(e) => {
-                    println!("tick={} attester={} sig=INVALID (verify error: {})",
-                        tick.chronon_number, att.attester_tbid, e);
+                    println!(
+                        "tick={} attester={} sig=INVALID (verify error: {})",
+                        tick.chronon_number, att.attester_tbid, e
+                    );
                     invalid_count += 1;
                     continue;
                 }
             };
 
             if valid {
-                println!("tick={} attester={} attester_tick={} sig=VALID",
-                    tick.chronon_number, att.attester_tbid, att.foretis.chronon_number);
+                println!(
+                    "tick={} attester={} attester_tick={} sig=VALID",
+                    tick.chronon_number, att.attester_tbid, att.foretis.chronon_number
+                );
                 valid_count += 1;
             } else {
-                println!("tick={} attester={} attester_tick={} sig=INVALID",
-                    tick.chronon_number, att.attester_tbid, att.foretis.chronon_number);
+                println!(
+                    "tick={} attester={} attester_tick={} sig=INVALID",
+                    tick.chronon_number, att.attester_tbid, att.foretis.chronon_number
+                );
                 invalid_count += 1;
             }
         }
@@ -641,8 +734,15 @@ struct CalendarInspect<'a> {
 }
 
 impl CalendarLookup for CalendarInspect<'_> {
-    fn get(&self, start: u64, count: usize) -> Result<Vec<ChrononRecord>, foretias_core::error::NodeError> {
-        Ok(self.calendar.ticks.iter()
+    fn get(
+        &self,
+        start: u64,
+        count: usize,
+    ) -> Result<Vec<ChrononRecord>, foretias_core::error::NodeError> {
+        Ok(self
+            .calendar
+            .ticks
+            .iter()
             .skip(start as usize)
             .take(count)
             .cloned()
@@ -709,25 +809,90 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // No tracing for client commands — stdout must be clean JSON for pipe consumption
         }
         _ => {
-            fmt()
-                .with_target(false)
-                .with_level(true)
-                .init();
+            fmt().with_target(false).with_level(true).init();
         }
     }
 
     match cli.command {
-        Commands::Serve { addr, chronon_ns, persist_path, start_dormant, peer, mutually_attest_every_chronons, request_timeout_secs, p2p_listen, p2p_port_range, p2p_dial, known_servers, dht_namespace, dht_bootstrap, max_discovered_peers } => {
-            cmd_serve(addr, chronon_ns, persist_path, start_dormant, peer, mutually_attest_every_chronons, request_timeout_secs, p2p_listen, p2p_port_range, p2p_dial, known_servers, dht_namespace, dht_bootstrap, max_discovered_peers).await
+        Commands::Serve {
+            addr,
+            chronon_ns,
+            persist_path,
+            start_dormant,
+            peer,
+            mutually_attest_every_chronons,
+            request_timeout_secs,
+            p2p_listen,
+            p2p_port_range,
+            p2p_dial,
+            known_servers,
+            dht_namespace,
+            dht_bootstrap,
+            max_discovered_peers,
+        } => {
+            cmd_serve(ServeConfig {
+                addr,
+                chronon_ns,
+                persist_path,
+                start_dormant,
+                peers: peer,
+                mutually_attest_every_chronons,
+                request_timeout_secs,
+                p2p_listen,
+                p2p_port_range,
+                p2p_dial,
+                known_servers,
+                dht_namespace,
+                dht_bootstrap,
+                max_discovered_peers,
+            })
+            .await
         }
-        Commands::Stamp { message, message_file, stamp_output, server } => {
-            cmd_stamp(message, message_file, stamp_output, server).await
+        Commands::Stamp {
+            message,
+            message_file,
+            stamp_output,
+            server,
+        } => cmd_stamp(message, message_file, stamp_output, server).await,
+        Commands::Verify {
+            message,
+            message_file,
+            foretis,
+            foretis_file,
+            signature,
+            signature_algorithm,
+            verify_output,
+            server,
+        } => {
+            cmd_verify(
+                message,
+                message_file,
+                foretis,
+                foretis_file,
+                signature,
+                signature_algorithm,
+                verify_output,
+                server,
+            )
+            .await
         }
-        Commands::Verify { message, message_file, foretis, foretis_file, signature, signature_algorithm, verify_output, server } => {
-            cmd_verify(message, message_file, foretis, foretis_file, signature, signature_algorithm, verify_output, server).await
-        }
-        Commands::VerifyWithProof { message, message_file, foretis, foretis_file, proof_output, server } => {
-            cmd_verify_with_proof(message, message_file, foretis, foretis_file, proof_output, server).await
+        Commands::VerifyWithProof {
+            message,
+            message_file,
+            foretis,
+            foretis_file,
+            proof_output,
+            server,
+        } => {
+            cmd_verify_with_proof(
+                message,
+                message_file,
+                foretis,
+                foretis_file,
+                proof_output,
+                server,
+            )
+            .await
         }
         Commands::InspectAttestations { calendar } => {
             cmd_inspect_attestations(calendar)?;
