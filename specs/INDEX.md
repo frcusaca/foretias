@@ -242,6 +242,32 @@
 
 ---
 
+### 11. bon Builders + Permissive Serde for Trust Boundary Types
+
+| File | Open | Done | Status |
+|------|------|------|--------|
+| `specs/BON_SERDE_TRUST_BOUNDARIES_PLAN.md` | ~40 | 0 | **PROPOSED** — spec + plan written, experiment verified |
+| `specs/BON_SERDE_TRUST_BOUNDARIES_SPEC.md` | — | — | Spec (paired) |
+
+**Dependencies:** Clippy Fix (complete)
+**Blocks:** None (improves code quality, not blocking other work)
+
+**Experiment:** `experiments/bon-serde-poc/` — 19/19 tests pass
+**Key pattern:** Shadow type (`ChrononRecordUnchecked`) → `TryFrom` → domain type → custom `Deserialize` impl
+
+**Scope:** ~40 tasks across 8 waves:
+- Wave 0: Setup (add `bon = "3.9"` dependency)
+- Wave 1: ChrononRecord shadow type + TryFrom + custom Deserialize
+- Wave 2: Foretis shadow type + TryFrom + custom Deserialize
+- Wave 3: ExternalAttestation shadow type + TryFrom + custom Deserialize
+- Wave 4: ChrononRecord bon builder with fallible build
+- Wave 5: Foretis + ExternalAttestation bon builders
+- Wave 6: Config struct bon builders (5 structs)
+- Wave 7: Migration — replace existing constructors
+- Wave 8: Final verification + merge
+
+---
+
 ### 10. Group 2 — Workspace Hygiene (Verification Only)
 
 | File | Open | Done | Status |
