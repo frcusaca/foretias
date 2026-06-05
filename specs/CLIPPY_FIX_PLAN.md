@@ -22,40 +22,56 @@
 
 These can be fixed with `cargo clippy --fix` or direct edits. No behavior changes.
 
-- [ ] Run `cargo clippy --fix --workspace --allow-dirty` for auto-fixable lints
-- [ ] A1: `clone_on_copy` (26 instances) — remove `.clone()` on Copy types
-- [ ] A3: `redundant_closure` (13 instances) — replace `.map(|x| f(x))` with `.map(f)`
-- [ ] A6: `derivable_impls` (3 instances) — replace manual `impl Default` with `#[derive(Default)]`
-- [ ] A8: `single_match` (2 instances) — replace `match { A => ..., _ => {} }` with `if let`
-- [ ] A9: `unnecessary_lazy_evaluations` (4 instances) — `.or_else(|| x)` → `.or(x)`
-- [ ] A10: `unnecessary_cast` (5 instances) — remove same-type casts
-- [ ] A11: `needless_borrow` (2 instances) — remove unnecessary `&`
-- [ ] A12: `useless_conversion` (2 instances) — remove `.into()` / `NodeError::from()`
-- [ ] A13: `question_mark` (2 instances) — `let Some(x) = y else { return None }` → `let x = y?`
-- [ ] A14: `needless_range_loop` (3 instances) — use `.iter_mut().enumerate()`
-- [ ] A15: `collapsible_match` (1 instance) — collapse nested match
-- [ ] A18: `manual_contains` (1 instance) — `.iter().any()` → `.contains()`
-- [ ] A19: `new_without_default` (1 instance) — add `impl Default for ProbityStore`
-- [ ] A20: `unwrap_or_default` (2 instances) — `.or_insert_with(Vec::new)` → `.or_default()`
-- [ ] A21: `manual_is_multiple_of` (2 instances) — `x % y == 0` → `x.is_multiple_of(y)`
-- [ ] A22: `let_unit_value` (3 instances) — remove `let _ =` for unit expressions
-- [ ] A23: `zombie_processes` (2 instances) — ensure `wait()` on all paths
-- [ ] A24: `unused_variables` / `unused_import` (4 instances) — prefix with `_` or remove
-- [ ] A25: `empty_line_after_doc_comment` (1 instance) — remove empty line
-- [ ] A26: `needless_question_mark` (1 instance) — remove `Ok()` wrapper
-- [ ] A27: `explicit_auto_deref` (1 instance) — `&*x` → `&x`
-- [ ] A28: `if_returns_bool` (1 instance) — simplify to condition
-- [ ] A29: `length_comparison` (2 instances) — `len() == 0` → `.is_empty()`
-- [ ] A30: `iter_copied_collect` (3 instances) — `.iter().copied().collect()` → `.to_vec()`
-- [ ] A31: `useless_vec` (2 instances) — remove unnecessary `vec![]`
-- [ ] A32: `map_or_simplify` (2 instances) — simplify map_or
-- [ ] A33: `writing_&Vec` / `writing_&PathBuf` (2 instances) — use slice/Path refs
-- [ ] A34: `push_after_creation` (1 instance) — `vec![]` + `.push()` → `vec![item]`
-- [ ] A35: `doc_list_indent` (2 instances) — fix indentation
-- [ ] A36: `replacing_text_with_itself` (8 instances) — remove no-op replacements
-- [ ] A37: `borrowed_expression` (5 instances) — remove unnecessary borrow
-- [ ] Verify: `cargo test --workspace` passes
-- [ ] Check progress: `cargo clippy --workspace --all-targets 2>&1 | grep -c "^warning"`
+- [x] Run `cargo clippy --fix --workspace --allow-dirty` for auto-fixable lints
+      (2026-06-04 15:30)
+- [x] A1: `clone_on_copy` (26 instances) — remove `.clone()` on Copy types
+      (2026-06-04 15:30)
+- [x] A3: `redundant_closure` (5 instances) — replace `.map(|x| f(x))` with `.map(f)`
+      (2026-06-04 15:30)
+- [x] A6: `derivable_impls` (3 instances) — replace manual `impl Default` with `#[derive(Default)]`
+      (2026-06-04 15:30)
+- [x] A8: `single_match` (1 instance) — replace `match { A => ..., _ => {} }` with `if let`
+      (2026-06-04 15:30)
+- [x] A9: `unnecessary_lazy_evaluations` (2 instances) — `.or_else(|| x)` → `.or(x)`
+      (2026-06-04 15:30)
+- [x] A10: `unnecessary_cast` (2 instances) — remove same-type casts
+      (2026-06-04 15:30)
+- [x] A11: `needless_borrow` (1 instance) — remove unnecessary `&`
+      (2026-06-04 15:30)
+- [x] A12: `useless_conversion` (3 instances) — remove `.into()` / `NodeError::from()`
+      (2026-06-04 15:30)
+- [x] A13: `question_mark` (2 instances) — `let Some(x) = y else { return None }` → `let x = y?`
+      (2026-06-04 15:30)
+- [x] A14: `needless_range_loop` (5 instances) — use `.iter_mut().enumerate()`
+      (2026-06-04 15:30)
+- [x] A15: `collapsible_match` (1 instance) — collapse nested match
+      (2026-06-04 15:30)
+- [x] A18: `manual_contains` (1 instance) — `.iter().any()` → `.contains()`
+      (2026-06-04 15:30)
+- [x] A19: `new_without_default` (1 instance) — add `impl Default for ProbityStore`
+      (2026-06-04 15:30)
+- [x] A20: `unwrap_or_default` (1 instance) — `.or_insert_with(Vec::new)` → `.or_default()`
+      (2026-06-04 15:30)
+- [x] A23: `zombie_processes` (2 instances) — ensure `wait()` on all paths
+      (2026-06-04 15:30)
+- [x] A24: `unused_variables` (1 instance) — prefix with `_`
+      (2026-06-04 15:30)
+- [x] A25: `empty_line_after_doc_comment` (1 instance) — remove empty line
+      (2026-06-04 15:30)
+- [x] A27: `explicit_auto_deref` (1 instance) — `&*x` → `&x`
+      (2026-06-04 15:30)
+- [x] A33: `writing_&Vec` / `writing_&PathBuf` (2 instances) — use slice/Path refs
+      (2026-06-04 15:30)
+- [x] A34: `push_after_creation` (1 instance) — `vec![]` + `.push()` → `vec![item]`
+      (2026-06-04 15:30)
+- [x] A36: `replacing_text_with_itself` (8 instances) — remove no-op replacements
+      (2026-06-04 15:30)
+- [x] A37: `borrowed_expression` (1 instance) — remove unnecessary borrow
+      (2026-06-04 15:30)
+- [x] Verify: `cargo test --workspace` passes (266 tests)
+      (2026-06-04 15:30)
+- [x] Check progress: `cargo clippy --workspace --all-targets 2>&1 | grep -c "^warning"` (166 → 48)
+      (2026-06-04 15:30)
 
 ### Wave 2: Struct Extraction (Tests First)
 

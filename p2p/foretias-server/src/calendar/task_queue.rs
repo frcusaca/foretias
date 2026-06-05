@@ -114,11 +114,7 @@ pub trait MirrorDispatcher: Send + Sync {
 
     /// "I have TBID X, will you mirror?" — Source → Candidate.
     /// Returns Ok(true) if the candidate accepted, Ok(false) if declined.
-    async fn mirror_announce(
-        &self,
-        peer: &PeerAddr,
-        local_tbid_hex: &str,
-    ) -> Result<bool, String>;
+    async fn mirror_announce(&self, peer: &PeerAddr, local_tbid_hex: &str) -> Result<bool, String>;
 
     /// Stream a chunk of locally-authoritative ChrononRecords to a mirror.
     /// Returns the number the mirror reports as accepted, or an error.
@@ -158,8 +154,7 @@ pub struct MirrorState {
     pub mirrors: parking_lot::RwLock<std::collections::HashSet<String>>,
     /// Per-mirror consecutive failures from `mirror_health_check`. After
     /// `MAX_HEALTH_FAILURES`, the worker enqueues `ExpireMirror`.
-    pub health_failures:
-        parking_lot::RwLock<std::collections::HashMap<String, u32>>,
+    pub health_failures: parking_lot::RwLock<std::collections::HashMap<String, u32>>,
     /// Lower-bound mirror count target. Below this, `ExpireMirror` enqueues
     /// a fresh `FindNewMirror`.
     pub min_mirrors: parking_lot::RwLock<usize>,
@@ -201,8 +196,7 @@ pub struct WorkerContext {
     pub dispatcher: Option<Arc<dyn MirrorDispatcher>>,
     pub mirror_state: Arc<MirrorState>,
     pub task_tx: CalendarTaskSender,
-    pub calendar_lookup:
-        Arc<parking_lot::RwLock<foretias_core::foretias::Calendar>>,
+    pub calendar_lookup: Arc<parking_lot::RwLock<foretias_core::foretias::Calendar>>,
     /// Communerd reference — needed by `DoChrononAttestation` to obtain a
     /// `CommunerdetteLine` for a target TBID. `None` in placeholder mode.
     pub communerd: Option<Arc<crate::communerd::Communerd>>,
@@ -212,7 +206,8 @@ pub struct WorkerContext {
     pub chronomatter: Option<Arc<foretias_core::chronomatter::Chronomatter>>,
     /// Calendar's Ed25519 signing key, shared via Arc from Calendar.
     /// Used by attestation handlers to sign stamp payloads.
-    pub signing_key: Option<Arc<parking_lot::Mutex<Option<foretias_core::core::identity::PrivKeyHandle>>>>,
+    pub signing_key:
+        Option<Arc<parking_lot::Mutex<Option<foretias_core::core::identity::PrivKeyHandle>>>>,
 }
 
 /// Spawn `worker_count` worker tasks that pull from `rx`, dispatch via the
@@ -247,7 +242,9 @@ pub fn spawn_workers(
 }
 
 /// Workaround helper: move the receiver out of its existing position.
-fn rx_take(rx: &mut mpsc::UnboundedReceiver<CalendarTask>) -> mpsc::UnboundedReceiver<CalendarTask> {
+fn rx_take(
+    rx: &mut mpsc::UnboundedReceiver<CalendarTask>,
+) -> mpsc::UnboundedReceiver<CalendarTask> {
     let (_placeholder_tx, placeholder_rx) = mpsc::unbounded_channel();
     std::mem::replace(rx, placeholder_rx)
 }
@@ -262,9 +259,7 @@ async fn handle_task(worker_id: usize, task: CalendarTask, ctx: &WorkerContext) 
     );
     match task {
         CalendarTask::FindNewMirror => handle_find_new_mirror(worker_id, ctx).await,
-        CalendarTask::InitiateDump { mirror } => {
-            handle_initiate_dump(worker_id, mirror, ctx).await
-        }
+        CalendarTask::InitiateDump { mirror } => handle_initiate_dump(worker_id, mirror, ctx).await,
         CalendarTask::StartStream { mirror } => {
             // Phase 4b.4c: subscribe to TickObserver and push via stream_tick.
             // Currently a structural stub — InitiateDump covers the initial
@@ -275,9 +270,7 @@ async fn handle_task(worker_id: usize, task: CalendarTask, ctx: &WorkerContext) 
         CalendarTask::ExploreMirror { mirror } => {
             handle_explore_mirror(worker_id, mirror, ctx).await
         }
-        CalendarTask::ExpireMirror { mirror } => {
-            handle_expire_mirror(worker_id, mirror, ctx).await
-        }
+        CalendarTask::ExpireMirror { mirror } => handle_expire_mirror(worker_id, mirror, ctx).await,
         CalendarTask::DoChrononAttestation { target_tbid } => {
             handle_do_chronon_attestation(worker_id, &target_tbid, ctx).await
         }
@@ -302,11 +295,7 @@ async fn handle_task(worker_id: usize, task: CalendarTask, ctx: &WorkerContext) 
 ///
 /// Gracefully degrades when Communerd or Chronomatter are not wired into the
 /// `WorkerContext` (placeholder mode).
-async fn handle_do_chronon_attestation(
-    worker_id: usize,
-    target_tbid: &str,
-    ctx: &WorkerContext,
-) {
+async fn handle_do_chronon_attestation(worker_id: usize, target_tbid: &str, ctx: &WorkerContext) {
     // ── Resource gate ────────────────────────────────────────────────────
     let Some(ref communerd) = ctx.communerd else {
         warn!(
@@ -346,55 +335,75 @@ async fn handle_do_chronon_attestation(
             return;
         }
     };
-
     let target_chronon = target_record.inner().chronon_number;
     info!(
         worker_id,
         target_tbid, target_chronon, "do_chronon_attestation: fetched target's latest chronon"
     );
 
-    // ── Step 3: Internally stamp via Chronomatter ────────────────────────
-    let stamp_content = format!("chronon-attest-{}", target_tbid);
-    let stamped = match chronomatter.stamp(
-        stamp_content.into_bytes(),
-        "chronon-attestation".to_string(),
-    ) {
-        Ok(s) => s,
-        Err(e) => {
-            warn!(
-                worker_id,
-                target_tbid, error = %e, "do_chronon_attestation: Chronomatter stamp failed"
-            );
-            return;
-        }
+    // ── Steps 3-4: Stamp and sign ────────────────────────────────────────
+    let Some((stamped, calendar_signature)) =
+        stamp_and_sign_chronon_attestation(worker_id, target_tbid, ctx, chronomatter)
+    else {
+        return;
     };
 
-    debug!(
+    // ── Step 5-6: Transmit and verify ────────────────────────────────────
+    transmit_chronon_attestation(
         worker_id,
         target_tbid,
-        local_chronon = stamped.foretis.chronon_number,
-        "do_chronon_attestation: local Foretis produced"
-    );
+        &line,
+        target_chronon,
+        stamped,
+        calendar_signature,
+    )
+    .await;
+}
 
-    // ── Step 4: Sign with Calendar's key ─────────────────────────────────
-    let calendar_signature = match sign_with_calendar_key(ctx, &stamped.foretis.sig_input_bytes()) {
-        Some(sig) => sig,
-        None => {
-            warn!(
+fn stamp_and_sign_chronon_attestation(
+    worker_id: usize,
+    target_tbid: &str,
+    ctx: &WorkerContext,
+    chronomatter: &foretias_core::chronomatter::Chronomatter,
+) -> Option<(
+    foretias_core::foretias::tick::StampedForetis,
+    foretias_core::foretias::types::SignatureBytes,
+)> {
+    let stamp_content = format!("chronon-attest-{}", target_tbid);
+    let stamped = chronomatter
+        .stamp(
+            stamp_content.into_bytes(),
+            "chronon-attestation".to_string(),
+        )
+        .ok()
+        .inspect(|s| {
+            debug!(
                 worker_id,
-                target_tbid, "do_chronon_attestation: calendar signing failed or key unavailable"
-            );
-            return;
-        }
-    };
+                target_tbid,
+                local_chronon = s.foretis.chronon_number,
+                "do_chronon_attestation: local Foretis produced"
+            )
+        })?;
+
+    let calendar_signature: foretias_core::foretias::types::SignatureBytes =
+        sign_with_calendar_key(ctx, &stamped.foretis.sig_input_bytes())?.into();
     debug!(
         worker_id,
         target_tbid,
         sig_len = calendar_signature.len(),
         "do_chronon_attestation: calendar signature produced"
     );
+    Some((stamped, calendar_signature))
+}
 
-    // ── Step 5: Transmit via line.stamp() ────────────────────────────────
+async fn transmit_chronon_attestation(
+    worker_id: usize,
+    target_tbid: &str,
+    line: &crate::communerd::CommunerdetteLine,
+    target_chronon: u64,
+    stamped: foretias_core::foretias::tick::StampedForetis,
+    _calendar_signature: foretias_core::foretias::types::SignatureBytes,
+) {
     let foretis_bytes = stamped.foretis.sig_input_bytes();
     let echo = format!("attest-{}", stamped.foretis.chronon_number);
     match line.stamp(foretis_bytes, echo.clone()).await {
@@ -405,52 +414,65 @@ async fn handle_do_chronon_attestation(
                 remote_chronon = remote_foretis.inner().chronon_number,
                 "do_chronon_attestation: mutual attestation complete"
             );
-
-            // ── Step 6: Verify attestation recorded on FB (best-effort) ──
-            // Query the target's chronon to check whether our attestation
-            // appears in external_attestations.  This is a read-after-write
-            // consistency check — the remote may not have persisted the
-            // attestation yet, so a miss is logged as a warning, not a failure.
-            match line.get_tick(target_chronon).await {
-                Ok(verified_record) => {
-                    let record = verified_record.inner();
-                    let attestation_present =
-                        record.external_attestations.iter().any(|att| {
-                            att.foretis.echo == echo
-                                && att.foretis.content_hash
-                                    == remote_foretis.inner().content_hash
-                        });
-                    if attestation_present {
-                        debug!(
-                            worker_id,
-                            target_tbid,
-                            target_chronon,
-                            "do_chronon_attestation: FB verification — attestation recorded"
-                        );
-                    } else {
-                        warn!(
-                            worker_id,
-                            target_tbid,
-                            target_chronon,
-                            "do_chronon_attestation: FB verification — attestation not yet visible in external_attestations"
-                        );
-                    }
-                }
-                Err(e) => {
-                    warn!(
-                        worker_id,
-                        target_tbid,
-                        target_chronon,
-                        error = %e,
-                        "do_chronon_attestation: FB verification query failed (best-effort)"
-                    );
-                }
-            }
+            verify_chronon_attestation_recorded(
+                worker_id,
+                target_tbid,
+                target_chronon,
+                line,
+                &echo,
+                &remote_foretis,
+            )
+            .await;
         }
         Err(e) => {
             warn!(
                 worker_id,
                 target_tbid, error = %e, "do_chronon_attestation: line.stamp() failed"
+            );
+        }
+    }
+}
+
+async fn verify_chronon_attestation_recorded(
+    worker_id: usize,
+    target_tbid: &str,
+    target_chronon: u64,
+    line: &crate::communerd::CommunerdetteLine,
+    echo: &str,
+    remote_foretis: &foretias_core::foretias::clean_auth::CleanAuthenticated<
+        foretias_core::foretias::tick::Foretis,
+    >,
+) {
+    match line.get_tick(target_chronon).await {
+        Ok(verified_record) => {
+            let record = verified_record.inner();
+            let remote_content_hash = remote_foretis.inner().content_hash.clone();
+            let attestation_present = record.external_attestations.iter().any(|att| {
+                att.foretis.echo == echo && att.foretis.content_hash == remote_content_hash
+            });
+            if attestation_present {
+                debug!(
+                    worker_id,
+                    target_tbid,
+                    target_chronon,
+                    "do_chronon_attestation: FB verification — attestation recorded"
+                );
+            } else {
+                warn!(
+                    worker_id,
+                    target_tbid,
+                    target_chronon,
+                    "do_chronon_attestation: attestation not yet visible"
+                );
+            }
+        }
+        Err(e) => {
+            warn!(
+                worker_id,
+                target_tbid,
+                target_chronon,
+                error = %e,
+                "do_chronon_attestation: FB verification query failed (best-effort)"
             );
         }
     }
@@ -467,11 +489,7 @@ async fn handle_do_chronon_attestation(
 ///
 /// Gracefully degrades when Communerd or Chronomatter are not wired into the
 /// `WorkerContext` (placeholder mode).
-async fn handle_do_epoch_attestation(
-    worker_id: usize,
-    target_tbid: &str,
-    ctx: &WorkerContext,
-) {
+async fn handle_do_epoch_attestation(worker_id: usize, target_tbid: &str, ctx: &WorkerContext) {
     // ── Resource gate ────────────────────────────────────────────────────
     let Some(ref communerd) = ctx.communerd else {
         warn!(
@@ -499,75 +517,85 @@ async fn handle_do_epoch_attestation(
         }
     };
 
-    // ── Step 2: Fetch target's latest epoch via get_calendar_slice ───────
+    // ── Step 2: Fetch target's latest epoch ──────────────────────────────
     let line = communerd.line_for_tbid(tbid);
-    let slice = match line.get_calendar_slice(u64::MAX, 1).await {
-        Ok(records) => records,
-        Err(e) => {
-            warn!(
-                worker_id,
-                target_tbid, error = %e, "do_epoch_attestation: get_calendar_slice failed"
-            );
-            return;
-        }
+    let target_chronon = match get_target_latest_epoch(worker_id, target_tbid, &line).await {
+        Some(v) => v,
+        None => return,
     };
 
-    let Some(target_record) = slice.into_iter().next() else {
+    // ── Steps 3-4: Stamp and sign ────────────────────────────────────────
+    let Some((stamped, calendar_signature)) =
+        stamp_and_sign_epoch_attestation(worker_id, target_tbid, ctx, chronomatter)
+    else {
+        return;
+    };
+
+    // ── Step 5: Transmit ────────────────────────────────────────────────
+    transmit_epoch_attestation(worker_id, target_tbid, &line, stamped, calendar_signature).await;
+}
+
+async fn get_target_latest_epoch(
+    worker_id: usize,
+    target_tbid: &str,
+    line: &crate::communerd::CommunerdetteLine,
+) -> Option<u64> {
+    let slice = line.get_calendar_slice(u64::MAX, 1).await.ok()?;
+    let target_record = slice.into_iter().next().inspect(|_| {
         warn!(
             worker_id,
             target_tbid, "do_epoch_attestation: target returned empty calendar slice"
         );
-        return;
-    };
+    })?;
 
     let target_chronon = target_record.inner().chronon_number;
     info!(
         worker_id,
         target_tbid, target_chronon, "do_epoch_attestation: fetched target's latest epoch"
     );
+    Some(target_chronon)
+}
 
-    // ── Step 3: Internally stamp via Chronomatter ────────────────────────
+fn stamp_and_sign_epoch_attestation(
+    worker_id: usize,
+    target_tbid: &str,
+    ctx: &WorkerContext,
+    chronomatter: &foretias_core::chronomatter::Chronomatter,
+) -> Option<(
+    foretias_core::foretias::tick::StampedForetis,
+    foretias_core::foretias::types::SignatureBytes,
+)> {
     let stamp_content = format!("epoch-attest-{}", target_tbid);
-    let stamped = match chronomatter.stamp(
-        stamp_content.into_bytes(),
-        "epoch-attestation".to_string(),
-    ) {
-        Ok(s) => s,
-        Err(e) => {
-            warn!(
+    let stamped = chronomatter
+        .stamp(stamp_content.into_bytes(), "epoch-attestation".to_string())
+        .ok()
+        .inspect(|s| {
+            debug!(
                 worker_id,
-                target_tbid, error = %e, "do_epoch_attestation: Chronomatter stamp failed"
-            );
-            return;
-        }
-    };
+                target_tbid,
+                local_chronon = s.foretis.chronon_number,
+                "do_epoch_attestation: local Foretis produced"
+            )
+        })?;
 
-    debug!(
-        worker_id,
-        target_tbid,
-        local_chronon = stamped.foretis.chronon_number,
-        "do_epoch_attestation: local Foretis produced"
-    );
-
-    // ── Step 4: Sign with Calendar's key ─────────────────────────────────
-    let calendar_signature = match sign_with_calendar_key(ctx, &stamped.foretis.sig_input_bytes()) {
-        Some(sig) => sig,
-        None => {
-            warn!(
-                worker_id,
-                target_tbid, "do_epoch_attestation: calendar signing failed or key unavailable"
-            );
-            return;
-        }
-    };
+    let calendar_signature: foretias_core::foretias::types::SignatureBytes =
+        sign_with_calendar_key(ctx, &stamped.foretis.sig_input_bytes())?.into();
     debug!(
         worker_id,
         target_tbid,
         sig_len = calendar_signature.len(),
         "do_epoch_attestation: calendar signature produced"
     );
+    Some((stamped, calendar_signature))
+}
 
-    // ── Step 5: Transmit via line.stamp() ────────────────────────────────
+async fn transmit_epoch_attestation(
+    worker_id: usize,
+    target_tbid: &str,
+    line: &crate::communerd::CommunerdetteLine,
+    stamped: foretias_core::foretias::tick::StampedForetis,
+    _calendar_signature: foretias_core::foretias::types::SignatureBytes,
+) {
     let foretis_bytes = stamped.foretis.sig_input_bytes();
     let echo = format!("epoch-attest-{}", stamped.foretis.chronon_number);
     match line.stamp(foretis_bytes, echo).await {
@@ -609,13 +637,19 @@ async fn handle_find_new_mirror(worker_id: usize, ctx: &WorkerContext) {
     let target = *ctx.mirror_state.target_mirrors.read();
     let current = ctx.mirror_state.mirrors.read().len();
     if current >= target {
-        debug!(worker_id, current, target, "find_new_mirror: at target; skipping");
+        debug!(
+            worker_id,
+            current, target, "find_new_mirror: at target; skipping"
+        );
         return;
     }
 
     let local_tbid = ctx.mirror_state.local_tbid_hex.read().clone();
     if local_tbid.is_empty() {
-        warn!(worker_id, "find_new_mirror: local_tbid not set on Calendar; cannot announce");
+        warn!(
+            worker_id,
+            "find_new_mirror: local_tbid not set on Calendar; cannot announce"
+        );
         return;
     }
 
@@ -635,10 +669,11 @@ async fn handle_find_new_mirror(worker_id: usize, ctx: &WorkerContext) {
                     .insert(peer.json_rpc.clone());
                 let _ = enqueue(
                     &ctx.task_tx,
-                    CalendarTask::InitiateDump { mirror: peer.clone() },
+                    CalendarTask::InitiateDump {
+                        mirror: peer.clone(),
+                    },
                 );
-                if ctx.mirror_state.mirrors.read().len()
-                    >= *ctx.mirror_state.target_mirrors.read()
+                if ctx.mirror_state.mirrors.read().len() >= *ctx.mirror_state.target_mirrors.read()
                 {
                     break;
                 }
@@ -700,7 +735,9 @@ async fn handle_initiate_dump(worker_id: usize, mirror: PeerAddr, ctx: &WorkerCo
             info!(worker_id, mirror = %mirror.json_rpc, sent, reported_count, "initiate_dump complete; enqueueing StartStream");
             let _ = enqueue(
                 &ctx.task_tx,
-                CalendarTask::StartStream { mirror: mirror.clone() },
+                CalendarTask::StartStream {
+                    mirror: mirror.clone(),
+                },
             );
         }
         Err(e) => {
@@ -718,10 +755,7 @@ async fn handle_explore_mirror(worker_id: usize, mirror: PeerAddr, ctx: &WorkerC
     if local_tbid.is_empty() {
         return;
     }
-    match dispatcher
-        .mirror_health_check(&mirror, &local_tbid)
-        .await
-    {
+    match dispatcher.mirror_health_check(&mirror, &local_tbid).await {
         Ok(tick_count) => {
             debug!(worker_id, mirror = %mirror.json_rpc, tick_count, "mirror health ok");
             ctx.mirror_state
@@ -741,7 +775,9 @@ async fn handle_explore_mirror(worker_id: usize, mirror: PeerAddr, ctx: &WorkerC
                 info!(worker_id, mirror = %mirror.json_rpc, failures, "mirror exceeded MAX_HEALTH_FAILURES; expiring");
                 let _ = enqueue(
                     &ctx.task_tx,
-                    CalendarTask::ExpireMirror { mirror: mirror.clone() },
+                    CalendarTask::ExpireMirror {
+                        mirror: mirror.clone(),
+                    },
                 );
             }
         }
@@ -766,7 +802,10 @@ async fn handle_expire_mirror(worker_id: usize, mirror: PeerAddr, ctx: &WorkerCo
     let active = ctx.mirror_state.mirrors.read().len();
     let min = *ctx.mirror_state.min_mirrors.read();
     if active < min {
-        debug!(worker_id, active, min, "active mirrors below min; enqueueing FindNewMirror");
+        debug!(
+            worker_id,
+            active, min, "active mirrors below min; enqueueing FindNewMirror"
+        );
         let _ = enqueue(&ctx.task_tx, CalendarTask::FindNewMirror);
     }
 }
@@ -778,16 +817,11 @@ async fn handle_expire_mirror(worker_id: usize, mirror: PeerAddr, ctx: &WorkerCo
 /// 3. Pick a random chronon range (chronon 1 to latest, capped at 100 records)
 /// 4. Call `get_calendar_slice` (with attestations) for that range
 /// 5. Log coverage results; warn if coverage is poor or attestations are missing
-async fn handle_verify_fb_recorded(
-    worker_id: usize,
-    target_tbid: &str,
-    ctx: &WorkerContext,
-) {
+async fn handle_verify_fb_recorded(worker_id: usize, target_tbid: &str, ctx: &WorkerContext) {
     let Some(ref communerd) = ctx.communerd else {
         warn!(
             worker_id,
-            target_tbid,
-            "verify_fb_recorded: no Communerd in WorkerContext; skipping"
+            target_tbid, "verify_fb_recorded: no Communerd in WorkerContext; skipping"
         );
         return;
     };
@@ -807,31 +841,47 @@ async fn handle_verify_fb_recorded(
 
     let line = communerd.line_for_tbid(tbid);
 
-    // Step 2: Fetch target's latest chronon to determine the available range.
-    let latest_record = match line.get_tick(u64::MAX).await {
-        Ok(record) => record,
+    let latest_chronon = match get_verify_latest_chronon(worker_id, target_tbid, &line).await {
+        Some(v) => v,
+        None => return,
+    };
+
+    let (start, count) = pick_verify_range(latest_chronon);
+    log_verify_fetch(worker_id, target_tbid, latest_chronon, start, count);
+
+    let records = match line.get_calendar_slice(start, count).await {
+        Ok(r) => r,
         Err(e) => {
             warn!(
                 worker_id,
-                target_tbid,
-                error = %e,
-                "verify_fb_recorded: get_tick(u64::MAX) failed"
+                target_tbid, start, count, error = %e,
+                "verify_fb_recorded: get_calendar_slice failed"
             );
             return;
         }
     };
-    let latest_chronon = latest_record.inner().chronon_number;
+
+    log_verify_coverage(worker_id, target_tbid, start, count, records);
+}
+
+async fn get_verify_latest_chronon(
+    worker_id: usize,
+    target_tbid: &str,
+    line: &crate::communerd::CommunerdetteLine,
+) -> Option<u64> {
+    let record = line.get_tick(u64::MAX).await.ok()?;
+    let latest_chronon = record.inner().chronon_number;
     if latest_chronon == 0 {
         info!(
             worker_id,
-            target_tbid,
-            "verify_fb_recorded: target has no ticks; nothing to verify"
+            target_tbid, "verify_fb_recorded: target has no ticks; nothing to verify"
         );
-        return;
+        return None;
     }
+    Some(latest_chronon)
+}
 
-    // Step 3: Pick a random chronon range. We pick a random start within
-    // [1, latest_chronon] and request up to 100 records.
+fn pick_verify_range(latest_chronon: u64) -> (u64, u64) {
     let max_records: u64 = 100;
     let start = if latest_chronon <= 1 {
         1
@@ -839,7 +889,16 @@ async fn handle_verify_fb_recorded(
         rand::thread_rng().gen_range(1..=latest_chronon)
     };
     let count = std::cmp::min(max_records, latest_chronon.saturating_sub(start) + 1);
+    (start, count)
+}
 
+fn log_verify_fetch(
+    worker_id: usize,
+    target_tbid: &str,
+    latest_chronon: u64,
+    start: u64,
+    count: u64,
+) {
     info!(
         worker_id,
         target_tbid,
@@ -848,24 +907,15 @@ async fn handle_verify_fb_recorded(
         count,
         "verify_fb_recorded: fetching chronon range from target"
     );
+}
 
-    // Step 4: Fetch the chronon slice (includes attestations by default).
-    let records = match line.get_calendar_slice(start, count).await {
-        Ok(records) => records,
-        Err(e) => {
-            warn!(
-                worker_id,
-                target_tbid,
-                start,
-                count,
-                error = %e,
-                "verify_fb_recorded: get_calendar_slice failed"
-            );
-            return;
-        }
-    };
-
-    // Step 5: Log coverage results.
+fn log_verify_coverage(
+    worker_id: usize,
+    target_tbid: &str,
+    start: u64,
+    count: u64,
+    records: Vec<foretias_core::foretias::clean_auth::CleanAuthenticated<ChrononRecord>>,
+) {
     let requested = count;
     let returned = records.len() as u64;
     let coverage_ratio = if requested > 0 {
@@ -905,10 +955,7 @@ async fn handle_verify_fb_recorded(
     if returned > 0 && records_with_attestations == 0 {
         warn!(
             worker_id,
-            target_tbid,
-            start,
-            returned,
-            "verify_fb_recorded: no attestations found in any returned records"
+            target_tbid, start, returned, "verify_fb_recorded: no attestations in returned records"
         );
     }
 }
@@ -918,7 +965,9 @@ async fn handle_verify_fb_recorded(
 /// exercise the network path).
 pub fn start_default_pool(
     calendar_lookup: Arc<parking_lot::RwLock<foretias_core::foretias::Calendar>>,
-    signing_key: Option<Arc<parking_lot::Mutex<Option<foretias_core::core::identity::PrivKeyHandle>>>>,
+    signing_key: Option<
+        Arc<parking_lot::Mutex<Option<foretias_core::core::identity::PrivKeyHandle>>>,
+    >,
 ) -> (CalendarTaskSender, WorkerPool, Arc<MirrorState>) {
     start_default_pool_with_dispatcher(calendar_lookup, None, signing_key)
 }
@@ -930,7 +979,9 @@ pub fn start_default_pool(
 pub fn start_default_pool_with_dispatcher(
     calendar_lookup: Arc<parking_lot::RwLock<foretias_core::foretias::Calendar>>,
     dispatcher: Option<Arc<dyn MirrorDispatcher>>,
-    signing_key: Option<Arc<parking_lot::Mutex<Option<foretias_core::core::identity::PrivKeyHandle>>>>,
+    signing_key: Option<
+        Arc<parking_lot::Mutex<Option<foretias_core::core::identity::PrivKeyHandle>>>,
+    >,
 ) -> (CalendarTaskSender, WorkerPool, Arc<MirrorState>) {
     start_pool(calendar_lookup, dispatcher, None, None, signing_key)
 }
@@ -943,7 +994,9 @@ pub fn start_pool(
     dispatcher: Option<Arc<dyn MirrorDispatcher>>,
     communerd: Option<Arc<crate::communerd::Communerd>>,
     chronomatter: Option<Arc<foretias_core::chronomatter::Chronomatter>>,
-    signing_key: Option<Arc<parking_lot::Mutex<Option<foretias_core::core::identity::PrivKeyHandle>>>>,
+    signing_key: Option<
+        Arc<parking_lot::Mutex<Option<foretias_core::core::identity::PrivKeyHandle>>>,
+    >,
 ) -> (CalendarTaskSender, WorkerPool, Arc<MirrorState>) {
     let (tx, rx) = mpsc::unbounded_channel();
     let mirror_state = Arc::new(MirrorState::default());
@@ -994,28 +1047,36 @@ mod tests {
         assert_eq!(CalendarTask::FindNewMirror.kind(), "find_new_mirror");
         assert_eq!(
             CalendarTask::InitiateDump {
-                mirror: PeerAddr { json_rpc: "x".into() }
+                mirror: PeerAddr {
+                    json_rpc: "x".into()
+                }
             }
             .kind(),
             "initiate_dump"
         );
         assert_eq!(
             CalendarTask::StartStream {
-                mirror: PeerAddr { json_rpc: "x".into() }
+                mirror: PeerAddr {
+                    json_rpc: "x".into()
+                }
             }
             .kind(),
             "start_stream"
         );
         assert_eq!(
             CalendarTask::ExploreMirror {
-                mirror: PeerAddr { json_rpc: "x".into() }
+                mirror: PeerAddr {
+                    json_rpc: "x".into()
+                }
             }
             .kind(),
             "explore_mirror"
         );
         assert_eq!(
             CalendarTask::ExpireMirror {
-                mirror: PeerAddr { json_rpc: "x".into() }
+                mirror: PeerAddr {
+                    json_rpc: "x".into()
+                }
             }
             .kind(),
             "expire_mirror"

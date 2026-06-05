@@ -413,108 +413,27 @@ pub fn verify_pair(
 
     let (forward_sig, backward_sig, attest_blob, genesis_valid) =
         if curr.chronon_number == 1 && curr.tb_version == 1 {
-            let forward = &curr.forward_foretis;
-            let backward = &curr.backward_foretis;
+            let (forward_sig, backward_sig, forward_genesis, backward_genesis) =
+                validate_and_split_genesis(&curr.forward_foretis, &curr.backward_foretis)?;
 
-            // Validate minimum length for genesis foretis
-            // forward_foretis and backward_foretis must contain at least an Ed25519 signature (64 bytes)
-            const ED25519_SIG_LEN: usize = 64;
-            if forward.len() < ED25519_SIG_LEN {
-                return Err(NodeError::InvalidInput(
-                    "forward_foretis too short for genesis split".into(),
-                ));
-            }
-            if backward.len() < ED25519_SIG_LEN {
-                return Err(NodeError::InvalidInput(
-                    "backward_foretis too short for genesis split".into(),
-                ));
-            }
+            let genesis_valid = verify_genesis(
+                &forward_genesis,
+                &backward_genesis,
+                prev,
+                curr,
+                curr.tb_version,
+            )?;
 
-            let ed25519_sig_len = 64usize;
+            let attest_blob =
+                build_genesis_attest_blob(tbid_str, curr, &forward_genesis, stamps, &nonce[..]);
 
-            let forward_ed_sig = if forward.len() > ed25519_sig_len {
-                &forward[..ed25519_sig_len]
-            } else {
-                forward
-            };
-            let forward_genesis = if forward.len() > ed25519_sig_len {
-                &forward[ed25519_sig_len..]
-            } else {
-                &[]
-            };
-
-            let backward_ed_sig = if backward.len() > ed25519_sig_len {
-                &backward[..ed25519_sig_len]
-            } else {
-                backward
-            };
-            let backward_genesis = if backward.len() > ed25519_sig_len {
-                &backward[ed25519_sig_len..]
-            } else {
-                &[]
-            };
-
-            let genesis_match = forward_genesis == backward_genesis;
-
-            let mut genesis_blob = Vec::with_capacity(96 + 8 + curr.public_key.len());
-            genesis_blob.extend_from_slice(&prev.tbid.raw_bytes());
-            genesis_blob.extend_from_slice(&curr.chronon_number.to_be_bytes());
-            genesis_blob.extend_from_slice(&curr.public_key);
-
-            let genesis_valid = if !forward_genesis.is_empty() && genesis_match {
-                let pub_bytes =
-                    crate::foretias::types::SignatureBytes::from(prev.tbid.raw_bytes());
-                let sig = crate::foretias::types::SignatureBytes::from(forward_genesis.to_vec());
-                crate::crypto_server::signing_tbid::tbid_verify(&pub_bytes, &genesis_blob, &sig)
-                    .map_err(NodeError::Crypto)?
-            } else { forward_genesis.is_empty() && curr.tb_version == 0 };
-
-            let attest_blob = if !forward_genesis.is_empty() {
-                let mut attest_blob = Vec::with_capacity(
-                    tbid_str.len() + 8 + 32 + 8 + 32 + forward_genesis.len() + 8 + 16,
-                );
-                attest_blob.extend_from_slice(tbid_str.as_bytes());
-                attest_blob.extend_from_slice(&curr.chronon_number.to_be_bytes());
-                attest_blob.extend_from_slice(&curr.public_key);
-                attest_blob.extend_from_slice(&curr.chronon_number.to_be_bytes());
-                attest_blob.extend_from_slice(&curr.public_key);
-                attest_blob.extend_from_slice(forward_genesis);
-                attest_blob.extend_from_slice(&stamps.to_be_bytes());
-                attest_blob.extend_from_slice(&nonce[..]);
-                attest_blob
-            } else {
-                let mut attest_blob = Vec::with_capacity(tbid_str.len() + 8 + 32 + 8 + 32 + 8 + 16);
-                attest_blob.extend_from_slice(tbid_str.as_bytes());
-                attest_blob.extend_from_slice(&curr.chronon_number.to_be_bytes());
-                attest_blob.extend_from_slice(&curr.public_key);
-                attest_blob.extend_from_slice(&curr.chronon_number.to_be_bytes());
-                attest_blob.extend_from_slice(&curr.public_key);
-                attest_blob.extend_from_slice(&stamps.to_be_bytes());
-                attest_blob.extend_from_slice(&nonce[..]);
-                attest_blob
-            };
-
-            (
-                forward_ed_sig.to_vec().into(),
-                backward_ed_sig.to_vec().into(),
-                attest_blob,
-                genesis_valid,
-            )
+            (forward_sig, backward_sig, attest_blob, genesis_valid)
         } else {
-            let mut attest_blob = Vec::with_capacity(
-                tbid_str.len() + 8 + prev.public_key.len() + 8 + curr.public_key.len() + 8 + 16,
-            );
-            attest_blob.extend_from_slice(tbid_str.as_bytes());
-            attest_blob.extend_from_slice(&prev.chronon_number.to_be_bytes());
-            attest_blob.extend_from_slice(&prev.public_key);
-            attest_blob.extend_from_slice(&curr.chronon_number.to_be_bytes());
-            attest_blob.extend_from_slice(&curr.public_key);
-            attest_blob.extend_from_slice(&stamps.to_be_bytes());
-            attest_blob.extend_from_slice(&nonce[..]);
+            let attest_blob = build_normal_attest_blob(tbid_str, prev, curr, stamps, &nonce[..]);
 
             (
-                curr.forward_foretis.clone(),
-                curr.backward_foretis.clone(),
+                curr.forward_foretis.clone().into(),
+                curr.backward_foretis.clone().into(),
                 attest_blob,
                 true,
             )
@@ -535,6 +454,120 @@ pub fn verify_pair(
     )?;
 
     Ok(forward_valid && backward_valid && genesis_valid)
+}
+
+fn validate_and_split_genesis(
+    forward: &[u8],
+    backward: &[u8],
+) -> Result<
+    (
+        super::types::SignatureBytes,
+        super::types::SignatureBytes,
+        Vec<u8>,
+        Vec<u8>,
+    ),
+    NodeError,
+> {
+    const ED25519_SIG_LEN: usize = 64;
+    if forward.len() < ED25519_SIG_LEN {
+        return Err(NodeError::InvalidInput(
+            "forward_foretis too short for genesis split".into(),
+        ));
+    }
+    if backward.len() < ED25519_SIG_LEN {
+        return Err(NodeError::InvalidInput(
+            "backward_foretis too short for genesis split".into(),
+        ));
+    }
+
+    let forward_ed_sig = super::types::SignatureBytes::from(forward[..ED25519_SIG_LEN].to_vec());
+    let forward_genesis = forward[ED25519_SIG_LEN..].to_vec();
+    let backward_ed_sig = super::types::SignatureBytes::from(backward[..ED25519_SIG_LEN].to_vec());
+    let backward_genesis = backward[ED25519_SIG_LEN..].to_vec();
+
+    Ok((
+        forward_ed_sig,
+        backward_ed_sig,
+        forward_genesis,
+        backward_genesis,
+    ))
+}
+
+/// Verify the genesis signature between prev TBID and curr tick.
+fn verify_genesis(
+    forward_genesis: &[u8],
+    backward_genesis: &[u8],
+    prev: &ChrononRecord,
+    curr: &ChrononRecord,
+    tb_version: u32,
+) -> Result<bool, NodeError> {
+    let genesis_match = forward_genesis == backward_genesis;
+
+    if !forward_genesis.is_empty() && genesis_match {
+        let genesis_blob = build_genesis_blob(prev, curr);
+        let pub_bytes = crate::foretias::types::SignatureBytes::from(prev.tbid.raw_bytes());
+        let sig = crate::foretias::types::SignatureBytes::from(forward_genesis.to_vec());
+        crate::crypto_server::signing_tbid::tbid_verify(&pub_bytes, &genesis_blob, &sig)
+            .map_err(NodeError::Crypto)
+    } else {
+        Ok(forward_genesis.is_empty() && tb_version == 0)
+    }
+}
+
+/// Build the genesis blob: prev_tbid || curr_chronon || curr_public_key.
+fn build_genesis_blob(prev: &ChrononRecord, curr: &ChrononRecord) -> Vec<u8> {
+    let mut genesis_blob = Vec::with_capacity(96 + 8 + curr.public_key.len());
+    genesis_blob.extend_from_slice(&prev.tbid.raw_bytes());
+    genesis_blob.extend_from_slice(&curr.chronon_number.to_be_bytes());
+    genesis_blob.extend_from_slice(&curr.public_key);
+    genesis_blob
+}
+
+/// Build the attestation blob for genesis tick 1.
+fn build_genesis_attest_blob(
+    tbid_str: &str,
+    curr: &ChrononRecord,
+    forward_genesis: &[u8],
+    stamps: u64,
+    nonce: &[u8],
+) -> Vec<u8> {
+    let mut attest_blob = if !forward_genesis.is_empty() {
+        Vec::with_capacity(tbid_str.len() + 8 + 32 + 8 + 32 + forward_genesis.len() + 8 + 16)
+    } else {
+        Vec::with_capacity(tbid_str.len() + 8 + 32 + 8 + 32 + 8 + 16)
+    };
+    attest_blob.extend_from_slice(tbid_str.as_bytes());
+    attest_blob.extend_from_slice(&curr.chronon_number.to_be_bytes());
+    attest_blob.extend_from_slice(&curr.public_key);
+    attest_blob.extend_from_slice(&curr.chronon_number.to_be_bytes());
+    attest_blob.extend_from_slice(&curr.public_key);
+    if !forward_genesis.is_empty() {
+        attest_blob.extend_from_slice(forward_genesis);
+    }
+    attest_blob.extend_from_slice(&stamps.to_be_bytes());
+    attest_blob.extend_from_slice(nonce);
+    attest_blob
+}
+
+/// Build the attestation blob for normal (non-genesis) ticks.
+fn build_normal_attest_blob(
+    tbid_str: &str,
+    prev: &ChrononRecord,
+    curr: &ChrononRecord,
+    stamps: u64,
+    nonce: &[u8],
+) -> Vec<u8> {
+    let mut attest_blob = Vec::with_capacity(
+        tbid_str.len() + 8 + prev.public_key.len() + 8 + curr.public_key.len() + 8 + 16,
+    );
+    attest_blob.extend_from_slice(tbid_str.as_bytes());
+    attest_blob.extend_from_slice(&prev.chronon_number.to_be_bytes());
+    attest_blob.extend_from_slice(&prev.public_key);
+    attest_blob.extend_from_slice(&curr.chronon_number.to_be_bytes());
+    attest_blob.extend_from_slice(&curr.public_key);
+    attest_blob.extend_from_slice(&stamps.to_be_bytes());
+    attest_blob.extend_from_slice(nonce);
+    attest_blob
 }
 
 impl super::clean_auth::RecordBase for ChrononRecord {

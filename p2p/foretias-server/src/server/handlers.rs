@@ -1628,84 +1628,89 @@ pub fn handle_storage_proof_verify(server: &TimeFamilyServer, params: Value) -> 
 
     let id = params.get("id").cloned();
 
-    let req_val = match params.get("request") {
-        Some(v) => v,
-        None => {
-            return resp_error(
-                server,
-                id,
-                jsonrpc::INVALID_PARAMS,
-                "missing 'request'".into(),
-            )
-        }
+    let req = match parse_storage_proof_request(&params) {
+        Ok(r) => r,
+        Err(e) => return resp_error(server, id, jsonrpc::INVALID_PARAMS, e),
     };
-    let req_tbid = match req_val.get("tbid").and_then(|v| v.as_str()) {
+
+    let (coverage_ratio, blocks_val) = match parse_storage_proof_response(&params) {
+        Ok(v) => v,
+        Err(e) => return resp_error(server, id, jsonrpc::INVALID_PARAMS, e),
+    };
+
+    let blocks = match parse_storage_proof_blocks(&blocks_val) {
+        Ok(v) => v,
+        Err(e) => return resp_error(server, id, jsonrpc::INVALID_PARAMS, e),
+    };
+
+    let resp = Resp {
+        blocks,
+        coverage_ratio,
+    };
+
+    let known_roots = match parse_known_roots(&params) {
+        Ok(v) => v,
+        Err(e) => return resp_error(server, id, jsonrpc::INVALID_PARAMS, e),
+    };
+
+    let result = verify_storage_proof(&req, &resp, &known_roots);
+
+    resp_success(
+        server,
+        id,
+        serde_json::json!({
+            "verified": result.verified,
+            "coverage_ratio": result.coverage_ratio,
+        }),
+    )
+}
+
+fn parse_storage_proof_request(
+    params: &Value,
+) -> Result<crate::calendar_store::StorageProofRequest, String> {
+    let req_val = params
+        .get("request")
+        .ok_or_else(|| "missing 'request'".to_string())?;
+
+    let tbid = match req_val.get("tbid").and_then(|v| v.as_str()) {
         Some(t) if !t.is_empty() => t.to_string(),
-        _ => {
-            return resp_error(
-                server,
-                id,
-                jsonrpc::INVALID_PARAMS,
-                "missing or empty 'request.tbid'".into(),
-            )
-        }
+        _ => return Err("missing or empty 'request.tbid'".into()),
     };
-    let req_start = match req_val.get("chronon_start").and_then(|v| v.as_u64()) {
-        Some(v) => v,
-        None => {
-            return resp_error(
-                server,
-                id,
-                jsonrpc::INVALID_PARAMS,
-                "missing or invalid 'request.chronon_start'".into(),
-            )
-        }
-    };
-    let req_end = match req_val.get("chronon_end").and_then(|v| v.as_u64()) {
-        Some(v) => v,
-        None => {
-            return resp_error(
-                server,
-                id,
-                jsonrpc::INVALID_PARAMS,
-                "missing or invalid 'request.chronon_end'".into(),
-            )
-        }
-    };
+    let chronon_start = req_val
+        .get("chronon_start")
+        .and_then(|v| v.as_u64())
+        .ok_or_else(|| "missing or invalid 'request.chronon_start'".to_string())?;
+    let chronon_end = req_val
+        .get("chronon_end")
+        .and_then(|v| v.as_u64())
+        .ok_or_else(|| "missing or invalid 'request.chronon_end'".to_string())?;
 
-    let req = Req {
-        tbid: req_tbid,
-        chronon_start: req_start,
-        chronon_end: req_end,
-    };
+    Ok(crate::calendar_store::StorageProofRequest {
+        tbid,
+        chronon_start,
+        chronon_end,
+    })
+}
 
-    let resp_val = match params.get("response") {
-        Some(v) => v,
-        None => {
-            return resp_error(
-                server,
-                id,
-                jsonrpc::INVALID_PARAMS,
-                "missing 'response'".into(),
-            )
-        }
-    };
+fn parse_storage_proof_response(params: &Value) -> Result<(f64, &Vec<Value>), String> {
+    let resp_val = params
+        .get("response")
+        .ok_or_else(|| "missing 'response'".to_string())?;
     let coverage_ratio = resp_val
         .get("coverage_ratio")
         .and_then(|v| v.as_f64())
         .unwrap_or(0.0);
-    let blocks_val = match resp_val.get("blocks").and_then(|v| v.as_array()) {
-        Some(a) => a,
-        None => {
-            return resp_error(
-                server,
-                id,
-                jsonrpc::INVALID_PARAMS,
-                "missing or invalid 'response.blocks'".into(),
-            )
-        }
-    };
+    let blocks_val = resp_val
+        .get("blocks")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| "missing or invalid 'response.blocks'".to_string())?;
 
+    Ok((coverage_ratio, blocks_val))
+}
+
+fn parse_storage_proof_blocks(
+    blocks_val: &[serde_json::Value],
+) -> Result<Vec<crate::calendar_store::BlockProof>, String> {
     let mut blocks = Vec::new();
     for (i, bv) in blocks_val.iter().enumerate() {
         let block_id = bv.get("block_id").and_then(|v| v.as_u64()).unwrap_or(0);
@@ -1714,58 +1719,42 @@ pub fn handle_storage_proof_verify(server: &TimeFamilyServer, params: Value) -> 
             Some(h) => {
                 let bytes = hex::decode(h).unwrap_or_default();
                 if bytes.len() != 32 {
-                    return resp_error(
-                        server,
-                        id,
-                        jsonrpc::INVALID_PARAMS,
-                        format!("blocks[{i}].merkle_root must be 64-char hex"),
-                    );
+                    return Err(format!("blocks[{i}].merkle_root must be 64-char hex"));
                 }
                 let mut arr = [0u8; 32];
                 arr.copy_from_slice(&bytes);
                 arr
             }
-            None => {
-                return resp_error(
-                    server,
-                    id,
-                    jsonrpc::INVALID_PARAMS,
-                    format!("missing blocks[{i}].merkle_root"),
-                )
-            }
+            None => return Err(format!("missing blocks[{i}].merkle_root")),
         };
 
-        let leaves_default: Vec<Value> = vec![];
-        let leaves_val = bv
-            .get("leaves")
-            .and_then(|v| v.as_array())
-            .unwrap_or(&leaves_default);
         let leaf_count = bv.get("leaf_count").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
         let mut leaves = [[0u8; 32]; 64];
-        for (j, lv) in leaves_val.iter().take(leaf_count.min(64)).enumerate() {
-            if let Some(h) = lv.as_str() {
-                let bytes = hex::decode(h).unwrap_or_default();
-                if bytes.len() == 32 {
-                    leaves[j].copy_from_slice(&bytes);
+        if let Some(leaves_val) = bv.get("leaves").and_then(|v| v.as_array()) {
+            for (j, lv) in leaves_val.iter().take(leaf_count.min(64)).enumerate() {
+                if let Some(h) = lv.as_str() {
+                    if let Ok(bytes) = hex::decode(h) {
+                        if bytes.len() == 32 {
+                            leaves[j].copy_from_slice(&bytes);
+                        }
+                    }
                 }
             }
         }
 
-        let siblings_default: Vec<Value> = vec![];
-        let siblings_val = bv
-            .get("siblings")
-            .and_then(|v| v.as_array())
-            .unwrap_or(&siblings_default);
         let sibling_count = bv
             .get("sibling_count")
             .and_then(|v| v.as_u64())
             .unwrap_or(0) as usize;
         let mut siblings = [[0u8; 32]; 32];
-        for (j, sv) in siblings_val.iter().take(sibling_count.min(32)).enumerate() {
-            if let Some(h) = sv.as_str() {
-                let bytes = hex::decode(h).unwrap_or_default();
-                if bytes.len() == 32 {
-                    siblings[j].copy_from_slice(&bytes);
+        if let Some(siblings_val) = bv.get("siblings").and_then(|v| v.as_array()) {
+            for (j, sv) in siblings_val.iter().take(sibling_count.min(32)).enumerate() {
+                if let Some(h) = sv.as_str() {
+                    if let Ok(bytes) = hex::decode(h) {
+                        if bytes.len() == 32 {
+                            siblings[j].copy_from_slice(&bytes);
+                        }
+                    }
                 }
             }
         }
@@ -1782,12 +1771,10 @@ pub fn handle_storage_proof_verify(server: &TimeFamilyServer, params: Value) -> 
             n,
         });
     }
+    Ok(blocks)
+}
 
-    let resp = Resp {
-        blocks,
-        coverage_ratio,
-    };
-
+fn parse_known_roots(params: &Value) -> Result<Vec<[u8; 32]>, String> {
     let known_roots_val = params
         .get("known_roots")
         .and_then(|v| v.as_array())
@@ -1798,29 +1785,14 @@ pub fn handle_storage_proof_verify(server: &TimeFamilyServer, params: Value) -> 
         if let Some(h) = rv.as_str() {
             let bytes = hex::decode(h).unwrap_or_default();
             if bytes.len() != 32 {
-                return resp_error(
-                    server,
-                    id,
-                    jsonrpc::INVALID_PARAMS,
-                    format!("known_roots[{i}] must be 64-char hex"),
-                );
+                return Err(format!("known_roots[{i}] must be 64-char hex"));
             }
             let mut arr = [0u8; 32];
             arr.copy_from_slice(&bytes);
             known_roots.push(arr);
         }
     }
-
-    let result = verify_storage_proof(&req, &resp, &known_roots);
-
-    resp_success(
-        server,
-        id,
-        serde_json::json!({
-            "verified": result.verified,
-            "coverage_ratio": result.coverage_ratio,
-        }),
-    )
+    Ok(known_roots)
 }
 
 // ── Chronon query handlers ─────────────────────────────────────────────────
