@@ -446,7 +446,7 @@ async fn verify_chronon_attestation_recorded(
     match line.get_tick(target_chronon).await {
         Ok(verified_record) => {
             let record = verified_record.inner();
-            let remote_content_hash = remote_foretis.inner().content_hash.clone();
+            let remote_content_hash = remote_foretis.inner().content_hash;
             let attestation_present = record.external_attestations.iter().any(|att| {
                 att.foretis.echo == echo && att.foretis.content_hash == remote_content_hash
             });
@@ -519,7 +519,7 @@ async fn handle_do_epoch_attestation(worker_id: usize, target_tbid: &str, ctx: &
 
     // ── Step 2: Fetch target's latest epoch ──────────────────────────────
     let line = communerd.line_for_tbid(tbid);
-    let target_chronon = match get_target_latest_epoch(worker_id, target_tbid, &line).await {
+    let _target_chronon = match get_target_latest_epoch(worker_id, target_tbid, &line).await {
         Some(v) => v,
         None => return,
     };

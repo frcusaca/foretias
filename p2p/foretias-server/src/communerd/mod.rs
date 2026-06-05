@@ -827,6 +827,7 @@ impl Communerd {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn handle_record_retrieved(
         key: &libp2p::kad::RecordKey,
         records: &[libp2p::kad::Record],

@@ -1622,9 +1622,7 @@ pub fn handle_storage_proof_request(server: &TimeFamilyServer, params: Value) ->
 /// request and optional known Merkle roots. Returns whether all block
 /// proofs verified and the coverage ratio.
 pub fn handle_storage_proof_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
-    use crate::calendar_store::{
-        verify_storage_proof, StorageProofRequest as Req, StorageProofResponse as Resp,
-    };
+    use crate::calendar_store::{verify_storage_proof, StorageProofResponse as Resp};
 
     let id = params.get("id").cloned();
 
@@ -1638,7 +1636,7 @@ pub fn handle_storage_proof_verify(server: &TimeFamilyServer, params: Value) -> 
         Err(e) => return resp_error(server, id, jsonrpc::INVALID_PARAMS, e),
     };
 
-    let blocks = match parse_storage_proof_blocks(&blocks_val) {
+    let blocks = match parse_storage_proof_blocks(blocks_val) {
         Ok(v) => v,
         Err(e) => return resp_error(server, id, jsonrpc::INVALID_PARAMS, e),
     };
