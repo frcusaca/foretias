@@ -841,30 +841,47 @@ async fn handle_verify_fb_recorded(worker_id: usize, target_tbid: &str, ctx: &Wo
 
     let line = communerd.line_for_tbid(tbid);
 
-    // Step 2: Fetch target's latest chronon to determine the available range.
-    let latest_record = match line.get_tick(u64::MAX).await {
-        Ok(record) => record,
+    let latest_chronon = match get_verify_latest_chronon(worker_id, target_tbid, &line).await {
+        Some(v) => v,
+        None => return,
+    };
+
+    let (start, count) = pick_verify_range(latest_chronon);
+    log_verify_fetch(worker_id, target_tbid, latest_chronon, start, count);
+
+    let records = match line.get_calendar_slice(start, count).await {
+        Ok(r) => r,
         Err(e) => {
             warn!(
                 worker_id,
-                target_tbid,
-                error = %e,
-                "verify_fb_recorded: get_tick(u64::MAX) failed"
+                target_tbid, start, count, error = %e,
+                "verify_fb_recorded: get_calendar_slice failed"
             );
             return;
         }
     };
-    let latest_chronon = latest_record.inner().chronon_number;
+
+    log_verify_coverage(worker_id, target_tbid, start, count, records);
+}
+
+async fn get_verify_latest_chronon(
+    worker_id: usize,
+    target_tbid: &str,
+    line: &crate::communerd::CommunerdetteLine,
+) -> Option<u64> {
+    let record = line.get_tick(u64::MAX).await.ok()?;
+    let latest_chronon = record.inner().chronon_number;
     if latest_chronon == 0 {
         info!(
             worker_id,
             target_tbid, "verify_fb_recorded: target has no ticks; nothing to verify"
         );
-        return;
+        return None;
     }
+    Some(latest_chronon)
+}
 
-    // Step 3: Pick a random chronon range. We pick a random start within
-    // [1, latest_chronon] and request up to 100 records.
+fn pick_verify_range(latest_chronon: u64) -> (u64, u64) {
     let max_records: u64 = 100;
     let start = if latest_chronon <= 1 {
         1
@@ -872,7 +889,16 @@ async fn handle_verify_fb_recorded(worker_id: usize, target_tbid: &str, ctx: &Wo
         rand::thread_rng().gen_range(1..=latest_chronon)
     };
     let count = std::cmp::min(max_records, latest_chronon.saturating_sub(start) + 1);
+    (start, count)
+}
 
+fn log_verify_fetch(
+    worker_id: usize,
+    target_tbid: &str,
+    latest_chronon: u64,
+    start: u64,
+    count: u64,
+) {
     info!(
         worker_id,
         target_tbid,
@@ -881,24 +907,15 @@ async fn handle_verify_fb_recorded(worker_id: usize, target_tbid: &str, ctx: &Wo
         count,
         "verify_fb_recorded: fetching chronon range from target"
     );
+}
 
-    // Step 4: Fetch the chronon slice (includes attestations by default).
-    let records = match line.get_calendar_slice(start, count).await {
-        Ok(records) => records,
-        Err(e) => {
-            warn!(
-                worker_id,
-                target_tbid,
-                start,
-                count,
-                error = %e,
-                "verify_fb_recorded: get_calendar_slice failed"
-            );
-            return;
-        }
-    };
-
-    // Step 5: Log coverage results.
+fn log_verify_coverage(
+    worker_id: usize,
+    target_tbid: &str,
+    start: u64,
+    count: u64,
+    records: Vec<foretias_core::foretias::clean_auth::CleanAuthenticated<ChrononRecord>>,
+) {
     let requested = count;
     let returned = records.len() as u64;
     let coverage_ratio = if requested > 0 {
@@ -938,10 +955,7 @@ async fn handle_verify_fb_recorded(worker_id: usize, target_tbid: &str, ctx: &Wo
     if returned > 0 && records_with_attestations == 0 {
         warn!(
             worker_id,
-            target_tbid,
-            start,
-            returned,
-            "verify_fb_recorded: no attestations found in any returned records"
+            target_tbid, start, returned, "verify_fb_recorded: no attestations in returned records"
         );
     }
 }
