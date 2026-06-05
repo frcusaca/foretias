@@ -774,121 +774,168 @@ impl Communerd {
                     }
                 }
                 NetworkEvent::HeartbeatMessage { data, .. } => {
-                    if let Ok(hb) =
-                        serde_json::from_slice::<foretias_core::collision::Heartbeat>(&data)
-                    {
-                        if let Some(det) = &detector {
-                            if let Some(CollisionEvent::Confirmed { foreign_heartbeat }) =
-                                det.on_heartbeat(&hb, crypto.as_ref())
-                            {
-                                tracing::error!(
-                                    peer_id = %foreign_heartbeat.peer_id,
-                                    nonce = ?foreign_heartbeat.nonce,
-                                    "identity collision detected! entering dormancy"
-                                );
-                                if let Some(ref cmd_tx) = cmd_tx {
-                                    let _ = cmd_tx.send(SwarmCommand::EnterDormancy);
-                                    tracing::warn!("EnterDormancy command sent to swarm");
-                                }
-                            }
-                        }
-                    }
+                    Self::handle_heartbeat(&data, &detector, &crypto, &cmd_tx);
                 }
                 NetworkEvent::RecordRetrieved { key, records } => {
-                    if key.to_vec().ends_with(b"/peers/v1") {
-                        for record in &records {
-                            if let Ok(peer_record) =
-                                serde_json::from_slice::<PeerRegistrationRecord>(&record.value)
-                            {
-                                match validate_peer_registration(&peer_record, crypto.as_ref()) {
-                                    Ok(true) => {}
-                                    Ok(false) => {
-                                        tracing::warn!(component = "communerd", peer_id = %peer_record.peer_id, "communerd: DHT peer record failed structural or signature validation, skipping");
-                                        continue;
-                                    }
-                                    Err(e) => {
-                                        tracing::warn!(component = "communerd", peer_id = %peer_record.peer_id, error = %e, "communerd: DHT peer record validation errored, skipping");
-                                        continue;
-                                    }
-                                }
-                                let peer_addr = PeerAddr {
-                                    json_rpc: peer_record.json_rpc.clone(),
-                                    peer_id: peer_record.peer_id.parse().ok(),
-                                    last_seen_ns: clock.now_ns().unwrap_or(0),
-                                };
-                                peer_pool.add_peer(peer_addr).await;
-                                tracing::info!(component = "communerd", peer = %peer_record.peer_id, "communerd: DHT-discovered peer added to pool");
-                            }
-                        }
-                    }
-                    let key_bytes = key.to_vec();
-                    if key_bytes.ends_with(b"/v1") {
-                        let key_str = String::from_utf8_lossy(&key_bytes);
-                        // Handle FamilyRecord lookups (raw bytes, no deserialization)
-                        if key_str.contains("/family/") {
-                            if let Some(sender) = pending_family_lookups.lock().remove(&key) {
-                                let raw_value: Option<Vec<u8>> =
-                                    records.first().map(|r| r.value.clone());
-                                let _ = sender.send(raw_value);
-                            }
-                        }
-                        if key_str.contains("/tbid/") {
-                            for record in &records {
-                                if let Ok(peer_record) =
-                                    serde_json::from_slice::<PeerRegistrationRecord>(&record.value)
-                                {
-                                    match validate_peer_registration(&peer_record, crypto.as_ref())
-                                    {
-                                        Ok(true) => {}
-                                        Ok(false) => {
-                                            tracing::warn!(component = "communerd", tbid = %peer_record.tbid, "communerd: DHT TBID record failed structural or signature validation, skipping");
-                                            continue;
-                                        }
-                                        Err(e) => {
-                                            tracing::warn!(component = "communerd", tbid = %peer_record.tbid, error = %e, "communerd: DHT TBID record validation errored, skipping");
-                                            continue;
-                                        }
-                                    }
-                                    let tbid_hex = peer_record.tbid.clone();
-                                    tbid_index
-                                        .write()
-                                        .insert(tbid_hex.clone(), peer_record.clone());
-                                    tracing::debug!(tbid = %tbid_hex, "TBID index record cached");
-
-                                    communerd.bridge_dht_to_communerdette(&tbid_hex, &peer_record);
-                                }
-                            }
-                            if let Some(sender) = pending_lookups.lock().remove(&key) {
-                                let result = records.iter().find_map(|r| {
-                                    serde_json::from_slice::<PeerRegistrationRecord>(&r.value)
-                                        .ok()
-                                        .filter(|rec| {
-                                            matches!(
-                                                validate_peer_registration(rec, crypto.as_ref()),
-                                                Ok(true)
-                                            )
-                                        })
-                                });
-                                let _ = sender.send(result);
-                            }
-                        }
-                    }
+                    Self::handle_record_retrieved(
+                        &key,
+                        &records,
+                        &crypto,
+                        &clock,
+                        &peer_pool,
+                        &tbid_index,
+                        &pending_lookups,
+                        &pending_family_lookups,
+                        &communerd,
+                    )
+                    .await;
                 }
                 NetworkEvent::DhtPeerDiscovered {
                     peer_id,
                     addresses: _,
                 } => {
-                    let peer_addr = PeerAddr {
-                        json_rpc: String::new(),
-                        peer_id: Some(peer_id),
-                        last_seen_ns: clock.now_ns().unwrap_or(0),
-                    };
-                    peer_pool.add_peer(peer_addr).await;
-                    tracing::info!(component = "communerd", peer = %peer_id, "communerd: DHT-discovered peer added to pool");
+                    Self::handle_dht_peer_discovered(&peer_id, &peer_pool, &clock).await;
                 }
                 _ => {}
             }
         }
+    }
+
+    fn handle_heartbeat(
+        data: &[u8],
+        detector: &Option<Arc<CollisionDetector>>,
+        crypto: &Arc<dyn CryptoServer>,
+        cmd_tx: &Option<tokio::sync::mpsc::UnboundedSender<SwarmCommand>>,
+    ) {
+        let Ok(hb) = serde_json::from_slice::<foretias_core::collision::Heartbeat>(data) else {
+            return;
+        };
+        let Some(det) = detector else { return };
+        let Some(CollisionEvent::Confirmed { foreign_heartbeat }) =
+            det.on_heartbeat(&hb, crypto.as_ref())
+        else {
+            return;
+        };
+        tracing::error!(
+            peer_id = %foreign_heartbeat.peer_id,
+            nonce = ?foreign_heartbeat.nonce,
+            "identity collision detected! entering dormancy"
+        );
+        if let Some(ref tx) = cmd_tx {
+            let _ = tx.send(SwarmCommand::EnterDormancy);
+            tracing::warn!("EnterDormancy command sent to swarm");
+        }
+    }
+
+    async fn handle_record_retrieved(
+        key: &libp2p::kad::RecordKey,
+        records: &[libp2p::kad::Record],
+        crypto: &Arc<dyn CryptoServer>,
+        clock: &Arc<dyn Clock>,
+        peer_pool: &PeerPool,
+        tbid_index: &Arc<
+            parking_lot::RwLock<std::collections::HashMap<String, PeerRegistrationRecord>>,
+        >,
+        pending_lookups: &PendingLookupMap,
+        pending_family_lookups: &PendingFamilyLookupMap,
+        communerd: &Communerd,
+    ) {
+        if key.to_vec().ends_with(b"/peers/v1") {
+            Self::handle_peer_records(records, crypto, clock, peer_pool).await;
+        }
+        let key_bytes = key.to_vec();
+        if !key_bytes.ends_with(b"/v1") {
+            return;
+        }
+        let key_str = String::from_utf8_lossy(&key_bytes);
+        if key_str.contains("/family/") {
+            if let Some(sender) = pending_family_lookups.lock().remove(key) {
+                let raw_value: Option<Vec<u8>> = records.first().map(|r| r.value.clone());
+                let _ = sender.send(raw_value);
+            }
+        }
+        if key_str.contains("/tbid/") {
+            Self::handle_tbid_records(records, crypto, tbid_index, pending_lookups, communerd)
+                .await;
+        }
+    }
+
+    async fn handle_peer_records(
+        records: &[libp2p::kad::Record],
+        crypto: &Arc<dyn CryptoServer>,
+        clock: &Arc<dyn Clock>,
+        peer_pool: &PeerPool,
+    ) {
+        for record in records {
+            let Ok(peer_record) = serde_json::from_slice::<PeerRegistrationRecord>(&record.value)
+            else {
+                continue;
+            };
+            match validate_peer_registration(&peer_record, crypto.as_ref()) {
+                Ok(true) => {}
+                Ok(false) | Err(_) => {
+                    tracing::warn!(component = "communerd", peer_id = %peer_record.peer_id, "communerd: DHT peer record failed validation, skipping");
+                    continue;
+                }
+            }
+            let peer_addr = PeerAddr {
+                json_rpc: peer_record.json_rpc.clone(),
+                peer_id: peer_record.peer_id.parse().ok(),
+                last_seen_ns: clock.now_ns().unwrap_or(0),
+            };
+            peer_pool.add_peer(peer_addr).await;
+            tracing::info!(component = "communerd", peer = %peer_record.peer_id, "communerd: DHT-discovered peer added to pool");
+        }
+    }
+
+    async fn handle_tbid_records(
+        records: &[libp2p::kad::Record],
+        crypto: &Arc<dyn CryptoServer>,
+        tbid_index: &Arc<
+            parking_lot::RwLock<std::collections::HashMap<String, PeerRegistrationRecord>>,
+        >,
+        pending_lookups: &PendingLookupMap,
+        communerd: &Communerd,
+    ) {
+        let mut valid_results = Vec::new();
+        for record in records {
+            let Ok(peer_record) = serde_json::from_slice::<PeerRegistrationRecord>(&record.value)
+            else {
+                continue;
+            };
+            match validate_peer_registration(&peer_record, crypto.as_ref()) {
+                Ok(true) => {}
+                Ok(false) | Err(_) => {
+                    tracing::warn!(component = "communerd", tbid = %peer_record.tbid, "communerd: DHT TBID record failed validation, skipping");
+                    continue;
+                }
+            }
+            let tbid_hex = peer_record.tbid.clone();
+            tbid_index
+                .write()
+                .insert(tbid_hex.clone(), peer_record.clone());
+            tracing::debug!(tbid = %tbid_hex, "TBID index record cached");
+            communerd.bridge_dht_to_communerdette(&tbid_hex, &peer_record);
+            valid_results.push(peer_record);
+        }
+        if let Some((_key, sender)) = pending_lookups.lock().drain().next() {
+            let result = valid_results.into_iter().next();
+            let _ = sender.send(result);
+        }
+    }
+
+    async fn handle_dht_peer_discovered(
+        peer_id: &libp2p::PeerId,
+        peer_pool: &PeerPool,
+        clock: &Arc<dyn Clock>,
+    ) {
+        let peer_addr = PeerAddr {
+            json_rpc: String::new(),
+            peer_id: Some(*peer_id),
+            last_seen_ns: clock.now_ns().unwrap_or(0),
+        };
+        peer_pool.add_peer(peer_addr).await;
+        tracing::info!(component = "communerd", peer = %peer_id, "communerd: DHT-discovered peer added to pool");
     }
 
     pub async fn bootstrap_dht(&self, bootstrap_addrs: Vec<String>) -> Result<(), NodeError> {
