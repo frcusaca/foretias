@@ -517,73 +517,85 @@ async fn handle_do_epoch_attestation(worker_id: usize, target_tbid: &str, ctx: &
         }
     };
 
-    // ── Step 2: Fetch target's latest epoch via get_calendar_slice ───────
+    // ── Step 2: Fetch target's latest epoch ──────────────────────────────
     let line = communerd.line_for_tbid(tbid);
-    let slice = match line.get_calendar_slice(u64::MAX, 1).await {
-        Ok(records) => records,
-        Err(e) => {
-            warn!(
-                worker_id,
-                target_tbid, error = %e, "do_epoch_attestation: get_calendar_slice failed"
-            );
-            return;
-        }
+    let target_chronon = match get_target_latest_epoch(worker_id, target_tbid, &line).await {
+        Some(v) => v,
+        None => return,
     };
 
-    let Some(target_record) = slice.into_iter().next() else {
+    // ── Steps 3-4: Stamp and sign ────────────────────────────────────────
+    let Some((stamped, calendar_signature)) =
+        stamp_and_sign_epoch_attestation(worker_id, target_tbid, ctx, chronomatter)
+    else {
+        return;
+    };
+
+    // ── Step 5: Transmit ────────────────────────────────────────────────
+    transmit_epoch_attestation(worker_id, target_tbid, &line, stamped, calendar_signature).await;
+}
+
+async fn get_target_latest_epoch(
+    worker_id: usize,
+    target_tbid: &str,
+    line: &crate::communerd::CommunerdetteLine,
+) -> Option<u64> {
+    let slice = line.get_calendar_slice(u64::MAX, 1).await.ok()?;
+    let target_record = slice.into_iter().next().inspect(|_| {
         warn!(
             worker_id,
             target_tbid, "do_epoch_attestation: target returned empty calendar slice"
         );
-        return;
-    };
+    })?;
 
     let target_chronon = target_record.inner().chronon_number;
     info!(
         worker_id,
         target_tbid, target_chronon, "do_epoch_attestation: fetched target's latest epoch"
     );
+    Some(target_chronon)
+}
 
-    // ── Step 3: Internally stamp via Chronomatter ────────────────────────
+fn stamp_and_sign_epoch_attestation(
+    worker_id: usize,
+    target_tbid: &str,
+    ctx: &WorkerContext,
+    chronomatter: &foretias_core::chronomatter::Chronomatter,
+) -> Option<(
+    foretias_core::foretias::tick::StampedForetis,
+    foretias_core::foretias::types::SignatureBytes,
+)> {
     let stamp_content = format!("epoch-attest-{}", target_tbid);
-    let stamped =
-        match chronomatter.stamp(stamp_content.into_bytes(), "epoch-attestation".to_string()) {
-            Ok(s) => s,
-            Err(e) => {
-                warn!(
-                    worker_id,
-                    target_tbid, error = %e, "do_epoch_attestation: Chronomatter stamp failed"
-                );
-                return;
-            }
-        };
-
-    debug!(
-        worker_id,
-        target_tbid,
-        local_chronon = stamped.foretis.chronon_number,
-        "do_epoch_attestation: local Foretis produced"
-    );
-
-    // ── Step 4: Sign with Calendar's key ─────────────────────────────────
-    let calendar_signature = match sign_with_calendar_key(ctx, &stamped.foretis.sig_input_bytes()) {
-        Some(sig) => sig,
-        None => {
-            warn!(
+    let stamped = chronomatter
+        .stamp(stamp_content.into_bytes(), "epoch-attestation".to_string())
+        .ok()
+        .inspect(|s| {
+            debug!(
                 worker_id,
-                target_tbid, "do_epoch_attestation: calendar signing failed or key unavailable"
-            );
-            return;
-        }
-    };
+                target_tbid,
+                local_chronon = s.foretis.chronon_number,
+                "do_epoch_attestation: local Foretis produced"
+            )
+        })?;
+
+    let calendar_signature: foretias_core::foretias::types::SignatureBytes =
+        sign_with_calendar_key(ctx, &stamped.foretis.sig_input_bytes())?.into();
     debug!(
         worker_id,
         target_tbid,
         sig_len = calendar_signature.len(),
         "do_epoch_attestation: calendar signature produced"
     );
+    Some((stamped, calendar_signature))
+}
 
-    // ── Step 5: Transmit via line.stamp() ────────────────────────────────
+async fn transmit_epoch_attestation(
+    worker_id: usize,
+    target_tbid: &str,
+    line: &crate::communerd::CommunerdetteLine,
+    stamped: foretias_core::foretias::tick::StampedForetis,
+    _calendar_signature: foretias_core::foretias::types::SignatureBytes,
+) {
     let foretis_bytes = stamped.foretis.sig_input_bytes();
     let echo = format!("epoch-attest-{}", stamped.foretis.chronon_number);
     match line.stamp(foretis_bytes, echo).await {
