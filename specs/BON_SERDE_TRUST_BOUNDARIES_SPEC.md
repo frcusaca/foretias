@@ -175,17 +175,77 @@ impl<S: chronon_record_builder::IsComplete> ChrononRecordBuilder<S> {
 
 ### 5. Config Struct Builders
 
-The 5 large config structs get `#[derive(Builder)]` without the shadow type pattern (they don't cross trust boundaries):
+The 5 large config structs get bon builders. The choice between **function builder** and **struct builder** depends on how the config is constructed:
 
-| Struct | Fields | File |
-|--------|--------|------|
-| `GossipLoopConfig` | 11 | `communerd/mod.rs` |
-| `RegistrationConfig` | 9 | `communerd/mod.rs` |
-| `TimeFamilyCliConfig` | 15 | `config/time_family.rs` |
-| `ServeConfig` | 14 | `main.rs` |
-| `VerifyConfig` | 8 | `main.rs` |
+#### bon Function Builder (`#[builder] fn`) — Use When All Params Available at Call Site
 
-These get `#[derive(Builder)]` with `#[builder(default)]` for optional fields and `#[allow(clippy::too_many_arguments)]` removed from their constructors.
+When all values are available atomically at the call site, use a **function builder**. The builder is ephemeral — consumed by `.call()`. No intermediate struct needed.
+
+```rust
+// Before: struct + multi-param constructor
+async fn gossip_event_loop(config: GossipLoopConfig) { ... }
+Self::gossip_event_loop(GossipLoopConfig::new(a, b, c, d, e, f, g, h, i, j, k)).await;
+
+// After: bon function builder
+#[bon::builder]
+async fn gossip_event_loop(
+    events: UnboundedReceiver<NetworkEvent>,
+    cmd_tx: Option<UnboundedSender<SwarmCommand>>,
+    probity_store: Arc<ProbityStore>,
+    // ... all 11 params
+) { ... }
+
+Self::gossip_event_loop()
+    .events(events)
+    .cmd_tx(cmd_tx)
+    .probity_store(probity_store)
+    // ...
+    .call()
+    .await;
+```
+
+**Candidates (all constructed atomically at the call site):**
+
+| Function | Fields | File | Current Call Site |
+|----------|--------|------|-------------------|
+| `gossip_event_loop` | 11 | `communerd/mod.rs:657` | All from `self.something.clone()` |
+| `refresh_self_registration` | 9 | `communerd/mod.rs:1123` | All from captured variables |
+| `cmd_serve` | 14 | `main.rs:837` | All from CLI parsing |
+
+#### bon Struct Builder (`#[derive(Builder)]`) — Use When Config Built Gradually
+
+When a config struct is built up **gradually over time** — each piece set as it becomes available, then finally passed to a function — use a **struct builder**. The struct acts as an accumulator.
+
+```rust
+// Config built gradually: piece by piece as each becomes available
+let mut builder = MyConfig::builder()
+    .name(available_name)
+    .timeout(available_timeout);
+
+// Later, when more pieces arrive:
+if let Some(path) = available_path {
+    builder = builder.persist_path(path);
+}
+
+// Finally, call:
+let config = builder.build()?;
+do_work(config);
+```
+
+**Candidates (built gradually, not atomically):**
+
+| Struct | Fields | File | Reason for struct builder |
+|--------|--------|------|---------------------------|
+| `TimeFamilyCliConfig` | 15 | `config/time_family.rs` | May be built from config file + CLI overrides |
+| `VerifyConfig` | 8 | `main.rs` | May be built from multiple input sources |
+
+#### Decision Rule
+
+| Pattern | Use | Example |
+|---------|-----|---------|
+| All params at call site | `#[builder] fn` | `gossip_event_loop`, `cmd_serve` |
+| Built gradually, passed later | `#[derive(Builder)]` on struct | `TimeFamilyCliConfig` |
+| Struct already exists and is passed around | Keep struct, add `#[derive(Builder)]` | `VerifyConfig` |
 
 ---
 
@@ -196,11 +256,11 @@ These get `#[derive(Builder)]` with `#[builder(default)]` for optional fields an
 - `ChrononRecord` — shadow type + TryFrom + custom Deserialize + bon builder
 - `Foretis` — shadow type + TryFrom + custom Deserialize + bon builder
 - `ExternalAttestation` — shadow type + TryFrom + custom Deserialize + bon builder
-- `GossipLoopConfig` — bon builder
-- `RegistrationConfig` — bon builder
-- `TimeFamilyCliConfig` — bon builder
-- `ServeConfig` — bon builder
-- `VerifyConfig` — bon builder
+- `GossipLoopConfig` — bon function builder (`#[builder] fn gossip_event_loop`)
+- `RegistrationConfig` — bon function builder (`#[builder] fn refresh_self_registration`)
+- `ServeConfig` — bon function builder (`#[builder] fn cmd_serve`)
+- `TimeFamilyCliConfig` — bon struct builder (`#[derive(Builder)]`)
+- `VerifyConfig` — bon struct builder (`#[derive(Builder)]`)
 - `bon = "3.9"` dependency added to `foretias-core` and `foretias-server`
 
 ### Out of Scope

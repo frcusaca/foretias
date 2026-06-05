@@ -74,17 +74,25 @@
 - [ ] Run `cargo test -p foretias-core` — all existing tests still pass
 - [ ] Commit: "Foretis + ExternalAttestation: add bon builders"
 
-### Wave 6: Config Struct bon Builders
+### Wave 6: Config Struct Builders
 
-- [ ] Add `#[derive(Builder)]` to `GossipLoopConfig` with `#[builder(default)]` for optional fields
-- [ ] Add `#[derive(Builder)]` to `RegistrationConfig`
-- [ ] Add `#[derive(Builder)]` to `TimeFamilyCliConfig`
-- [ ] Add `#[derive(Builder)]` to `ServeConfig`
-- [ ] Add `#[derive(Builder)]` to `VerifyConfig`
-- [ ] Update all call sites to use `StructName::builder().field(value).build()` syntax
-- [ ] Remove `#[allow(clippy::too_many_arguments)]` from constructors that are replaced by builders
+**Function builders** (all params available at call site — use `#[builder] fn`):
+
+- [ ] Convert `gossip_event_loop` to `#[bon::builder]` function builder, remove `GossipLoopConfig` struct
+- [ ] Update call site at `communerd/mod.rs:657` to use `.events(events).cmd_tx(cmd_tx)...call().await`
+- [ ] Convert `refresh_self_registration` to `#[bon::builder]` function builder, remove `RegistrationConfig` struct
+- [ ] Update call site at `communerd/mod.rs:1123` to use builder chain
+- [ ] Convert `cmd_serve` to `#[bon::builder]` function builder, remove `ServeConfig` struct
+- [ ] Update call site at `main.rs:837` to use builder chain
+
+**Struct builders** (built gradually — use `#[derive(Builder)]`):
+
+- [ ] Add `#[derive(Builder)]` to `TimeFamilyCliConfig` with `#[builder(default)]` for optional fields
+- [ ] Add `#[derive(Builder)]` to `VerifyConfig` with `#[builder(default)]` for optional fields
+- [ ] Update call sites to use `StructName::builder().field(value).build()` syntax
+
 - [ ] Run `cargo test --workspace` — all tests still pass
-- [ ] Commit: "Config structs: add bon builders"
+- [ ] Commit: "Config: bon function builders + struct builders"
 
 ### Wave 7: Migration — Replace Existing Constructors
 
