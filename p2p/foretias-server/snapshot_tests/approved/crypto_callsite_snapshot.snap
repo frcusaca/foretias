@@ -52,12 +52,12 @@ core-engine/src/foretias/clean_auth.rs                          1197  gate    le
 core-engine/src/foretias/clean_auth.rs                          1203  gate    let cfa: CleanFullyAuthenticated<u32> = CleanFullyAuthenticated::from_dual_verif
 core-engine/src/foretias/clean_auth.rs                          1210  gate    let cfa: CleanFullyAuthenticated<u32> = CleanFullyAuthenticated::from_dual_verif
 core-engine/src/foretias/family_record.rs                        105  verify  let valid = crypto.verify_ed25519(
-core-engine/src/foretias/tick.rs                                 350  sign    let signature = server.sign(&sig_input)?;
-core-engine/src/foretias/tick.rs                                 381  verify  Ok(server.verify_with(&rec.public_key, signature_algorithm, &sig_input, signatur
-core-engine/src/foretias/tick.rs                                 493  verify  let forward_valid = crypto.verify_with(
-core-engine/src/foretias/tick.rs                                 500  verify  let backward_valid = crypto.verify_with(
-core-engine/src/foretias/tick.rs                                 841  sign    let sig = server.sign(&attest_blob).unwrap();
-core-engine/src/foretias/tick.rs                                 891  sign    let sig = server.sign(&attest_blob).unwrap();
+core-engine/src/foretias/tick.rs                                 358  sign    let signature = server.sign(&sig_input)?;
+core-engine/src/foretias/tick.rs                                 389  verify  Ok(server.verify_with(&rec.public_key, signature_algorithm, &sig_input, signatur
+core-engine/src/foretias/tick.rs                                 501  verify  let forward_valid = crypto.verify_with(
+core-engine/src/foretias/tick.rs                                 508  verify  let backward_valid = crypto.verify_with(
+core-engine/src/foretias/tick.rs                                 849  sign    let sig = server.sign(&attest_blob).unwrap();
+core-engine/src/foretias/tick.rs                                 899  sign    let sig = server.sign(&attest_blob).unwrap();
 core-engine/src/foretias/types.rs                                124  sign    signing_tbid::tbid_sign(&SignatureBytes::from(secret_array), message)
 core-engine/src/integration_tests.rs                              20  sign    let sig = server.sign_with(msg, SignatureAlgorithm::SPHINCS_SHA2_128S).unwrap();
 core-engine/src/integration_tests.rs                              23  verify  let valid = server.verify_with(&sphincs_pk, "SPHINCS+-SHA2-128s-simple", msg, &s
@@ -223,5 +223,5 @@ crypto_callsite_snapshot — update with UPDATE_SNAPSHOT=1 when adding new crypt
 SIGNATURES:
 Public key: 4193efbf702cde19fbae087ea53189f67e7768ebe888e0816e24a27282a5b030
 Input signature: jLQNK2xu7muEZJFKzPe/bCVpupjqFQ2keqDkdjvDiJ/C8TDEW8U060D8aTvrQROVSSi3S2tUnBodjJtACZOhDw==
-Result signature: CcQbWuXIcO8/plgkLa0FprFxZHDZsbG5dcgJu2f0I5rC6pEpLtv4z8AsG3sBTWFGy/xbJhxbZt5Hhr7mmTUWCA==
-Comments signature: W9kSj0NI7MAsCeHVdYz3xbXr3A7NkeyCsT0VDwOazxiSfdPDiyeWDv5jxXL8by3z0rsOTqnmFIx4XSUqlkz+Bw==
+Result signature: caZfPbyeYHlNXjbFXmwJw6uKsKidnKGerhoTgoBX7PpzfzZnmSEyM4BcwBKVgagy13XXx1XZlkLONFJDiGpLAA==
+Comments signature: GKKSZyB/WiigYPkfJHP83sfiP0vk7Sk83cNulqArR1kERKpTYsjj9T84eGmDWDobN1uZWwMvc+Ik0CzY7iIKDQ==
