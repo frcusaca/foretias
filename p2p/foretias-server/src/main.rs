@@ -4,6 +4,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use bon::Builder;
 use clap::{Parser, Subcommand};
 use serde::Deserialize;
 use tracing_appender::rolling;
@@ -286,22 +287,48 @@ fn client_echo() -> String {
 // ── Subcommands ─────────────────────────────────────────────────────────────
 
 /// Configuration for the `serve` subcommand.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Builder)]
 struct ServeConfig {
     addr: String,
     chronon_ns: u64,
     persist_path: Option<String>,
+    #[builder(default)]
     start_dormant: bool,
+    #[builder(default)]
     peers: Vec<String>,
+    #[builder(default)]
     mutually_attest_every_chronons: u64,
+    #[builder(default = default_request_timeout_secs())]
     request_timeout_secs: u64,
     p2p_listen: Option<String>,
+    #[builder(default = default_p2p_port_range())]
     p2p_port_range: String,
+    #[builder(default)]
     p2p_dial: Vec<String>,
+    #[builder(default)]
     known_servers: Vec<String>,
+    #[builder(default = default_dht_namespace())]
     dht_namespace: String,
+    #[builder(default)]
     dht_bootstrap: Vec<String>,
+    #[builder(default = default_max_discovered_peers())]
     max_discovered_peers: usize,
+}
+
+fn default_request_timeout_secs() -> u64 {
+    15
+}
+
+fn default_p2p_port_range() -> String {
+    "4002-4999".to_string()
+}
+
+fn default_dht_namespace() -> String {
+    "foretias".to_string()
+}
+
+fn default_max_discovered_peers() -> usize {
+    100
 }
 
 async fn cmd_serve(config: ServeConfig) -> Result<(), Box<dyn std::error::Error>> {
@@ -547,16 +574,26 @@ async fn cmd_stamp(
 }
 
 /// Configuration for the `verify` subcommand.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Builder)]
 struct VerifyConfig {
     message: Option<String>,
     message_file: Option<String>,
     foretis: Option<String>,
     foretis_file: Option<String>,
     signature: Option<String>,
+    #[builder(default = default_signature_algorithm())]
     signature_algorithm: String,
     verify_output: Option<String>,
+    #[builder(default = default_verify_server_addr())]
     server_addr: String,
+}
+
+fn default_signature_algorithm() -> String {
+    "Ed25519".to_string()
+}
+
+fn default_verify_server_addr() -> String {
+    "127.0.0.1:4001".to_string()
 }
 
 async fn cmd_verify(config: VerifyConfig) -> Result<(), Box<dyn std::error::Error>> {

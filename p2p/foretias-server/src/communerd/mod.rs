@@ -19,6 +19,7 @@ pub use communerdette::{
 };
 pub use tiers::{CommunerdP2P, CommunerdServer};
 
+use bon::Builder;
 use dashmap::DashMap;
 use rand::seq::SliceRandom;
 use std::sync::{Arc, OnceLock};
@@ -67,6 +68,7 @@ type PendingFamilyLookupMap =
     Arc<parking_lot::Mutex<HashMap<kad::RecordKey, tokio::sync::oneshot::Sender<Option<Vec<u8>>>>>>;
 
 /// Configuration for the gossip event loop.
+#[derive(Builder)]
 pub struct GossipLoopConfig {
     /// Event receiver for network events.
     pub events: tokio::sync::mpsc::UnboundedReceiver<NetworkEvent>,
@@ -125,6 +127,7 @@ impl GossipLoopConfig {
 }
 
 /// Configuration for self-registration refresh.
+#[derive(Builder)]
 pub struct RegistrationConfig {
     /// Command sender for swarm commands.
     pub cmd_tx: tokio::sync::mpsc::UnboundedSender<SwarmCommand>,
@@ -654,19 +657,19 @@ impl Communerd {
         let pending_family_lookups = Arc::clone(&self.pending_family_lookups);
         let communerd_ref = self.clone();
         let task = tokio::spawn(async move {
-            Self::gossip_event_loop(GossipLoopConfig::new(
+            Self::gossip_event_loop(GossipLoopConfig {
                 events,
                 cmd_tx,
                 probity_store,
                 crypto,
-                clock_gossip,
-                Some(det),
+                clock: clock_gossip,
+                detector: Some(det),
                 peer_pool,
                 tbid_index,
                 pending_lookups,
                 pending_family_lookups,
-                communerd_ref,
-            ))
+                communerd: communerd_ref,
+            })
             .await;
         });
         let _ = self.gossip_task.set(task);
@@ -1120,17 +1123,19 @@ impl Communerd {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
             loop {
                 interval.tick().await;
-                Self::refresh_self_registration(RegistrationConfig::new(
-                    cmd_tx_clone.clone(),
-                    ns.clone(),
-                    tbid_arc,
-                    chronon,
-                    rpc.clone(),
-                    ma_arc.clone(),
-                    pid,
-                    Arc::clone(&clock_refresh),
-                    Arc::clone(&crypto_refresh),
-                ))
+                Self::refresh_self_registration(
+                    RegistrationConfig::builder()
+                        .cmd_tx(cmd_tx_clone.clone())
+                        .namespace(ns.clone())
+                        .tbid(tbid_arc)
+                        .chronon_ns(chronon)
+                        .json_rpc_addr(rpc.clone())
+                        .local_multiaddr(ma_arc.clone())
+                        .peer_id(pid)
+                        .clock(Arc::clone(&clock_refresh))
+                        .crypto(Arc::clone(&crypto_refresh))
+                        .build(),
+                )
                 .await;
             }
         });

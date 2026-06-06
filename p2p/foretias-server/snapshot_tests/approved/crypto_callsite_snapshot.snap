@@ -164,16 +164,16 @@ foretias-server/src/communerd/communerdette.rs                  4456  sign    //
 foretias-server/src/communerd/communerdette.rs                  4458  sign    .sign_with(
 foretias-server/src/communerd/communerdette.rs                  4734  sign    .sign_with(
 foretias-server/src/communerd/communerdette.rs                  4816  sign    .sign_with(
-foretias-server/src/communerd/mod.rs                             268  verify  .verify_with(&pubkey[..32], "Ed25519", &canonical, &record.signature)
-foretias-server/src/communerd/mod.rs                             739  sign    if let Ok(sig) = crypto.sign(&hb.canonical()) {
-foretias-server/src/communerd/mod.rs                             982  sign    if let Ok(sig) = crypto.sign(&report.canonical()) {
-foretias-server/src/communerd/mod.rs                            1073  sign    .sign(&canonical)
-foretias-server/src/communerd/mod.rs                            1170  sign    match crypto.sign(&canonical) {
-foretias-server/src/communerd/mod.rs                            1632  sign    .sign(&canonical)
+foretias-server/src/communerd/mod.rs                             271  verify  .verify_with(&pubkey[..32], "Ed25519", &canonical, &record.signature)
+foretias-server/src/communerd/mod.rs                             742  sign    if let Ok(sig) = crypto.sign(&hb.canonical()) {
+foretias-server/src/communerd/mod.rs                             985  sign    if let Ok(sig) = crypto.sign(&report.canonical()) {
+foretias-server/src/communerd/mod.rs                            1076  sign    .sign(&canonical)
+foretias-server/src/communerd/mod.rs                            1175  sign    match crypto.sign(&canonical) {
+foretias-server/src/communerd/mod.rs                            1637  sign    .sign(&canonical)
 foretias-server/src/communerd/p2p/tbid_handshake.rs               95  sign    .sign(&signed_payload)
 foretias-server/src/communerd/p2p/tbid_handshake.rs              123  verify  .verify_ed25519(
 foretias-server/src/communerd/p2p/tbid_handshake.rs              254  sign    let sig = crypto2.sign(&short_payload).expect("sign short payload");
-foretias-server/src/main.rs                                      593  verify  .verify(&content, &foretis, &signature_bytes, sig_alg)
+foretias-server/src/main.rs                                      630  verify  .verify(&content, &foretis, &signature_bytes, sig_alg)
 foretias-server/src/probity/gossip_handler.rs                     89  verify  match envelope.verify(crypto) {
 foretias-server/src/probity/gossip_handler.rs                    150  verify  .verify_with(&public_key, "Ed25519", &canonical, &report.signature)
 foretias-server/src/probity/gossip_handler.rs                    211  sign    let sig = crypto.sign(&canonical).unwrap();
@@ -223,5 +223,5 @@ crypto_callsite_snapshot — update with UPDATE_SNAPSHOT=1 when adding new crypt
 SIGNATURES:
 Public key: 4193efbf702cde19fbae087ea53189f67e7768ebe888e0816e24a27282a5b030
 Input signature: jLQNK2xu7muEZJFKzPe/bCVpupjqFQ2keqDkdjvDiJ/C8TDEW8U060D8aTvrQROVSSi3S2tUnBodjJtACZOhDw==
-Result signature: SjSvsoIiNXFEfwkbCZOQPVka1LNv7Bcy3iTfbORVqNx2UHRr3YvpYWUypbW/XtSie+8nJLHm+x2l5c4X/eAIDA==
-Comments signature: 0n44tLHceBCMIn2bjWI8nd+AwgRSd4vlVqKskOJf/tVW9GAk+TEyuKa5/XOcQIRDuE12JxK/f5LJyYDuZ1EnCQ==
+Result signature: CcQbWuXIcO8/plgkLa0FprFxZHDZsbG5dcgJu2f0I5rC6pEpLtv4z8AsG3sBTWFGy/xbJhxbZt5Hhr7mmTUWCA==
+Comments signature: W9kSj0NI7MAsCeHVdYz3xbXr3A7NkeyCsT0VDwOazxiSfdPDiyeWDv5jxXL8by3z0rsOTqnmFIx4XSUqlkz+Bw==
