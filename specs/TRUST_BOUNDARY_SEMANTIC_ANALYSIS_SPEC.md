@@ -67,12 +67,12 @@ enforcement again. Closing that gap is the reason the type-resolved TinmanSuite 
 Stated abstractly, the rule both suites enforce is a classic **information-flow / taint** rule:
 
 - **Sources** — points where the protected, *untrusted* type is constructed (raw data off the
-  wire or disk becomes `Unprocessed<R>`).
+  wire or disk becomes `DontUse<R>`).
 - **Sinks** — points where the *trusted* boundary type appears (`CleanAuthenticated<R>`,
   consumed by in-process logic that assumes due diligence is done).
 - **Barriers** — an **allow-listed set of gate functions** that are the *only* sanctioned way to
   transform a source into a sink. In our terms: only the inbound gate may turn
-  `Unprocessed<R>` into `CleanAuthenticated<R>`.
+  `DontUse<R>` into `CleanAuthenticated<R>`.
 - **Flagged** — any source→sink path that reaches a sink without passing through a barrier, or
   any appearance of the protected type outside the regions where it is permitted.
 
@@ -82,10 +82,10 @@ path. Our two suites are two complementary **partial** implementations of the sa
 cheap and syntactic, one type-accurate — and the rest of this section is about that trade.
 
 **Terminology bridge.** The companion spec `GENERIC_TRUST_BOUNDARY_WRAPPERS_SPEC.md` names the
-trust-states conceptually as `Unprocessed<T>` → `CleanAuthenticated<T>` → `Externalized<T>`. In
+trust-states conceptually as `DontUse<T>` → `CleanAuthenticated<T>` → `Externalized<T>`. In
 the *implementation*, the concrete source type the scanner matches is
 **`UnverifiedSignatureEnvelope<T>`** (with the alias `DontUse<T>`) — that is the realized form of
-"unprocessed." Throughout this document the taint discussion uses the conceptual `Unprocessed<R>`;
+"unprocessed." Throughout this document the taint discussion uses the conceptual `DontUse<R>`;
 the catalogues in §6–§7 name the literal strings the code actually matches.
 
 ### 3.1 Syntactic / AST analysis — the Strawman model
@@ -404,7 +404,7 @@ catalogue above stays an accurate description of the code. A future author promo
 implementing it and moving it up into the implemented catalogue.
 
 - **Construction-site allow-list (true source check).** Flag any call to a source constructor
-  (`Unprocessed::from_bytes`, `from_json_value`, `Externalized::into_unprocessed`) outside the
+  (`DontUse::from_bytes`, `from_json_value`, `Externalized::into_inner`) outside the
   permitted boundary files — the source half of the taint rule, currently only approximated by the
   placement rules.
 - **`DontUse` literal usage.** The placement scan keys on `UnverifiedSignatureEnvelope`; extend the
@@ -520,7 +520,7 @@ pub enum Position {
 }
 
 pub enum WrapperKind {
-    Unprocessed,          // realized as UnverifiedSignatureEnvelope
+    DontUse,              // realized as UnverifiedSignatureEnvelope
     CleanAuthenticated,
     Externalized,
 }
@@ -692,7 +692,7 @@ design doc and are intentionally **not** specified here. Nothing in the core sui
 
 It is worth talking out, honestly, the recurring temptation: *several of these invariants would be
 expressible directly in a more powerful type system* — linear/affine types to ensure an
-`Unprocessed<R>` is consumed exactly once by a gate; information-flow type systems (à la a security-typed
+`DontUse<R>` is consumed exactly once by a gate; information-flow type systems (à la a security-typed
 language) to make "untrusted may not reach trusted without passing a barrier" a **compile error**;
 dependent types to tie a `CleanAuthenticated<R>` to evidence that verification ran. In a language
 like Haskell (or Idris/Agda for the dependent end), parts of §6–§7 could in principle be discharged
@@ -719,3 +719,136 @@ and the migration cost is not justified. The two suites are the **pragmatic** re
 information-flow invariant on the platform we actually ship. If that calculus ever changes (e.g. a
 mature security-typed Rust dialect, or an effect system in the language), revisit this appendix
 against the §3.6 rubric.
+
+---
+
+## §2. Active Design Requirements
+
+> **Status:** These requirements are not yet implemented. They inform how we design the code
+> analysis system (StrawmanSuite + TinmanSuite) and what checks the suites must enforce.
+
+### 2.1 `BaseRecord` — The Trait for Important Data Structures
+
+All important data structures in Foretias must implement `BaseRecord`. An "important" data
+structure is one that is **signed**, **stored**, or **transmitted** across a trust boundary.
+
+```rust
+/// Base trait for all important data structures (signed, stored, transmitted).
+pub trait BaseRecord: serde::Serialize + Send + Sync + Clone + 'static {
+    /// Must this record reach `CleanFullyAuthenticated` before it may be used?
+    fn always_require_full_signature(&self) -> bool { false }
+}
+```
+
+### 2.2 Naming Convention: `*Record`
+
+All important data structures must be named `*Record`:
+
+| Type | Renamed To | Implements `BaseRecord`? |
+|------|-----------|-------------------------|
+| `ChrononRecord` | `ChrononRecord` (no change) | ✅ (already `RecordBase`) |
+| `Foretis` | `ForetisRecord` | ❌ (needs implementation) |
+| `ExternalAttestation` | `ExternalAttestationRecord` | ❌ (needs implementation) |
+| `EpochSnapshot` | `EpochSnapshotRecord` | ✅ (already `RecordBase`) |
+| `FamilyRecord` | `FamilyRecord` (no change) | ✅ (already `RecordBase`) |
+| `ProbityReport` | `ProbityReportRecord` | ✅ (already `RecordBase`) |
+| `RecordBase` | `BaseRecord` (rename) | — (this is the trait) |
+
+**Types that do NOT rename** (not important data structures):
+- `Tbid` — identifier, not a record
+- `SignatureEntry` — internal, not transmitted independently
+- `Calendar` — container, not a record
+- Config structs (`TimeFamilyCliConfig`, `ServeConfig`, etc.) — internal, not signed/stored/transmitted
+
+### 2.3 Construction Rules
+
+All `BaseRecord` implementations must:
+
+1. **Private constructor** — no `pub fn new()` or public struct literal. The only way to construct is through the builder.
+2. **`#[derive(Builder)]`** — use `bon` for construction with named parameters.
+3. **Fallible `build()`** — validate invariants during construction (e.g., `chronon_number > 0`).
+
+```rust
+// Correct: private constructor, builder pattern
+#[derive(Debug, Clone, Serialize, Builder)]
+pub struct ChrononRecord {
+    // ...
+}
+
+// Wrong: public constructor
+impl ChrononRecord {
+    pub fn new(/* params */) -> Self { /* ... */ }  // ❌ FORBIDDEN
+}
+```
+
+### 2.4 Trust Boundary Flow Rules
+
+All `*Record` types follow these rules when crossing trust boundaries:
+
+| Direction | Wrapper Type | When |
+|-----------|-------------|------|
+| Network → local | `DontUse<Record>` | Inbound data from wire |
+| Communerd → internal time beings | `CleanAuthenticated<Record>` | Calendar, Chronomatter receiving data |
+| Communerd → external time beings | `Externalized<Record>` | Sending data to network |
+| Local production | `CleanAuthenticated<Record>` via `from_trusted()` | Chronomatter producing a new tick |
+| Wire/disk persistence | `Externalized<Record>` | Calendar storing records |
+
+**Key invariant:** A `*Record` must NEVER cross a trust boundary without a wrapper. The only
+exceptions are internal method calls within the same trust boundary (e.g., Calendar calling
+Chronomatter directly).
+
+### 2.5 What the Code Analysis System Must Enforce
+
+The StrawmanSuite and TinmanSuite must be extended to check:
+
+1. **`BaseRecord` completeness** — every type that is signed, stored, or transmitted must
+   implement `BaseRecord`. The analysis must flag types that cross trust boundaries but don't
+   implement the trait.
+
+2. **Naming convention** — all `BaseRecord` implementations must be named `*Record`. The
+   analysis must flag types that implement `BaseRecord` but don't follow the naming convention.
+
+3. **Private constructors** — all `BaseRecord` implementations must have private constructors.
+   The analysis must flag public `fn new()` or public struct literals on `BaseRecord` types.
+
+4. **Trust boundary flow** — `*Record` types must only cross trust boundaries through the
+   correct wrapper types. The analysis must flag:
+   - `*Record` appearing at a network boundary without `DontUse<>` wrapper
+   - `*Record` passed from Communerd to internal time beings without `CleanAuthenticated<>`
+   - `*Record` transmitted externally without `Externalized<>`
+
+5. **Builder pattern** — all `BaseRecord` implementations must use `#[derive(Builder)]`. The
+   analysis must flag `BaseRecord` types that don't have a builder.
+
+### 2.6 Design Considerations
+
+During implementation of these requirements, we will consider:
+
+- **Tool choices:** `bon` for builders, `syn` for AST analysis, rustdoc JSON for type-resolved
+  analysis, `cargo-geiger` for unsafe audit
+- **Functional/stricter languages:** In a language like Haskell or OCaml, the trust boundary
+  enforcement could be expressed as a type-level guarantee (phantom types, GADTs, or type
+  families). Rust's type system is strong enough for `CleanAuthenticated<T>` (private constructors)
+  but requires out-of-band analysis (the suites) for placement rules. The suites are the
+  pragmatic realization of what a stronger type system would guarantee at compile time.
+- **Incremental adoption:** The naming convention and `BaseRecord` implementation can be done
+  incrementally. The analysis checks can be added one at a time. Each check is independent.
+
+### 2.7 Implementation TODO
+
+- [ ] Rename `RecordBase` → `BaseRecord` in `clean_auth.rs`
+- [ ] Rename `Foretis` → `ForetisRecord` in `tick.rs` and all call sites
+- [ ] Rename `ExternalAttestation` → `ExternalAttestationRecord` in `external_attestation.rs` and all call sites
+- [ ] Rename `EpochSnapshot` → `EpochSnapshotRecord` in `epoch/snapshot.rs` and all call sites
+- [ ] Rename `ProbityReport` → `ProbityReportRecord` in `probity/report.rs` and all call sites
+- [ ] Implement `BaseRecord` for `ForetisRecord` and `ExternalAttestationRecord`
+- [ ] Add `#[derive(Builder)]` to all renamed types
+- [ ] Make constructors private on all `BaseRecord` types
+- [ ] Document `BaseRecord` in `AGENTS.md` under "Important Data Structures"
+- [ ] Extend StrawmanSuite to check `BaseRecord` completeness and naming
+- [ ] Extend TinmanSuite to check trust boundary flow rules
+- [ ] Add analysis check: `*Record` at network boundary must have `DontUse<>` wrapper
+- [ ] Add analysis check: `*Record` from Communerd to internal must have `CleanAuthenticated<>`
+- [ ] Add analysis check: `*Record` transmitted externally must have `Externalized<>`
+- [ ] Add analysis check: `BaseRecord` types must have private constructors
+- [ ] Add analysis check: `BaseRecord` types must have `#[derive(Builder)]`
