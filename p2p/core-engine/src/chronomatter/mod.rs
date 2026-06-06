@@ -307,18 +307,17 @@ impl Chronomatter {
                 obs.on_mutual_attest_ok();
             }
 
-            Ok(ChrononRecord {
-                chronon_number: tick,
-                public_key: new_pub.to_vec().into(),
-                signature_algorithm: alg.clone(),
-                forward_foretis: forward_foretis.into(),
-                backward_foretis: backward_foretis.into(),
-                aa_nonce: aa_nonce.into(),
-                chronon_stamp_count: stamps,
-                external_attestations: Vec::new(),
-                tb_version,
-                tbid: self.tbid,
-            })
+            Ok(ChrononRecord::builder()
+                .chronon_number(tick)
+                .public_key(new_pub.to_vec().into())
+                .signature_algorithm(alg.clone())
+                .forward_foretis(forward_foretis.into())
+                .backward_foretis(backward_foretis.into())
+                .aa_nonce(aa_nonce.into())
+                .chronon_stamp_count(stamps)
+                .tb_version(tb_version)
+                .tbid(self.tbid)
+                .build()?)
         } else {
             if let Some(ref obs) = self.mutual_attest_observer {
                 obs.on_mutual_attest_sent();
@@ -332,18 +331,17 @@ impl Chronomatter {
             }
             let (forward_foretis, backward_foretis, aa_nonce, stamps) = result?;
 
-            Ok(ChrononRecord {
-                chronon_number: tick,
-                public_key: new_pub.to_vec().into(),
-                signature_algorithm: alg,
-                forward_foretis: forward_foretis.into(),
-                backward_foretis: backward_foretis.into(),
-                aa_nonce: aa_nonce.into(),
-                chronon_stamp_count: stamps,
-                external_attestations: Vec::new(),
-                tb_version: 0u32,
-                tbid: self.tbid,
-            })
+            Ok(ChrononRecord::builder()
+                .chronon_number(tick)
+                .public_key(new_pub.to_vec().into())
+                .signature_algorithm(alg)
+                .forward_foretis(forward_foretis.into())
+                .backward_foretis(backward_foretis.into())
+                .aa_nonce(aa_nonce.into())
+                .chronon_stamp_count(stamps)
+                .tb_version(0u32)
+                .tbid(self.tbid)
+                .build()?)
         }
     }
 
