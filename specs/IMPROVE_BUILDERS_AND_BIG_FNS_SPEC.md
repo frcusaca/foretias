@@ -10,7 +10,7 @@
 
 ## Overview
 
-Introduce `bon` builders for domain types and convert large multi-parameter functions to named-parameter function builders. No serde or trust boundary changes.
+Introduce `bon` builders for domain types and convert large multi-parameter functions to named-parameter function builders. Rename `RecordBase` → `BaseRecord`. Establish naming convention: all important data structures are `*Record`.
 
 ### Motivation
 
@@ -18,13 +18,56 @@ Introduce `bon` builders for domain types and convert large multi-parameter func
 
 2. **Large function signatures are hard to read.** `gossip_event_loop` takes 11 params. `cmd_serve` takes 14. `#[builder] fn` gives named, optional parameters.
 
+3. **Naming consistency.** Important data structures (signed, stored, transmitted) should all be named `*Record` and implement `BaseRecord`. This makes them easy to identify and enforces a common pattern.
+
+### Naming Convention: `*Record`
+
+All important data structures that are **signed**, **stored**, or **transmitted** must:
+
+- Be named `*Record` (e.g., `ChrononRecord`, `ForetisRecord`, `FamilyRecord`)
+- Implement the `BaseRecord` trait
+- Have a **private constructor** (no `pub fn new()` or public struct literal)
+- Use `#[derive(Builder)]` for construction (public builder pattern)
+
+**Renames:**
+
+| Before | After | Reason |
+|--------|-------|--------|
+| `ChrononRecord` | `ChrononRecord` | Already correct |
+| `Foretis` | `ForetisRecord` | Missing `Record` suffix |
+| `ExternalAttestation` | `ExternalAttestationRecord` | Missing `Record` suffix |
+| `EpochSnapshot` | `EpochSnapshotRecord` | Missing `Record` suffix |
+| `FamilyRecord` | `FamilyRecord` | Already correct |
+| `RecordBase` | `BaseRecord` | Rename for clarity |
+
+**Types that do NOT rename** (not important data structures):
+- `Tbid` — identifier, not a record
+- `SignatureEntry` — internal, not transmitted independently
+- `Calendar` — container, not a record
+- Config structs (`TimeFamilyCliConfig`, `ServeConfig`, etc.) — internal, not signed/stored/transmitted
+
+### Trust Boundary Rules
+
+All `*Record` types follow these rules when crossing trust boundaries:
+
+| Direction | Type | When |
+|-----------|------|------|
+| Communerd → internal time beings | `CleanAuthenticated<Record>` | Calendar, Chronomatter receiving data from network |
+| Communerd → external time beings | `Externalized<Record>` | Communerd sending data to network |
+| Local production | `CleanAuthenticated<Record>` via `from_trusted()` | Chronomatter producing a new tick |
+| Wire/disk persistence | `Externalized<Record>` | Calendar storing records |
+
 ### What Changes
 
 | Component | Before | After |
 |-----------|--------|-------|
 | `ChrononRecord` construction (Chronomatter) | Struct literal with 10 fields | `ChrononRecord::builder().chronon_number(1)...build()` |
 | `ChrononRecord::new()` | 7 positional params | `ChrononRecord::builder()...build()` |
-| `Foretis::new()` | 6 positional params | `Foretis::builder()...build()` |
+| `Foretis::new()` | 6 positional params | `ForetisRecord::builder()...build()` |
+| `Foretis` | `pub struct Foretis` | `pub struct ForetisRecord` |
+| `ExternalAttestation` | `pub struct ExternalAttestation` | `pub struct ExternalAttestationRecord` |
+| `EpochSnapshot` | `pub struct EpochSnapshot` | `pub struct EpochSnapshotRecord` |
+| `RecordBase` | `pub trait RecordBase` | `pub trait BaseRecord` |
 | `gossip_event_loop` | 11 params | `#[builder] fn` with named params |
 | `refresh_self_registration` | 9 params | `#[builder] fn` with named params |
 | `cmd_serve` | 14 params | `#[builder] fn` with named params |
