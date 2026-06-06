@@ -68,21 +68,31 @@
 - [ ] Run `cargo test -p foretias-core` — all existing tests still pass
 - [ ] Commit: "BaseRecord rename + implement for all Record types"
 
-### Wave 5: Function Builders
+### Wave 5: Function Builders (REVISED to Struct Builders)
 
-- [ ] Convert `gossip_event_loop` to `#[bon::builder]` function builder, remove `GossipLoopConfig` struct
-- [ ] Update call site at `communerd/mod.rs` to use builder chain
-- [ ] Convert `refresh_self_registration` to `#[bon::builder]` function builder, remove `RegistrationConfig` struct
-- [ ] Update call site at `communerd/mod.rs` to use builder chain
-- [ ] Convert `cmd_serve` to `#[bon::builder]` function builder, remove `ServeConfig` struct
-- [ ] Update call site at `main.rs` to use builder chain
-- [ ] Run `cargo test --workspace` — all tests still pass
-- [ ] Commit: "Config: bon function builders for large functions"
+- [x] Function builders on async functions incompatible with bon 3.9; revised to struct builders instead
+      (2026-06-06 01:30)
+- [x] Add `#[derive(Builder)]` to `GossipLoopConfig` in `communerd/mod.rs`
+      (2026-06-06 01:30)
+- [x] Add `#[derive(Builder)]` to `RegistrationConfig` in `communerd/mod.rs` — builder used at call site
+      (2026-06-06 01:30)
+- [x] Add `#[derive(Builder)]` to `ServeConfig` in `main.rs` with custom defaults
+      (2026-06-06 01:30)
+- [x] Add `#[derive(Builder)]` to `VerifyConfig` in `main.rs` with custom defaults
+      (2026-06-06 01:30)
+- [x] Update `RegistrationConfig` call site to use `.builder()...build()` pattern
+      (2026-06-06 01:30)
+- [x] Call sites for Option-heavy structs (GossipLoopConfig, ServeConfig, VerifyConfig) retain struct literals
+      (2026-06-06 01:30)
+- [x] Run `cargo test --workspace` — all 668 tests pass
+      (2026-06-06 01:30)
+- [x] Commit: "Config: bon struct builders for config types (revised Wave 5)"
+      (2026-06-06 01:30)
 
 ### Wave 6: Struct Builders for Config Types
 
 - [ ] Add `#[derive(Builder)]` to `TimeFamilyCliConfig` with `#[builder(default)]` for optional fields
-- [ ] Add `#[derive(Builder)]` to `VerifyConfig` with `#[builder(default)]` for optional fields
+- [-] `VerifyConfig` builder already done in revised Wave 5
 - [ ] Update call sites to use `StructName::builder().field(value).build()` syntax
 - [ ] Run `cargo test --workspace` — all tests still pass
 - [ ] Commit: "Config structs: add bon struct builders"
