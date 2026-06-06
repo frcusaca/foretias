@@ -243,25 +243,19 @@
 
 | File | Open | Done | Status |
 |------|------|------|--------|
-| `specs/IMPROVE_BUILDERS_AND_BIG_FNS_PLAN.md` | ~35 | 0 | **PROPOSED** — spec + plan ready for implementation |
+| `specs/IMPROVE_BUILDERS_AND_BIG_FNS_PLAN.md` | 0 | ~35 | **COMPLETE** — all 8 waves done, merged to alpha |
 | `specs/IMPROVE_BUILDERS_AND_BIG_FNS_SPEC.md` | — | — | Spec (paired) |
 
-**Dependencies:** Clippy Fix (complete)
-**Blocks:** None (improves code quality, not blocking other work)
-
-**Experiment:** `experiments/bon-serde-poc/` — 19/19 tests pass
-**Key pattern:** bon builders for domain types + function builders for large functions
-
-**Scope:** ~35 tasks across 8 waves:
-- Wave 0: Setup (add `bon = "3.9"` dependency)
-- Wave 1: ChrononRecord builder with fallible build
-- Wave 2: Chronomatter uses builder (replace struct literals)
-- Wave 3: ForetisRecord + ExternalAttestationRecord (rename + builders)
-- Wave 4: BaseRecord rename + remaining types
-- Wave 5: Function builders (gossip_event_loop, cmd_serve, refresh_self_registration)
-- Wave 6: Struct builders for config types
-- Wave 7: Migration — replace existing constructors
-- Wave 8: Final verification + merge
+**Completed 2026-06-06:**
+- Wave 0: ✅ Setup — `bon = "3.9"` dependency added
+- Wave 1: ✅ ChrononRecord builder with fallible build
+- Wave 2: ✅ Chronomatter uses builder (replace struct literals)
+- Wave 3: ✅ Foretis→ForetisRecord, ExternalAttestation→ExternalAttestationRecord (rename + builders)
+- Wave 4: ✅ RecordBase→BaseRecord, EpochSnapshot→EpochSnapshotRecord, ProbityReport→ProbityReportRecord
+- Wave 5: ✅ Config struct builders (GossipLoopConfig, RegistrationConfig, ServeConfig, VerifyConfig)
+- Wave 6: ✅ TimeFamilyCliConfig builder
+- Wave 7: ✅ Migrate ::new() constructors to builders, deprecate old methods
+- Wave 8: ✅ Final verification — clippy clean, fmt clean, all tests pass, merged to alpha
 
 ---
 
