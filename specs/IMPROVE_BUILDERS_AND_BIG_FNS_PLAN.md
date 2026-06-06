@@ -141,7 +141,11 @@
 
 ### Wave 8: Final Verification
 
-- [ ] `cargo clippy --workspace --all-targets -- -D warnings` — zero warnings
-- [ ] `cargo test --workspace` — all tests pass
-- [ ] `cargo fmt --check` — no formatting changes needed
-- [ ] Merge to alpha
+- [x] `cargo clippy --workspace --all-targets -- -D warnings` — zero warnings
+      (2026-06-06 16:30)
+- [x] `cargo test --workspace` — all tests pass
+      (2026-06-06 16:30)
+- [x] `cargo fmt --check` — no formatting changes needed
+      (2026-06-06 16:30)
+- [x] Merge to alpha
+      (2026-06-06 16:30)
