@@ -1,15 +1,15 @@
 //! Config module — hierarchical configuration for Foretias nodes.
 
-pub mod p2p;
-pub mod chronomatter;
 pub mod calendar;
-pub mod time_family;
 pub mod calendar_persist;
+pub mod chronomatter;
 pub mod node;
+pub mod p2p;
+pub mod time_family;
 
-pub use p2p::{DHTConfig, CollisionConfig, CommunerdConfig, MutualAttestConfig};
-pub use chronomatter::{ChronomatterConfig, KeyRotationConfig};
 pub use calendar::{CalendarConfig, EncryptionConfig};
+pub use calendar_persist::{CalendarMetadata, PersistedCalendar};
+pub use chronomatter::{ChronomatterConfig, KeyRotationConfig};
+pub use node::{compute_attestation_interval, NodeConfig, FORETIAS_MUTUAL_ATTESTATION_MINIMUM};
+pub use p2p::{CollisionConfig, CommunerdConfig, DHTConfig, MutualAttestConfig};
 pub use time_family::{TimeFamilyCliConfig, TimeFamilyConfig};
-pub use calendar_persist::{PersistedCalendar, CalendarMetadata};
-pub use node::{NodeConfig, FORETIAS_MUTUAL_ATTESTATION_MINIMUM, compute_attestation_interval};

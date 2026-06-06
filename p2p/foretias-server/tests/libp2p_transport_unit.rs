@@ -38,28 +38,31 @@ async fn request_serialization_writes_jsonrpc_envelope() {
     let echo = "echo";
 
     // Spawn a task that will receive the command on the cmd channel
-    let cmd_handle = tokio::spawn(async move {
-        cmd_rx.recv().await
-    });
+    let cmd_handle = tokio::spawn(async move { cmd_rx.recv().await });
 
     // Call route_stamp — this sends on cmd_tx but will timeout waiting for
     // the oneshot reply (no one is driving the swarm). We ignore the
     // result here; we only care about what was sent on cmd_tx.
-    let _result = transport.route_stamp(&peer, target_tbid, content_hex, echo).await;
+    let _result = transport
+        .route_stamp(&peer, target_tbid, content_hex, echo)
+        .await;
 
     // Retrieve the command that was sent
-    let Some(SwarmCommand::RequestResponse { request, .. }) = (match
-        tokio::time::timeout(std::time::Duration::from_secs(2), cmd_handle).await
-    {
-        Ok(Ok(Some(cmd))) => Some(cmd),
-        _ => None,
-    }) else {
+    let Some(SwarmCommand::RequestResponse { request, .. }) =
+        (match tokio::time::timeout(std::time::Duration::from_secs(2), cmd_handle).await {
+            Ok(Ok(Some(cmd))) => Some(cmd),
+            _ => None,
+        })
+    else {
         panic!("expected SwarmCommand::RequestResponse on cmd channel");
     };
 
     // Assert JSON-RPC 2.0 envelope structure
     assert_eq!(request["jsonrpc"], "2.0", "must be JSON-RPC 2.0");
-    assert_eq!(request["method"], "route_stamp", "method must be 'route_stamp'");
+    assert_eq!(
+        request["method"], "route_stamp",
+        "method must be 'route_stamp'"
+    );
     assert_eq!(request["params"]["target_tbid"], target_tbid);
     assert_eq!(request["params"]["content"], content_hex);
     assert_eq!(request["params"]["echo"], echo);
@@ -83,7 +86,14 @@ async fn closed_cmd_channel_returns_transport_error() {
     drop(cmd_rx);
 
     let peer = make_peer();
-    let result = transport.route_stamp(&peer, "0000000000000000000000000000000000000000000000000000000000000000", "abcd", "echo").await;
+    let result = transport
+        .route_stamp(
+            &peer,
+            "0000000000000000000000000000000000000000000000000000000000000000",
+            "abcd",
+            "echo",
+        )
+        .await;
 
     match result {
         Err(TransportError::Connect(msg)) => {
@@ -92,9 +102,6 @@ async fn closed_cmd_channel_returns_transport_error() {
                 "expected 'swarm channel closed' in error message, got: {msg}"
             );
         }
-        other => panic!(
-            "expected TransportError::Connect, got: {:?}",
-            other
-        ),
+        other => panic!("expected TransportError::Connect, got: {:?}", other),
     }
 }

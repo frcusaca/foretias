@@ -1,7 +1,7 @@
 //! Calendar persistence wrapper with config metadata header.
 
-use serde::{Deserialize, Serialize};
 use super::calendar::CalendarConfig;
+use serde::{Deserialize, Serialize};
 
 /// On-disk calendar wrapper with config metadata header.
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -29,6 +29,8 @@ impl StubLiegeChannel {
 
 impl LiegeChannel for StubLiegeChannel {
     fn send_help(&self, reason: HelpReason) -> Result<(), NodeError> {
-        self.tx.send(reason).map_err(|e| NodeError::Internal(e.to_string()))
+        self.tx
+            .send(reason)
+            .map_err(|e| NodeError::Internal(e.to_string()))
     }
 }

@@ -1,8 +1,10 @@
 //! Integration sanity tests for multi-algorithm PQC support.
 
-use crate::crypto_server::{ForetiasCurve, SignOps, VerifyOps, IdentityOps, software::SoftwareCryptoServer};
 use crate::crypto_server::kem_mlkem;
-use crate::foretias::types::{SignatureAlgorithm, KemAlgorithm};
+use crate::crypto_server::{
+    software::SoftwareCryptoServer, ForetiasCurve, IdentityOps, SignOps, VerifyOps,
+};
+use crate::foretias::types::{KemAlgorithm, SignatureAlgorithm};
 
 fn make_server() -> SoftwareCryptoServer {
     SoftwareCryptoServer::generate(ForetiasCurve::Ed25519).unwrap()
@@ -17,10 +19,14 @@ mod cross_signature {
     fn sphincs_self_verify() {
         let server = make_server();
         let msg = b"SPHINCS+ self-test message";
-        let sig = server.sign_with(msg, SignatureAlgorithm::SPHINCS_SHA2_128S).unwrap();
+        let sig = server
+            .sign_with(msg, SignatureAlgorithm::SPHINCS_SHA2_128S)
+            .unwrap();
         let sphincs_pk = server.sphincs_pub_key.as_ref().unwrap().clone();
 
-        let valid = server.verify_with(&sphincs_pk, "SPHINCS+-SHA2-128s-simple", msg, &sig).unwrap();
+        let valid = server
+            .verify_with(&sphincs_pk, "SPHINCS+-SHA2-128s-simple", msg, &sig)
+            .unwrap();
         assert!(valid);
     }
 
@@ -28,10 +34,14 @@ mod cross_signature {
     fn dilithium_self_verify() {
         let server = make_server();
         let msg = b"Dilithium3 self-test message";
-        let sig = server.sign_with(msg, SignatureAlgorithm::Dilithium3).unwrap();
+        let sig = server
+            .sign_with(msg, SignatureAlgorithm::Dilithium3)
+            .unwrap();
         let dilithium_pk = server.dilithium_pub_key.as_ref().unwrap().clone();
 
-        let valid = server.verify_with(&dilithium_pk, "Dilithium3", msg, &sig).unwrap();
+        let valid = server
+            .verify_with(&dilithium_pk, "Dilithium3", msg, &sig)
+            .unwrap();
         assert!(valid);
     }
 
@@ -55,10 +65,14 @@ mod cross_signature {
         let verifier = make_server();
 
         let msg = b"Cross-server SPHINCS+ message";
-        let sig = signer.sign_with(msg, SignatureAlgorithm::SPHINCS_SHA2_128S).unwrap();
+        let sig = signer
+            .sign_with(msg, SignatureAlgorithm::SPHINCS_SHA2_128S)
+            .unwrap();
         let sphincs_pk = signer.sphincs_pub_key.as_ref().unwrap().clone();
 
-        let valid = verifier.verify_with(&sphincs_pk, "SPHINCS+-SHA2-128s-simple", msg, &sig).unwrap();
+        let valid = verifier
+            .verify_with(&sphincs_pk, "SPHINCS+-SHA2-128s-simple", msg, &sig)
+            .unwrap();
         assert!(valid);
     }
 
@@ -68,10 +82,14 @@ mod cross_signature {
         let verifier = make_server();
 
         let msg = b"Cross-server Dilithium message";
-        let sig = signer.sign_with(msg, SignatureAlgorithm::Dilithium3).unwrap();
+        let sig = signer
+            .sign_with(msg, SignatureAlgorithm::Dilithium3)
+            .unwrap();
         let dilithium_pk = signer.dilithium_pub_key.as_ref().unwrap().clone();
 
-        let valid = verifier.verify_with(&dilithium_pk, "Dilithium3", msg, &sig).unwrap();
+        let valid = verifier
+            .verify_with(&dilithium_pk, "Dilithium3", msg, &sig)
+            .unwrap();
         assert!(valid);
     }
 
@@ -79,12 +97,16 @@ mod cross_signature {
     fn sphincs_tampered_signature_fails() {
         let server = make_server();
         let msg = b"Tampered test message";
-        let mut sig = server.sign_with(msg, SignatureAlgorithm::SPHINCS_SHA2_128S).unwrap();
+        let mut sig = server
+            .sign_with(msg, SignatureAlgorithm::SPHINCS_SHA2_128S)
+            .unwrap();
         let sphincs_pk = server.sphincs_pub_key.as_ref().unwrap().clone();
 
         sig[0] ^= 0xFF;
 
-        let valid = server.verify_with(&sphincs_pk, "SPHINCS+-SHA2-128s-simple", msg, &sig).unwrap();
+        let valid = server
+            .verify_with(&sphincs_pk, "SPHINCS+-SHA2-128s-simple", msg, &sig)
+            .unwrap();
         assert!(!valid);
     }
 
@@ -92,12 +114,16 @@ mod cross_signature {
     fn dilithium_tampered_signature_fails() {
         let server = make_server();
         let msg = b"Tampered test message";
-        let mut sig = server.sign_with(msg, SignatureAlgorithm::Dilithium3).unwrap();
+        let mut sig = server
+            .sign_with(msg, SignatureAlgorithm::Dilithium3)
+            .unwrap();
         let dilithium_pk = server.dilithium_pub_key.as_ref().unwrap().clone();
 
         sig[0] ^= 0xFF;
 
-        let valid = server.verify_with(&dilithium_pk, "Dilithium3", msg, &sig).unwrap();
+        let valid = server
+            .verify_with(&dilithium_pk, "Dilithium3", msg, &sig)
+            .unwrap();
         assert!(!valid);
     }
 
@@ -108,14 +134,22 @@ mod cross_signature {
 
         let msg = b"Wrong pubkey test";
 
-        let sig = signer.sign_with(msg, SignatureAlgorithm::SPHINCS_SHA2_128S).unwrap();
+        let sig = signer
+            .sign_with(msg, SignatureAlgorithm::SPHINCS_SHA2_128S)
+            .unwrap();
         let fake_pk = impersonator.sphincs_pub_key.as_ref().unwrap().clone();
-        let valid = signer.verify_with(&fake_pk, "SPHINCS+-SHA2-128s-simple", msg, &sig).unwrap();
+        let valid = signer
+            .verify_with(&fake_pk, "SPHINCS+-SHA2-128s-simple", msg, &sig)
+            .unwrap();
         assert!(!valid);
 
-        let sig = signer.sign_with(msg, SignatureAlgorithm::Dilithium3).unwrap();
+        let sig = signer
+            .sign_with(msg, SignatureAlgorithm::Dilithium3)
+            .unwrap();
         let fake_pk = impersonator.dilithium_pub_key.as_ref().unwrap().clone();
-        let valid = signer.verify_with(&fake_pk, "Dilithium3", msg, &sig).unwrap();
+        let valid = signer
+            .verify_with(&fake_pk, "Dilithium3", msg, &sig)
+            .unwrap();
         assert!(!valid);
     }
 
@@ -146,14 +180,22 @@ mod mutual_attestation {
         let msg_a = b"Server A attesting to Server B";
         let msg_b = b"Server B attesting to Server A";
 
-        let sig_a = server_a.sign_with(msg_a, SignatureAlgorithm::SPHINCS_SHA2_128S).unwrap();
+        let sig_a = server_a
+            .sign_with(msg_a, SignatureAlgorithm::SPHINCS_SHA2_128S)
+            .unwrap();
         let pk_a = server_a.sphincs_pub_key.as_ref().unwrap().clone();
-        let valid_b = server_b.verify_with(&pk_a, "SPHINCS+-SHA2-128s-simple", msg_a, &sig_a).unwrap();
+        let valid_b = server_b
+            .verify_with(&pk_a, "SPHINCS+-SHA2-128s-simple", msg_a, &sig_a)
+            .unwrap();
         assert!(valid_b);
 
-        let sig_b = server_b.sign_with(msg_b, SignatureAlgorithm::Dilithium3).unwrap();
+        let sig_b = server_b
+            .sign_with(msg_b, SignatureAlgorithm::Dilithium3)
+            .unwrap();
         let pk_b = server_b.dilithium_pub_key.as_ref().unwrap().clone();
-        let valid_a = server_a.verify_with(&pk_b, "Dilithium3", msg_b, &sig_b).unwrap();
+        let valid_a = server_a
+            .verify_with(&pk_b, "Dilithium3", msg_b, &sig_b)
+            .unwrap();
         assert!(valid_a);
     }
 
@@ -165,17 +207,31 @@ mod mutual_attestation {
 
         let msg = b"Three-way mutual attestation";
 
-        let sig_a = server_a.sign_with(msg, SignatureAlgorithm::SPHINCS_SHA2_128S).unwrap();
+        let sig_a = server_a
+            .sign_with(msg, SignatureAlgorithm::SPHINCS_SHA2_128S)
+            .unwrap();
         let pk_a = server_a.sphincs_pub_key.as_ref().unwrap().clone();
-        assert!(server_b.verify_with(&pk_a, "SPHINCS+-SHA2-128s-simple", msg, &sig_a).unwrap());
-        assert!(server_c.verify_with(&pk_a, "SPHINCS+-SHA2-128s-simple", msg, &sig_a).unwrap());
+        assert!(server_b
+            .verify_with(&pk_a, "SPHINCS+-SHA2-128s-simple", msg, &sig_a)
+            .unwrap());
+        assert!(server_c
+            .verify_with(&pk_a, "SPHINCS+-SHA2-128s-simple", msg, &sig_a)
+            .unwrap());
 
-        let sig_b = server_b.sign_with(msg, SignatureAlgorithm::Dilithium3).unwrap();
+        let sig_b = server_b
+            .sign_with(msg, SignatureAlgorithm::Dilithium3)
+            .unwrap();
         let pk_b = server_b.dilithium_pub_key.as_ref().unwrap().clone();
-        assert!(server_a.verify_with(&pk_b, "Dilithium3", msg, &sig_b).unwrap());
-        assert!(server_c.verify_with(&pk_b, "Dilithium3", msg, &sig_b).unwrap());
+        assert!(server_a
+            .verify_with(&pk_b, "Dilithium3", msg, &sig_b)
+            .unwrap());
+        assert!(server_c
+            .verify_with(&pk_b, "Dilithium3", msg, &sig_b)
+            .unwrap());
 
-        let sig_c = server_c.sign_with(msg, SignatureAlgorithm::Ed25519).unwrap();
+        let sig_c = server_c
+            .sign_with(msg, SignatureAlgorithm::Ed25519)
+            .unwrap();
         let pk_c = match server_c.public_key() {
             crate::crypto_server::PublicKeyBytes::Ed25519(pk) => pk.bytes.to_vec(),
             _ => panic!("expected Ed25519 pubkey"),
@@ -192,10 +248,14 @@ mod mutual_attestation {
         let ed_sig = server.sign_with(msg, SignatureAlgorithm::Ed25519).unwrap();
         assert_eq!(ed_sig.len(), 64);
 
-        let sphincs_sig = server.sign_with(msg, SignatureAlgorithm::SPHINCS_SHA2_128S).unwrap();
+        let sphincs_sig = server
+            .sign_with(msg, SignatureAlgorithm::SPHINCS_SHA2_128S)
+            .unwrap();
         assert_eq!(sphincs_sig.len(), 7856);
 
-        let dil_sig = server.sign_with(msg, SignatureAlgorithm::Dilithium3).unwrap();
+        let dil_sig = server
+            .sign_with(msg, SignatureAlgorithm::Dilithium3)
+            .unwrap();
         assert_eq!(dil_sig.len(), 3293);
     }
 
@@ -323,9 +383,7 @@ mod full_integration {
 
     #[test]
     fn four_server_all_algorithms_coexist() {
-        let servers: Vec<_> = (0..4)
-            .map(|_| make_server())
-            .collect();
+        let servers: Vec<_> = (0..4).map(|_| make_server()).collect();
 
         let algos = [
             SignatureAlgorithm::Ed25519,
@@ -343,14 +401,20 @@ mod full_integration {
                     let valid = match alg {
                         SignatureAlgorithm::Ed25519 => {
                             let pk = match signer.public_key() {
-                                crate::crypto_server::PublicKeyBytes::Ed25519(pk) => pk.bytes.to_vec(),
+                                crate::crypto_server::PublicKeyBytes::Ed25519(pk) => {
+                                    pk.bytes.to_vec()
+                                }
                                 _ => panic!("expected Ed25519"),
                             };
-                            verifier.verify_with(&pk, alg.to_id_string(), msg, &sig).unwrap()
+                            verifier
+                                .verify_with(&pk, alg.to_id_string(), msg, &sig)
+                                .unwrap()
                         }
                         SignatureAlgorithm::SPHINCS_SHA2_128S => {
                             let pk = signer.sphincs_pub_key.as_ref().unwrap().clone();
-                            verifier.verify_with(&pk, "SPHINCS+-SHA2-128s-simple", msg, &sig).unwrap()
+                            verifier
+                                .verify_with(&pk, "SPHINCS+-SHA2-128s-simple", msg, &sig)
+                                .unwrap()
                         }
                         SignatureAlgorithm::Dilithium3 => {
                             let pk = signer.dilithium_pub_key.as_ref().unwrap().clone();
@@ -358,11 +422,16 @@ mod full_integration {
                         }
                         SignatureAlgorithm::SLH_DSA_SHA2_256F => {
                             let pk = signer.sphincs_sha2_256f_pub_key.as_ref().unwrap().clone();
-                            verifier.verify_with(&pk, "SPHINCS+-SHA2-256f-simple", msg, &sig).unwrap()
+                            verifier
+                                .verify_with(&pk, "SPHINCS+-SHA2-256f-simple", msg, &sig)
+                                .unwrap()
                         }
                     };
-                    assert!(valid,
-                        "Server {} should verify server {}'s {} signature", j, i, alg);
+                    assert!(
+                        valid,
+                        "Server {} should verify server {}'s {} signature",
+                        j, i, alg
+                    );
                 }
             }
         }
@@ -370,31 +439,36 @@ mod full_integration {
 
     #[test]
     fn all_servers_default_to_sphincs() {
-        let servers: Vec<_> = (0..4)
-            .map(|_| make_server())
-            .collect();
+        let servers: Vec<_> = (0..4).map(|_| make_server()).collect();
 
         for (i, server) in servers.iter().enumerate() {
-            assert_eq!(server.signature_algorithm(), SignatureAlgorithm::Ed25519,
-                "Server {} should default to Ed25519", i);
+            assert_eq!(
+                server.signature_algorithm(),
+                SignatureAlgorithm::Ed25519,
+                "Server {} should default to Ed25519",
+                i
+            );
         }
     }
 
     #[test]
     fn all_servers_mlkem_key_exchange() {
-        let servers: Vec<_> = (0..4)
-            .map(|_| make_server())
-            .collect();
+        let servers: Vec<_> = (0..4).map(|_| make_server()).collect();
 
         for (i, _sender) in servers.iter().enumerate() {
             for (j, _receiver) in servers.iter().enumerate() {
-                if i == j { continue; }
+                if i == j {
+                    continue;
+                }
 
                 let (pk, sk) = kem_mlkem::mlkem_768_keypair().unwrap();
                 let (_ct, ss_e) = kem_mlkem::mlkem_768_encapsulate(&pk).unwrap();
                 let ss_d = kem_mlkem::mlkem_768_decapsulate(&sk, &(_ct)).unwrap();
-                assert_eq!(ss_e, ss_d,
-                    "Servers {}->{} ML-KEM exchange should produce matching secrets", i, j);
+                assert_eq!(
+                    ss_e, ss_d,
+                    "Servers {}->{} ML-KEM exchange should produce matching secrets",
+                    i, j
+                );
             }
         }
     }
@@ -420,10 +494,7 @@ mod algorithm_mismatch {
 
     #[test]
     fn kem_algorithm_id_roundtrip() {
-        for &alg in &[
-            KemAlgorithm::NoiseXX,
-            KemAlgorithm::MLKEM_768,
-        ] {
+        for &alg in &[KemAlgorithm::NoiseXX, KemAlgorithm::MLKEM_768] {
             let id = alg.to_id_string();
             let parsed = KemAlgorithm::from_id_string(id).unwrap();
             assert_eq!(alg, parsed, "{} should round-trip through ID string", id);

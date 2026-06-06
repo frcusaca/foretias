@@ -2,17 +2,17 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::foretias::encoding::{FTByteVector, FTByteArray};
+use crate::foretias::encoding::{FTByteArray, FTByteVector};
 
 /// A signed heartbeat broadcast by each node on a regular interval.
 /// Carries a random nonce so replays are detectable.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Heartbeat {
-    pub peer_id:      String,
+    pub peer_id: String,
     pub timestamp_ns: u64,
-    pub nonce:        FTByteArray<16>,
-    pub curve:        u8,
-    pub signature:    FTByteVector,
+    pub nonce: FTByteArray<16>,
+    pub curve: u8,
+    pub signature: FTByteVector,
 }
 
 impl Heartbeat {

@@ -16,9 +16,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use foretias_core::foretias::callbacks::PeerAddr;
 use foretias_server::calendar::CalendarTask;
 use foretias_server::server::TimeFamilyServer;
-use foretias_core::foretias::callbacks::PeerAddr;
 
 fn find_available_port() -> u16 {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind ephemeral port");
@@ -45,10 +45,8 @@ async fn source_dumps_history_to_mirror() {
     // ── Spin up Mirror (B) ──────────────────────────────────────────────
     let port_b = find_available_port();
     let addr_b = format!("127.0.0.1:{}", port_b);
-    let server_b: Arc<TimeFamilyServer> = Arc::new(
-        TimeFamilyServer::new(&addr_b, 100_000_000)
-            .expect("create mirror server B"),
-    );
+    let server_b: Arc<TimeFamilyServer> =
+        Arc::new(TimeFamilyServer::new(&addr_b, 100_000_000).expect("create mirror server B"));
     server_b.start_daemon_arc();
     let handle_b = Arc::clone(&server_b).start().expect("start B TCP");
 
@@ -178,10 +176,8 @@ async fn find_new_mirror_stops_at_target() {
     // queue.
     let port_a = find_available_port();
     let addr_a = format!("127.0.0.1:{}", port_a);
-    let server_a: Arc<TimeFamilyServer> = Arc::new(
-        TimeFamilyServer::new(&addr_a, 1_000_000_000)
-            .expect("create source"),
-    );
+    let server_a: Arc<TimeFamilyServer> =
+        Arc::new(TimeFamilyServer::new(&addr_a, 1_000_000_000).expect("create source"));
     // Start the queue in placeholder mode (no dispatcher) — workers run
     // the real handlers but the find_new_mirror handler short-circuits on
     // missing dispatcher. This confirms the no-dispatcher branch is safe.
@@ -199,8 +195,8 @@ async fn find_new_mirror_stops_at_target() {
 
 #[tokio::test]
 async fn mirror_state_defaults_are_reasonable() {
-    use foretias_server::calendar::Calendar;
     use foretias_core::foretias::types::Tbid;
+    use foretias_server::calendar::Calendar;
     let cal = Calendar::new(Tbid::from_raw([7u8; 96]), "mirror-state-test");
     cal.start_task_queue();
     let state = cal.mirror_state().expect("state present after start");
@@ -232,9 +228,8 @@ async fn mirror_announce_and_health_check_wire_path() {
     // Mirror (B).
     let port_b = find_available_port();
     let addr_b = format!("127.0.0.1:{}", port_b);
-    let server_b: Arc<TimeFamilyServer> = Arc::new(
-        TimeFamilyServer::new(&addr_b, 1_000_000_000).expect("create B"),
-    );
+    let server_b: Arc<TimeFamilyServer> =
+        Arc::new(TimeFamilyServer::new(&addr_b, 1_000_000_000).expect("create B"));
     server_b.start_daemon_arc();
     let handle_b = Arc::clone(&server_b).start().expect("start B TCP");
 
@@ -259,12 +254,17 @@ async fn mirror_announce_and_health_check_wire_path() {
     tokio::time::sleep(Duration::from_millis(200)).await;
 
     let communerd_a = server_a.communerd().expect("Communerd present").clone();
-    let b_peer = PeerAddr { json_rpc: addr_b.clone() };
+    let b_peer = PeerAddr {
+        json_rpc: addr_b.clone(),
+    };
     let tbid_a_hex = server_a.get_tbid().to_hex();
 
     // mirror_announce should succeed (B has capacity).
     let announce = communerd_a.mirror_announce(&b_peer, &tbid_a_hex).await;
-    assert!(matches!(announce, Ok(true)), "mirror_announce accepted: got {announce:?}");
+    assert!(
+        matches!(announce, Ok(true)),
+        "mirror_announce accepted: got {announce:?}"
+    );
 
     // mirror_health_check should also succeed (B always responds).
     let health = communerd_a.mirror_health_check(&b_peer, &tbid_a_hex).await;
@@ -283,9 +283,8 @@ async fn mirror_announce_and_health_check_wire_path() {
 async fn find_new_mirror_enrolls_peer_in_mirror_state() {
     let port_b = find_available_port();
     let addr_b = format!("127.0.0.1:{}", port_b);
-    let server_b: Arc<TimeFamilyServer> = Arc::new(
-        TimeFamilyServer::new(&addr_b, 1_000_000_000).expect("create B"),
-    );
+    let server_b: Arc<TimeFamilyServer> =
+        Arc::new(TimeFamilyServer::new(&addr_b, 1_000_000_000).expect("create B"));
     server_b.start_daemon_arc();
     let handle_b = Arc::clone(&server_b).start().expect("start B TCP");
 
@@ -352,21 +351,31 @@ async fn liveness_ping_reachable_peer_succeeds() {
 
     let port = find_available_port();
     let addr = format!("127.0.0.1:{port}");
-    let server = Arc::new(
-        TimeFamilyServer::new(&addr, 1_000_000_000).expect("create server"),
-    );
+    let server = Arc::new(TimeFamilyServer::new(&addr, 1_000_000_000).expect("create server"));
     let _handle = Arc::clone(&server).start().expect("start server");
 
     let deadline = std::time::Instant::now() + Duration::from_secs(10);
     loop {
-        if tokio::net::TcpStream::connect(&addr).await.is_ok() { break; }
-        assert!(std::time::Instant::now() < deadline, "server did not start in time");
+        if tokio::net::TcpStream::connect(&addr).await.is_ok() {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "server did not start in time"
+        );
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
 
     let transport = JsonRpcTransport::new(5);
-    let peer = PeerAddr { json_rpc: addr, peer_id: None, last_seen_ns: 0 };
-    transport.ping(&peer).await.expect("ping reachable peer must succeed");
+    let peer = PeerAddr {
+        json_rpc: addr,
+        peer_id: None,
+        last_seen_ns: 0,
+    };
+    transport
+        .ping(&peer)
+        .await
+        .expect("ping reachable peer must succeed");
 }
 
 /// Verify `ping` returns an error against a port with no listener.
@@ -379,7 +388,11 @@ async fn liveness_ping_unreachable_peer_fails() {
     let addr = format!("127.0.0.1:{port}");
 
     let transport = JsonRpcTransport::new(2);
-    let peer = PeerAddr { json_rpc: addr, peer_id: None, last_seen_ns: 0 };
+    let peer = PeerAddr {
+        json_rpc: addr,
+        peer_id: None,
+        last_seen_ns: 0,
+    };
     assert!(
         transport.ping(&peer).await.is_err(),
         "ping unreachable peer must return an error",

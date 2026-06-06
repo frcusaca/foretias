@@ -1,6 +1,9 @@
 use std::sync::Once;
 
-use foretias_core::core::bindings::{foretias_privkey_decrypt, foretias_privkey_encrypt, foretias_privkey_init, ForetiasResult_FORETIAS_ERR_BAD_SIG, ForetiasResult_FORETIAS_OK};
+use foretias_core::core::bindings::{
+    foretias_privkey_decrypt, foretias_privkey_encrypt, foretias_privkey_init,
+    ForetiasResult_FORETIAS_ERR_BAD_SIG, ForetiasResult_FORETIAS_OK,
+};
 
 static INIT: Once = Once::new();
 
@@ -26,7 +29,11 @@ fn roundtrip(pt_len: usize) {
             nonce.as_mut_ptr(),
         )
     };
-    assert_eq!(rc, ForetiasResult_FORETIAS_OK, "encrypt failed for size {}", pt_len);
+    assert_eq!(
+        rc, ForetiasResult_FORETIAS_OK,
+        "encrypt failed for size {}",
+        pt_len
+    );
 
     let rc = unsafe {
         foretias_privkey_decrypt(
@@ -36,9 +43,17 @@ fn roundtrip(pt_len: usize) {
             decrypted.as_mut_ptr(),
         )
     };
-    assert_eq!(rc, ForetiasResult_FORETIAS_OK, "decrypt failed for size {}", pt_len);
+    assert_eq!(
+        rc, ForetiasResult_FORETIAS_OK,
+        "decrypt failed for size {}",
+        pt_len
+    );
 
-    assert_eq!(plaintext, decrypted, "roundtrip mismatch for size {}", pt_len);
+    assert_eq!(
+        plaintext, decrypted,
+        "roundtrip mismatch for size {}",
+        pt_len
+    );
 }
 
 #[test]
@@ -91,7 +106,12 @@ fn test_decrypt_wrong_nonce_fails() {
     let mut decrypted = vec![0u8; 32];
 
     let rc = unsafe {
-        foretias_privkey_encrypt(plaintext.as_ptr(), 32, ciphertext.as_mut_ptr(), nonce.as_mut_ptr())
+        foretias_privkey_encrypt(
+            plaintext.as_ptr(),
+            32,
+            ciphertext.as_mut_ptr(),
+            nonce.as_mut_ptr(),
+        )
     };
     assert_eq!(rc, ForetiasResult_FORETIAS_OK, "encrypt should succeed");
 
@@ -99,9 +119,17 @@ fn test_decrypt_wrong_nonce_fails() {
     wrong_nonce[0] ^= 0xFF;
 
     let rc = unsafe {
-        foretias_privkey_decrypt(ciphertext.as_ptr(), 48, wrong_nonce.as_ptr(), decrypted.as_mut_ptr())
+        foretias_privkey_decrypt(
+            ciphertext.as_ptr(),
+            48,
+            wrong_nonce.as_ptr(),
+            decrypted.as_mut_ptr(),
+        )
     };
-    assert_eq!(rc, ForetiasResult_FORETIAS_ERR_BAD_SIG, "decrypt with wrong nonce must fail");
+    assert_eq!(
+        rc, ForetiasResult_FORETIAS_ERR_BAD_SIG,
+        "decrypt with wrong nonce must fail"
+    );
 }
 
 #[test]
@@ -114,14 +142,27 @@ fn test_decrypt_tampered_ciphertext_fails() {
     let mut decrypted = vec![0u8; 32];
 
     let rc = unsafe {
-        foretias_privkey_encrypt(plaintext.as_ptr(), 32, ciphertext.as_mut_ptr(), nonce.as_mut_ptr())
+        foretias_privkey_encrypt(
+            plaintext.as_ptr(),
+            32,
+            ciphertext.as_mut_ptr(),
+            nonce.as_mut_ptr(),
+        )
     };
     assert_eq!(rc, ForetiasResult_FORETIAS_OK, "encrypt should succeed");
 
     ciphertext[10] ^= 0xFF;
 
     let rc = unsafe {
-        foretias_privkey_decrypt(ciphertext.as_ptr(), 48, nonce.as_ptr(), decrypted.as_mut_ptr())
+        foretias_privkey_decrypt(
+            ciphertext.as_ptr(),
+            48,
+            nonce.as_ptr(),
+            decrypted.as_mut_ptr(),
+        )
     };
-    assert_eq!(rc, ForetiasResult_FORETIAS_ERR_BAD_SIG, "decrypt with tampered ciphertext must fail");
+    assert_eq!(
+        rc, ForetiasResult_FORETIAS_ERR_BAD_SIG,
+        "decrypt with tampered ciphertext must fail"
+    );
 }

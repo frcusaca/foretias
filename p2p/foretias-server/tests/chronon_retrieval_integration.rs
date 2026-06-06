@@ -87,11 +87,17 @@ async fn jsonrpc_call(addr: &str, method: &str, params: Value) -> Value {
 async fn wait_for_http(addr: &str, timeout: Duration) {
     let deadline = tokio::time::Instant::now() + timeout;
     loop {
-        if try_jsonrpc_call(addr, "ping", serde_json::json!({})).await.is_ok() {
+        if try_jsonrpc_call(addr, "ping", serde_json::json!({}))
+            .await
+            .is_ok()
+        {
             return;
         }
         if tokio::time::Instant::now() > deadline {
-            panic!("HTTP server did not become ready on {} within {:?}", addr, timeout);
+            panic!(
+                "HTTP server did not become ready on {} within {:?}",
+                addr, timeout
+            );
         }
         tokio::time::sleep(Duration::from_millis(200)).await;
     }
@@ -103,9 +109,11 @@ fn sample_tbid_hex() -> String {
 }
 
 /// Build a minimal `ChrononRecord` wrapped as `Externalized<ChrononRecord>`.
-fn make_externalized_tick(chronon_number: u64) -> foretias_core::foretias::clean_auth::Externalized<foretias_core::foretias::ChrononRecord> {
+fn make_externalized_tick(
+    chronon_number: u64,
+) -> foretias_core::foretias::clean_auth::Externalized<foretias_core::foretias::ChrononRecord> {
     use foretias_core::foretias::clean_auth::CleanAuthenticated;
-    use foretias_core::foretias::{ChrononRecord, types::Tbid};
+    use foretias_core::foretias::{types::Tbid, ChrononRecord};
 
     let record = ChrononRecord {
         chronon_number,
@@ -128,10 +136,10 @@ fn make_externalized_tick(chronon_number: u64) -> foretias_core::foretias::clean
 async fn start_server_with_calendar_data(
     n_ticks: u64,
 ) -> (String, std::path::PathBuf, tokio::task::JoinHandle<()>) {
-    use foretias_server::server::TimeFamilyServer;
-    use foretias_server::calendar_store::encrypted_jsonl::EncryptedJsonlCalendarStore;
     use foretias_core::foretias::clean_auth::Externalized;
     use foretias_core::foretias::ChrononRecord;
+    use foretias_server::calendar_store::encrypted_jsonl::EncryptedJsonlCalendarStore;
+    use foretias_server::server::TimeFamilyServer;
 
     let listen_port = find_available_port();
     let listen_addr = format!("127.0.0.1:{}", listen_port);
@@ -211,7 +219,9 @@ async fn get_chronon_found() {
         result
     );
 
-    let record = result.get("record").expect("response missing 'record' field");
+    let record = result
+        .get("record")
+        .expect("response missing 'record' field");
     // The ChrononRecord serializes chronon_number as "tick_number" via serde rename.
     assert_eq!(
         record.get("tick_number").and_then(|v| v.as_u64()),
@@ -239,10 +249,7 @@ async fn get_chronon_found() {
             cn
         );
         let record = result.get("record").expect("missing record");
-        assert_eq!(
-            record.get("tick_number").and_then(|v| v.as_u64()),
-            Some(cn),
-        );
+        assert_eq!(record.get("tick_number").and_then(|v| v.as_u64()), Some(cn),);
     }
 
     handle.abort();
@@ -333,7 +340,12 @@ async fn get_chronon_chain_complete() {
         .get("records")
         .and_then(|v| v.as_array())
         .expect("missing 'records' array");
-    assert_eq!(records.len(), 6, "expected 6 records, got {}", records.len());
+    assert_eq!(
+        records.len(),
+        6,
+        "expected 6 records, got {}",
+        records.len()
+    );
 
     // Verify chronon numbers are in order: 2, 3, 4, 5, 6, 7.
     for (i, rec) in records.iter().enumerate() {
@@ -347,14 +359,8 @@ async fn get_chronon_chain_complete() {
     }
 
     let coverage = result.get("coverage").expect("missing 'coverage'");
-    assert_eq!(
-        coverage.get("requested").and_then(|v| v.as_u64()),
-        Some(6),
-    );
-    assert_eq!(
-        coverage.get("returned").and_then(|v| v.as_u64()),
-        Some(6),
-    );
+    assert_eq!(coverage.get("requested").and_then(|v| v.as_u64()), Some(6),);
+    assert_eq!(coverage.get("returned").and_then(|v| v.as_u64()), Some(6),);
 
     handle.abort();
     let _ = std::fs::remove_dir_all(&persist_dir);
@@ -394,7 +400,12 @@ async fn get_chronon_chain_partial() {
         .get("records")
         .and_then(|v| v.as_array())
         .expect("missing 'records' array");
-    assert_eq!(records.len(), 5, "expected 5 records, got {}", records.len());
+    assert_eq!(
+        records.len(),
+        5,
+        "expected 5 records, got {}",
+        records.len()
+    );
 
     // Verify the returned records are chronon 0..4.
     for (i, rec) in records.iter().enumerate() {

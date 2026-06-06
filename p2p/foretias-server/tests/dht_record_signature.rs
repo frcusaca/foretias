@@ -7,9 +7,7 @@
 //! 4. A record signed by one key but claiming a different TBID is rejected.
 
 use foretias_core::crypto_server::{self, ForetiasCurve, PublicKeyBytes};
-use foretias_server::communerd::{
-    validate_peer_registration, PeerRegistrationRecord,
-};
+use foretias_server::communerd::{validate_peer_registration, PeerRegistrationRecord};
 
 /// Build a 96-byte hex TBID with `pubkey_32` as the first 32 bytes and zeros
 /// for the remaining 64 (SLH-DSA portion). The signature-verification path
@@ -47,8 +45,8 @@ fn legacy_record_without_signature_accepted_with_warn() {
     // Spec: a record with empty `signature` is the pre-signing format. Until
     // the legacy compatibility window closes, validate_peer_registration must
     // accept it (and log at debug).
-    let crypto = crypto_server::new_software(ForetiasCurve::Ed25519)
-        .expect("libsodium must be available");
+    let crypto =
+        crypto_server::new_software(ForetiasCurve::Ed25519).expect("libsodium must be available");
     let pubkey = ed25519_pub_of(&*crypto);
     let mut record = make_record(tbid_from_pubkey(&pubkey));
     record.signature.clear(); // explicit: legacy peers omit the field
@@ -64,8 +62,8 @@ fn legacy_record_without_signature_accepted_with_warn() {
 fn valid_signature_accepted() {
     // Spec: sign canonical_payload with the TBID's Ed25519 key; verify with the
     // same pubkey extracted from the TBID hex. Must accept.
-    let crypto = crypto_server::new_software(ForetiasCurve::Ed25519)
-        .expect("libsodium must be available");
+    let crypto =
+        crypto_server::new_software(ForetiasCurve::Ed25519).expect("libsodium must be available");
     let pubkey = ed25519_pub_of(&*crypto);
     let mut record = make_record(tbid_from_pubkey(&pubkey));
 
@@ -84,8 +82,8 @@ fn valid_signature_accepted() {
 fn tampered_record_rejected() {
     // Spec: a record where any signed field is modified after signing must
     // produce signature verification failure (Ok(false)).
-    let crypto = crypto_server::new_software(ForetiasCurve::Ed25519)
-        .expect("libsodium must be available");
+    let crypto =
+        crypto_server::new_software(ForetiasCurve::Ed25519).expect("libsodium must be available");
     let pubkey = ed25519_pub_of(&*crypto);
     let mut record = make_record(tbid_from_pubkey(&pubkey));
 
@@ -137,8 +135,8 @@ fn wrong_pubkey_rejected() {
 fn structurally_invalid_record_rejected_even_without_signature() {
     // Bonus coverage: structural validation runs before signature checks, so
     // a record with empty peer_id must be rejected regardless of legacy compat.
-    let crypto = crypto_server::new_software(ForetiasCurve::Ed25519)
-        .expect("libsodium must be available");
+    let crypto =
+        crypto_server::new_software(ForetiasCurve::Ed25519).expect("libsodium must be available");
     let pubkey = ed25519_pub_of(&*crypto);
     let mut record = make_record(tbid_from_pubkey(&pubkey));
     record.peer_id.clear(); // structurally invalid
@@ -154,8 +152,8 @@ fn structurally_invalid_record_rejected_even_without_signature() {
 fn canonical_payload_excludes_signature_field() {
     // The canonical payload must not include the signature itself, otherwise
     // re-signing with a known good signature would produce a different payload.
-    let crypto = crypto_server::new_software(ForetiasCurve::Ed25519)
-        .expect("libsodium must be available");
+    let crypto =
+        crypto_server::new_software(ForetiasCurve::Ed25519).expect("libsodium must be available");
     let pubkey = ed25519_pub_of(&*crypto);
     let mut record = make_record(tbid_from_pubkey(&pubkey));
 

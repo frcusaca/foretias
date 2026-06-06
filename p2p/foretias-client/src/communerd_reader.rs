@@ -26,8 +26,15 @@ impl CommunerdReader {
     }
 
     /// Stamp content on a remote peer.
-    pub async fn stamp(&self, peer_idx: usize, content: &[u8], echo: &str) -> Result<serde_json::Value, PtPError> {
-        let peer = self.peers.get(peer_idx)
+    pub async fn stamp(
+        &self,
+        peer_idx: usize,
+        content: &[u8],
+        echo: &str,
+    ) -> Result<serde_json::Value, PtPError> {
+        let peer = self
+            .peers
+            .get(peer_idx)
             .ok_or_else(|| PtPError::Connect("peer index out of range".into()))?;
         let params = serde_json::json!({
             "content": hex::encode(content),
@@ -37,8 +44,15 @@ impl CommunerdReader {
     }
 
     /// Verify content on a remote peer.
-    pub async fn verify(&self, peer_idx: usize, content: &[u8], foretis: &serde_json::Value) -> Result<serde_json::Value, PtPError> {
-        let peer = self.peers.get(peer_idx)
+    pub async fn verify(
+        &self,
+        peer_idx: usize,
+        content: &[u8],
+        foretis: &serde_json::Value,
+    ) -> Result<serde_json::Value, PtPError> {
+        let peer = self
+            .peers
+            .get(peer_idx)
             .ok_or_else(|| PtPError::Connect("peer index out of range".into()))?;
         let params = serde_json::json!({
             "content": hex::encode(content),
@@ -48,8 +62,15 @@ impl CommunerdReader {
     }
 
     /// Fetch calendar slice from a remote peer.
-    pub async fn calendar_slice(&self, peer_idx: usize, start: u64, count: u64) -> Result<serde_json::Value, PtPError> {
-        let peer = self.peers.get(peer_idx)
+    pub async fn calendar_slice(
+        &self,
+        peer_idx: usize,
+        start: u64,
+        count: u64,
+    ) -> Result<serde_json::Value, PtPError> {
+        let peer = self
+            .peers
+            .get(peer_idx)
             .ok_or_else(|| PtPError::Connect("peer index out of range".into()))?;
         let params = serde_json::json!({
             "cal_chronon_start": start,

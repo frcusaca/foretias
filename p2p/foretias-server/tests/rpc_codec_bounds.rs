@@ -5,10 +5,10 @@
 //! allocating a correspondingly huge buffer, and that normal frames
 //! are still accepted.
 
+use foretias_server::communerd::p2p::rpc_protocol::ForetiasRpcCodec;
 use futures::io::Cursor;
 use libp2p::request_response::Codec;
 use libp2p::StreamProtocol;
-use foretias_server::communerd::p2p::rpc_protocol::ForetiasRpcCodec;
 
 #[tokio::test]
 async fn rpc_codec_rejects_malicious_frame_length() {

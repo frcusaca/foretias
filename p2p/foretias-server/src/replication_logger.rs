@@ -41,7 +41,10 @@ impl ReplicationLogger {
         let base_dir = base_dir.into();
         std::fs::create_dir_all(&base_dir)?;
         let global_path = base_dir.join("replication.log");
-        let _ = OpenOptions::new().create(true).append(true).open(&global_path);
+        let _ = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&global_path);
         Ok(Self { base_dir })
     }
 
@@ -56,7 +59,11 @@ impl ReplicationLogger {
         let line_clone = line.clone();
         let log_path_clone = log_path.clone();
         std::thread::spawn(move || {
-            if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(&log_path_clone) {
+            if let Ok(mut file) = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&log_path_clone)
+            {
                 let _ = writeln!(file, "{}", line_clone);
                 let _ = file.flush();
             }
@@ -69,7 +76,11 @@ impl ReplicationLogger {
         let line = Self::format_entry(entry);
         let line_clone = line.clone();
         std::thread::spawn(move || {
-            if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(global_path) {
+            if let Ok(mut file) = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(global_path)
+            {
                 let _ = writeln!(file, "{}", line_clone);
                 let _ = file.flush();
             }
@@ -106,7 +117,10 @@ impl ReplicationLogger {
             event: event.to_string(),
             tbid: None,
             peer: None,
-            details: details.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+            details: details
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
         };
         if let Some(pid) = peer_id {
             self.log_peer(pid, &entry);

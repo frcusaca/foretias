@@ -15,12 +15,12 @@
 //! 2. `step()` → sends 80 bytes (ephemeral + encrypted static)
 //! 3. `step()` ← receives ≤48 bytes (encrypted static)
 
-use std::ptr::NonNull;
 use std::mem::ManuallyDrop;
+use std::ptr::NonNull;
 
 use crate::core::bindings::*;
 use crate::core::identity::PrivKeyHandle;
-use crate::error::{CryptoError, c_result_to_error};
+use crate::error::{c_result_to_error, CryptoError};
 
 /// Maximum payload size supported by the Noise_XX cipher.
 pub const NOISE_MAX_MSG: usize = FORETIAS_NOISE_MAX_MSG as usize;
@@ -92,8 +92,9 @@ impl NoiseSession {
         their_static_pub: Option<&[u8; 32]>,
         is_initiator: bool,
     ) -> Result<Self, CryptoError> {
-        let their_pub: *const ForetiasPubKey32 =
-            their_static_pub.map_or(std::ptr::null(), |p| p as *const _ as *const ForetiasPubKey32);
+        let their_pub: *const ForetiasPubKey32 = their_static_pub.map_or(std::ptr::null(), |p| {
+            p as *const _ as *const ForetiasPubKey32
+        });
 
         let layout = std::alloc::Layout::new::<ForetiasNoiseState>();
         let state_ptr = unsafe {
@@ -105,18 +106,14 @@ impl NoiseSession {
         };
 
         let rc = unsafe {
-            foretias_noise_init_with_handle(
-                state_ptr,
-                handle.as_ptr(),
-                their_pub,
-                is_initiator,
-            )
+            foretias_noise_init_with_handle(state_ptr, handle.as_ptr(), their_pub, is_initiator)
         };
 
         c_result_to_error(rc)?;
 
-        let ptr = NonNull::new(state_ptr)
-            .ok_or(CryptoError::BadInput("noise: C library returned null state pointer"))?;
+        let ptr = NonNull::new(state_ptr).ok_or(CryptoError::BadInput(
+            "noise: C library returned null state pointer",
+        ))?;
         Ok(Self(ManuallyDrop::new(ptr)))
     }
 
@@ -128,8 +125,9 @@ impl NoiseSession {
         let mut priv_key = ForetiasPrivKey32 { bytes: [0u8; 32] };
         priv_key.bytes.copy_from_slice(static_priv);
 
-        let their_pub: *const ForetiasPubKey32 =
-            their_static_pub.map_or(std::ptr::null(), |p| p as *const _ as *const ForetiasPubKey32);
+        let their_pub: *const ForetiasPubKey32 = their_static_pub.map_or(std::ptr::null(), |p| {
+            p as *const _ as *const ForetiasPubKey32
+        });
 
         let layout = std::alloc::Layout::new::<ForetiasNoiseState>();
         // SAFETY: alloc_zeroed returns a valid, aligned pointer for the layout; null check below guards allocation failure.
@@ -142,14 +140,8 @@ impl NoiseSession {
         };
 
         // SAFETY: state_ptr is valid and aligned (from alloc_zeroed above); priv_key and their_pub remain valid for duration of this call.
-        let rc = unsafe {
-            foretias_noise_init_ed25519(
-                state_ptr,
-                &priv_key,
-                their_pub,
-                is_initiator,
-            )
-        };
+        let rc =
+            unsafe { foretias_noise_init_ed25519(state_ptr, &priv_key, their_pub, is_initiator) };
 
         // Zeroize private key immediately
         priv_key.bytes.fill(0);
@@ -157,8 +149,9 @@ impl NoiseSession {
         c_result_to_error(rc)?;
 
         // SAFETY: C11 API guarantees non-null pointer on success (rc == 0).
-        let ptr = NonNull::new(state_ptr)
-            .ok_or(CryptoError::BadInput("noise: C library returned null state pointer"))?;
+        let ptr = NonNull::new(state_ptr).ok_or(CryptoError::BadInput(
+            "noise: C library returned null state pointer",
+        ))?;
         Ok(Self(ManuallyDrop::new(ptr)))
     }
 
@@ -278,13 +271,18 @@ impl Drop for NoiseSession {
 
 // ── Tokio I/O helpers for noisy TCP ──────────────────────────────────────────
 
-async fn read_length_prefix(reader: &mut (impl tokio::io::AsyncReadExt + Unpin)) -> Result<u32, std::io::Error> {
+async fn read_length_prefix(
+    reader: &mut (impl tokio::io::AsyncReadExt + Unpin),
+) -> Result<u32, std::io::Error> {
     let mut buf = [0u8; 4];
     tokio::io::AsyncReadExt::read_exact(reader, &mut buf).await?;
     Ok(u32::from_le_bytes(buf))
 }
 
-async fn write_length_prefix(writer: &mut (impl tokio::io::AsyncWriteExt + Unpin), len: u32) -> Result<(), std::io::Error> {
+async fn write_length_prefix(
+    writer: &mut (impl tokio::io::AsyncWriteExt + Unpin),
+    len: u32,
+) -> Result<(), std::io::Error> {
     tokio::io::AsyncWriteExt::write_all(writer, &len.to_le_bytes()).await
 }
 
@@ -366,21 +364,31 @@ pub async fn noise_handshake_with_handle(
 
 async fn write_len(stream: &mut tokio::net::TcpStream, msg: &[u8]) -> Result<(), CryptoError> {
     let len = (msg.len() as u32).to_le_bytes();
-    tokio::io::AsyncWriteExt::write_all(stream, &len).await.map_err(|e| CryptoError::IoWrite(e.to_string()))?;
-    tokio::io::AsyncWriteExt::write_all(stream, msg).await.map_err(|e| CryptoError::IoWrite(e.to_string()))?;
-    tokio::io::AsyncWriteExt::flush(stream).await.map_err(|e| CryptoError::IoWrite(e.to_string()))?;
+    tokio::io::AsyncWriteExt::write_all(stream, &len)
+        .await
+        .map_err(|e| CryptoError::IoWrite(e.to_string()))?;
+    tokio::io::AsyncWriteExt::write_all(stream, msg)
+        .await
+        .map_err(|e| CryptoError::IoWrite(e.to_string()))?;
+    tokio::io::AsyncWriteExt::flush(stream)
+        .await
+        .map_err(|e| CryptoError::IoWrite(e.to_string()))?;
     Ok(())
 }
 
 async fn read_len(stream: &mut tokio::net::TcpStream) -> Result<Vec<u8>, CryptoError> {
     let mut len_buf = [0u8; 4];
-    tokio::io::AsyncReadExt::read_exact(stream, &mut len_buf).await.map_err(|e| CryptoError::IoRead(e.to_string()))?;
+    tokio::io::AsyncReadExt::read_exact(stream, &mut len_buf)
+        .await
+        .map_err(|e| CryptoError::IoRead(e.to_string()))?;
     let len = u32::from_le_bytes(len_buf) as usize;
     if len > NOISE_MAX_MSG {
         return Err(CryptoError::BadInput("message exceeds maximum size"));
     }
     let mut buf = vec![0u8; len];
-    tokio::io::AsyncReadExt::read_exact(stream, &mut buf).await.map_err(|e| CryptoError::IoRead(e.to_string()))?;
+    tokio::io::AsyncReadExt::read_exact(stream, &mut buf)
+        .await
+        .map_err(|e| CryptoError::IoRead(e.to_string()))?;
     Ok(buf)
 }
 
@@ -393,11 +401,14 @@ pub async fn noise_send(
     plaintext: &[u8],
 ) -> Result<(), CryptoError> {
     let ct = session.send(plaintext)?;
-    write_length_prefix(writer, ct.len() as u32).await
+    write_length_prefix(writer, ct.len() as u32)
+        .await
         .map_err(|e| CryptoError::IoWrite(format!("length prefix: {}", e)))?;
-    tokio::io::AsyncWriteExt::write_all(writer, &ct).await
+    tokio::io::AsyncWriteExt::write_all(writer, &ct)
+        .await
         .map_err(|e| CryptoError::IoWrite(format!("ciphertext write: {}", e)))?;
-    tokio::io::AsyncWriteExt::flush(writer).await
+    tokio::io::AsyncWriteExt::flush(writer)
+        .await
         .map_err(|e| CryptoError::IoWrite(format!("flush: {}", e)))?;
     Ok(())
 }
@@ -409,10 +420,13 @@ pub async fn noise_recv(
     session: &mut NoiseSession,
     reader: &mut tokio::io::BufReader<tokio::net::tcp::OwnedReadHalf>,
 ) -> Result<Vec<u8>, CryptoError> {
-    let ct_len = read_length_prefix(reader).await
-        .map_err(|e| CryptoError::IoRead(format!("length prefix: {}", e)))? as usize;
+    let ct_len = read_length_prefix(reader)
+        .await
+        .map_err(|e| CryptoError::IoRead(format!("length prefix: {}", e)))?
+        as usize;
     let mut ct_buf = vec![0u8; ct_len];
-    tokio::io::AsyncReadExt::read_exact(reader, &mut ct_buf).await
+    tokio::io::AsyncReadExt::read_exact(reader, &mut ct_buf)
+        .await
         .map_err(|e| CryptoError::IoRead(format!("ciphertext read: {}", e)))?;
     session.recv(&ct_buf)
 }
@@ -518,7 +532,10 @@ mod tests {
         // Tamper with ciphertext
         ct[0] ^= 0xFF;
 
-        assert!(bob.recv(&ct).is_err(), "Tampered ciphertext should be rejected");
+        assert!(
+            bob.recv(&ct).is_err(),
+            "Tampered ciphertext should be rejected"
+        );
     }
 
     #[test]

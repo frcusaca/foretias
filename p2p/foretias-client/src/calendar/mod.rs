@@ -4,14 +4,17 @@ use std::sync::Arc;
 
 pub mod mirror;
 
+use foretias_core::error::NodeError;
 use foretias_core::foretias::callbacks::TickObserver;
 use foretias_core::foretias::tick::CalendarLookup;
-use foretias_core::foretias::{Calendar as CoreCalendar, ChrononRecord, types::{TickNumber, Tbid}};
-use foretias_core::error::NodeError;
+use foretias_core::foretias::{
+    types::{Tbid, TickNumber},
+    Calendar as CoreCalendar, ChrononRecord,
+};
 use parking_lot::RwLock;
 use tracing::{debug, info};
 
-pub use mirror::{MirrorStore, compute_hash_sanity};
+pub use mirror::{compute_hash_sanity, MirrorStore};
 
 pub struct Calendar {
     inner: Arc<RwLock<CoreCalendar>>,
@@ -52,7 +55,7 @@ impl Calendar {
 
     /// Save the calendar wrapped in `PersistedCalendar` format (with metadata header).
     pub fn save_as_persisted(&self, path: &str) -> Result<(), NodeError> {
-        use foretias_core::config::{PersistedCalendar, CalendarMetadata, CalendarConfig};
+        use foretias_core::config::{CalendarConfig, CalendarMetadata, PersistedCalendar};
 
         let cal = self.inner.read();
         let persisted = PersistedCalendar {
@@ -63,20 +66,29 @@ impl Calendar {
                 persisted_by: env!("CARGO_PKG_VERSION").to_string(),
                 calendar_config: CalendarConfig::default(),
             },
-            ticks: cal.ticks.iter()
+            ticks: cal
+                .ticks
+                .iter()
                 .map(|t| serde_json::to_value(t).unwrap_or_default())
                 .collect(),
         };
-        let json = serde_json::to_string_pretty(&persisted)
-            .map_err(|e| NodeError::Internal(format!("failed to serialize persisted calendar: {}", e)))?;
-        std::fs::write(path, json)
-            .map_err(|e| NodeError::Internal(format!("failed to write persisted calendar: {}", e)))?;
+        let json = serde_json::to_string_pretty(&persisted).map_err(|e| {
+            NodeError::Internal(format!("failed to serialize persisted calendar: {}", e))
+        })?;
+        std::fs::write(path, json).map_err(|e| {
+            NodeError::Internal(format!("failed to write persisted calendar: {}", e))
+        })?;
         Ok(())
     }
 }
 
 impl TickObserver for Calendar {
-    fn on_tick_advance(&self, chronon_number: TickNumber, _public_key: &[u8], tick_record: &ChrononRecord) {
+    fn on_tick_advance(
+        &self,
+        chronon_number: TickNumber,
+        _public_key: &[u8],
+        tick_record: &ChrononRecord,
+    ) {
         let mut cal = self.inner.write();
         if let Err(e) = cal.append(tick_record.clone()) {
             tracing::error!(component = "calendar", tbid = %cal.tbid().to_hex(), tick = chronon_number.0, "calendar: on_tick_advance failed: {}", e);

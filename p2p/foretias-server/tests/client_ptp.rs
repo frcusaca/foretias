@@ -33,9 +33,7 @@ async fn wait_for_server(addr: &str) {
 async fn spawn_server() -> (Arc<TimeFamilyServer>, String) {
     let port = find_available_port();
     let addr = format!("127.0.0.1:{port}");
-    let server = Arc::new(
-        TimeFamilyServer::new(&addr, 1_000_000_000u64).expect("create server"),
-    );
+    let server = Arc::new(TimeFamilyServer::new(&addr, 1_000_000_000u64).expect("create server"));
     let _handle = Arc::clone(&server).start().expect("start server");
     wait_for_server(&addr).await;
     (server, addr)
@@ -45,12 +43,8 @@ async fn spawn_server() -> (Arc<TimeFamilyServer>, String) {
 async fn ptp_stamp_and_verify() {
     let (_server, addr) = spawn_server().await;
 
-    let client = Foretias::connect_one(
-        "ptp-client".into(),
-        addr.clone(),
-        None,
-    )
-    .expect("connect client");
+    let client =
+        Foretias::connect_one("ptp-client".into(), addr.clone(), None).expect("connect client");
 
     let (foretis, sig, alg) = client
         .stamp(b"hello world", "ptp-test".into())
@@ -71,12 +65,8 @@ async fn ptp_stamp_and_verify() {
 async fn ptp_stamp_verify_roundtrip() {
     let (_server, addr) = spawn_server().await;
 
-    let client = Foretias::connect_one(
-        "roundtrip-client".into(),
-        addr.clone(),
-        None,
-    )
-    .expect("connect client");
+    let client = Foretias::connect_one("roundtrip-client".into(), addr.clone(), None)
+        .expect("connect client");
 
     let content = b"roundtrip content data";
     let (foretis, sig, alg) = client
@@ -101,12 +91,8 @@ async fn ptp_stamp_verify_roundtrip() {
 async fn ptp_calendar_slice() {
     let (_server, addr) = spawn_server().await;
 
-    let client = Foretias::connect_one(
-        "calendar-client".into(),
-        addr.clone(),
-        None,
-    )
-    .expect("connect client");
+    let client = Foretias::connect_one("calendar-client".into(), addr.clone(), None)
+        .expect("connect client");
 
     client
         .stamp(b"first", "cal1".into())
@@ -121,23 +107,20 @@ async fn ptp_calendar_slice() {
         .calendar_slice(0, 10)
         .await
         .expect("calendar slice succeeds");
-    assert!(!records.is_empty(), "calendar should have records after stamps");
+    assert!(
+        !records.is_empty(),
+        "calendar should have records after stamps"
+    );
 }
 
 #[tokio::test]
 async fn ptp_unreachable_server_returns_error() {
     let addr = "127.0.0.1:59999";
 
-    let client = Foretias::connect_one(
-        "unreachable-client".into(),
-        addr.into(),
-        None,
-    )
-    .expect("connect client");
+    let client = Foretias::connect_one("unreachable-client".into(), addr.into(), None)
+        .expect("connect client");
 
-    let result = client
-        .stamp(b"hello", "noop".into())
-        .await;
+    let result = client.stamp(b"hello", "noop".into()).await;
 
     assert!(
         matches!(result, Err(ForetiasError::Network(_))),

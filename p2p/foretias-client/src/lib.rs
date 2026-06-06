@@ -6,12 +6,15 @@
 //! - Level 3 (P2P Full): P2P mesh participation (Phase 10)
 
 pub mod calendar;
-pub mod noise_ptp;
-pub mod foretias;
-pub mod config;
 pub mod communerd_reader;
+pub mod config;
+pub mod foretias;
+pub mod noise_ptp;
 
-pub use noise_ptp::{noise_json_rpc, noise_json_rpc_typed, PtPError};
-pub use foretias::{Foretias, ForetiasError, ForetiasStatus, ForetiasInner, ClientLevel, P2pJoinConfig, VerificationReport};
-pub use config::{StandaloneConfig, PtpConfig, P2pConfig, ForetiasConfig};
 pub use communerd_reader::CommunerdReader;
+pub use config::{ForetiasConfig, P2pConfig, PtpConfig, StandaloneConfig};
+pub use foretias::{
+    ClientLevel, Foretias, ForetiasError, ForetiasInner, ForetiasStatus, P2pJoinConfig,
+    VerificationReport,
+};
+pub use noise_ptp::{noise_json_rpc, noise_json_rpc_typed, PtPError};

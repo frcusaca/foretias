@@ -25,19 +25,22 @@ pub mod mirror;
 pub mod task_queue;
 
 use foretias_core::core::identity::PrivKeyHandle;
+use foretias_core::error::NodeError;
 use foretias_core::foretias::callbacks::TickObserver;
 use foretias_core::foretias::tick::CalendarLookup;
-use foretias_core::foretias::{Calendar as CoreCalendar, ChrononRecord, types::{TickNumber, Tbid}};
-use foretias_core::error::NodeError;
+use foretias_core::foretias::{
+    types::{Tbid, TickNumber},
+    Calendar as CoreCalendar, ChrononRecord,
+};
 use parking_lot::RwLock;
 use rand::Rng;
 use tracing::{debug, info, warn};
 
 pub use foretias_core::foretias::callbacks::PeerChangeCallback;
-pub use mirror::{MirrorStore, compute_hash_sanity};
+pub use mirror::{compute_hash_sanity, MirrorStore};
 pub use task_queue::{
-    CalendarTask, CalendarTaskSender, MirrorDispatcher, MirrorState, WorkerPool,
-    DEFAULT_WORKER_COUNT, start_pool,
+    start_pool, CalendarTask, CalendarTaskSender, MirrorDispatcher, MirrorState, WorkerPool,
+    DEFAULT_WORKER_COUNT,
 };
 
 /// Approximate 1-in-N chance of enqueuing a `VerifyFbRecorded` task on
@@ -100,10 +103,8 @@ impl Calendar {
     /// Useful for tests of the queue plumbing that don't exercise network
     /// behavior. Production callers should use `start_task_queue_with_dispatcher`.
     pub fn start_task_queue(&self) {
-        let (tx, pool, state) = task_queue::start_default_pool(
-            self.inner(),
-            Some(self.signing_key_handle()),
-        );
+        let (tx, pool, state) =
+            task_queue::start_default_pool(self.inner(), Some(self.signing_key_handle()));
         // The mirror state carries the local TBID — populate it from the
         // calendar's current TBID so worker handlers can address themselves.
         let local_tbid = self.tbid().to_hex();
@@ -127,12 +128,11 @@ impl Calendar {
         &self,
         dispatcher: Arc<dyn MirrorDispatcher>,
     ) -> Arc<MirrorState> {
-        let (tx, pool, state) =
-            task_queue::start_default_pool_with_dispatcher(
-                self.inner(),
-                Some(dispatcher),
-                Some(self.signing_key_handle()),
-            );
+        let (tx, pool, state) = task_queue::start_default_pool_with_dispatcher(
+            self.inner(),
+            Some(dispatcher),
+            Some(self.signing_key_handle()),
+        );
         let local_tbid = self.tbid().to_hex();
         *state.local_tbid_hex.write() = local_tbid;
         *self.task_tx.lock().unwrap() = Some(tx);
@@ -190,7 +190,7 @@ impl Calendar {
     /// Save the calendar wrapped in `PersistedCalendar` format (with metadata header).
     /// This is an additional save format alongside the raw JSON `save()` method.
     pub fn save_as_persisted(&self, path: &str) -> Result<(), NodeError> {
-        use foretias_core::config::{PersistedCalendar, CalendarMetadata, CalendarConfig};
+        use foretias_core::config::{CalendarConfig, CalendarMetadata, PersistedCalendar};
 
         let cal = self.inner.read();
         let persisted = PersistedCalendar {
@@ -201,14 +201,18 @@ impl Calendar {
                 persisted_by: env!("CARGO_PKG_VERSION").to_string(),
                 calendar_config: CalendarConfig::default(),
             },
-            ticks: cal.ticks.iter()
+            ticks: cal
+                .ticks
+                .iter()
                 .map(|t| serde_json::to_value(t).unwrap_or_default())
                 .collect(),
         };
-        let json = serde_json::to_string_pretty(&persisted)
-            .map_err(|e| NodeError::Internal(format!("failed to serialize persisted calendar: {}", e)))?;
-        std::fs::write(path, json)
-            .map_err(|e| NodeError::Internal(format!("failed to write persisted calendar: {}", e)))?;
+        let json = serde_json::to_string_pretty(&persisted).map_err(|e| {
+            NodeError::Internal(format!("failed to serialize persisted calendar: {}", e))
+        })?;
+        std::fs::write(path, json).map_err(|e| {
+            NodeError::Internal(format!("failed to write persisted calendar: {}", e))
+        })?;
         Ok(())
     }
 
@@ -216,9 +220,9 @@ impl Calendar {
     /// signature. Fails if the signing key was not generated at construction.
     pub fn sign_foretis(&self, foretis_bytes: &[u8]) -> Result<Vec<u8>, NodeError> {
         let guard = self.signing_key.lock();
-        let key = guard.as_ref().ok_or_else(|| {
-            NodeError::Internal("calendar signing key not initialized".into())
-        })?;
+        let key = guard
+            .as_ref()
+            .ok_or_else(|| NodeError::Internal("calendar signing key not initialized".into()))?;
         let sig = key.sign(foretis_bytes)?;
         Ok(sig.bytes.to_vec())
     }
@@ -253,7 +257,12 @@ fn generate_calendar_signing_key() -> Option<PrivKeyHandle> {
 }
 
 impl TickObserver for Calendar {
-    fn on_tick_advance(&self, chronon_number: TickNumber, _public_key: &[u8], tick_record: &ChrononRecord) {
+    fn on_tick_advance(
+        &self,
+        chronon_number: TickNumber,
+        _public_key: &[u8],
+        tick_record: &ChrononRecord,
+    ) {
         let mut cal = self.inner.write();
         if let Err(e) = cal.append(tick_record.clone()) {
             tracing::error!(component = "calendar", tbid = %cal.tbid().to_hex(), tick = chronon_number.0, "calendar: on_tick_advance failed: {}", e);
@@ -442,16 +451,29 @@ mod tests {
             json_rpc: "127.0.0.1:6001".to_string(),
         };
         let variants = vec![
-            CalendarTask::DoChrononAttestation { target_tbid: "tbid-abc".into() },
-            CalendarTask::DoEpochAttestation { target_tbid: "tbid-abc".into() },
+            CalendarTask::DoChrononAttestation {
+                target_tbid: "tbid-abc".into(),
+            },
+            CalendarTask::DoEpochAttestation {
+                target_tbid: "tbid-abc".into(),
+            },
             CalendarTask::FindNewMirror,
-            CalendarTask::InitiateDump { mirror: peer.clone() },
-            CalendarTask::StartStream { mirror: peer.clone() },
-            CalendarTask::ExploreMirror { mirror: peer.clone() },
-            CalendarTask::ExpireMirror { mirror: peer.clone() },
+            CalendarTask::InitiateDump {
+                mirror: peer.clone(),
+            },
+            CalendarTask::StartStream {
+                mirror: peer.clone(),
+            },
+            CalendarTask::ExploreMirror {
+                mirror: peer.clone(),
+            },
+            CalendarTask::ExpireMirror {
+                mirror: peer.clone(),
+            },
         ];
         for task in variants {
-            cal.enqueue_task(task).expect("enqueue after start succeeds");
+            cal.enqueue_task(task)
+                .expect("enqueue after start succeeds");
         }
         // Give the worker pool a tick to drain placeholder dispatches.
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;

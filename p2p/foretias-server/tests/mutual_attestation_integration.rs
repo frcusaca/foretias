@@ -88,11 +88,17 @@ async fn jsonrpc_call(addr: &str, method: &str, params: Value) -> Value {
 async fn wait_for_http(addr: &str, timeout: Duration) {
     let deadline = tokio::time::Instant::now() + timeout;
     loop {
-        if try_jsonrpc_call(addr, "ping", serde_json::json!({})).await.is_ok() {
+        if try_jsonrpc_call(addr, "ping", serde_json::json!({}))
+            .await
+            .is_ok()
+        {
             return;
         }
         if tokio::time::Instant::now() > deadline {
-            panic!("HTTP server did not become ready on {} within {:?}", addr, timeout);
+            panic!(
+                "HTTP server did not become ready on {} within {:?}",
+                addr, timeout
+            );
         }
         tokio::time::sleep(Duration::from_millis(200)).await;
     }
@@ -105,7 +111,11 @@ fn sample_tbid_hex() -> String {
 
 /// Start a server with its calendar task queue active, listening for HTTP
 /// requests on a random port. Returns (http_addr, server_arc, join_handle).
-async fn start_server_with_task_queue() -> (String, Arc<foretias_server::server::TimeFamilyServer>, tokio::task::JoinHandle<()>) {
+async fn start_server_with_task_queue() -> (
+    String,
+    Arc<foretias_server::server::TimeFamilyServer>,
+    tokio::task::JoinHandle<()>,
+) {
     use foretias_server::server::TimeFamilyServer;
 
     let listen_port = find_available_port();
@@ -114,8 +124,7 @@ async fn start_server_with_task_queue() -> (String, Arc<foretias_server::server:
     let http_addr = format!("127.0.0.1:{}", http_port);
 
     let server: Arc<TimeFamilyServer> = Arc::new(
-        TimeFamilyServer::new(&listen_addr, 100_000_000)
-            .expect("failed to create server"),
+        TimeFamilyServer::new(&listen_addr, 100_000_000).expect("failed to create server"),
     );
 
     // Start the calendar task queue so enqueue_task succeeds.

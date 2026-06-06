@@ -71,17 +71,39 @@ pub fn compute_attestation_interval(my_chronon_ns: u64, peer_chronon_ns: u64) ->
     FORETIAS_MUTUAL_ATTESTATION_MINIMUM.max(50 * (my_chronon_ns + peer_chronon_ns))
 }
 
-fn default_listen_addr() -> String { "127.0.0.1:4001".to_string() }
-fn default_version() -> String { env!("CARGO_PKG_VERSION").to_string() }
-fn default_calendar_path() -> PathBuf { PathBuf::from(".foretias/calendars") }
-fn default_chronon_ns() -> u64 { 60_000_000_000 }
-fn default_auto_attest_every_n() -> u64 { 1 }
-fn default_request_timeout_secs() -> u64 { 5 }
-fn default_dht_namespace() -> String { "mainnet".to_string() }
-fn default_signature_algorithm() -> SignatureAlgorithm { SignatureAlgorithm::Ed25519 }
-fn default_kem_algorithm() -> KemAlgorithm { KemAlgorithm::NoiseXX }
-fn default_p2p_port_range() -> [u16; 2] { [9900, 9999] }
-fn default_max_discovered_peers() -> usize { 13 }
+fn default_listen_addr() -> String {
+    "127.0.0.1:4001".to_string()
+}
+fn default_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+fn default_calendar_path() -> PathBuf {
+    PathBuf::from(".foretias/calendars")
+}
+fn default_chronon_ns() -> u64 {
+    60_000_000_000
+}
+fn default_auto_attest_every_n() -> u64 {
+    1
+}
+fn default_request_timeout_secs() -> u64 {
+    5
+}
+fn default_dht_namespace() -> String {
+    "mainnet".to_string()
+}
+fn default_signature_algorithm() -> SignatureAlgorithm {
+    SignatureAlgorithm::Ed25519
+}
+fn default_kem_algorithm() -> KemAlgorithm {
+    KemAlgorithm::NoiseXX
+}
+fn default_p2p_port_range() -> [u16; 2] {
+    [9900, 9999]
+}
+fn default_max_discovered_peers() -> usize {
+    13
+}
 
 impl Default for NodeConfig {
     fn default() -> Self {

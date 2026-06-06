@@ -4,18 +4,23 @@ use foretias_core::chronomatter::Chronomatter;
 use foretias_core::crypto_server::{self, ForetiasCurve};
 use foretias_core::foretias::callbacks::TickObserver;
 use foretias_core::foretias::types::{Tbid, TickNumber};
+use foretias_core::foretias::Calendar;
 use foretias_core::foretias::ChrononRecord;
+use parking_lot::RwLock;
 use std::sync::atomic::{AtomicU64, Ordering::SeqCst};
 use std::sync::Arc;
-use parking_lot::RwLock;
-use foretias_core::foretias::Calendar;
 
 struct StressObserver {
     last_tick: Arc<AtomicU64>,
     calendar: Arc<RwLock<Calendar>>,
 }
 impl TickObserver for StressObserver {
-    fn on_tick_advance(&self, chronon_number: TickNumber, _public_key: &[u8], tick_record: &ChrononRecord) {
+    fn on_tick_advance(
+        &self,
+        chronon_number: TickNumber,
+        _public_key: &[u8],
+        tick_record: &ChrononRecord,
+    ) {
         self.last_tick.store(chronon_number.0, SeqCst);
         self.calendar.write().append(tick_record.clone()).unwrap();
     }
@@ -32,10 +37,10 @@ async fn concurrent_stamps_no_conflicts() {
         last_tick: Arc::clone(&last_tick),
         calendar: Arc::clone(&calendar),
     });
-    let crypto = Arc::from(crypto_server::new_software(ForetiasCurve::Ed25519).expect("crypto server"));
-    let cm = Arc::new(
-        Chronomatter::new(1_000_000_000, observer, crypto).expect("create Chronomatter"),
-    );
+    let crypto =
+        Arc::from(crypto_server::new_software(ForetiasCurve::Ed25519).expect("crypto server"));
+    let cm =
+        Arc::new(Chronomatter::new(1_000_000_000, observer, crypto).expect("create Chronomatter"));
     calendar.write().tbid = cm.get_tbid();
     calendar.write().tbn = cm.get_tbn().to_string();
 
@@ -49,10 +54,7 @@ async fn concurrent_stamps_no_conflicts() {
         handles.push(tokio::spawn(async move {
             let mut results = Vec::new();
             for i in 0..stamps_per_task {
-                let r = cm.stamp(
-                    format!("msg-{}", i).into_bytes(),
-                    "stress".to_string(),
-                );
+                let r = cm.stamp(format!("msg-{}", i).into_bytes(), "stress".to_string());
                 results.push(r);
             }
             results
