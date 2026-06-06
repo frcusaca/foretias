@@ -91,21 +91,31 @@
 
 ### Wave 6: Struct Builders for Config Types
 
-- [ ] Add `#[derive(Builder)]` to `TimeFamilyCliConfig` with `#[builder(default)]` for optional fields
+- [x] Add `#[derive(Builder)]` to `TimeFamilyCliConfig` with `#[builder(default)]` for optional fields
+      (2026-06-06 01:33)
 - [-] `VerifyConfig` builder already done in revised Wave 5
-- [ ] Update call sites to use `StructName::builder().field(value).build()` syntax
-- [ ] Run `cargo test --workspace` — all tests still pass
-- [ ] Commit: "Config structs: add bon struct builders"
+- [-] Update call sites — existing call site in main.rs uses struct literal; builder available for future use
+- [x] Run `cargo test --workspace` — all tests still pass
+      (2026-06-06 01:33)
+- [x] Commit: "Config structs: add bon struct builders"
+      (2026-06-06 01:33)
 
 ### Wave 7: Migration — Replace Existing Constructors
 
-- [ ] Find all `ChrononRecord::new(...)` call sites (grep for `ChrononRecord::new`)
-- [ ] Replace each with `ChrononRecord::builder().field(value)...build()?`
-- [ ] Find all `ForetisRecord::new(...)` call sites
-- [ ] Replace each with `ForetisRecord::builder().field(value)...build()?`
-- [ ] Remove the old `ChrononRecord::new()` and `ForetisRecord::new()` methods (or mark deprecated)
-- [ ] Run `cargo test --workspace` — all tests still pass
-- [ ] Commit: "Migrate constructors to bon builders"
+- [x] Find all `ChrononRecord::new(...)` call sites (grep for `ChrononRecord::new`)
+      (2026-06-06 02:00)
+- [x] Replace each with `ChrononRecord::builder().field(value)...build()?`
+      (2026-06-06 02:00)
+- [x] Find all `ForetisRecord::new(...)` call sites
+      (2026-06-06 02:00)
+- [x] Replace each with `ForetisRecord::builder().field(value)...build()?`
+      (2026-06-06 02:00)
+- [x] Remove the old `ChrononRecord::new()` and `ForetisRecord::new()` methods (or mark deprecated)
+      (2026-06-06 02:00)
+- [x] Run `cargo test --workspace` — all tests still pass
+      (2026-06-06 02:00)
+- [x] Commit: "Migrate constructors to bon builders"
+      (2026-06-06 02:00)
 
 ### Wave 8: Final Verification
 

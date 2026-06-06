@@ -31,15 +31,15 @@ fn make_test_foretis() -> ForetisRecord {
     for (i, c) in ch.iter_mut().enumerate() {
         *c = (i * 3 + 1) as u8;
     }
-    ForetisRecord::new(
-        42,
-        FTByteArray::from(ch),
-        make_test_tbid(),
-        "test-echo".to_string(),
-        "test-tbn".to_string(),
-        "2026-01-01T00:00:00Z".to_string(),
-    )
-    .expect("valid foretis")
+    ForetisRecord::builder()
+        .chronon_number(42)
+        .content_hash(FTByteArray::from(ch))
+        .tbid(make_test_tbid())
+        .echo("test-echo".to_string())
+        .tbn("test-tbn".to_string())
+        .time_being_reference_time("2026-01-01T00:00:00Z".to_string())
+        .build()
+        .expect("valid foretis")
 }
 
 fn make_test_tick_record(tick: u64) -> ChrononRecord {
@@ -47,16 +47,15 @@ fn make_test_tick_record(tick: u64) -> ChrononRecord {
     for (i, n) in nonce.iter_mut().enumerate() {
         *n = (tick.wrapping_mul(7).wrapping_add(i as u64)) as u8;
     }
-    ChrononRecord::new(
-        tick,
-        FTByteVector::from(vec![(tick % 256) as u8; 32]),
-        "Ed25519".to_string(),
-        FTByteVector::from(vec![0xFF; 64]),
-        FTByteVector::new(),
-        FTByteArray::from(nonce),
-        0,
-    )
-    .expect("valid tick record")
+    ChrononRecord::builder()
+        .chronon_number(tick)
+        .public_key(FTByteVector::from(vec![(tick % 256) as u8; 32]))
+        .signature_algorithm("Ed25519".to_string())
+        .forward_foretis(FTByteVector::from(vec![0xFF; 64]))
+        .backward_foretis(FTByteVector::new())
+        .aa_nonce(FTByteArray::from(nonce))
+        .build()
+        .expect("valid tick record")
 }
 
 fn make_test_calendar(num_ticks: u64) -> Calendar {
@@ -619,16 +618,15 @@ fn all_zero_calendars() {
     let tbid = Tbid::from_raw([0u8; 96]);
     let mut cal = Calendar::new(tbid, "zero-cal");
     let zero_nonce: [u8; 16] = [0u8; 16];
-    let tr = ChrononRecord::new(
-        1,
-        FTByteVector::from(vec![0u8; 32]),
-        "Ed25519".to_string(),
-        FTByteVector::from(vec![0u8; 64]),
-        FTByteVector::new(),
-        FTByteArray::from(zero_nonce),
-        0,
-    )
-    .expect("zero tick");
+    let tr = ChrononRecord::builder()
+        .chronon_number(1)
+        .public_key(FTByteVector::from(vec![0u8; 32]))
+        .signature_algorithm("Ed25519".to_string())
+        .forward_foretis(FTByteVector::from(vec![0u8; 64]))
+        .backward_foretis(FTByteVector::new())
+        .aa_nonce(FTByteArray::from(zero_nonce))
+        .build()
+        .expect("zero tick");
     cal.append(tr).expect("append zero tick");
 
     let json = to_json(&cal).unwrap();
@@ -645,16 +643,15 @@ fn max_slh_dsa_signature_in_tick_record() {
     for (i, n) in nonce.iter_mut().enumerate() {
         *n = i as u8;
     }
-    let tr = ChrononRecord::new(
-        1,
-        FTByteVector::from(vec![0x01; 32]),
-        "SPHINCS+-SHA2-256f-simple".to_string(),
-        FTByteVector::from(vec![0x42u8; 49_856]),
-        FTByteVector::from(vec![0x43u8; 49_856]),
-        FTByteArray::from(nonce),
-        0,
-    )
-    .expect("large tick");
+    let tr = ChrononRecord::builder()
+        .chronon_number(1)
+        .public_key(FTByteVector::from(vec![0x01; 32]))
+        .signature_algorithm("SPHINCS+-SHA2-256f-simple".to_string())
+        .forward_foretis(FTByteVector::from(vec![0x42u8; 49_856]))
+        .backward_foretis(FTByteVector::from(vec![0x43u8; 49_856]))
+        .aa_nonce(FTByteArray::from(nonce))
+        .build()
+        .expect("large tick");
     let json = to_json(&tr).unwrap();
     let decoded: ChrononRecord = from_json(&json).unwrap();
     assert_eq!(decoded.forward_foretis.len(), 49_856);
@@ -669,16 +666,15 @@ fn mimic_spincs_signature_size() {
     for (i, n) in nonce.iter_mut().enumerate() {
         *n = (i + 1) as u8;
     }
-    let tr = ChrononRecord::new(
-        2,
-        FTByteVector::from(vec![0x02; 32]),
-        "SPHINCS+-SHA2-128s-simple".to_string(),
-        FTByteVector::from(vec![0x55u8; 7_856]),
-        FTByteVector::new(),
-        FTByteArray::from(nonce),
-        0,
-    )
-    .expect("sphincs tick");
+    let tr = ChrononRecord::builder()
+        .chronon_number(2)
+        .public_key(FTByteVector::from(vec![0x02; 32]))
+        .signature_algorithm("SPHINCS+-SHA2-128s-simple".to_string())
+        .forward_foretis(FTByteVector::from(vec![0x55u8; 7_856]))
+        .backward_foretis(FTByteVector::new())
+        .aa_nonce(FTByteArray::from(nonce))
+        .build()
+        .expect("sphincs tick");
     let json = to_json(&tr).unwrap();
     let decoded: ChrononRecord = from_json(&json).unwrap();
     assert_eq!(decoded.forward_foretis.len(), 7_856);

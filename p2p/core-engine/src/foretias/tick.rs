@@ -54,6 +54,10 @@ impl ChrononRecord {
     ///
     /// # Errors
     /// Returns `NodeError::InvalidInput` if `chronon_number` is 0 or `public_key` is empty.
+    #[deprecated(
+        since = "0.2.0",
+        note = "Use ChrononRecord::builder()...build() instead"
+    )]
     pub fn new(
         chronon_number: u64,
         public_key: FTByteVector,
@@ -170,6 +174,10 @@ impl ForetisRecord {
     ///
     /// # Errors
     /// Returns `NodeError::InvalidInput` if `chronon_number` is 0.
+    #[deprecated(
+        since = "0.2.0",
+        note = "Use ForetisRecord::builder()...build() instead"
+    )]
     pub fn new(
         chronon_number: u64,
         content_hash: FTByteArray<32>,
