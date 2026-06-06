@@ -50,7 +50,7 @@ impl Evaluator for ServerStampEvaluator {
                 .map_err(|e| format!("Stamp failed for '{}': {}", msg, e))?;
             stamps.push((
                 serde_json::to_value(&stamped.foretis)
-                    .map_err(|e| format!("Failed to serialize Foretis: {}", e))?,
+                    .map_err(|e| format!("Failed to serialize ForetisRecord: {}", e))?,
                 serde_json::to_value(&stamped.signature_bytes)
                     .map_err(|e| format!("Failed to serialize signature: {}", e))?,
                 serde_json::to_value(&stamped.signature_algorithm)
@@ -61,9 +61,10 @@ impl Evaluator for ServerStampEvaluator {
         // Verify each stamp
         let mut verifications = Vec::new();
         for (msg, (foretis_val, sig_val, alg_val)) in self.messages.iter().zip(stamps.iter()) {
-            let foretis: foretias_core::foretias::tick::Foretis =
-                serde_json::from_value(foretis_val.clone())
-                    .map_err(|e| format!("Failed to deserialize Foretis for verify: {}", e))?;
+            let foretis: foretias_core::foretias::tick::ForetisRecord =
+                serde_json::from_value(foretis_val.clone()).map_err(|e| {
+                    format!("Failed to deserialize ForetisRecord for verify: {}", e)
+                })?;
             let sig: Vec<u8> = serde_json::from_value(sig_val.clone())
                 .map_err(|e| format!("Failed to deserialize signature: {}", e))?;
             let alg: String = serde_json::from_value(alg_val.clone())

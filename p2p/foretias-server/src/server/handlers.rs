@@ -5,7 +5,7 @@ use super::TimeFamilyServer;
 use crate::metrics::MetricField;
 use foretias_core::error::NodeError;
 use foretias_core::foretias::clean_auth::{CleanAuthenticated, UnverifiedSignatureEnvelope};
-use foretias_core::foretias::tick::{CalendarLookup, ChrononRecord, Foretis};
+use foretias_core::foretias::tick::{CalendarLookup, ChrononRecord, ForetisRecord};
 
 const MAX_CONTENT_BYTES: usize = 1_073_741_824;
 const MAX_CALENDAR_SLICE_COUNT: usize = 10_000;
@@ -276,7 +276,7 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
         );
     }
 
-    let foretis: Foretis = match serde_json::from_value(foretis_value.clone()) {
+    let foretis: ForetisRecord = match serde_json::from_value(foretis_value.clone()) {
         Ok(f) => f,
         Err(e) => {
             return resp_error(
@@ -341,7 +341,7 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
 
     // Cross-node verification: construct envelope and use existing path
     let unproc_foretis =
-        match UnverifiedSignatureEnvelope::<Foretis>::from_json_value(foretis_value) {
+        match UnverifiedSignatureEnvelope::<ForetisRecord>::from_json_value(foretis_value) {
             Ok(f) => f,
             Err(e) => {
                 return resp_error(
@@ -372,7 +372,7 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
 
 async fn cross_node_verify(
     server: &TimeFamilyServer,
-    unproc_foretis: &UnverifiedSignatureEnvelope<Foretis>,
+    unproc_foretis: &UnverifiedSignatureEnvelope<ForetisRecord>,
     content: &[u8],
     foretis_tbid_hex: &str,
 ) -> Result<bool, NodeError> {
@@ -2074,7 +2074,7 @@ mod tests {
     /// g3-e regression: a malformed `foretis` field (e.g., an object with the
     /// wrong shape or a string instead of an object) must produce INVALID_PARAMS
     /// rather than panicking or silently returning a 500. Verifies the
-    /// `UnverifiedSignatureEnvelope::<Foretis>::from_json_value` error surfaces correctly.
+    /// `UnverifiedSignatureEnvelope::<ForetisRecord>::from_json_value` error surfaces correctly.
     #[test]
     fn handle_verify_malformed_foretis_returns_invalid_params() {
         let server = make_server();
@@ -2481,7 +2481,7 @@ mod tests {
     ///
     /// When target_tbid matches the server's own TBID, handle_route_stamp delegates
     /// to handle_stamp, so the response must include foretis, signature, and
-    /// signature_algorithm fields — not a bare Foretis object.
+    /// signature_algorithm fields — not a bare ForetisRecord object.
     #[test]
     fn handle_route_stamp_self_route_returns_envelope_shape() {
         let server = make_server();

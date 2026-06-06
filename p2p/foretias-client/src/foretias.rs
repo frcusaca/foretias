@@ -17,7 +17,7 @@ use foretias_core::clock::Clock;
 use foretias_core::crypto_server::{self, CryptoServer, ForetiasCurve};
 use foretias_core::error::{CryptoError, NodeError};
 use foretias_core::foretias::callbacks::TickObserver;
-use foretias_core::foretias::tick::{CalendarLookup, ChrononRecord, Foretis};
+use foretias_core::foretias::tick::{CalendarLookup, ChrononRecord, ForetisRecord};
 use foretias_core::foretias::types::Tbid;
 
 use crate::calendar::Calendar;
@@ -329,7 +329,7 @@ impl Foretias {
         &self,
         content: &[u8],
         echo: String,
-    ) -> Result<(Foretis, Vec<u8>, String), ForetiasError> {
+    ) -> Result<(ForetisRecord, Vec<u8>, String), ForetiasError> {
         let echo = if echo.is_empty() {
             Self::client_echo()
         } else {
@@ -345,7 +345,7 @@ impl Foretias {
         &self,
         content: &[u8],
         echo: &str,
-    ) -> Result<(Foretis, Vec<u8>, String), ForetiasError> {
+    ) -> Result<(ForetisRecord, Vec<u8>, String), ForetiasError> {
         let cm = self.inner.chronomatter();
         if cm.is_dormant() {
             return Err(ForetiasError::Dormant(
@@ -366,7 +366,7 @@ impl Foretias {
     pub async fn verify(
         &self,
         content: &[u8],
-        foretis: &Foretis,
+        foretis: &ForetisRecord,
         signature: &[u8],
         signature_algorithm: &str,
     ) -> Result<bool, ForetiasError> {
@@ -393,7 +393,7 @@ impl Foretias {
     pub async fn verify_with_proof(
         &self,
         content: &[u8],
-        foretis: &Foretis,
+        foretis: &ForetisRecord,
         signature: &[u8],
         signature_algorithm: &str,
     ) -> Result<VerificationReport, ForetiasError> {
@@ -546,7 +546,7 @@ impl Foretias {
         &self,
         content: &[u8],
         echo: &str,
-    ) -> Result<(Foretis, Vec<u8>, String), ForetiasError> {
+    ) -> Result<(ForetisRecord, Vec<u8>, String), ForetiasError> {
         let Some(peer) = self.primary_peer() else {
             return Err(ForetiasError::Network("no peer configured".into()));
         };
@@ -557,7 +557,7 @@ impl Foretias {
         });
         let result = noise_json_rpc(peer, "stamp", params, self.timeout()).await?;
         // v2: server returns {foretis, signature, signature_algorithm}
-        let foretis: Foretis =
+        let foretis: ForetisRecord =
             serde_json::from_value(result.get("foretis").cloned().unwrap_or(result.clone()))
                 .map_err(|e| {
                     ForetiasError::Network(format!("stamp deserialization failed: {}", e))
@@ -578,7 +578,7 @@ impl Foretias {
     async fn verify_remote(
         &self,
         content: &[u8],
-        foretis: &Foretis,
+        foretis: &ForetisRecord,
         signature: &[u8],
         signature_algorithm: &str,
     ) -> Result<bool, ForetiasError> {
@@ -658,7 +658,7 @@ pub struct VerificationReport {
     pub verified: bool,
     pub chronon_number: u64,
     pub calendar_records: Vec<ChrononRecord>,
-    pub foretis: Foretis,
+    pub foretis: ForetisRecord,
     pub method: String,
 }
 
@@ -794,7 +794,7 @@ mod tests {
         rt.block_on(async {
             let (foretis, _, _) = client.stamp(b"serialize me", "echo".into()).await.unwrap();
             let json = serde_json::to_string(&foretis).unwrap();
-            let deserialized: Foretis = serde_json::from_str(&json).unwrap();
+            let deserialized: ForetisRecord = serde_json::from_str(&json).unwrap();
             assert_eq!(foretis.chronon_number, deserialized.chronon_number);
             assert_eq!(foretis.content_hash, deserialized.content_hash);
             assert_eq!(foretis.tbid, deserialized.tbid);

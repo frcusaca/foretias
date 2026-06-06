@@ -201,7 +201,7 @@ pub struct WorkerContext {
     /// `CommunerdetteLine` for a target TBID. `None` in placeholder mode.
     pub communerd: Option<Arc<crate::communerd::Communerd>>,
     /// Chronomatter reference — needed by `DoChrononAttestation` to produce
-    /// an internal Foretis (stamp-free, within trust boundary). `None` in
+    /// an internal ForetisRecord (stamp-free, within trust boundary). `None` in
     /// placeholder mode.
     pub chronomatter: Option<Arc<foretias_core::chronomatter::Chronomatter>>,
     /// Calendar's Ed25519 signing key, shared via Arc from Calendar.
@@ -289,7 +289,7 @@ async fn handle_task(worker_id: usize, task: CalendarTask, ctx: &WorkerContext) 
 /// 1. Obtain a `CommunerdetteLine` for `target_tbid` via Communerd
 /// 2. Fetch the target's latest chronon via `line.get_tick(u64::MAX)`
 /// 3. Internally stamp via Chronomatter (stamp-free, within trust boundary)
-/// 4. Sign the Foretis with Calendar's key
+/// 4. Sign the ForetisRecord with Calendar's key
 /// 5. Transmit the stamped content to the target via `line.stamp()`
 /// 6. Verify attestation was recorded on the target (best-effort)
 ///
@@ -381,7 +381,7 @@ fn stamp_and_sign_chronon_attestation(
                 worker_id,
                 target_tbid,
                 local_chronon = s.foretis.chronon_number,
-                "do_chronon_attestation: local Foretis produced"
+                "do_chronon_attestation: local ForetisRecord produced"
             )
         })?;
 
@@ -440,7 +440,7 @@ async fn verify_chronon_attestation_recorded(
     line: &crate::communerd::CommunerdetteLine,
     echo: &str,
     remote_foretis: &foretias_core::foretias::clean_auth::CleanAuthenticated<
-        foretias_core::foretias::tick::Foretis,
+        foretias_core::foretias::tick::ForetisRecord,
     >,
 ) {
     match line.get_tick(target_chronon).await {
@@ -484,7 +484,7 @@ async fn verify_chronon_attestation_recorded(
 /// 1. Obtain a `CommunerdetteLine` for `target_tbid` via Communerd
 /// 2. Fetch the target's latest epoch via `line.get_calendar_slice(u64::MAX, 1)`
 /// 3. Internally stamp via Chronomatter (stamp-free, within trust boundary)
-/// 4. Sign the Foretis with Calendar's key
+/// 4. Sign the ForetisRecord with Calendar's key
 /// 5. Transmit the stamped content to the target via `line.stamp()`
 ///
 /// Gracefully degrades when Communerd or Chronomatter are not wired into the
@@ -574,7 +574,7 @@ fn stamp_and_sign_epoch_attestation(
                 worker_id,
                 target_tbid,
                 local_chronon = s.foretis.chronon_number,
-                "do_epoch_attestation: local Foretis produced"
+                "do_epoch_attestation: local ForetisRecord produced"
             )
         })?;
 

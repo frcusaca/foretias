@@ -396,7 +396,7 @@ async fn jsonrpc_handler(
 
 /// Maximum plaintext size for an incoming JSON-RPC request line. Sized to
 /// admit Group 4b mirror-dump chunks (a small batch of ChrononRecords with
-/// real Foretis signatures) while still bounded against memory exhaustion.
+/// real ForetisRecord signatures) while still bounded against memory exhaustion.
 /// 8 MiB lets a 64-record chunk with PQC-sized signatures fit comfortably.
 const MAX_REQUEST_LINE_BYTES: usize = 8 * 1024 * 1024;
 

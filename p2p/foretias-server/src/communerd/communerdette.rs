@@ -26,7 +26,7 @@ use foretias_core::error::NodeError;
 use foretias_core::foretias::clean_auth::{
     CleanAuthError, CleanAuthenticated, UnverifiedSignatureEnvelope,
 };
-use foretias_core::foretias::tick::{ChrononRecord, Foretis};
+use foretias_core::foretias::tick::{ChrononRecord, ForetisRecord};
 use foretias_core::foretias::types::Tbid;
 #[cfg(test)]
 use parking_lot::Mutex;
@@ -930,7 +930,7 @@ pub enum CommunerdettePriority {
     Bulk,
     /// Stamp request, small calendar slice, mirror negotiation.
     Normal,
-    /// Fetch tick needed to verify a Foretis, mutual-attestation evidence.
+    /// Fetch tick needed to verify a ForetisRecord, mutual-attestation evidence.
     High,
     /// TBID binding proof, collision/dormancy control, shutdown-sensitive.
     Critical,
@@ -955,7 +955,7 @@ enum CommunerdetteCommand {
         content: Vec<u8>,
         echo: String,
         timeout: TokioDuration,
-        reply: oneshot::Sender<Result<CleanAuthenticated<Foretis>, CommunerdetteError>>,
+        reply: oneshot::Sender<Result<CleanAuthenticated<ForetisRecord>, CommunerdetteError>>,
     },
     /// Shutdown — drain or cancel pending work.
     Shutdown,
@@ -1200,11 +1200,11 @@ impl CommunerdetteExecutor {
         Ok(authenticated)
     }
 
-    /// Run Take 3 inbound gate for a Foretis reply.
+    /// Run Take 3 inbound gate for a ForetisRecord reply.
     ///
-    /// Parse as UnverifiedSignatureEnvelope<Foretis>, run full Take 3 inbound gate.
+    /// Parse as UnverifiedSignatureEnvelope<ForetisRecord>, run full Take 3 inbound gate.
     ///
-    /// Requires the authenticated ChrononRecord for the Foretis's chronon and the
+    /// Requires the authenticated ChrononRecord for the ForetisRecord's chronon and the
     /// original content bytes.  Callers must fetch the record via execute_tick first
     /// (Phase 11.1 — spec §11.5).
     fn gate_foretis(
@@ -1212,17 +1212,17 @@ impl CommunerdetteExecutor {
         raw: serde_json::Value,
         chronon_record: &CleanAuthenticated<ChrononRecord>,
         content: &[u8],
-    ) -> Result<CleanAuthenticated<Foretis>, CommunerdetteError> {
-        let unprocessed: Result<UnverifiedSignatureEnvelope<Foretis>, _> =
-            UnverifiedSignatureEnvelope::<Foretis>::from_json_value_v2(raw);
+    ) -> Result<CleanAuthenticated<ForetisRecord>, CommunerdetteError> {
+        let unprocessed: Result<UnverifiedSignatureEnvelope<ForetisRecord>, _> =
+            UnverifiedSignatureEnvelope::<ForetisRecord>::from_json_value_v2(raw);
         let unprocessed = unprocessed.map_err(|e| TransportError::Decode(e.to_string()))?;
 
-        // Structural validation (signature is now in the envelope, not Foretis)
+        // Structural validation (signature is now in the envelope, not ForetisRecord)
         {
             let f = unprocessed.inner();
             if f.chronon_number == 0 {
                 return Err(CommunerdetteError::Structural(
-                    "structurally invalid Foretis: chronon_number == 0".into(),
+                    "structurally invalid ForetisRecord: chronon_number == 0".into(),
                 ));
             }
         }
@@ -1237,16 +1237,16 @@ impl CommunerdetteExecutor {
 
         if !unprocessed.has_signatures() {
             return Err(CommunerdetteError::Structural(
-                "structurally invalid Foretis: no signatures in envelope".into(),
+                "structurally invalid ForetisRecord: no signatures in envelope".into(),
             ));
         }
 
-        // TODO(slow-key): if Foretis carries a slow-key signature, verify it here
+        // TODO(slow-key): if ForetisRecord carries a slow-key signature, verify it here
         // against target_tbid's slow public key. Reject if signature is present
         // but invalid. Absence is acceptable. Slow-key verification is currently
         // only required at channel-binding establishment; see Phase 12.0.
 
-        // TODO(slow-key): if Foretis carries a slow-key signature, verify it here
+        // TODO(slow-key): if ForetisRecord carries a slow-key signature, verify it here
         // against target_tbid's slow public key. Reject if signature is present
         // but invalid. Absence is acceptable. Slow-key verification is currently
         // only required at channel-binding establishment; see Phase 12.0.
@@ -1300,14 +1300,14 @@ impl Communerdette {
 
     /// Execute stamp with full Take 3 inbound gate (Phase 11.1 — spec §11.5).
     ///
-    /// After receiving the Foretis, we fetch the corresponding ChrononRecord so
+    /// After receiving the ForetisRecord, we fetch the corresponding ChrononRecord so
     /// gate_foretis can run the real fast-key signature check rather than from_trusted.
     async fn execute_stamp(
         executor: &CommunerdetteExecutor,
         content: Vec<u8>,
         echo: String,
         timeout: TokioDuration,
-    ) -> Result<CleanAuthenticated<Foretis>, CommunerdetteError> {
+    ) -> Result<CleanAuthenticated<ForetisRecord>, CommunerdetteError> {
         let content_hex = hex::encode(&content);
         let peer = executor.resolve_peer().await?;
 
@@ -1317,7 +1317,7 @@ impl Communerdette {
 
         // Parse just enough to get chronon_number before consuming raw
         let chronon_number = {
-            let tmp = UnverifiedSignatureEnvelope::<Foretis>::from_json_value_v2(raw.clone())
+            let tmp = UnverifiedSignatureEnvelope::<ForetisRecord>::from_json_value_v2(raw.clone())
                 .map_err(|e| TransportError::Decode(e.to_string()))?;
             *tmp.chronon_number()
         };
@@ -1907,8 +1907,8 @@ impl CommunerdetteLine {
 
     /// Stamp content on the remote TBID.
     ///
-    /// Returns a clean-authenticated Foretis after running the Take 3 inbound gate.
-    /// The Foretis's TBID is verified to match the target TBID.
+    /// Returns a clean-authenticated ForetisRecord after running the Take 3 inbound gate.
+    /// The ForetisRecord's TBID is verified to match the target TBID.
     ///
     /// This method asks the remote TBID to stamp supplied content;
     /// it does not sign local Calendar or Chronomatter messages.
@@ -1916,7 +1916,7 @@ impl CommunerdetteLine {
         &self,
         content: Vec<u8>,
         echo: String,
-    ) -> Result<CleanAuthenticated<Foretis>, CommunerdetteError> {
+    ) -> Result<CleanAuthenticated<ForetisRecord>, CommunerdetteError> {
         let timeout = TokioDuration::from_secs(15);
         let executor = CommunerdetteExecutor::new(
             Arc::clone(&self.host),
@@ -1989,13 +1989,13 @@ impl CommunerdetteLine {
     /// Serializes `content` using the specified algorithm and delegates to
     /// [`stamp`](Self::stamp). The remote TBID receives the serialized bytes
     /// (hex-encoded at the transport layer) and returns a
-    /// `CleanAuthenticated<Foretis>` through the Take 3 inbound gate.
+    /// `CleanAuthenticated<ForetisRecord>` through the Take 3 inbound gate.
     pub async fn stamp_chronon(
         &self,
         content: &[u8],
         serialization: foretias_core::foretias::tick::SerializationAlgorithm,
         echo: String,
-    ) -> Result<CleanAuthenticated<Foretis>, CommunerdetteError> {
+    ) -> Result<CleanAuthenticated<ForetisRecord>, CommunerdetteError> {
         let serialized = serialization.serialize(content).map_err(|e| {
             CommunerdetteError::Structural(format!(
                 "{} serialization failed: {e}",
@@ -2453,8 +2453,8 @@ mod tests {
         }
     }
 
-    fn make_test_foretis(tbid: &Tbid) -> Foretis {
-        Foretis {
+    fn make_test_foretis(tbid: &Tbid) -> ForetisRecord {
+        ForetisRecord {
             chronon_number: 1,
             content_hash: FTByteArray::from([5u8; 32]),
             tbid: *tbid,
@@ -2652,7 +2652,7 @@ mod tests {
             None,
         );
 
-        let bad_foretis = Foretis {
+        let bad_foretis = ForetisRecord {
             chronon_number: 0,
             content_hash: FTByteArray::from([0u8; 32]),
             tbid,
@@ -2692,7 +2692,7 @@ mod tests {
             None,
         );
 
-        let bad_foretis = Foretis {
+        let bad_foretis = ForetisRecord {
             chronon_number: 1,
             content_hash: FTByteArray::from([0u8; 32]),
             tbid,
@@ -2732,7 +2732,7 @@ mod tests {
             None,
         );
 
-        let bad_foretis = Foretis {
+        let bad_foretis = ForetisRecord {
             chronon_number: 1,
             content_hash: FTByteArray::from([0u8; 32]),
             tbid,
@@ -2805,10 +2805,10 @@ mod tests {
         let content = b"valid foretis content" as &[u8];
         let chronon_number: u64 = 1;
 
-        // v2: sign the postcard-encoded Foretis (not tbid || chronon_number || content)
+        // v2: sign the postcard-encoded ForetisRecordRecord (not tbid || chronon_number || content)
         let content_hash = crypto.sha256(content).expect("sha256");
 
-        let foretis_for_signing = Foretis {
+        let foretis_for_signing = ForetisRecord {
             chronon_number,
             content_hash: FTByteArray::from(content_hash.bytes),
             tbid: target_tbid,
@@ -2840,7 +2840,7 @@ mod tests {
             tbid: target_tbid,
         });
 
-        let foretis = Foretis {
+        let foretis = ForetisRecord {
             chronon_number,
             content_hash: FTByteArray::from(content_hash.bytes),
             tbid: target_tbid,
@@ -2871,7 +2871,7 @@ mod tests {
         let result = executor.gate_foretis(json, &chronon_record, content);
         assert!(
             result.is_ok(),
-            "gate_foretis must accept valid signed Foretis: {:?}",
+            "gate_foretis must accept valid signed ForetisRecord: {:?}",
             result
         );
         let ca = result.unwrap();
@@ -2913,7 +2913,7 @@ mod tests {
         });
 
         // Wrong signature — 64 bytes of garbage, not a real Ed25519 signature
-        let foretis = Foretis {
+        let foretis = ForetisRecord {
             chronon_number,
             content_hash: FTByteArray::from(content_hash.bytes),
             tbid: target_tbid,
@@ -2945,7 +2945,7 @@ mod tests {
         let result = executor.gate_foretis(json, &chronon_record, content);
         assert!(
             matches!(result, Err(CommunerdetteError::CleanAuth(_))),
-            "gate_foretis must reject Foretis with wrong signature: {:?}",
+            "gate_foretis must reject ForetisRecord with wrong signature: {:?}",
             result
         );
     }
@@ -3299,7 +3299,7 @@ mod tests {
     }
 
     /// Phase 11.1 — gate_foretis now performs full fast-key signature verification.
-    /// A Foretis reply with matching TBID but garbage signature bytes must be
+    /// A ForetisRecord reply with matching TBID but garbage signature bytes must be
     /// rejected with CleanAuth error. (Previously gate_foretis used from_trusted
     /// and silently accepted bad signatures — that was the known correctness bug.)
     #[test]
@@ -3333,7 +3333,7 @@ mod tests {
             tbid: target_tbid,
         });
 
-        let foretis_bad_sig = Foretis {
+        let foretis_bad_sig = ForetisRecord {
             chronon_number: 1,
             content_hash: FTByteArray::from(content_hash.bytes),
             tbid: target_tbid,
@@ -3365,7 +3365,7 @@ mod tests {
         let result = executor.gate_foretis(json, &chronon_record, content);
         assert!(
             matches!(result, Err(CommunerdetteError::CleanAuth(_))),
-            "gate_foretis must reject Foretis with garbage signature: {:?}",
+            "gate_foretis must reject ForetisRecord with garbage signature: {:?}",
             result
         );
     }
@@ -3669,10 +3669,10 @@ mod tests {
         let content = b"stamp-test-content" as &[u8];
         let chronon_number: u64 = 1;
 
-        // v2: sign the postcard-encoded Foretis
+        // v2: sign the postcard-encoded ForetisRecord
         let content_hash = crypto.sha256(content).expect("sha256");
 
-        let foretis_for_signing = Foretis {
+        let foretis_for_signing = ForetisRecord {
             chronon_number,
             content_hash: FTByteArray::from(content_hash.bytes),
             tbid,
@@ -3727,19 +3727,19 @@ mod tests {
 
         assert!(
             result.is_ok(),
-            "execute_stamp must succeed with valid signed Foretis: {:?}",
+            "execute_stamp must succeed with valid signed ForetisRecord: {:?}",
             result
         );
         let ca = result.unwrap();
         assert_eq!(
             *ca.tbid(),
             tbid,
-            "returned Foretis must carry the target TBID"
+            "returned ForetisRecord must carry the target TBID"
         );
         assert_eq!(*ca.chronon_number(), chronon_number);
         assert!(
             ca.is_authenticated_quickly(),
-            "returned Foretis must be authenticated"
+            "returned ForetisRecord must be authenticated"
         );
         assert!(ca.is_authenticated_quickly());
     }
@@ -4442,10 +4442,10 @@ mod tests {
         let target_tbid = Tbid::from_raw(tbid_bytes);
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
 
-        // Build the Foretis that L3's execute_stamp will receive
+        // Build the ForetisRecord that L3's execute_stamp will receive
         let content = b"liveness-probe";
         let content_hash = crypto.sha256(content).expect("sha256");
-        let foretis_for_signing = Foretis {
+        let foretis_for_signing = ForetisRecord {
             chronon_number: 1,
             content_hash: FTByteArray::from(content_hash.bytes),
             tbid: target_tbid,
@@ -4502,7 +4502,10 @@ mod tests {
         // L3 doesn't write to flags — verify the task ran without panicking
         cancel.cancel();
         let result = handle.await;
-        assert!(result.is_ok(), "L3 task must not panic with valid Foretis");
+        assert!(
+            result.is_ok(),
+            "L3 task must not panic with valid ForetisRecord"
+        );
     }
 
     #[tokio::test]
@@ -4719,7 +4722,7 @@ mod tests {
         let chronon_number: u64 = 1;
 
         let content_hash = crypto.sha256(&serialized).expect("sha256");
-        let foretis_for_signing = Foretis {
+        let foretis_for_signing = ForetisRecord {
             chronon_number,
             content_hash: FTByteArray::from(content_hash.bytes),
             tbid,
@@ -4801,7 +4804,7 @@ mod tests {
         let chronon_number: u64 = 1;
 
         let content_hash = crypto.sha256(&serialized).expect("sha256");
-        let foretis_for_signing = Foretis {
+        let foretis_for_signing = ForetisRecord {
             chronon_number,
             content_hash: FTByteArray::from(content_hash.bytes),
             tbid,

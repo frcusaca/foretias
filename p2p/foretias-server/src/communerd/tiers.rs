@@ -15,7 +15,7 @@ use super::Communerd;
 use foretias_core::config::CommunerdConfig;
 use foretias_core::error::NodeError;
 use foretias_core::foretias::clean_auth::CleanAuthenticated;
-use foretias_core::foretias::tick::{ChrononRecord, Foretis};
+use foretias_core::foretias::tick::{ChrononRecord, ForetisRecord};
 use libp2p;
 
 /// Server tier — contains CommunerdReader capabilities + TCP listener.
@@ -44,13 +44,13 @@ impl CommunerdServer {
         self.inner.start_liveness_pings();
     }
 
-    /// Route a stamp through Communerdette — returns `CleanAuthenticated<Foretis>`.
+    /// Route a stamp through Communerdette — returns `CleanAuthenticated<ForetisRecord>`.
     pub async fn route_stamp(
         &self,
         target_tbid: &str,
         content_hex: &str,
         echo: &str,
-    ) -> Result<CleanAuthenticated<Foretis>, CommunerdetteError> {
+    ) -> Result<CleanAuthenticated<ForetisRecord>, CommunerdetteError> {
         self.inner.route_stamp(target_tbid, content_hex, echo).await
     }
 
@@ -61,7 +61,7 @@ impl CommunerdServer {
         content: &[u8],
         serialization: foretias_core::foretias::tick::SerializationAlgorithm,
         echo: &str,
-    ) -> Result<CleanAuthenticated<Foretis>, CommunerdetteError> {
+    ) -> Result<CleanAuthenticated<ForetisRecord>, CommunerdetteError> {
         self.inner
             .stamp_chronon(target_tbid, content, serialization, echo)
             .await
@@ -183,13 +183,13 @@ impl CommunerdP2P {
         self.server.start_liveness_pings();
     }
 
-    /// Route a stamp through Communerdette — returns `CleanAuthenticated<Foretis>`.
+    /// Route a stamp through Communerdette — returns `CleanAuthenticated<ForetisRecord>`.
     pub async fn route_stamp(
         &self,
         target_tbid: &str,
         content_hex: &str,
         echo: &str,
-    ) -> Result<CleanAuthenticated<Foretis>, CommunerdetteError> {
+    ) -> Result<CleanAuthenticated<ForetisRecord>, CommunerdetteError> {
         self.server
             .route_stamp(target_tbid, content_hex, echo)
             .await
@@ -202,7 +202,7 @@ impl CommunerdP2P {
         content: &[u8],
         serialization: foretias_core::foretias::tick::SerializationAlgorithm,
         echo: &str,
-    ) -> Result<CleanAuthenticated<Foretis>, CommunerdetteError> {
+    ) -> Result<CleanAuthenticated<ForetisRecord>, CommunerdetteError> {
         self.server
             .stamp_chronon(target_tbid, content, serialization, echo)
             .await

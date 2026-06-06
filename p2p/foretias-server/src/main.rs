@@ -87,7 +87,7 @@ enum Commands {
         #[arg(short, long, default_value = "127.0.0.1:4001")]
         server: String,
     },
-    /// Verify content against a Foretis (server-side verification)
+    /// Verify content against a ForetisRecord (server-side verification)
     Verify {
         /// Message to verify
         #[arg(short, long)]
@@ -95,10 +95,10 @@ enum Commands {
         /// Read message from file
         #[arg(short = 'M', long = "message-file")]
         message_file: Option<String>,
-        /// Foretis JSON inline
+        /// ForetisRecord JSON inline
         #[arg(short = 'f', long)]
         foretis: Option<String>,
-        /// Read Foretis from file
+        /// Read ForetisRecord from file
         #[arg(short = 'F', long = "foretis-file")]
         foretis_file: Option<String>,
         /// Signature (hex-encoded) for v2 wire format
@@ -122,10 +122,10 @@ enum Commands {
         /// Read message from file
         #[arg(short = 'M', long = "message-file")]
         message_file: Option<String>,
-        /// Foretis JSON inline
+        /// ForetisRecord JSON inline
         #[arg(short = 'f', long)]
         foretis: Option<String>,
-        /// Read Foretis from file
+        /// Read ForetisRecord from file
         #[arg(short = 'F', long = "foretis-file")]
         foretis_file: Option<String>,
         /// Write proof output to file (default: stdout)
@@ -563,7 +563,7 @@ async fn cmd_verify(config: VerifyConfig) -> Result<(), Box<dyn std::error::Erro
     let content = read_message(config.message, config.message_file)?;
     let stamp_str = read_foretis(config.foretis, config.foretis_file)?;
     let stamp_obj: serde_json::Value = serde_json::from_str(&stamp_str)?;
-    let foretis: foretias_core::foretias::tick::Foretis = serde_json::from_value(
+    let foretis: foretias_core::foretias::tick::ForetisRecord = serde_json::from_value(
         stamp_obj
             .get("foretis")
             .cloned()
@@ -619,7 +619,7 @@ async fn cmd_verify_with_proof(
     let content = read_message(message, message_file)?;
     let stamp_str = read_foretis(foretis, foretis_file)?;
     let stamp_obj: serde_json::Value = serde_json::from_str(&stamp_str)?;
-    let foretis: foretias_core::foretias::tick::Foretis = serde_json::from_value(
+    let foretis: foretias_core::foretias::tick::ForetisRecord = serde_json::from_value(
         stamp_obj
             .get("foretis")
             .cloned()

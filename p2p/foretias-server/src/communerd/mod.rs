@@ -38,7 +38,7 @@ use foretias_core::foretias::clean_auth::{
     CleanAuthenticated, CleanFullyAuthenticated, UnverifiedSignatureEnvelope,
 };
 use foretias_core::foretias::family_record::FamilyRecord;
-use foretias_core::foretias::tick::{ChrononRecord, Foretis};
+use foretias_core::foretias::tick::{ChrononRecord, ForetisRecord};
 use foretias_core::foretias::types::Tbid;
 
 use self::communerdette::Communerdette;
@@ -458,7 +458,7 @@ impl Communerd {
 
     /// Route a stamp request through Communerdette for the target TBID.
     ///
-    /// Returns `CleanAuthenticated<Foretis>` — fully gated through the Take 3
+    /// Returns `CleanAuthenticated<ForetisRecord>` — fully gated through the Take 3
     /// inbound pipeline. Old direct-transport path was removed in Phase 4.3.
     pub async fn route_stamp(
         &self,
@@ -466,7 +466,7 @@ impl Communerd {
         content_hex: &str,
         echo: &str,
     ) -> Result<
-        foretias_core::foretias::clean_auth::CleanAuthenticated<Foretis>,
+        foretias_core::foretias::clean_auth::CleanAuthenticated<ForetisRecord>,
         communerdette::CommunerdetteError,
     > {
         let content = hex::decode(content_hex).map_err(|e| {
@@ -483,7 +483,7 @@ impl Communerd {
     /// Route a stamp request through Communerdette with serialization control.
     ///
     /// Serializes `content` using the specified algorithm, then routes through
-    /// CommunerdetteLine. Returns `CleanAuthenticated<Foretis>` through the
+    /// CommunerdetteLine. Returns `CleanAuthenticated<ForetisRecord>` through the
     /// Take 3 inbound gate.
     pub async fn stamp_chronon(
         &self,
@@ -492,7 +492,7 @@ impl Communerd {
         serialization: foretias_core::foretias::tick::SerializationAlgorithm,
         echo: &str,
     ) -> Result<
-        foretias_core::foretias::clean_auth::CleanAuthenticated<Foretis>,
+        foretias_core::foretias::clean_auth::CleanAuthenticated<ForetisRecord>,
         communerdette::CommunerdetteError,
     > {
         let tbid = Tbid::from_hex(target_tbid).map_err(|e| {

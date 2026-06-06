@@ -15,9 +15,9 @@ use std::time::Duration;
 use tokio::io::AsyncWriteExt;
 use tokio::task::JoinHandle;
 
-use foretias_server::server::TimeFamilyServer;
 use foretias_core::config::{CommunerdConfig, MutualAttestConfig};
 use foretias_server::communerd::transport::PeerTransport;
+use foretias_server::server::TimeFamilyServer;
 
 // ── Port allocation ───────────────────────────────────────────────────────────
 
@@ -62,10 +62,10 @@ pub struct ToppliPeerConfig {
 impl Default for ToppliPeerConfig {
     fn default() -> Self {
         Self {
-            chronon_ns:           100_000_000, // 100 ms
-            peers:                vec![],
-            namespace:            "toppoli".to_string(),
-            with_communerd:       false,
+            chronon_ns: 100_000_000, // 100 ms
+            peers: vec![],
+            namespace: "toppoli".to_string(),
+            with_communerd: false,
             request_timeout_secs: 5,
         }
     }
@@ -75,16 +75,18 @@ impl Default for ToppliPeerConfig {
 
 /// A peer that has been started.
 pub struct ToppliPeer {
-    pub idx:    usize,
+    pub idx: usize,
     /// Bound TCP address, e.g. `"127.0.0.1:51234"`.
-    pub addr:   String,
+    pub addr: String,
     /// Direct access to the server for introspection and method calls.
     pub server: Arc<TimeFamilyServer>,
-    handle:     JoinHandle<()>,
+    handle: JoinHandle<()>,
 }
 
 impl ToppliPeer {
-    pub fn server(&self) -> &Arc<TimeFamilyServer> { &self.server }
+    pub fn server(&self) -> &Arc<TimeFamilyServer> {
+        &self.server
+    }
 }
 
 // ── Harness ───────────────────────────────────────────────────────────────────
@@ -98,9 +100,9 @@ pub struct ToppliHarness {
     /// Per-slot configuration. Never removed; updated while stopped.
     configs: Vec<ToppliPeerConfig>,
     /// Pre-allocated addresses (`"127.0.0.1:<port>"`), indexed by slot.
-    addrs:   Vec<String>,
+    addrs: Vec<String>,
     /// Running peer handles. `None` means the slot exists but is not running.
-    peers:   Vec<Option<ToppliPeer>>,
+    peers: Vec<Option<ToppliPeer>>,
 }
 
 impl ToppliHarness {
@@ -114,7 +116,7 @@ impl ToppliHarness {
         let addrs: Vec<String> = ports.iter().map(|p| format!("127.0.0.1:{p}")).collect();
         Self {
             configs: vec![config; count],
-            peers:   (0..count).map(|_| None).collect(),
+            peers: (0..count).map(|_| None).collect(),
             addrs,
         }
     }
@@ -140,7 +142,9 @@ impl ToppliHarness {
         );
         let all = self.addrs.clone();
         for (idx, cfg) in self.configs.iter_mut().enumerate() {
-            cfg.peers = all.iter().enumerate()
+            cfg.peers = all
+                .iter()
+                .enumerate()
                 .filter(|(i, _)| *i != idx)
                 .map(|(_, a)| a.clone())
                 .collect();
@@ -166,7 +170,7 @@ impl ToppliHarness {
     pub async fn start_peer(&mut self, idx: usize) {
         assert!(self.peers[idx].is_none(), "peer {idx} is already running");
         let addr = self.addrs[idx].clone();
-        let cfg  = &self.configs[idx];
+        let cfg = &self.configs[idx];
 
         let server: Arc<TimeFamilyServer> = if cfg.with_communerd {
             Arc::new(
@@ -174,23 +178,25 @@ impl ToppliHarness {
                     .expect("create server")
                     .with_communerd(CommunerdConfig {
                         mutual_attest: MutualAttestConfig {
-                            peers:                cfg.peers.clone(),
-                            every_n_chronons:     1,
+                            peers: cfg.peers.clone(),
+                            every_n_chronons: 1,
                             request_timeout_secs: cfg.request_timeout_secs,
                         },
                         ..Default::default()
                     }),
             )
         } else {
-            Arc::new(
-                TimeFamilyServer::new(&addr, cfg.chronon_ns)
-                    .expect("create server"),
-            )
+            Arc::new(TimeFamilyServer::new(&addr, cfg.chronon_ns).expect("create server"))
         };
 
         server.start_daemon_arc();
         let handle = Arc::clone(&server).start().expect("start TCP");
-        self.peers[idx] = Some(ToppliPeer { idx, addr, server, handle });
+        self.peers[idx] = Some(ToppliPeer {
+            idx,
+            addr,
+            server,
+            handle,
+        });
     }
 
     /// Stop a single peer.
@@ -246,7 +252,9 @@ impl ToppliHarness {
     }
 
     /// Total number of slots (running + stopped).
-    pub fn slot_count(&self) -> usize { self.configs.len() }
+    pub fn slot_count(&self) -> usize {
+        self.configs.len()
+    }
 
     /// Iterate over all running peers.
     pub fn running_peers(&self) -> impl Iterator<Item = &ToppliPeer> {
@@ -294,8 +302,12 @@ impl ToppliHarness {
     ) -> bool {
         let deadline = tokio::time::Instant::now() + Duration::from_millis(timeout_ms);
         loop {
-            if predicate(self) { return true; }
-            if tokio::time::Instant::now() >= deadline { return false; }
+            if predicate(self) {
+                return true;
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return false;
+            }
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
     }
@@ -354,7 +366,10 @@ pub struct ToppoliFBProbityTest {
 
 impl ToppoliFBProbityTest {
     pub async fn setup(peers: usize) -> Self {
-        let cfg = ToppliPeerConfig { with_communerd: true, ..Default::default() };
+        let cfg = ToppliPeerConfig {
+            with_communerd: true,
+            ..Default::default()
+        };
         let mut harness = ToppliHarness::with_peers(peers, cfg);
         harness.topology_full_mesh();
         harness.start_all().await;
@@ -376,7 +391,10 @@ pub struct ToppliLivenessTest {
 
 impl ToppliLivenessTest {
     pub async fn setup(peers: usize) -> Self {
-        let cfg = ToppliPeerConfig { with_communerd: true, ..Default::default() };
+        let cfg = ToppliPeerConfig {
+            with_communerd: true,
+            ..Default::default()
+        };
         let mut harness = ToppliHarness::with_peers(peers, cfg);
         harness.topology_full_mesh();
         harness.start_all().await;
@@ -400,7 +418,10 @@ pub struct ToppliGNFTest {
 
 impl ToppliGNFTest {
     pub async fn setup_ring(peers: usize) -> Self {
-        let cfg = ToppliPeerConfig { with_communerd: true, ..Default::default() };
+        let cfg = ToppliPeerConfig {
+            with_communerd: true,
+            ..Default::default()
+        };
         let mut harness = ToppliHarness::with_peers(peers, cfg);
         harness.topology_ring();
         harness.start_all().await;
@@ -540,14 +561,24 @@ async fn toppoli_basic_fixture_setup_teardown() {
 async fn toppoli_fb_gossip() {
     let f = ToppoliFBProbityTest::setup(2).await;
 
-    let ok = f.harness.wait_until(|h| h.running_count() == 2, 5_000).await;
+    let ok = f
+        .harness
+        .wait_until(|h| h.running_count() == 2, 5_000)
+        .await;
     assert!(ok, "peers should be running");
 
     let peer0_tbid_hex = f.harness.peer(0).server.chronomatter().get_tbid().to_hex();
     let peer1_tbid_hex = f.harness.peer(1).server.chronomatter().get_tbid().to_hex();
-    assert_ne!(peer0_tbid_hex, peer1_tbid_hex, "peers must have distinct TBIDs");
+    assert_ne!(
+        peer0_tbid_hex, peer1_tbid_hex,
+        "peers must have distinct TBIDs"
+    );
 
-    let store_1 = f.harness.peer(1).server.communerd()
+    let store_1 = f
+        .harness
+        .peer(1)
+        .server
+        .communerd()
         .expect("peer 1 must have communerd")
         .probity_store();
 
@@ -560,9 +591,13 @@ async fn toppoli_fb_gossip() {
         "toppoli_fb_gossip: waiting for FB report from peer 0 to appear in peer 1's ProbityStore"
     );
 
-    let ok = f.harness.wait_until(|_| {
-        store_1.report_count(&peer1_tbid_hex) > initial_count
-    }, 8_000).await;
+    let ok = f
+        .harness
+        .wait_until(
+            |_| store_1.report_count(&peer1_tbid_hex) > initial_count,
+            8_000,
+        )
+        .await;
 
     if ok {
         let final_count = store_1.report_count(&peer1_tbid_hex);
@@ -609,13 +644,13 @@ async fn raw_json_rpc(
                 let stream = tokio::net::TcpStream::connect(&addr)
                     .await
                     .map_err(|e| format!("connect: {e}"))?;
-                let (_pub_key, priv_key) = foretias_core::core::identity::generate_ed25519_keypair()
-                    .map_err(|e| format!("keygen: {e}"))?;
-                let (mut session, stream) = foretias_core::noise::noise_handshake(
-                    stream, &priv_key.bytes, None, true,
-                )
-                .await
-                .map_err(|e| format!("noise: {e}"))?;
+                let (_pub_key, priv_key) =
+                    foretias_core::core::identity::generate_ed25519_keypair()
+                        .map_err(|e| format!("keygen: {e}"))?;
+                let (mut session, stream) =
+                    foretias_core::noise::noise_handshake(stream, &priv_key.bytes, None, true)
+                        .await
+                        .map_err(|e| format!("noise: {e}"))?;
 
                 let (reader_half, mut writer_half) = stream.into_split();
                 let mut reader = tokio::io::BufReader::new(reader_half);
@@ -626,38 +661,52 @@ async fn raw_json_rpc(
                     "params": params,
                     "id": 1,
                 });
-                let request_bytes = serde_json::to_vec(&request)
-                    .map_err(|e| format!("serialize: {e}"))?;
+                let request_bytes =
+                    serde_json::to_vec(&request).map_err(|e| format!("serialize: {e}"))?;
 
-                let ct = session.send(&request_bytes)
+                let ct = session
+                    .send(&request_bytes)
                     .map_err(|e| format!("noise send: {e}"))?;
                 let ct_len = (ct.len() as u32).to_le_bytes();
-                writer_half.write_all(&ct_len).await
+                writer_half
+                    .write_all(&ct_len)
+                    .await
                     .map_err(|e| format!("write len: {e}"))?;
-                writer_half.write_all(&ct).await
+                writer_half
+                    .write_all(&ct)
+                    .await
                     .map_err(|e| format!("write body: {e}"))?;
-                writer_half.flush().await
+                writer_half
+                    .flush()
+                    .await
                     .map_err(|e| format!("flush: {e}"))?;
 
                 let mut len_buf = [0u8; 4];
-                tokio::io::AsyncReadExt::read_exact(&mut reader, &mut len_buf).await
+                tokio::io::AsyncReadExt::read_exact(&mut reader, &mut len_buf)
+                    .await
                     .map_err(|e| format!("read len: {e}"))?;
                 let resp_len = u32::from_le_bytes(len_buf) as usize;
                 let mut resp_buf = vec![0u8; resp_len];
-                tokio::io::AsyncReadExt::read_exact(&mut reader, &mut resp_buf).await
+                tokio::io::AsyncReadExt::read_exact(&mut reader, &mut resp_buf)
+                    .await
                     .map_err(|e| format!("read body: {e}"))?;
 
-                let plaintext = session.recv(&resp_buf)
+                let plaintext = session
+                    .recv(&resp_buf)
                     .map_err(|e| format!("noise recv: {e}"))?;
-                let response: serde_json::Value = serde_json::from_slice(&plaintext)
-                    .map_err(|e| format!("deserialize: {e}"))?;
+                let response: serde_json::Value =
+                    serde_json::from_slice(&plaintext).map_err(|e| format!("deserialize: {e}"))?;
 
                 if let Some(err) = response.get("error") {
                     let msg = err.get("message").and_then(|m| m.as_str()).unwrap_or("?");
-                    return Err(format!("rpc error {code}: {msg}",
-                        code = err.get("code").and_then(|c| c.as_i64()).unwrap_or(-1)));
+                    return Err(format!(
+                        "rpc error {code}: {msg}",
+                        code = err.get("code").and_then(|c| c.as_i64()).unwrap_or(-1)
+                    ));
                 }
-                response.get("result").cloned()
+                response
+                    .get("result")
+                    .cloned()
                     .ok_or_else(|| "missing result".to_string())
             })
             .await
@@ -678,16 +727,12 @@ async fn toppoli_l1_ping_round_trip() {
     let peer1_addr = f.harness.peer(1).addr.clone();
     let transport = foretias_server::communerd::json_rpc_transport::JsonRpcTransport::new(2);
     let peer = foretias_server::communerd::transport::PeerAddr {
-        json_rpc:  peer1_addr,
-        peer_id:   None,
+        json_rpc: peer1_addr,
+        peer_id: None,
         last_seen_ns: 0,
     };
 
-    let result = tokio::time::timeout(
-        Duration::from_secs(2),
-        transport.ping(&peer),
-    )
-    .await;
+    let result = tokio::time::timeout(Duration::from_secs(2), transport.ping(&peer)).await;
 
     assert!(result.is_ok(), "ping timed out after 2 s");
     assert!(result.unwrap().is_ok(), "ping returned transport error");
@@ -708,7 +753,10 @@ async fn toppoli_l2_auth_ping() {
     let peer0_tbid = f.harness.peer(0).server.get_tbid();
     let peer1_addr = f.harness.peer(1).addr.clone();
 
-    let ok = f.harness.wait_until(|h| h.running_count() == 2, 5_000).await;
+    let ok = f
+        .harness
+        .wait_until(|h| h.running_count() == 2, 5_000)
+        .await;
     assert!(ok, "peers should be running");
 
     let challenge_hex = hex::encode([0x42u8; 32]);
@@ -721,18 +769,31 @@ async fn toppoli_l2_auth_ping() {
             "requester_tbid": requester_tbid_hex,
         }),
         5,
-    ).await;
+    )
+    .await;
 
     tracing::info!(result = ?result, "toppoli_l2_auth_ping: authenticated_ping response");
 
     match result {
         Ok(v) => {
             // Response should be a JSON object with responder_tbid, challenge_echo, signature
-            assert!(v.is_object(), "authenticated_ping must return a JSON object");
+            assert!(
+                v.is_object(),
+                "authenticated_ping must return a JSON object"
+            );
             let obj = v.as_object().unwrap();
-            assert!(obj.contains_key("responder_tbid"), "response must have responder_tbid");
-            assert!(obj.contains_key("challenge_echo"), "response must have challenge_echo");
-            assert!(obj.contains_key("signature"), "response must have signature");
+            assert!(
+                obj.contains_key("responder_tbid"),
+                "response must have responder_tbid"
+            );
+            assert!(
+                obj.contains_key("challenge_echo"),
+                "response must have challenge_echo"
+            );
+            assert!(
+                obj.contains_key("signature"),
+                "response must have signature"
+            );
             tracing::info!("toppoli_l2_auth_ping: handler responded correctly");
         }
         Err(e) => {
@@ -757,7 +818,10 @@ async fn toppoli_l2_auth_ping() {
 async fn toppoli_gnf_churn() {
     let mut f = ToppliGNFTest::setup_ring(12).await;
 
-    let ok = f.harness.wait_until(|h| h.running_count() == 12, 5_000).await;
+    let ok = f
+        .harness
+        .wait_until(|h| h.running_count() == 12, 5_000)
+        .await;
     assert!(ok, "all 12 peers must start within 5 s");
 
     let tbids: Vec<String> = (0..12)
@@ -771,7 +835,11 @@ async fn toppoli_gnf_churn() {
     for idx in 0..3 {
         f.harness.stop_peer(idx, 50).await;
     }
-    assert_eq!(f.harness.running_count(), 9, "9 peers should remain after stopping 3");
+    assert_eq!(
+        f.harness.running_count(),
+        9,
+        "9 peers should remain after stopping 3"
+    );
 
     tokio::time::sleep(Duration::from_secs(1)).await;
 
@@ -780,14 +848,21 @@ async fn toppoli_gnf_churn() {
         f.harness.restart_peer(idx).await;
     }
 
-    let ok = f.harness.wait_until(|h| h.running_count() == 12, 10_000).await;
+    let ok = f
+        .harness
+        .wait_until(|h| h.running_count() == 12, 10_000)
+        .await;
     assert!(ok, "all 12 peers must recover within 10 s of restart");
 
     let post_tbids: Vec<String> = (0..12)
         .map(|i| f.harness.peer(i).server.get_tbid().to_hex())
         .collect();
     let post_set: std::collections::HashSet<&str> = post_tbids.iter().map(|s| s.as_str()).collect();
-    assert_eq!(post_set.len(), 12, "all recovered peers must have distinct TBIDs");
+    assert_eq!(
+        post_set.len(),
+        12,
+        "all recovered peers must have distinct TBIDs"
+    );
 
     f.teardown().await;
 }
@@ -808,14 +883,16 @@ async fn toppoli_gnf_churn() {
 async fn toppoli_channel_bind() {
     let f = ToppoliFBProbityTest::setup(2).await;
 
-    let ok = f.harness.wait_until(|h| h.running_count() == 2, 5_000).await;
+    let ok = f
+        .harness
+        .wait_until(|h| h.running_count() == 2, 5_000)
+        .await;
     assert!(ok, "peers should be running within 5 s");
 
     let peer0 = f.harness.peer(0).server();
     let peer1_tbid = f.harness.peer(1).server().get_tbid();
 
-    let communerd_0 = peer0.communerd()
-        .expect("peer 0 must have communerd");
+    let communerd_0 = peer0.communerd().expect("peer 0 must have communerd");
     let line = communerd_0.line_for_tbid(peer1_tbid);
 
     tracing::info!(
@@ -824,14 +901,20 @@ async fn toppoli_channel_bind() {
         "toppoli_channel_bind: polling binding status on peer 0 → peer 1"
     );
 
-    let ok = f.harness.wait_until(|_| {
-        let summary = line.status_summary();
-        matches!(
-            summary.binding,
-            foretias_server::communerd::TbidBindingStatus::ClaimedByDht { .. }
-                | foretias_server::communerd::TbidBindingStatus::Verified { .. }
+    let ok = f
+        .harness
+        .wait_until(
+            |_| {
+                let summary = line.status_summary();
+                matches!(
+                    summary.binding,
+                    foretias_server::communerd::TbidBindingStatus::ClaimedByDht { .. }
+                        | foretias_server::communerd::TbidBindingStatus::Verified { .. }
+                )
+            },
+            30_000,
         )
-    }, 30_000).await;
+        .await;
 
     if ok {
         let summary = line.status_summary();
@@ -868,12 +951,14 @@ async fn toppoli_channel_bind() {
 async fn toppoli_channel_bind_two_channels() {
     let f = ToppoliFBProbityTest::setup(3).await;
 
-    let ok = f.harness.wait_until(|h| h.running_count() == 3, 5_000).await;
+    let ok = f
+        .harness
+        .wait_until(|h| h.running_count() == 3, 5_000)
+        .await;
     assert!(ok, "3 peers should be running within 5 s");
 
     let peer0 = f.harness.peer(0).server();
-    let communerd_0 = peer0.communerd()
-        .expect("peer 0 must have communerd");
+    let communerd_0 = peer0.communerd().expect("peer 0 must have communerd");
 
     let peer1_tbid = f.harness.peer(1).server().get_tbid();
     let peer2_tbid = f.harness.peer(2).server().get_tbid();
@@ -888,23 +973,35 @@ async fn toppoli_channel_bind_two_channels() {
         "toppoli_channel_bind_two_channels: polling two independent bindings"
     );
 
-    let ok_01 = f.harness.wait_until(|_| {
-        let s = line_01.status_summary();
-        matches!(
-            s.binding,
-            foretias_server::communerd::TbidBindingStatus::ClaimedByDht { .. }
-                | foretias_server::communerd::TbidBindingStatus::Verified { .. }
+    let ok_01 = f
+        .harness
+        .wait_until(
+            |_| {
+                let s = line_01.status_summary();
+                matches!(
+                    s.binding,
+                    foretias_server::communerd::TbidBindingStatus::ClaimedByDht { .. }
+                        | foretias_server::communerd::TbidBindingStatus::Verified { .. }
+                )
+            },
+            30_000,
         )
-    }, 30_000).await;
+        .await;
 
-    let ok_02 = f.harness.wait_until(|_| {
-        let s = line_02.status_summary();
-        matches!(
-            s.binding,
-            foretias_server::communerd::TbidBindingStatus::ClaimedByDht { .. }
-                | foretias_server::communerd::TbidBindingStatus::Verified { .. }
+    let ok_02 = f
+        .harness
+        .wait_until(
+            |_| {
+                let s = line_02.status_summary();
+                matches!(
+                    s.binding,
+                    foretias_server::communerd::TbidBindingStatus::ClaimedByDht { .. }
+                        | foretias_server::communerd::TbidBindingStatus::Verified { .. }
+                )
+            },
+            30_000,
         )
-    }, 30_000).await;
+        .await;
 
     if ok_01 {
         let s = line_01.status_summary();
@@ -930,7 +1027,8 @@ async fn toppoli_channel_bind_two_channels() {
     // summary warning.  Do NOT panic: this documents the integration gap.
     if !ok_01 || !ok_02 {
         tracing::warn!(
-            ok_01, ok_02,
+            ok_01,
+            ok_02,
             "toppoli_channel_bind_two_channels: one or both channels failed to bind — \
              channel bind task may not be wired yet (integration gap)"
         );
@@ -953,7 +1051,10 @@ async fn toppoli_l2_verified() {
     let peer0_tbid = f.harness.peer(0).server.get_tbid();
     let peer1_addr = f.harness.peer(1).addr.clone();
 
-    let ok = f.harness.wait_until(|h| h.running_count() == 2, 5_000).await;
+    let ok = f
+        .harness
+        .wait_until(|h| h.running_count() == 2, 5_000)
+        .await;
     assert!(ok, "peers should be running");
 
     let challenge_hex = hex::encode([0xAAu8; 32]);
@@ -966,21 +1067,34 @@ async fn toppoli_l2_verified() {
             "requester_tbid": requester_tbid_hex,
         }),
         5,
-    ).await;
+    )
+    .await;
 
     match result {
         Ok(v) => {
             let obj = v.as_object().expect("response must be object");
-            assert!(obj.contains_key("responder_tbid"), "must have responder_tbid");
-            assert!(obj.contains_key("challenge_echo"), "must have challenge_echo");
+            assert!(
+                obj.contains_key("responder_tbid"),
+                "must have responder_tbid"
+            );
+            assert!(
+                obj.contains_key("challenge_echo"),
+                "must have challenge_echo"
+            );
             assert!(obj.contains_key("signature"), "must have signature");
 
             let responder = obj["responder_tbid"].as_str().unwrap_or("");
-            assert_eq!(responder, f.harness.peer(1).server.get_tbid().to_hex(),
-                "responder_tbid must match peer 1");
+            assert_eq!(
+                responder,
+                f.harness.peer(1).server.get_tbid().to_hex(),
+                "responder_tbid must match peer 1"
+            );
 
             let echo = obj["challenge_echo"].as_str().unwrap_or("");
-            assert_eq!(echo, challenge_hex, "challenge_echo must echo the challenge");
+            assert_eq!(
+                echo, challenge_hex,
+                "challenge_echo must echo the challenge"
+            );
 
             tracing::info!("toppoli_l2_verified: authenticated_ping handler works correctly");
         }
@@ -995,7 +1109,7 @@ async fn toppoli_l2_verified() {
 
 /// L3 integration: two real servers, L3 stamp succeeds end-to-end.
 ///
-/// Peer 0 stamps content via peer 1's server, verifies the Foretis response
+/// Peer 0 stamps content via peer 1's server, verifies the ForetisRecord response
 /// is valid and contains the correct content hash.
 #[tokio::test]
 #[ignore = "toppoli: L3 integration; run with --include-ignored"]
@@ -1006,7 +1120,10 @@ async fn toppoli_l3_stamp() {
     let peer1_tbid = f.harness.peer(1).server().get_tbid();
     let _peer1_addr = f.harness.peer(1).addr.clone();
 
-    let ok = f.harness.wait_until(|h| h.running_count() == 2, 5_000).await;
+    let ok = f
+        .harness
+        .wait_until(|h| h.running_count() == 2, 5_000)
+        .await;
     assert!(ok, "peers should be running");
 
     let com0 = peer0.communerd().expect("peer 0 must have communerd");
@@ -1018,13 +1135,17 @@ async fn toppoli_l3_stamp() {
     let result = tokio::time::timeout(
         Duration::from_secs(10),
         line.stamp(content.clone(), echo.clone()),
-    ).await;
+    )
+    .await;
 
     match result {
         Ok(Ok(foretis)) => {
             let inner = foretis.inner();
-            assert_eq!(inner.tbid().to_hex(), peer1_tbid.to_hex(),
-                "Foretis TBID must match peer 1");
+            assert_eq!(
+                inner.tbid().to_hex(),
+                peer1_tbid.to_hex(),
+                "ForetisRecord TBID must match peer 1"
+            );
             assert!(*inner.chronon_number() > 0, "chronon_number must be > 0");
             tracing::info!(
                 chronon = inner.chronon_number(),
@@ -1052,24 +1173,41 @@ async fn toppoli_l3_stamp() {
 async fn toppoli_fb_gossip_integration() {
     let f = ToppoliFBProbityTest::setup(2).await;
 
-    let ok = f.harness.wait_until(|h| h.running_count() == 2, 5_000).await;
+    let ok = f
+        .harness
+        .wait_until(|h| h.running_count() == 2, 5_000)
+        .await;
     assert!(ok, "2 peers should be running");
 
     let peer0_tbid_hex = f.harness.peer(0).server.get_tbid().to_hex();
-    let store1 = f.harness.peer(1).server.communerd()
+    let store1 = f
+        .harness
+        .peer(1)
+        .server
+        .communerd()
         .expect("peer 1 must have communerd")
         .probity_store();
 
     let initial_count = store1.report_count(&peer0_tbid_hex);
-    tracing::info!(initial_count, "toppoli_fb_gossip_integration: waiting for FB report from peer 0");
+    tracing::info!(
+        initial_count,
+        "toppoli_fb_gossip_integration: waiting for FB report from peer 0"
+    );
 
-    let ok = f.harness.wait_until(|_| {
-        store1.report_count(&peer0_tbid_hex) > initial_count
-    }, 10_000).await;
+    let ok = f
+        .harness
+        .wait_until(
+            |_| store1.report_count(&peer0_tbid_hex) > initial_count,
+            10_000,
+        )
+        .await;
 
     if ok {
         let final_count = store1.report_count(&peer0_tbid_hex);
-        tracing::info!(final_count, "toppoli_fb_gossip_integration: FB report arrived");
+        tracing::info!(
+            final_count,
+            "toppoli_fb_gossip_integration: FB report arrived"
+        );
     } else {
         tracing::warn!(
             "toppoli_fb_gossip_integration: no FB report within 10 s — \
