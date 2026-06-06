@@ -59,48 +59,48 @@ core-engine/src/foretias/tick.rs                                 508  verify  le
 core-engine/src/foretias/tick.rs                                 849  sign    let sig = server.sign(&attest_blob).unwrap();
 core-engine/src/foretias/tick.rs                                 899  sign    let sig = server.sign(&attest_blob).unwrap();
 core-engine/src/foretias/types.rs                                124  sign    signing_tbid::tbid_sign(&SignatureBytes::from(secret_array), message)
-core-engine/src/integration_tests.rs                              20  sign    let sig = server.sign_with(msg, SignatureAlgorithm::SPHINCS_SHA2_128S).unwrap();
-core-engine/src/integration_tests.rs                              23  verify  let valid = server.verify_with(&sphincs_pk, "SPHINCS+-SHA2-128s-simple", msg, &s
-core-engine/src/integration_tests.rs                              31  sign    let sig = server.sign_with(msg, SignatureAlgorithm::Dilithium3).unwrap();
-core-engine/src/integration_tests.rs                              34  verify  let valid = server.verify_with(&dilithium_pk, "Dilithium3", msg, &sig).unwrap();
-core-engine/src/integration_tests.rs                              42  sign    let sig = server.sign_with(msg, SignatureAlgorithm::Ed25519).unwrap();
-core-engine/src/integration_tests.rs                              48  verify  let valid = server.verify_with(&pk, "Ed25519", msg, &sig).unwrap();
-core-engine/src/integration_tests.rs                              58  sign    let sig = signer.sign_with(msg, SignatureAlgorithm::SPHINCS_SHA2_128S).unwrap();
-core-engine/src/integration_tests.rs                              61  verify  let valid = verifier.verify_with(&sphincs_pk, "SPHINCS+-SHA2-128s-simple", msg, 
-core-engine/src/integration_tests.rs                              71  sign    let sig = signer.sign_with(msg, SignatureAlgorithm::Dilithium3).unwrap();
-core-engine/src/integration_tests.rs                              74  verify  let valid = verifier.verify_with(&dilithium_pk, "Dilithium3", msg, &sig).unwrap(
-core-engine/src/integration_tests.rs                              82  sign    let mut sig = server.sign_with(msg, SignatureAlgorithm::SPHINCS_SHA2_128S).unwra
-core-engine/src/integration_tests.rs                              87  verify  let valid = server.verify_with(&sphincs_pk, "SPHINCS+-SHA2-128s-simple", msg, &s
-core-engine/src/integration_tests.rs                              95  sign    let mut sig = server.sign_with(msg, SignatureAlgorithm::Dilithium3).unwrap();
-core-engine/src/integration_tests.rs                             100  verify  let valid = server.verify_with(&dilithium_pk, "Dilithium3", msg, &sig).unwrap();
-core-engine/src/integration_tests.rs                             111  sign    let sig = signer.sign_with(msg, SignatureAlgorithm::SPHINCS_SHA2_128S).unwrap();
-core-engine/src/integration_tests.rs                             113  verify  let valid = signer.verify_with(&fake_pk, "SPHINCS+-SHA2-128s-simple", msg, &sig)
-core-engine/src/integration_tests.rs                             116  sign    let sig = signer.sign_with(msg, SignatureAlgorithm::Dilithium3).unwrap();
-core-engine/src/integration_tests.rs                             118  verify  let valid = signer.verify_with(&fake_pk, "Dilithium3", msg, &sig).unwrap();
-core-engine/src/integration_tests.rs                             126  sign    let sig = server.sign_with(msg, SignatureAlgorithm::Ed25519).unwrap();
-core-engine/src/integration_tests.rs                             129  verify  let result = server.verify_with(&sphincs_pk, "Ed25519", msg, &sig);
-core-engine/src/integration_tests.rs                             149  sign    let sig_a = server_a.sign_with(msg_a, SignatureAlgorithm::SPHINCS_SHA2_128S).unw
-core-engine/src/integration_tests.rs                             151  verify  let valid_b = server_b.verify_with(&pk_a, "SPHINCS+-SHA2-128s-simple", msg_a, &s
-core-engine/src/integration_tests.rs                             154  sign    let sig_b = server_b.sign_with(msg_b, SignatureAlgorithm::Dilithium3).unwrap();
-core-engine/src/integration_tests.rs                             156  verify  let valid_a = server_a.verify_with(&pk_b, "Dilithium3", msg_b, &sig_b).unwrap();
-core-engine/src/integration_tests.rs                             168  sign    let sig_a = server_a.sign_with(msg, SignatureAlgorithm::SPHINCS_SHA2_128S).unwra
-core-engine/src/integration_tests.rs                             170  verify  assert!(server_b.verify_with(&pk_a, "SPHINCS+-SHA2-128s-simple", msg, &sig_a).un
-core-engine/src/integration_tests.rs                             171  verify  assert!(server_c.verify_with(&pk_a, "SPHINCS+-SHA2-128s-simple", msg, &sig_a).un
-core-engine/src/integration_tests.rs                             173  sign    let sig_b = server_b.sign_with(msg, SignatureAlgorithm::Dilithium3).unwrap();
-core-engine/src/integration_tests.rs                             175  verify  assert!(server_a.verify_with(&pk_b, "Dilithium3", msg, &sig_b).unwrap());
-core-engine/src/integration_tests.rs                             176  verify  assert!(server_c.verify_with(&pk_b, "Dilithium3", msg, &sig_b).unwrap());
-core-engine/src/integration_tests.rs                             178  sign    let sig_c = server_c.sign_with(msg, SignatureAlgorithm::Ed25519).unwrap();
-core-engine/src/integration_tests.rs                             183  verify  assert!(server_a.verify_with(&pk_c, "Ed25519", msg, &sig_c).unwrap());
-core-engine/src/integration_tests.rs                             184  verify  assert!(server_b.verify_with(&pk_c, "Ed25519", msg, &sig_c).unwrap());
-core-engine/src/integration_tests.rs                             192  sign    let ed_sig = server.sign_with(msg, SignatureAlgorithm::Ed25519).unwrap();
-core-engine/src/integration_tests.rs                             195  sign    let sphincs_sig = server.sign_with(msg, SignatureAlgorithm::SPHINCS_SHA2_128S).u
-core-engine/src/integration_tests.rs                             198  sign    let dil_sig = server.sign_with(msg, SignatureAlgorithm::Dilithium3).unwrap();
-core-engine/src/integration_tests.rs                             340  sign    let sig = signer.sign_with(msg, alg).unwrap();
-core-engine/src/integration_tests.rs                             349  verify  verifier.verify_with(&pk, alg.to_id_string(), msg, &sig).unwrap()
-core-engine/src/integration_tests.rs                             353  verify  verifier.verify_with(&pk, "SPHINCS+-SHA2-128s-simple", msg, &sig).unwrap()
-core-engine/src/integration_tests.rs                             357  verify  verifier.verify_with(&pk, "Dilithium3", msg, &sig).unwrap()
-core-engine/src/integration_tests.rs                             361  verify  verifier.verify_with(&pk, "SPHINCS+-SHA2-256f-simple", msg, &sig).unwrap()
-core-engine/src/integration_tests.rs                             456  verify  let result = server.verify_with(&fake_pk, "UNKNOWN-ALGO", msg, &fake_sig);
+core-engine/src/integration_tests.rs                              23  sign    .sign_with(msg, SignatureAlgorithm::SPHINCS_SHA2_128S)
+core-engine/src/integration_tests.rs                              28  verify  .verify_with(&sphincs_pk, "SPHINCS+-SHA2-128s-simple", msg, &sig)
+core-engine/src/integration_tests.rs                              38  sign    .sign_with(msg, SignatureAlgorithm::Dilithium3)
+core-engine/src/integration_tests.rs                              43  verify  .verify_with(&dilithium_pk, "Dilithium3", msg, &sig)
+core-engine/src/integration_tests.rs                              52  sign    let sig = server.sign_with(msg, SignatureAlgorithm::Ed25519).unwrap();
+core-engine/src/integration_tests.rs                              58  verify  let valid = server.verify_with(&pk, "Ed25519", msg, &sig).unwrap();
+core-engine/src/integration_tests.rs                              69  sign    .sign_with(msg, SignatureAlgorithm::SPHINCS_SHA2_128S)
+core-engine/src/integration_tests.rs                              74  verify  .verify_with(&sphincs_pk, "SPHINCS+-SHA2-128s-simple", msg, &sig)
+core-engine/src/integration_tests.rs                              86  sign    .sign_with(msg, SignatureAlgorithm::Dilithium3)
+core-engine/src/integration_tests.rs                              91  verify  .verify_with(&dilithium_pk, "Dilithium3", msg, &sig)
+core-engine/src/integration_tests.rs                             101  sign    .sign_with(msg, SignatureAlgorithm::SPHINCS_SHA2_128S)
+core-engine/src/integration_tests.rs                             108  verify  .verify_with(&sphincs_pk, "SPHINCS+-SHA2-128s-simple", msg, &sig)
+core-engine/src/integration_tests.rs                             118  sign    .sign_with(msg, SignatureAlgorithm::Dilithium3)
+core-engine/src/integration_tests.rs                             125  verify  .verify_with(&dilithium_pk, "Dilithium3", msg, &sig)
+core-engine/src/integration_tests.rs                             138  sign    .sign_with(msg, SignatureAlgorithm::SPHINCS_SHA2_128S)
+core-engine/src/integration_tests.rs                             142  verify  .verify_with(&fake_pk, "SPHINCS+-SHA2-128s-simple", msg, &sig)
+core-engine/src/integration_tests.rs                             147  sign    .sign_with(msg, SignatureAlgorithm::Dilithium3)
+core-engine/src/integration_tests.rs                             151  verify  .verify_with(&fake_pk, "Dilithium3", msg, &sig)
+core-engine/src/integration_tests.rs                             160  sign    let sig = server.sign_with(msg, SignatureAlgorithm::Ed25519).unwrap();
+core-engine/src/integration_tests.rs                             163  verify  let result = server.verify_with(&sphincs_pk, "Ed25519", msg, &sig);
+core-engine/src/integration_tests.rs                             184  sign    .sign_with(msg_a, SignatureAlgorithm::SPHINCS_SHA2_128S)
+core-engine/src/integration_tests.rs                             188  verify  .verify_with(&pk_a, "SPHINCS+-SHA2-128s-simple", msg_a, &sig_a)
+core-engine/src/integration_tests.rs                             193  sign    .sign_with(msg_b, SignatureAlgorithm::Dilithium3)
+core-engine/src/integration_tests.rs                             197  verify  .verify_with(&pk_b, "Dilithium3", msg_b, &sig_b)
+core-engine/src/integration_tests.rs                             211  sign    .sign_with(msg, SignatureAlgorithm::SPHINCS_SHA2_128S)
+core-engine/src/integration_tests.rs                             215  verify  .verify_with(&pk_a, "SPHINCS+-SHA2-128s-simple", msg, &sig_a)
+core-engine/src/integration_tests.rs                             218  verify  .verify_with(&pk_a, "SPHINCS+-SHA2-128s-simple", msg, &sig_a)
+core-engine/src/integration_tests.rs                             222  sign    .sign_with(msg, SignatureAlgorithm::Dilithium3)
+core-engine/src/integration_tests.rs                             226  verify  .verify_with(&pk_b, "Dilithium3", msg, &sig_b)
+core-engine/src/integration_tests.rs                             229  verify  .verify_with(&pk_b, "Dilithium3", msg, &sig_b)
+core-engine/src/integration_tests.rs                             233  sign    .sign_with(msg, SignatureAlgorithm::Ed25519)
+core-engine/src/integration_tests.rs                             239  verify  assert!(server_a.verify_with(&pk_c, "Ed25519", msg, &sig_c).unwrap());
+core-engine/src/integration_tests.rs                             240  verify  assert!(server_b.verify_with(&pk_c, "Ed25519", msg, &sig_c).unwrap());
+core-engine/src/integration_tests.rs                             248  sign    let ed_sig = server.sign_with(msg, SignatureAlgorithm::Ed25519).unwrap();
+core-engine/src/integration_tests.rs                             252  sign    .sign_with(msg, SignatureAlgorithm::SPHINCS_SHA2_128S)
+core-engine/src/integration_tests.rs                             257  sign    .sign_with(msg, SignatureAlgorithm::Dilithium3)
+core-engine/src/integration_tests.rs                             398  sign    let sig = signer.sign_with(msg, alg).unwrap();
+core-engine/src/integration_tests.rs                             410  verify  .verify_with(&pk, alg.to_id_string(), msg, &sig)
+core-engine/src/integration_tests.rs                             416  verify  .verify_with(&pk, "SPHINCS+-SHA2-128s-simple", msg, &sig)
+core-engine/src/integration_tests.rs                             421  verify  verifier.verify_with(&pk, "Dilithium3", msg, &sig).unwrap()
+core-engine/src/integration_tests.rs                             426  verify  .verify_with(&pk, "SPHINCS+-SHA2-256f-simple", msg, &sig)
+core-engine/src/integration_tests.rs                             527  verify  let result = server.verify_with(&fake_pk, "UNKNOWN-ALGO", msg, &fake_sig);
 core-engine/src/probity/report.rs                                106  gate    impl UnverifiedSignatureEnvelope<ProbityReportRecord> {
 core-engine/src/probity/report.rs                                152  verify  .verify_with(&public_key, "Ed25519", &canonical, &report.signature)
 core-engine/src/probity/report.rs                                159  gate    Ok(CleanAuthenticated::from_trusted(self.into_inner()))
@@ -112,7 +112,7 @@ core-engine/src/snapshot_signature.rs                            111  sign    le
 foretias-client/src/foretias.rs                                  377  verify  let result = cm.verify(
 foretias-client/src/foretias.rs                                  703  verify  let verified = client.verify(content, &foretis, &sig, &alg).await.unwrap();
 foretias-client/src/foretias.rs                                  715  verify  .verify(b"tampered", &foretis, &sig, &alg)
-foretias-server/src/calendar/mod.rs                              222  sign    let sig = key.sign(foretis_bytes)?;
+foretias-server/src/calendar/mod.rs                              226  sign    let sig = key.sign(foretis_bytes)?;
 foretias-server/src/calendar/task_queue.rs                       623  sign    match key.sign(data) {
 foretias-server/src/calendar_store/mod.rs                        229  gate    return Some(CleanAuthenticated::from_trusted(record));
 foretias-server/src/calendar_store/mod.rs                        279  gate    found.push((cn, CleanAuthenticated::from_trusted(record)));
@@ -189,9 +189,9 @@ foretias-server/src/server/handlers.rs                          1283  gate    le
 foretias-server/src/server/mod.rs                                192  sign    /// // SIGN(local-tbid, fast-key+slow-key)
 foretias-server/src/server/mod.rs                                193  sign    pub fn sign_tbid_message(
 foretias-server/src/server/mod.rs                                198  sign    self.chronomatter.sign_tbid_message(msg)
-foretias-server/tests/client_ptp.rs                               64  verify  .verify(b"hello world", &foretis, &sig, &alg)
-foretias-server/tests/client_ptp.rs                               88  verify  .verify(content, &foretis, &sig, &alg)
-foretias-server/tests/client_ptp.rs                               94  verify  .verify(b"tampered content", &foretis, &sig, &alg)
+foretias-server/tests/client_ptp.rs                               58  verify  .verify(b"hello world", &foretis, &sig, &alg)
+foretias-server/tests/client_ptp.rs                               78  verify  .verify(content, &foretis, &sig, &alg)
+foretias-server/tests/client_ptp.rs                               84  verify  .verify(b"tampered content", &foretis, &sig, &alg)
 foretias-server/tests/crypto_callsite_snapshot.rs                 19  sign    "sign_with(",
 foretias-server/tests/crypto_callsite_snapshot.rs                 20  sign    ".sign(",
 foretias-server/tests/crypto_callsite_snapshot.rs                 21  sign    "sign_tbid_message(",
@@ -210,9 +210,9 @@ foretias-server/tests/crypto_callsite_snapshot.rs                 41  gate    "g
 foretias-server/tests/crypto_callsite_snapshot.rs                 42  gate    "from_dual_verified(",
 foretias-server/tests/crypto_callsite_snapshot.rs                 93  sign    && !trimmed.contains("// SIGN(")
 foretias-server/tests/crypto_callsite_snapshot.rs                 94  verify  && !trimmed.contains("// VERIFY(")
-foretias-server/tests/dht_record_signature.rs                     73  sign    let sig = crypto.sign(&canonical).expect("sign canonical payload");
-foretias-server/tests/dht_record_signature.rs                     94  sign    let sig = crypto.sign(&canonical).expect("sign canonical payload");
-foretias-server/tests/dht_record_signature.rs                    124  sign    let sig = crypto_a.sign(&canonical).expect("sign with key A");
+foretias-server/tests/dht_record_signature.rs                     71  sign    let sig = crypto.sign(&canonical).expect("sign canonical payload");
+foretias-server/tests/dht_record_signature.rs                     92  sign    let sig = crypto.sign(&canonical).expect("sign canonical payload");
+foretias-server/tests/dht_record_signature.rs                    122  sign    let sig = crypto_a.sign(&canonical).expect("sign with key A");
 foretias-server/tests/e2e_verification.rs                         95  gate    let _up: UnverifiedSignatureEnvelope<ChrononRecord> =
 foretias-server/tests/snapshot_tests.rs                           74  verify  .verify(&foretis, &sig, &alg, msg.as_bytes(), server.calendar())
 ```
@@ -223,5 +223,5 @@ crypto_callsite_snapshot — update with UPDATE_SNAPSHOT=1 when adding new crypt
 SIGNATURES:
 Public key: 4193efbf702cde19fbae087ea53189f67e7768ebe888e0816e24a27282a5b030
 Input signature: jLQNK2xu7muEZJFKzPe/bCVpupjqFQ2keqDkdjvDiJ/C8TDEW8U060D8aTvrQROVSSi3S2tUnBodjJtACZOhDw==
-Result signature: caZfPbyeYHlNXjbFXmwJw6uKsKidnKGerhoTgoBX7PpzfzZnmSEyM4BcwBKVgagy13XXx1XZlkLONFJDiGpLAA==
-Comments signature: GKKSZyB/WiigYPkfJHP83sfiP0vk7Sk83cNulqArR1kERKpTYsjj9T84eGmDWDobN1uZWwMvc+Ik0CzY7iIKDQ==
+Result signature: B7462HslH54ySsvoq+7rONlDtPMJg97hmXhC5vGaP6L47DsQDVOJnh1242tq3MvdyLoLP0Spok80HAC2e7ooBA==
+Comments signature: KhGODDUpqFyCcOE6VZ2rJDW9eTNFzj/lcmeQuOMP9dDtw++2y41YbVDa99PpfdtOiNLzdubOaDL7HF2aAinmBw==
