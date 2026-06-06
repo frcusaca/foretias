@@ -4,16 +4,21 @@
 //! and short-lived callbacks. No channels, no message passing, no serialization.
 
 use crate::error::NodeError;
-use crate::foretias::tick::{Foretis, ChrononRecord};
+use crate::foretias::tick::{ChrononRecord, ForetisRecord};
 use crate::foretias::types::{Message, TickNumber};
 
 pub trait TickObserver: Send + Sync {
-    fn on_tick_advance(&self, chronon_number: TickNumber, public_key: &[u8], tick_record: &ChrononRecord);
+    fn on_tick_advance(
+        &self,
+        chronon_number: TickNumber,
+        public_key: &[u8],
+        tick_record: &ChrononRecord,
+    );
 }
 
 pub trait Attester: Send + Sync {
-    fn stamp(&self, content: Message, echo: String) -> Result<Foretis, NodeError>;
-    fn verify(&self, foretis: &Foretis, content: &Message) -> Result<bool, NodeError>;
+    fn stamp(&self, content: Message, echo: String) -> Result<ForetisRecord, NodeError>;
+    fn verify(&self, foretis: &ForetisRecord, content: &Message) -> Result<bool, NodeError>;
 }
 
 /// Peer address for extra-family communication.
@@ -58,11 +63,14 @@ pub enum TransportError {
 /// Calendar calls this for all extra-family communication.
 pub trait PeerMessenger: Send + Sync {
     /// Send a JSON-RPC call to a peer and receive the result.
-    fn send_to_peer(&self, addr: &PeerAddr, method: &str, params: serde_json::Value)
-        -> Result<serde_json::Value, TransportError>;
+    fn send_to_peer(
+        &self,
+        addr: &PeerAddr,
+        method: &str,
+        params: serde_json::Value,
+    ) -> Result<serde_json::Value, TransportError>;
     /// Query community state.
-    fn query_community(&self, query: CommunityQuery)
-        -> Result<CommunityResponse, TransportError>;
+    fn query_community(&self, query: CommunityQuery) -> Result<CommunityResponse, TransportError>;
 }
 
 /// Observer for mutual-attestation lifecycle events.

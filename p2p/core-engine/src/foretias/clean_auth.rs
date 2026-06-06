@@ -11,9 +11,9 @@
 //! `CleanAuthenticated` covers authentication + cleansing, NOT full chain-of-trust to genesis.
 
 use super::encoding::{FTByteArray, FTByteVector};
-use super::external_attestation::ExternalAttestation;
+use super::external_attestation::ExternalAttestationRecord;
 use super::family_record::FamilyRecord;
-use super::tick::{verify_pair, ChrononRecord, Foretis};
+use super::tick::{verify_pair, ChrononRecord, ForetisRecord};
 use super::types::Tbid;
 use crate::crypto_server::CryptoServer;
 use crate::error::NodeError;
@@ -547,7 +547,7 @@ impl UnverifiedSignatureEnvelope<ChrononRecord> {
     pub fn chronon_stamp_count(&self) -> &u64 {
         &self.inner.chronon_stamp_count
     }
-    pub fn external_attestations(&self) -> &Vec<ExternalAttestation> {
+    pub fn external_attestations(&self) -> &Vec<ExternalAttestationRecord> {
         &self.inner.external_attestations
     }
     pub fn tb_version(&self) -> &u32 {
@@ -637,7 +637,7 @@ impl CleanAuthenticated<ChrononRecord> {
     pub fn chronon_stamp_count(&self) -> &u64 {
         &self.inner.chronon_stamp_count
     }
-    pub fn external_attestations(&self) -> &Vec<ExternalAttestation> {
+    pub fn external_attestations(&self) -> &Vec<ExternalAttestationRecord> {
         &self.inner.external_attestations
     }
     pub fn tb_version(&self) -> &u32 {
@@ -654,12 +654,12 @@ impl CleanAuthenticated<ChrononRecord> {
 }
 
 // ---------------------------------------------------------------------------
-// Foretis — field accessors + verify + externalize
+// ForetisRecord — field accessors + verify + externalize
 // ---------------------------------------------------------------------------
-// Foretis — field accessors + verify + externalize
+// ForetisRecord — field accessors + verify + externalize
 // ---------------------------------------------------------------------------
 
-impl UnverifiedSignatureEnvelope<Foretis> {
+impl UnverifiedSignatureEnvelope<ForetisRecord> {
     pub fn chronon_number(&self) -> &u64 {
         &self.inner.chronon_number
     }
@@ -684,9 +684,9 @@ impl UnverifiedSignatureEnvelope<Foretis> {
         !self.signatures.is_empty()
     }
 
-    /// Parse v2 wire format: `{foretis: <Foretis>, signature: <hex>, signature_algorithm: <string>}`.
+    /// Parse v2 wire format: `{foretis: <ForetisRecord>, signature: <hex>, signature_algorithm: <string>}`.
     ///
-    /// v1 bare Foretis JSON is rejected — clean cutover to v2.
+    /// v1 bare ForetisRecord JSON is rejected — clean cutover to v2.
     pub fn from_json_value_v2(v: serde_json::Value) -> Result<Self, ParseError> {
         let obj = match v {
             serde_json::Value::Object(map) => map,
@@ -701,7 +701,7 @@ impl UnverifiedSignatureEnvelope<Foretis> {
         let foretis_val = obj
             .get("foretis")
             .ok_or_else(|| ParseError::BadFormat("v2 envelope requires 'foretis' key".into()))?;
-        let foretis: Foretis =
+        let foretis: ForetisRecord =
             serde_json::from_value(foretis_val.clone()).map_err(ParseError::InvalidJson)?;
 
         let mut env = Self::from_parsed(foretis);
@@ -727,18 +727,18 @@ impl UnverifiedSignatureEnvelope<Foretis> {
         Ok(env)
     }
 
-    /// Inbound gate (V2): verify this Foretis against a calendar record.
+    /// Inbound gate (V2): verify this ForetisRecord against a calendar record.
     ///
     /// v2 wire-break: signature comes from the envelope's signatures list,
-    /// not from the inner Foretis. Uses postcard-encoded payload for sig_input.
+    /// not from the inner ForetisRecord. Uses postcard-encoded payload for sig_input.
     ///
-    /// The `record` must cover the same chronon number as this Foretis.
+    /// The `record` must cover the same chronon number as this ForetisRecord.
     pub fn verify(
         self,
         crypto: &dyn CryptoServer,
         record: &CleanAuthenticated<ChrononRecord>,
         content: &[u8],
-    ) -> Result<CleanAuthenticated<Foretis>, CleanAuthError> {
+    ) -> Result<CleanAuthenticated<ForetisRecord>, CleanAuthError> {
         let rec = &record.inner;
         let foretis = &self.inner;
 
@@ -785,7 +785,7 @@ impl UnverifiedSignatureEnvelope<Foretis> {
         crypto: &dyn CryptoServer,
         content: &[u8],
         record: &CleanAuthenticated<ChrononRecord>,
-    ) -> Result<CleanAuthenticated<Foretis>, CleanAuthError> {
+    ) -> Result<CleanAuthenticated<ForetisRecord>, CleanAuthError> {
         self.verify(crypto, record, content)
     }
 }
@@ -807,7 +807,7 @@ impl<'a> super::tick::CalendarLookup for CalendarLookupFromCleanRecord<'a> {
     }
 }
 
-impl CleanAuthenticated<Foretis> {
+impl CleanAuthenticated<ForetisRecord> {
     pub fn chronon_number(&self) -> &u64 {
         &self.inner.chronon_number
     }
@@ -846,7 +846,7 @@ impl CleanAuthenticated<Foretis> {
     }
 
     /// Outbound gate: wrap the domain type for wire/disk.
-    pub fn externalize(self) -> Externalized<Foretis> {
+    pub fn externalize(self) -> Externalized<ForetisRecord> {
         Externalized::from_trusted(self.inner)
     }
 }
@@ -997,7 +997,7 @@ mod tests {
 
     #[test]
     fn test_unprocessed_foretis_from_bytes() {
-        let foretis = Foretis {
+        let foretis = ForetisRecord {
             chronon_number: 42,
             content_hash: [0xABu8; 32].into(),
             tbid: Tbid::default(),
@@ -1006,13 +1006,13 @@ mod tests {
             time_being_reference_time: "UE+12345ns".to_string(),
         };
         let json = serde_json::to_vec(&foretis).unwrap();
-        let up = UnverifiedSignatureEnvelope::<Foretis>::from_bytes(&json).unwrap();
+        let up = UnverifiedSignatureEnvelope::<ForetisRecord>::from_bytes(&json).unwrap();
         assert_eq!(up.inner().chronon_number, 42);
     }
 
     #[test]
     fn test_unprocessed_foretis_from_invalid_json() {
-        let result = UnverifiedSignatureEnvelope::<Foretis>::from_bytes(b"{invalid");
+        let result = UnverifiedSignatureEnvelope::<ForetisRecord>::from_bytes(b"{invalid");
         assert!(result.is_err());
     }
 
@@ -1045,7 +1045,7 @@ mod tests {
 
     #[test]
     fn test_externalize_roundtrip_foretis() {
-        let foretis = Foretis {
+        let foretis = ForetisRecord {
             chronon_number: 10,
             content_hash: [0x55u8; 32].into(),
             tbid: Tbid::default(),
@@ -1053,7 +1053,7 @@ mod tests {
             tbn: "tbn".to_string(),
             time_being_reference_time: "UE+999ns".to_string(),
         };
-        let ca = CleanAuthenticated::<Foretis>::from_trusted(foretis);
+        let ca = CleanAuthenticated::<ForetisRecord>::from_trusted(foretis);
         let ext = ca.externalize();
         assert_eq!(ext.inner().chronon_number, 10);
 
@@ -1068,7 +1068,7 @@ mod tests {
         let result = UnverifiedSignatureEnvelope::<ChrononRecord>::from_bytes(b"{}");
         assert!(result.is_err());
 
-        let result = UnverifiedSignatureEnvelope::<Foretis>::from_bytes(b"[]");
+        let result = UnverifiedSignatureEnvelope::<ForetisRecord>::from_bytes(b"[]");
         assert!(matches!(result, Err(ParseError::InvalidJson(_))));
     }
 
@@ -1118,7 +1118,7 @@ mod tests {
 
     #[test]
     fn snapshot_foretis_externalized() {
-        let foretis = Foretis {
+        let foretis = ForetisRecord {
             chronon_number: 10,
             content_hash: [0x55u8; 32].into(),
             tbid: Tbid::default(),
@@ -1126,7 +1126,7 @@ mod tests {
             tbn: "tbn".to_string(),
             time_being_reference_time: "UE+999ns".to_string(),
         };
-        let ca = CleanAuthenticated::<Foretis>::from_trusted(foretis);
+        let ca = CleanAuthenticated::<ForetisRecord>::from_trusted(foretis);
         let ext = ca.externalize();
         let json_bytes = serde_json::to_vec(&ext).unwrap();
         let obj: serde_json::Value = serde_json::from_slice(&json_bytes).unwrap();

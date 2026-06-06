@@ -1,21 +1,33 @@
-//! Foretias domain types (ChrononRecord, Foretis, Calendar, TimeFamily).
+//! Foretias domain types (ChrononRecord, ForetisRecord, Calendar, TimeFamily).
 
-pub mod types;
-pub mod tick;
 pub mod calendar;
-pub mod external_attestation;
 pub mod callbacks;
-pub mod encoding;
 pub mod clean_auth;
+pub mod encoding;
+pub mod external_attestation;
 pub mod family_record;
-pub use clean_auth::{CleanAuthenticated, CleanFullyAuthenticated, Externalized, UnverifiedSignatureEnvelope};
-pub use family_record::{FamilyRecord, FamilyError, MAX_FAMILY_MEMBERS};
+pub mod tick;
+pub mod types;
+pub use clean_auth::{
+    CleanAuthenticated, CleanFullyAuthenticated, Externalized, UnverifiedSignatureEnvelope,
+};
+pub use family_record::{FamilyError, FamilyRecord, MAX_FAMILY_MEMBERS};
 
-pub use types::{Tbid, TbidSecret, PublicKeyBytes, SignatureBytes, AlgorithmId, Digest, Message, AaNonce, TickNumber, SignatureAlgorithm, KemAlgorithm};
-pub use tick::{ChrononRecord, Foretis, SerializationAlgorithm, CalendarLookup, stamp, verify, auto_attestation_blob, auto_attestation_blob_with_count, auto_attestation_blob_with_genesis, verify_pair};
 pub use calendar::Calendar;
-pub use external_attestation::ExternalAttestation;
-pub use callbacks::{TickObserver, Attester, PeerMessenger, PeerAddr, CommunityQuery, CommunityResponse, TransportError, MutualAttestObserver};
+pub use callbacks::{
+    Attester, CommunityQuery, CommunityResponse, MutualAttestObserver, PeerAddr, PeerMessenger,
+    TickObserver, TransportError,
+};
+pub use external_attestation::ExternalAttestationRecord;
+pub use tick::{
+    auto_attestation_blob, auto_attestation_blob_with_count, auto_attestation_blob_with_genesis,
+    stamp, verify, verify_pair, CalendarLookup, ChrononRecord, ForetisRecord,
+    SerializationAlgorithm,
+};
+pub use types::{
+    AaNonce, AlgorithmId, Digest, KemAlgorithm, Message, PublicKeyBytes, SignatureAlgorithm,
+    SignatureBytes, Tbid, TbidSecret, TickNumber,
+};
 
 #[cfg(test)]
 mod encoding_tests;

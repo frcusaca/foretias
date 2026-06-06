@@ -20,7 +20,9 @@ pub struct Tbid {
 
 impl Default for Tbid {
     fn default() -> Self {
-        Self { inner: FTByteArray::zeros() }
+        Self {
+            inner: FTByteArray::zeros(),
+        }
     }
 }
 
@@ -32,13 +34,17 @@ impl Tbid {
 
     /// Parse from raw 96-byte representation (ed25519 first, then slh_dsa).
     pub fn from_raw(bytes: [u8; 96]) -> Self {
-        Self { inner: FTByteArray::new(bytes) }
+        Self {
+            inner: FTByteArray::new(bytes),
+        }
     }
 
     /// Parse from a 96-byte slice.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, crate::error::CryptoError> {
         if bytes.len() != 96 {
-            return Err(crate::error::CryptoError::BadInput("TBID public key must be 96 bytes"));
+            return Err(crate::error::CryptoError::BadInput(
+                "TBID public key must be 96 bytes",
+            ));
         }
         let mut raw = [0u8; 96];
         raw.copy_from_slice(bytes);
@@ -62,14 +68,17 @@ impl Tbid {
 
     /// Parse from a hex-encoded string (192 hex chars = 96 bytes).
     pub fn from_hex(s: &str) -> Result<Self, crate::error::CryptoError> {
-        let bytes = hex::decode(s).map_err(|_| crate::error::CryptoError::BadInput("invalid hex TBID"))?;
+        let bytes =
+            hex::decode(s).map_err(|_| crate::error::CryptoError::BadInput("invalid hex TBID"))?;
         Self::from_bytes(&bytes)
     }
 
     /// Create a test TBID with all bytes set to the given value.
     #[cfg(test)]
     pub fn test() -> Self {
-        Self { inner: FTByteArray::new([0xAB; 96]) }
+        Self {
+            inner: FTByteArray::new([0xAB; 96]),
+        }
     }
 }
 
@@ -109,7 +118,8 @@ impl TbidSecret {
         secret_bytes.extend_from_slice(&self.ed25519_nonce[..]);
         secret_bytes.extend_from_slice(&self.encrypted_slh_dsa[..]);
         secret_bytes.extend_from_slice(&self.slh_dsa_nonce[..]);
-        let secret_array: [u8; 240] = secret_bytes.try_into()
+        let secret_array: [u8; 240] = secret_bytes
+            .try_into()
             .map_err(|_| crate::error::CryptoError::BadInput("secret key length mismatch"))?;
         signing_tbid::tbid_sign(&SignatureBytes::from(secret_array), message)
     }
@@ -117,7 +127,9 @@ impl TbidSecret {
     /// Construct from flat 240-byte encrypted secret key material.
     fn from_bytes(bytes: &[u8]) -> Result<Self, crate::error::CryptoError> {
         if bytes.len() != 240 {
-            return Err(crate::error::CryptoError::BadInput("TBID secret must be 240 bytes"));
+            return Err(crate::error::CryptoError::BadInput(
+                "TBID secret must be 240 bytes",
+            ));
         }
         let mut encrypted_ed25519 = [0u8; 48];
         encrypted_ed25519.copy_from_slice(&bytes[..48]);
@@ -411,7 +423,9 @@ pub type Message = Vec<u8>;
 pub type AaNonce = [u8; 16];
 
 /// Tick number — monotonically increasing identifier for a calendar tick.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
 pub struct TickNumber(pub u64);
 
 impl TickNumber {
@@ -441,9 +455,9 @@ impl SignatureAlgorithm {
     /// Returns the liboqs algorithm identifier string.
     pub fn to_id_string(&self) -> &'static str {
         match self {
-            Self::Ed25519         => "Ed25519",
+            Self::Ed25519 => "Ed25519",
             Self::SPHINCS_SHA2_128S => "SPHINCS+-SHA2-128s-simple",
-            Self::Dilithium3      => "Dilithium3",
+            Self::Dilithium3 => "Dilithium3",
             Self::SLH_DSA_SHA2_256F => "SPHINCS+-SHA2-256f-simple",
         }
     }
@@ -451,9 +465,9 @@ impl SignatureAlgorithm {
     /// Parse from a liboqs algorithm identifier string.
     pub fn from_id_string(id: &str) -> Result<Self, crate::error::CryptoError> {
         match id {
-            "Ed25519"                => Ok(Self::Ed25519),
+            "Ed25519" => Ok(Self::Ed25519),
             "SPHINCS+-SHA2-128s-simple" => Ok(Self::SPHINCS_SHA2_128S),
-            "Dilithium3"             => Ok(Self::Dilithium3),
+            "Dilithium3" => Ok(Self::Dilithium3),
             "SPHINCS+-SHA2-256f-simple" => Ok(Self::SLH_DSA_SHA2_256F),
             _ => Err(crate::error::CryptoError::UnknownAlgorithm(id.to_string())),
         }
@@ -462,9 +476,9 @@ impl SignatureAlgorithm {
     /// Maximum public key size in bytes for this algorithm.
     pub fn pubkey_max_bytes(&self) -> usize {
         match self {
-            Self::Ed25519         => 32,
+            Self::Ed25519 => 32,
             Self::SPHINCS_SHA2_128S => 32,
-            Self::Dilithium3      => 1952,
+            Self::Dilithium3 => 1952,
             Self::SLH_DSA_SHA2_256F => 64,
         }
     }
@@ -472,9 +486,9 @@ impl SignatureAlgorithm {
     /// Maximum signature size in bytes for this algorithm.
     pub fn signature_max_bytes(&self) -> usize {
         match self {
-            Self::Ed25519         => 64,
+            Self::Ed25519 => 64,
             Self::SPHINCS_SHA2_128S => 7856,
-            Self::Dilithium3      => 3309,
+            Self::Dilithium3 => 3309,
             Self::SLH_DSA_SHA2_256F => 49_856,
         }
     }
@@ -515,7 +529,7 @@ impl KemAlgorithm {
     /// Returns the liboqs algorithm identifier string.
     pub fn to_id_string(&self) -> &'static str {
         match self {
-            Self::NoiseXX  => "Noise-XX",
+            Self::NoiseXX => "Noise-XX",
             Self::MLKEM_768 => "ML-KEM-768",
         }
     }
@@ -523,7 +537,7 @@ impl KemAlgorithm {
     /// Parse from a liboqs algorithm identifier string.
     pub fn from_id_string(id: &str) -> Result<Self, crate::error::CryptoError> {
         match id {
-            "Noise-XX"  => Ok(Self::NoiseXX),
+            "Noise-XX" => Ok(Self::NoiseXX),
             "ML-KEM-768" => Ok(Self::MLKEM_768),
             _ => Err(crate::error::CryptoError::UnknownAlgorithm(id.to_string())),
         }

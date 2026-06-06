@@ -193,7 +193,7 @@ impl Calendar {
     pub fn add_external_attestation(
         &mut self,
         chronon_number: u64,
-        att: super::external_attestation::ExternalAttestation,
+        att: super::external_attestation::ExternalAttestationRecord,
     ) -> Result<(), NodeError> {
         for tick in self.ticks.iter_mut() {
             if tick.chronon_number == chronon_number {

@@ -4,11 +4,11 @@
 //! where `matrix[i][j]` is member i's dual-key signature over member j's TBID.
 //! This record requires full (CleanFullyAuthenticated) gate enforcement.
 
-use serde::Serialize;
 use crate::crypto_server::VerifyOps;
 use crate::error::CryptoError;
 use crate::foretias::clean_auth::RecordBase;
 use crate::foretias::types::Tbid;
+use serde::Serialize;
 
 /// Maximum family members (DoS guard).
 pub const MAX_FAMILY_MEMBERS: usize = 64;
@@ -99,7 +99,8 @@ impl FamilyRecord {
                 if sig.len() < 64 {
                     return Err(CryptoError::BadSignature);
                 }
-                let sig_arr: [u8; 64] = sig[..64].try_into()
+                let sig_arr: [u8; 64] = sig[..64]
+                    .try_into()
                     .map_err(|_| CryptoError::BadSignature)?;
                 let valid = crypto.verify_ed25519(
                     &crate::core::bindings::ForetiasPubKey32 {
@@ -196,7 +197,10 @@ mod tests {
             vec![vec![1u8; 32], vec![1u8; 64]],
         ];
         let record = FamilyRecord::try_new(members, matrix).unwrap();
-        let crypto = crate::crypto_server::software::SoftwareCryptoServer::generate(crate::crypto_server::ForetiasCurve::Ed25519).unwrap();
+        let crypto = crate::crypto_server::software::SoftwareCryptoServer::generate(
+            crate::crypto_server::ForetiasCurve::Ed25519,
+        )
+        .unwrap();
         let result = record.verify_matrix(&crypto);
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), CryptoError::BadSignature));
@@ -212,7 +216,10 @@ mod tests {
             vec![vec![0xFF; 64], vec![0xFF; 64]],
         ];
         let record = FamilyRecord::try_new(members, matrix).unwrap();
-        let crypto = crate::crypto_server::software::SoftwareCryptoServer::generate(crate::crypto_server::ForetiasCurve::Ed25519).unwrap();
+        let crypto = crate::crypto_server::software::SoftwareCryptoServer::generate(
+            crate::crypto_server::ForetiasCurve::Ed25519,
+        )
+        .unwrap();
         let result = record.verify_matrix(&crypto);
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), CryptoError::BadSignature));

@@ -20,7 +20,8 @@ use crate::foretias::tick::CalendarLookup;
 use crate::foretias::tick::StampedForetis;
 use crate::foretias::types::{Tbid, TbidSecret, TickNumber};
 use crate::foretias::{
-    auto_attestation_blob_with_count, auto_attestation_blob_with_genesis, ChrononRecord, Foretis,
+    auto_attestation_blob_with_count, auto_attestation_blob_with_genesis, ChrononRecord,
+    ForetisRecord,
 };
 
 struct TickKeyPair {
@@ -391,8 +392,8 @@ impl Chronomatter {
             .map_err(|e| NodeError::Internal(format!("clock error: {e}")))?;
         let time_being_reference_time = format!("UE+{}ns", now_ns);
 
-        // V2: Foretis payload is signature-free
-        let foretis = Foretis {
+        // V2: ForetisRecord payload is signature-free
+        let foretis = ForetisRecord {
             chronon_number: tick,
             content_hash: content_hash.bytes.into(),
             tbid,
@@ -422,7 +423,7 @@ impl Chronomatter {
 
     pub fn verify(
         &self,
-        foretis: &Foretis,
+        foretis: &ForetisRecord,
         signature: &[u8],
         signature_algorithm: &str,
         content: &[u8],
@@ -438,21 +439,21 @@ impl Chronomatter {
         )
     }
 
-    /// Verify an unprocessed Foretis against the local calendar.
+    /// Verify an unprocessed ForetisRecord against the local calendar.
     ///
-    /// Accepts `UnverifiedSignatureEnvelope<Foretis>` (parsed, not trusted) and returns
-    /// `CleanAuthenticated<Foretis>` (authenticated + cleansed) on success.
+    /// Accepts `UnverifiedSignatureEnvelope<ForetisRecord>` (parsed, not trusted) and returns
+    /// `CleanAuthenticated<ForetisRecord>` (authenticated + cleansed) on success.
     /// The calendar record for the matching chronon must exist and be trusted
     /// by construction (locally produced or previously verified).
     pub fn verify_unprocessed(
         &self,
         unprocessed: crate::foretias::clean_auth::UnverifiedSignatureEnvelope<
-            crate::foretias::tick::Foretis,
+            crate::foretias::tick::ForetisRecord,
         >,
         content: &[u8],
         calendar: &dyn CalendarLookup,
     ) -> Result<
-        crate::foretias::clean_auth::CleanAuthenticated<crate::foretias::tick::Foretis>,
+        crate::foretias::clean_auth::CleanAuthenticated<crate::foretias::tick::ForetisRecord>,
         NodeError,
     > {
         // Look up the calendar record for this chronon

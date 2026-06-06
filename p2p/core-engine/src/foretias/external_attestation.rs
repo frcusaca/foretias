@@ -1,27 +1,49 @@
 //! External attestation types for cross-node auto attestation.
 
+use bon::Builder;
 use serde::{Deserialize, Serialize};
 
 use super::encoding::FTByteVector;
 use super::tick::ChrononRecord;
+use crate::error::NodeError;
 
 /// An external attestation from another Time Family.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExternalAttestation {
+#[derive(Debug, Clone, Serialize, Deserialize, Builder)]
+#[builder(finish_fn(vis = "", name = build_internal))]
+pub struct ExternalAttestationRecord {
     /// Hex-encoded TBID of the attesting peer.
     pub attester_tbid: String,
     /// B's stamp of A's tick record (signature-free payload).
-    pub foretis: super::tick::Foretis,
-    /// v2: Signature covering postcard-encoded Foretis payload (base64-encoded in JSON).
+    pub foretis: super::tick::ForetisRecord,
+    /// v2: Signature covering postcard-encoded ForetisRecord payload (base64-encoded in JSON).
     #[serde(default)]
+    #[builder(default)]
     pub signature: FTByteVector,
     /// v2: Signature algorithm identifier (e.g. "Ed25519").
     #[serde(default = "default_sig_algorithm")]
+    #[builder(default = "Ed25519".to_string())]
     pub signature_algorithm: String,
     /// B's tick at attestation time (for offline re-verify).
     pub attester_tick_record: ChrononRecord,
     /// Wall-clock receive time in nanoseconds.
     pub received_at_ns: u64,
+}
+
+/// Fallible builder for ExternalAttestationRecord — validates invariants before construction.
+impl<S: external_attestation_record_builder::IsComplete> ExternalAttestationRecordBuilder<S> {
+    /// Build a validated ExternalAttestationRecord.
+    ///
+    /// # Errors
+    /// Returns `NodeError::InvalidInput` if the foretis chronon_number is 0.
+    pub fn build(self) -> Result<ExternalAttestationRecord, NodeError> {
+        let record = self.build_internal();
+        if record.foretis.chronon_number == 0 {
+            return Err(NodeError::InvalidInput(
+                "foretis.chronon_number must be > 0".into(),
+            ));
+        }
+        Ok(record)
+    }
 }
 
 fn default_sig_algorithm() -> String {
@@ -31,8 +53,8 @@ fn default_sig_algorithm() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::foretias::types::Tbid;
     use crate::foretias::tick::ChrononRecord;
+    use crate::foretias::types::Tbid;
 
     fn make_dummy_tick() -> ChrononRecord {
         ChrononRecord {
@@ -51,7 +73,7 @@ mod tests {
 
     #[test]
     fn external_attestation_serde_roundtrip() {
-        let foretis = crate::foretias::tick::Foretis {
+        let foretis = crate::foretias::tick::ForetisRecord {
             chronon_number: 42,
             content_hash: [1u8; 32].into(),
             tbid: crate::foretias::types::Tbid::from_raw([3u8; 96]),
@@ -60,7 +82,7 @@ mod tests {
             time_being_reference_time: "UE+123ns".to_string(),
         };
 
-        let att = ExternalAttestation {
+        let att = ExternalAttestationRecord {
             attester_tbid: "ab".to_string(),
             foretis,
             signature: FTByteVector::from(vec![2u8; 64]),
@@ -70,6 +92,6 @@ mod tests {
         };
 
         let json = serde_json::to_string(&att).unwrap();
-        let _parsed: ExternalAttestation = serde_json::from_str(&json).unwrap();
+        let _parsed: ExternalAttestationRecord = serde_json::from_str(&json).unwrap();
     }
 }

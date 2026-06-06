@@ -20,7 +20,7 @@ pub trait Evaluator {
     ///
     /// The output is a multi-block string:
     ///   - INPUT block: description of what was stamped/verified
-    ///   - RESULT block(s): Foretis JSON, verification results
+    ///   - RESULT block(s): ForetisRecord JSON, verification results
     ///   - COMMENTS block: test name + metadata
     ///
     /// Returns the signed snapshot text (including SIGNATURES footer).

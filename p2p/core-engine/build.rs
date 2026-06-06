@@ -160,7 +160,7 @@ fn main() {
     let raw = std::fs::read_to_string(out.join("core_bindings.rs")).unwrap();
     let mut src = raw;
 
-    // Rename Foretias* types to Foretias* (but not Foretis which is a domain struct)
+    // Rename Foretias* types to Foretias* (but not ForetisRecord which is a domain struct)
     let type_renames = [
         ("ForetiasCoreVersion", "ForetiasCoreVersion"),
         ("ForetiasResult", "ForetiasResult"),

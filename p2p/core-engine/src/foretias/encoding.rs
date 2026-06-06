@@ -4,8 +4,8 @@
 //! (no padding) JSON serialization, and convenience functions for JSON
 //! encoding/decoding.
 
-pub use self::ft_byte_vector::FTByteVector;
 pub use self::ft_byte_array::FTByteArray;
+pub use self::ft_byte_vector::FTByteVector;
 
 pub fn to_json<T: serde::Serialize>(val: &T) -> Result<String, serde_json::Error> {
     serde_json::to_string(val)
@@ -282,10 +282,19 @@ mod tests {
 
     #[test]
     fn test_byte_array_16_roundtrip() {
-        let arr: FTByteArray<16> = FTByteArray::new([0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10]);
+        let arr: FTByteArray<16> = FTByteArray::new([
+            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E,
+            0x0F, 0x10,
+        ]);
         let json = to_json(&arr).unwrap();
         let decoded: FTByteArray<16> = from_json(&json).unwrap();
-        assert_eq!(decoded.as_slice(), &[0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10]);
+        assert_eq!(
+            decoded.as_slice(),
+            &[
+                0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E,
+                0x0F, 0x10
+            ]
+        );
     }
 
     #[test]

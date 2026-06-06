@@ -10,8 +10,8 @@ use crate::epoch::frost_bridge::FrostMsg;
 use crate::epoch::snapshot::EpochSnapshot;
 use crate::foretias::calendar::Calendar;
 use crate::foretias::encoding::{from_json, to_json, to_json_pretty, FTByteArray, FTByteVector};
-use crate::foretias::external_attestation::ExternalAttestation;
-use crate::foretias::tick::{ChrononRecord, Foretis};
+use crate::foretias::external_attestation::ExternalAttestationRecord;
+use crate::foretias::tick::{ChrononRecord, ForetisRecord};
 use crate::foretias::types::Tbid;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
@@ -26,12 +26,12 @@ fn make_test_tbid() -> Tbid {
     Tbid::from_raw(bytes)
 }
 
-fn make_test_foretis() -> Foretis {
+fn make_test_foretis() -> ForetisRecord {
     let mut ch = [0u8; 32];
     for (i, c) in ch.iter_mut().enumerate() {
         *c = (i * 3 + 1) as u8;
     }
-    Foretis::new(
+    ForetisRecord::new(
         42,
         FTByteArray::from(ch),
         make_test_tbid(),
@@ -252,7 +252,7 @@ fn base64array_deref_read() {
 
 // ─── Category 2: Domain Type Serialization Tests ────────────────────
 
-// Foretis
+// ForetisRecord
 #[test]
 fn foretis_serializes_to_base64_strings() {
     let f = make_test_foretis();
@@ -268,7 +268,7 @@ fn foretis_serializes_to_base64_strings() {
 fn foretis_roundtrip() {
     let f = make_test_foretis();
     let json = to_json(&f).unwrap();
-    let decoded: Foretis = from_json(&json).unwrap();
+    let decoded: ForetisRecord = from_json(&json).unwrap();
     assert_eq!(decoded.chronon_number, f.chronon_number);
     assert_eq!(decoded.content_hash, f.content_hash);
     assert_eq!(decoded.tbid, f.tbid);
@@ -457,12 +457,12 @@ fn sealed_blob_roundtrip() {
     assert_eq!(decoded.ciphertext, blob.ciphertext);
 }
 
-// ExternalAttestation
+// ExternalAttestationRecord
 #[test]
 fn external_attestation_roundtrip() {
     let foretis = make_test_foretis();
     let tick = make_test_tick_record(42);
-    let att = ExternalAttestation {
+    let att = ExternalAttestationRecord {
         attester_tbid: "test-attester".to_string(),
         foretis,
         signature: FTByteVector::default(),
@@ -471,7 +471,7 @@ fn external_attestation_roundtrip() {
         received_at_ns: 1_000_000_000,
     };
     let json = to_json(&att).unwrap();
-    let decoded: ExternalAttestation = from_json(&json).unwrap();
+    let decoded: ExternalAttestationRecord = from_json(&json).unwrap();
     assert_eq!(decoded.attester_tbid, att.attester_tbid);
     assert_eq!(decoded.received_at_ns, att.received_at_ns);
     assert_eq!(decoded.foretis.chronon_number, att.foretis.chronon_number);
@@ -487,7 +487,7 @@ fn external_attestation_roundtrip() {
 fn to_json_and_from_json_are_inverses() {
     let f = make_test_foretis();
     let json = to_json(&f).unwrap();
-    let decoded: Foretis = from_json(&json).unwrap();
+    let decoded: ForetisRecord = from_json(&json).unwrap();
     assert_eq!(decoded.chronon_number, f.chronon_number);
     assert_eq!(decoded.content_hash, f.content_hash);
     assert_eq!(decoded.tbid, f.tbid);
@@ -593,10 +593,10 @@ fn calendar_0_ticks_serialization() {
 
 #[test]
 fn deep_nesting_external_attestation() {
-    // ExternalAttestation contains Foretis + ChrononRecord — deep nesting
+    // ExternalAttestationRecord contains ForetisRecord + ChrononRecord — deep nesting
     let foretis = make_test_foretis();
     let tick = make_test_tick_record(100);
-    let att = ExternalAttestation {
+    let att = ExternalAttestationRecord {
         attester_tbid: "deep-attester".to_string(),
         foretis,
         signature: FTByteVector::default(),
@@ -605,7 +605,7 @@ fn deep_nesting_external_attestation() {
         received_at_ns: 9_999_999_999,
     };
     let json = to_json(&att).unwrap();
-    let decoded: ExternalAttestation = from_json(&json).unwrap();
+    let decoded: ExternalAttestationRecord = from_json(&json).unwrap();
     assert_eq!(decoded.attester_tbid, att.attester_tbid);
     assert_eq!(decoded.received_at_ns, att.received_at_ns);
     assert_eq!(decoded.foretis.chronon_number, att.foretis.chronon_number);
@@ -738,7 +738,7 @@ fn to_json_pretty_produces_valid_output() {
     // Verify to_json_pretty also works and produces valid JSON
     let f = make_test_foretis();
     let json = to_json_pretty(&f).unwrap();
-    let decoded: Foretis = serde_json::from_str(&json).unwrap();
+    let decoded: ForetisRecord = serde_json::from_str(&json).unwrap();
     assert_eq!(decoded.chronon_number, f.chronon_number);
     assert_eq!(decoded.content_hash, f.content_hash);
     assert_eq!(decoded.tbid, f.tbid);

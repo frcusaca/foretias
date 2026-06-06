@@ -1,4 +1,4 @@
-//! Foretias domain types: ChrononRecord, Foretis, and stamp/verify operations.
+//! Foretias domain types: ChrononRecord, ForetisRecord, and stamp/verify operations.
 
 use bon::Builder;
 use serde::{Deserialize, Serialize};
@@ -10,7 +10,7 @@ use crate::core::rng::random_bytes;
 use crate::crypto_server::CryptoServer;
 use crate::error::NodeError;
 
-/// A single entry in the Calendar, linking consecutive chronons via Foretis attestations.
+/// A single entry in the Calendar, linking consecutive chronons via ForetisRecord attestations.
 #[derive(Debug, Clone, Serialize, Deserialize, Builder)]
 #[builder(finish_fn(vis = "", name = build_internal))]
 pub struct ChrononRecord {
@@ -23,9 +23,9 @@ pub struct ChrononRecord {
     #[serde(default = "default_sig_algorithm")]
     #[builder(default = "Ed25519".to_string())]
     pub signature_algorithm: String,
-    /// Serialized Foretis attesting forward to the next chronon.
+    /// Serialized ForetisRecord attesting forward to the next chronon.
     pub forward_foretis: FTByteVector,
-    /// Serialized Foretis attesting backward to the previous chronon.
+    /// Serialized ForetisRecord attesting backward to the previous chronon.
     pub backward_foretis: FTByteVector,
     /// Cryptographic nonce (16 bytes) used in the auto-attestation blob for this chronon pair.
     /// This prevents replay attacks by ensuring each blob is unique even if the chronon data repeats.
@@ -37,7 +37,7 @@ pub struct ChrononRecord {
     /// External attestations from other Time Families.
     #[serde(default)]
     #[builder(default)]
-    pub external_attestations: Vec<super::external_attestation::ExternalAttestation>,
+    pub external_attestations: Vec<super::external_attestation::ExternalAttestationRecord>,
 
     /// TBID protocol version: 0 = legacy (16-byte UUID), 1 = dual-key (96-byte).
     #[serde(default = "default_tb_version")]
@@ -111,7 +111,9 @@ impl ChrononRecord {
     pub fn chronon_stamp_count(&self) -> &u64 {
         &self.chronon_stamp_count
     }
-    pub fn external_attestations(&self) -> &Vec<super::external_attestation::ExternalAttestation> {
+    pub fn external_attestations(
+        &self,
+    ) -> &Vec<super::external_attestation::ExternalAttestationRecord> {
         &self.external_attestations
     }
     pub fn tb_version(&self) -> &u32 {
@@ -146,8 +148,9 @@ impl<S: chronon_record_builder::IsComplete> ChrononRecordBuilder<S> {
 ///
 /// V2: signatures are carried by the trust-boundary wrapper (UnverifiedSignatureEnvelope),
 /// not by the payload struct. Signing bytes are `postcard::to_allocvec(&foretis_payload)`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Foretis {
+#[derive(Debug, Clone, Serialize, Deserialize, Builder)]
+#[builder(finish_fn(vis = "", name = build_internal))]
+pub struct ForetisRecord {
     /// The chronon number at which this attestation was created.
     pub chronon_number: u64,
     /// SHA-256 hash of the attested content.
@@ -162,8 +165,8 @@ pub struct Foretis {
     pub time_being_reference_time: String,
 }
 
-impl Foretis {
-    /// Create a validated Foretis.
+impl ForetisRecord {
+    /// Create a validated ForetisRecord.
     ///
     /// # Errors
     /// Returns `NodeError::InvalidInput` if `chronon_number` is 0.
@@ -209,7 +212,22 @@ impl Foretis {
 
     /// Returns postcard-encoded canonical bytes for signing (v2 wire format).
     pub fn sig_input_bytes(&self) -> Vec<u8> {
-        postcard::to_allocvec(self).expect("postcard serialize Foretis")
+        postcard::to_allocvec(self).expect("postcard serialize ForetisRecord")
+    }
+}
+
+/// Fallible builder for ForetisRecord — validates invariants before construction.
+impl<S: foretis_record_builder::IsComplete> ForetisRecordBuilder<S> {
+    /// Build a validated ForetisRecord.
+    ///
+    /// # Errors
+    /// Returns `NodeError::InvalidInput` if `chronon_number` is 0.
+    pub fn build(self) -> Result<ForetisRecord, NodeError> {
+        let record = self.build_internal();
+        if record.chronon_number == 0 {
+            return Err(NodeError::InvalidInput("chronon_number must be > 0".into()));
+        }
+        Ok(record)
     }
 }
 
@@ -282,10 +300,10 @@ pub trait CalendarLookup: Send + Sync {
 
 /// V2 StampedForetis: payload + signature carried separately by the trust-boundary wrapper.
 ///
-/// The `Foretis` payload is signature-free. The `signature_bytes` and `signature_algorithm`
+/// The `ForetisRecord` payload is signature-free. The `signature_bytes` and `signature_algorithm`
 /// are stored in the `UnverifiedSignatureEnvelope` / `CleanAuthenticated` wrappers.
 pub struct StampedForetis {
-    pub foretis: Foretis,
+    pub foretis: ForetisRecord,
     pub signature_bytes: Vec<u8>,
     pub signature_algorithm: String,
 }
@@ -310,7 +328,7 @@ pub fn stamp(
         .map_err(|e| NodeError::Internal(format!("clock error: {e}")))?;
     let time_being_reference_time = format!("UE+{}ns", now_ns);
 
-    let foretis = Foretis {
+    let foretis = ForetisRecord {
         chronon_number,
         content_hash: content_hash.bytes.into(),
         tbid: *tbid,
@@ -333,10 +351,10 @@ pub fn stamp(
     })
 }
 
-/// Verify a Foretis against content and calendar (V2: signature comes from wrapper).
+/// Verify a ForetisRecord against content and calendar (V2: signature comes from wrapper).
 pub fn verify(
     server: &dyn CryptoServer,
-    foretis: &Foretis,
+    foretis: &ForetisRecord,
     signature: &[u8],
     signature_algorithm: &str,
     content: &[u8],
@@ -1289,5 +1307,43 @@ mod tests {
             err_str.contains("public_key"),
             "error message should mention public_key, got: {err_str}"
         );
+    }
+
+    #[test]
+    fn foretis_builder_validation() {
+        // Build with chronon_number=0 must fail
+        let result = ForetisRecord::builder()
+            .chronon_number(0)
+            .content_hash([0u8; 32].into())
+            .tbid(Tbid::default())
+            .echo("test".to_string())
+            .tbn("test".to_string())
+            .time_being_reference_time("UE+123ns".to_string())
+            .build();
+
+        assert!(
+            result.is_err(),
+            "ForetisRecord::builder().build() with chronon_number=0 must return an error"
+        );
+        let err = result.unwrap_err();
+        let err_str = format!("{err}");
+        assert!(
+            err_str.contains("chronon_number"),
+            "error message should mention chronon_number, got: {err_str}"
+        );
+
+        // Build with valid chronon_number must succeed
+        let record = ForetisRecord::builder()
+            .chronon_number(1)
+            .content_hash([0u8; 32].into())
+            .tbid(Tbid::default())
+            .echo("test".to_string())
+            .tbn("test".to_string())
+            .time_being_reference_time("UE+123ns".to_string())
+            .build()
+            .expect("build with chronon_number=1 should succeed");
+
+        assert_eq!(record.chronon_number, 1);
+        assert_eq!(record.echo, "test");
     }
 }

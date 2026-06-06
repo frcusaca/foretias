@@ -16,11 +16,11 @@ core-engine/src/foretias/clean_auth.rs | EpochSnapshot | impl::UnverifiedSignatu
 core-engine/src/foretias/clean_auth.rs | EpochSnapshot | impl::UnverifiedSignatureEnvelope::fn::into_clean_authenticated | - | Y | -
 core-engine/src/foretias/clean_auth.rs | EpochSnapshot | impl::UnverifiedSignatureEnvelope::fn::verify | - | Y | -
 core-engine/src/foretias/clean_auth.rs | FamilyRecord | impl::UnverifiedSignatureEnvelope | Y | - | -
-core-engine/src/foretias/clean_auth.rs | Foretis | impl::CleanAuthenticated | - | Y | -
-core-engine/src/foretias/clean_auth.rs | Foretis | impl::CleanAuthenticated::fn::externalize | - | - | Y
-core-engine/src/foretias/clean_auth.rs | Foretis | impl::UnverifiedSignatureEnvelope | Y | - | -
-core-engine/src/foretias/clean_auth.rs | Foretis | impl::UnverifiedSignatureEnvelope::fn::into_clean_authenticated | - | Y | -
-core-engine/src/foretias/clean_auth.rs | Foretis | impl::UnverifiedSignatureEnvelope::fn::verify | - | Y | -
+core-engine/src/foretias/clean_auth.rs | ForetisRecord | impl::CleanAuthenticated | - | Y | -
+core-engine/src/foretias/clean_auth.rs | ForetisRecord | impl::CleanAuthenticated::fn::externalize | - | - | Y
+core-engine/src/foretias/clean_auth.rs | ForetisRecord | impl::UnverifiedSignatureEnvelope | Y | - | -
+core-engine/src/foretias/clean_auth.rs | ForetisRecord | impl::UnverifiedSignatureEnvelope::fn::into_clean_authenticated | - | Y | -
+core-engine/src/foretias/clean_auth.rs | ForetisRecord | impl::UnverifiedSignatureEnvelope::fn::verify | - | Y | -
 core-engine/src/foretias/clean_auth.rs | T | impl::CleanAuthenticated | - | Y | -
 core-engine/src/foretias/clean_auth.rs | T | impl::CleanAuthenticated::fn::from | - | Y | -
 core-engine/src/foretias/clean_auth.rs | T | impl::Externalized | - | - | Y
@@ -54,19 +54,19 @@ foretias-server/src/communerd/communerdette.rs | ChrononRecord | impl::Communerd
 foretias-server/src/communerd/communerdette.rs | ChrononRecord | impl::CommunerdetteLine::fn::get_calendar_slice | - | Y | -
 foretias-server/src/communerd/communerdette.rs | ChrononRecord | impl::CommunerdetteLine::fn::get_tick | - | Y | -
 foretias-server/src/communerd/communerdette.rs | ChrononRecord | other | - | Y | -
-foretias-server/src/communerd/communerdette.rs | Foretis | impl::Communerdette::fn::execute_stamp | - | Y | -
-foretias-server/src/communerd/communerdette.rs | Foretis | impl::CommunerdetteExecutor::fn::gate_foretis | Y | Y | -
-foretias-server/src/communerd/communerdette.rs | Foretis | impl::CommunerdetteLine::fn::stamp | - | Y | -
-foretias-server/src/communerd/communerdette.rs | Foretis | impl::CommunerdetteLine::fn::stamp_chronon | - | Y | -
-foretias-server/src/communerd/communerdette.rs | Foretis | other | - | Y | -
+foretias-server/src/communerd/communerdette.rs | ForetisRecord | impl::Communerdette::fn::execute_stamp | - | Y | -
+foretias-server/src/communerd/communerdette.rs | ForetisRecord | impl::CommunerdetteExecutor::fn::gate_foretis | Y | Y | -
+foretias-server/src/communerd/communerdette.rs | ForetisRecord | impl::CommunerdetteLine::fn::stamp | - | Y | -
+foretias-server/src/communerd/communerdette.rs | ForetisRecord | impl::CommunerdetteLine::fn::stamp_chronon | - | Y | -
+foretias-server/src/communerd/communerdette.rs | ForetisRecord | other | - | Y | -
 foretias-server/src/communerd/communerdette.rs | u8 | fn::clean_auth_types_are_importable | Y | Y | Y
-foretias-server/src/communerd/tiers.rs | Foretis | impl::CommunerdP2P::fn::route_stamp | - | Y | -
-foretias-server/src/communerd/tiers.rs | Foretis | impl::CommunerdP2P::fn::stamp_chronon | - | Y | -
-foretias-server/src/communerd/tiers.rs | Foretis | impl::CommunerdServer::fn::route_stamp | - | Y | -
-foretias-server/src/communerd/tiers.rs | Foretis | impl::CommunerdServer::fn::stamp_chronon | - | Y | -
+foretias-server/src/communerd/tiers.rs | ForetisRecord | impl::CommunerdP2P::fn::route_stamp | - | Y | -
+foretias-server/src/communerd/tiers.rs | ForetisRecord | impl::CommunerdP2P::fn::stamp_chronon | - | Y | -
+foretias-server/src/communerd/tiers.rs | ForetisRecord | impl::CommunerdServer::fn::route_stamp | - | Y | -
+foretias-server/src/communerd/tiers.rs | ForetisRecord | impl::CommunerdServer::fn::stamp_chronon | - | Y | -
 foretias-server/src/server/handlers.rs | ChrononRecord | fn::handle_history_dump_chunk | Y | Y | -
 foretias-server/src/server/handlers.rs | ChrononRecord | fn::handle_ship_ack | Y | Y | -
-foretias-server/src/server/handlers.rs | Foretis | fn::cross_node_verify | Y | - | -
+foretias-server/src/server/handlers.rs | ForetisRecord | fn::cross_node_verify | Y | - | -
 
 
 === Cross-Tabulation ===
@@ -75,29 +75,29 @@ crate | wrapper | inner | count
 ================================================================================
 core-engine | CleanAuthenticated | ChrononRecord | 9
 core-engine | CleanAuthenticated | EpochSnapshot | 3
-core-engine | CleanAuthenticated | Foretis | 3
+core-engine | CleanAuthenticated | ForetisRecord | 3
 core-engine | CleanAuthenticated | ProbityReport | 3
 core-engine | CleanAuthenticated | T | 6
 core-engine | CleanAuthenticated | u32 | 2
 core-engine | Externalized | ChrononRecord | 1
 core-engine | Externalized | EpochSnapshot | 1
-core-engine | Externalized | Foretis | 1
+core-engine | Externalized | ForetisRecord | 1
 core-engine | Externalized | ProbityReport | 1
 core-engine | Externalized | T | 3
 core-engine | UnverifiedSignatureEnvelope | ChrononRecord | 2
 core-engine | UnverifiedSignatureEnvelope | EpochSnapshot | 1
 core-engine | UnverifiedSignatureEnvelope | FamilyRecord | 1
-core-engine | UnverifiedSignatureEnvelope | Foretis | 1
+core-engine | UnverifiedSignatureEnvelope | ForetisRecord | 1
 core-engine | UnverifiedSignatureEnvelope | ProbityReport | 1
 core-engine | UnverifiedSignatureEnvelope | T | 5
 foretias-server | CleanAuthenticated | AuthenticatedPong | 1
 foretias-server | CleanAuthenticated | ChrononRecord | 16
-foretias-server | CleanAuthenticated | Foretis | 9
+foretias-server | CleanAuthenticated | ForetisRecord | 9
 foretias-server | CleanAuthenticated | u8 | 1
 foretias-server | Externalized | ChrononRecord | 5
 foretias-server | Externalized | u8 | 1
 foretias-server | UnverifiedSignatureEnvelope | ChrononRecord | 2
-foretias-server | UnverifiedSignatureEnvelope | Foretis | 2
+foretias-server | UnverifiedSignatureEnvelope | ForetisRecord | 2
 foretias-server | UnverifiedSignatureEnvelope | u8 | 1
 
 
@@ -114,21 +114,21 @@ wrapper | inner/context | count
 CleanAuthenticated | AuthenticatedPong | 1
 CleanAuthenticated | ChrononRecord | 25
 CleanAuthenticated | EpochSnapshot | 3
-CleanAuthenticated | Foretis | 12
+CleanAuthenticated | ForetisRecord | 12
 CleanAuthenticated | ProbityReport | 3
 CleanAuthenticated | T | 6
 CleanAuthenticated | u32 | 2
 CleanAuthenticated | u8 | 1
 Externalized | ChrononRecord | 6
 Externalized | EpochSnapshot | 1
-Externalized | Foretis | 1
+Externalized | ForetisRecord | 1
 Externalized | ProbityReport | 1
 Externalized | T | 3
 Externalized | u8 | 1
 UnverifiedSignatureEnvelope | ChrononRecord | 4
 UnverifiedSignatureEnvelope | EpochSnapshot | 1
 UnverifiedSignatureEnvelope | FamilyRecord | 1
-UnverifiedSignatureEnvelope | Foretis | 3
+UnverifiedSignatureEnvelope | ForetisRecord | 3
 UnverifiedSignatureEnvelope | ProbityReport | 1
 UnverifiedSignatureEnvelope | T | 5
 UnverifiedSignatureEnvelope | u8 | 1
