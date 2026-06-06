@@ -41,13 +41,24 @@
 
 ### Wave 3: Foretis + ExternalAttestation Builders
 
-- [ ] Add `#[derive(Builder)]` to `Foretis` with fallible `build()`
-- [ ] Add `#[derive(Builder)]` to `ExternalAttestation` with fallible `build()`
+- [ ] Rename `Foretis` → `ForetisRecord` in `tick.rs` and all call sites
+- [ ] Rename `ExternalAttestation` → `ExternalAttestationRecord` in `external_attestation.rs` and all call sites
+- [ ] Add `#[derive(Builder)]` to `ForetisRecord` with fallible `build()`
+- [ ] Add `#[derive(Builder)]` to `ExternalAttestationRecord` with fallible `build()`
 - [ ] Write test: `foretis_builder_validation` — build with chronon_number=0 → error
 - [ ] Run `cargo test -p foretias-core` — all existing tests still pass
-- [ ] Commit: "Foretis + ExternalAttestation: add bon builders"
+- [ ] Commit: "ForetisRecord + ExternalAttestationRecord: rename + add bon builders"
 
-### Wave 4: Function Builders
+### Wave 4: BaseRecord Rename + Remaining Types
+
+- [ ] Rename `RecordBase` → `BaseRecord` in `clean_auth.rs` and all call sites
+- [ ] Rename `EpochSnapshot` → `EpochSnapshotRecord` in `epoch/snapshot.rs` and all call sites
+- [ ] Rename `ProbityReport` → `ProbityReportRecord` in `probity/report.rs` and all call sites
+- [ ] Implement `BaseRecord` for `ForetisRecord` and `ExternalAttestationRecord`
+- [ ] Run `cargo test -p foretias-core` — all existing tests still pass
+- [ ] Commit: "BaseRecord rename + implement for all Record types"
+
+### Wave 5: Function Builders
 
 - [ ] Convert `gossip_event_loop` to `#[bon::builder]` function builder, remove `GossipLoopConfig` struct
 - [ ] Update call site at `communerd/mod.rs` to use builder chain
@@ -58,7 +69,7 @@
 - [ ] Run `cargo test --workspace` — all tests still pass
 - [ ] Commit: "Config: bon function builders for large functions"
 
-### Wave 5: Struct Builders for Config Types
+### Wave 6: Struct Builders for Config Types
 
 - [ ] Add `#[derive(Builder)]` to `TimeFamilyCliConfig` with `#[builder(default)]` for optional fields
 - [ ] Add `#[derive(Builder)]` to `VerifyConfig` with `#[builder(default)]` for optional fields
@@ -66,17 +77,17 @@
 - [ ] Run `cargo test --workspace` — all tests still pass
 - [ ] Commit: "Config structs: add bon struct builders"
 
-### Wave 6: Migration — Replace Existing Constructors
+### Wave 7: Migration — Replace Existing Constructors
 
 - [ ] Find all `ChrononRecord::new(...)` call sites (grep for `ChrononRecord::new`)
 - [ ] Replace each with `ChrononRecord::builder().field(value)...build()?`
-- [ ] Find all `Foretis::new(...)` call sites
-- [ ] Replace each with `Foretis::builder().field(value)...build()?`
-- [ ] Remove the old `ChrononRecord::new()` and `Foretis::new()` methods (or mark deprecated)
+- [ ] Find all `ForetisRecord::new(...)` call sites
+- [ ] Replace each with `ForetisRecord::builder().field(value)...build()?`
+- [ ] Remove the old `ChrononRecord::new()` and `ForetisRecord::new()` methods (or mark deprecated)
 - [ ] Run `cargo test --workspace` — all tests still pass
 - [ ] Commit: "Migrate constructors to bon builders"
 
-### Wave 7: Final Verification
+### Wave 8: Final Verification
 
 - [ ] `cargo clippy --workspace --all-targets -- -D warnings` — zero warnings
 - [ ] `cargo test --workspace` — all tests pass
