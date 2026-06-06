@@ -1,5 +1,6 @@
 //! TimeFamily top-level configuration.
 
+use bon::Builder;
 use serde::{Deserialize, Serialize};
 
 use super::calendar::{CalendarConfig, EncryptionConfig};
@@ -47,6 +48,22 @@ fn default_log_level() -> String {
 
 fn default_log_format() -> String {
     "pretty".to_string()
+}
+
+fn default_request_timeout_secs() -> u64 {
+    15
+}
+
+fn default_p2p_port_range() -> [u16; 2] {
+    [4002, 4999]
+}
+
+fn default_dht_namespace() -> String {
+    "foretias".to_string()
+}
+
+fn default_max_discovered_peers() -> usize {
+    100
 }
 
 impl Default for LoggingConfig {
@@ -100,21 +117,31 @@ impl Default for TimeFamilyConfig {
 }
 
 /// CLI and config-file parameters for building a TimeFamilyConfig.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Builder)]
 pub struct TimeFamilyCliConfig {
     pub listen_addr: String,
     pub chronon_ns: u64,
     pub persist_path: Option<std::path::PathBuf>,
+    #[builder(default)]
     pub dormant: bool,
+    #[builder(default)]
     pub peers: Vec<String>,
+    #[builder(default)]
     pub auto_attest_every_n: u64,
+    #[builder(default = default_request_timeout_secs())]
     pub request_timeout_secs: u64,
     pub p2p_listen: Option<String>,
+    #[builder(default = default_p2p_port_range())]
     pub p2p_port_range: [u16; 2],
+    #[builder(default)]
     pub p2p_dial: Vec<String>,
+    #[builder(default)]
     pub known_servers: Vec<String>,
+    #[builder(default = default_dht_namespace())]
     pub dht_namespace: String,
+    #[builder(default)]
     pub dht_bootstrap: Vec<String>,
+    #[builder(default = default_max_discovered_peers())]
     pub max_discovered_peers: usize,
     pub config_file_path: Option<String>,
 }
