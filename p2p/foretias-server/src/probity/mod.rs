@@ -9,7 +9,7 @@ pub mod store;
 pub use aggregator::{aggregate, u_shape_weight, UShapeConfig};
 pub use clean_auth::{pub_key_from_tbid_hex, CleanAuthError};
 pub use gossip_handler::{handle_gossip_message, DefaultReporterKeyResolver, ReporterKeyResolver};
-pub use report::ProbityReport;
+pub use report::ProbityReportRecord;
 pub use store::ProbityStore;
 
 use crate::calendar_store::StorageProofResult;
@@ -28,10 +28,10 @@ pub const STORAGE_PARTIAL: &str = "storage_partial";
 pub const STORAGE_FAILED: &str = "storage_failed";
 
 // ---------------------------------------------------------------------------
-// Storage proof → ProbityReport conversion
+// Storage proof → ProbityReportRecord conversion
 // ---------------------------------------------------------------------------
 
-/// Convert a [`StorageProofResult`] into a single [`ProbityReport`].
+/// Convert a [`StorageProofResult`] into a single [`ProbityReportRecord`].
 ///
 /// Attribute selection and value:
 /// - `verified == true` → `STORAGE_VERIFIED`, value `+1.0`
@@ -45,7 +45,7 @@ pub fn storage_proof_to_probity(
     subject: &str,
     reporter: &str,
     timestamp_ns: u64,
-) -> ProbityReport {
+) -> ProbityReportRecord {
     let (attribute, value) = if result.verified {
         (STORAGE_VERIFIED, 1.0f32)
     } else if result.coverage_ratio <= 0.0 {
@@ -55,7 +55,7 @@ pub fn storage_proof_to_probity(
         (STORAGE_PARTIAL, penalty)
     };
 
-    ProbityReport {
+    ProbityReportRecord {
         subject: subject.to_string(),
         reporter: reporter.to_string(),
         attribute: attribute.to_string(),

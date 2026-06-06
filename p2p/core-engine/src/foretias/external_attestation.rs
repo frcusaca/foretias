@@ -3,6 +3,7 @@
 use bon::Builder;
 use serde::{Deserialize, Serialize};
 
+use super::clean_auth::BaseRecord;
 use super::encoding::FTByteVector;
 use super::tick::ChrononRecord;
 use crate::error::NodeError;
@@ -43,6 +44,12 @@ impl<S: external_attestation_record_builder::IsComplete> ExternalAttestationReco
             ));
         }
         Ok(record)
+    }
+}
+
+impl BaseRecord for ExternalAttestationRecord {
+    fn always_require_full_signature(&self) -> bool {
+        false
     }
 }
 

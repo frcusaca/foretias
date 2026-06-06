@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::epoch::snapshot::{EpochSnapshot, PeerScore};
+use crate::epoch::snapshot::{EpochSnapshotRecord, PeerScore};
 use crate::error::NodeError;
 use crate::foretias::encoding::FTByteVector;
 
@@ -15,10 +15,7 @@ pub enum FrostMsg {
         commitment: FTByteVector,
     },
     /// Second round: a peer's signed share of the message.
-    Share {
-        from: String,
-        share: FTByteVector,
-    },
+    Share { from: String, share: FTByteVector },
 }
 
 /// Run a FROST signing round for the given epoch.
@@ -26,14 +23,14 @@ pub enum FrostMsg {
 /// For v0.8 this returns a stub snapshot with dummy signature data.
 /// The actual FROST protocol will be wired in once the C11 backend is ready.
 pub async fn run_frost_round(
-    epoch_num:    u64,
-    start_ns:     u64,
-    end_ns:       u64,
-    committee:    &[String],
-    threshold_k:  u32,
-) -> Result<EpochSnapshot, NodeError> {
+    epoch_num: u64,
+    start_ns: u64,
+    end_ns: u64,
+    committee: &[String],
+    threshold_k: u32,
+) -> Result<EpochSnapshotRecord, NodeError> {
     // Stub: return a dummy snapshot with placeholder signature.
-    Ok(EpochSnapshot {
+    Ok(EpochSnapshotRecord {
         epoch_number: epoch_num,
         epoch_start_ns: start_ns,
         epoch_end_ns: end_ns,
@@ -48,13 +45,13 @@ pub async fn run_frost_round(
 /// Stub FROST round — produces a fake snapshot for testing with peer scores.
 /// Real FROST implementation deferred to v0.9+ enclave work.
 pub async fn run_frost_round_stub(
-    epoch_num:   u64,
-    start_ns:    u64,
-    end_ns:      u64,
+    epoch_num: u64,
+    start_ns: u64,
+    end_ns: u64,
     peer_scores: Vec<PeerScore>,
-    committee:   Vec<String>,
-    threshold:   u32,
-) -> Result<EpochSnapshot, NodeError> {
+    committee: Vec<String>,
+    threshold: u32,
+) -> Result<EpochSnapshotRecord, NodeError> {
     let mut scores = peer_scores;
     scores.sort_by(|a, b| a.peer_id.cmp(&b.peer_id));
 
@@ -63,7 +60,7 @@ pub async fn run_frost_round_stub(
     let frost_signature: FTByteVector = vec![0xAB; 64].into();
     let committee_pubkey: FTByteVector = vec![0xCD; 32].into();
 
-    Ok(EpochSnapshot {
+    Ok(EpochSnapshotRecord {
         epoch_number: epoch_num,
         epoch_start_ns: start_ns,
         epoch_end_ns: end_ns,
@@ -99,7 +96,10 @@ mod tests {
         let json = serde_json::to_string(&commitment).unwrap();
         let parsed: FrostMsg = serde_json::from_str(&json).unwrap();
         match parsed {
-            FrostMsg::Commitment { from, commitment: c } => {
+            FrostMsg::Commitment {
+                from,
+                commitment: c,
+            } => {
                 assert_eq!(from, "peer-1");
                 assert_eq!(c.len(), 32);
             }
@@ -121,14 +121,25 @@ mod tests {
     #[tokio::test]
     async fn frost_round_stub_produces_valid_snapshot() {
         let scores = vec![
-            PeerScore { peer_id: "peer-b".into(), score: 90.0 },
-            PeerScore { peer_id: "peer-a".into(), score: 80.0 },
+            PeerScore {
+                peer_id: "peer-b".into(),
+                score: 90.0,
+            },
+            PeerScore {
+                peer_id: "peer-a".into(),
+                score: 80.0,
+            },
         ];
         let snap = run_frost_round_stub(
-            5, 1_000, 2_000, scores,
+            5,
+            1_000,
+            2_000,
+            scores,
             vec!["peer-a".into(), "peer-b".into()],
             2,
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         assert_eq!(snap.epoch_number, 5);
         assert_eq!(snap.epoch_start_ns, 1_000);
@@ -143,17 +154,35 @@ mod tests {
     #[tokio::test]
     async fn frost_round_stub_peer_scores_sorted() {
         let scores = vec![
-            PeerScore { peer_id: "zzz".into(), score: 10.0 },
-            PeerScore { peer_id: "aaa".into(), score: 99.0 },
-            PeerScore { peer_id: "mmm".into(), score: 50.0 },
+            PeerScore {
+                peer_id: "zzz".into(),
+                score: 10.0,
+            },
+            PeerScore {
+                peer_id: "aaa".into(),
+                score: 99.0,
+            },
+            PeerScore {
+                peer_id: "mmm".into(),
+                score: 50.0,
+            },
         ];
         let snap = run_frost_round_stub(
-            1, 0, 1_000, scores,
+            1,
+            0,
+            1_000,
+            scores,
             vec!["aaa".into(), "mmm".into(), "zzz".into()],
             2,
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
-        let ids: Vec<&str> = snap.peer_scores.iter().map(|s| s.peer_id.as_str()).collect();
+        let ids: Vec<&str> = snap
+            .peer_scores
+            .iter()
+            .map(|s| s.peer_id.as_str())
+            .collect();
         assert_eq!(ids, vec!["aaa", "mmm", "zzz"]);
     }
 }

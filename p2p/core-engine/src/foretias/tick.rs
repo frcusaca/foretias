@@ -231,6 +231,12 @@ impl<S: foretis_record_builder::IsComplete> ForetisRecordBuilder<S> {
     }
 }
 
+impl super::clean_auth::BaseRecord for ForetisRecord {
+    fn always_require_full_signature(&self) -> bool {
+        false
+    }
+}
+
 /// Serialization algorithm used to encode content before stamping.
 ///
 /// Controls how raw bytes are serialized before being hashed and signed.
@@ -615,7 +621,7 @@ fn build_normal_attest_blob(
     attest_blob
 }
 
-impl super::clean_auth::RecordBase for ChrononRecord {
+impl super::clean_auth::BaseRecord for ChrononRecord {
     fn always_require_full_signature(&self) -> bool {
         false
     }
@@ -635,7 +641,7 @@ mod tests {
     use crate::clock::SystemClock;
     use crate::crypto_server;
     use crate::foretias::calendar::Calendar;
-    use crate::foretias::clean_auth::RecordBase;
+    use crate::foretias::clean_auth::BaseRecord;
     use postcard;
 
     fn make_server() -> Box<dyn CryptoServer> {

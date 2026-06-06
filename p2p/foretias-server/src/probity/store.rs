@@ -5,10 +5,10 @@ use parking_lot::RwLock;
 use std::collections::HashMap;
 
 use super::aggregator::{aggregate, UShapeConfig};
-use super::report::ProbityReport;
+use super::report::ProbityReportRecord;
 
 pub struct ProbityStore {
-    reports: RwLock<HashMap<String, Vec<ProbityReport>>>,
+    reports: RwLock<HashMap<String, Vec<ProbityReportRecord>>>,
     scores: RwLock<HashMap<String, f32>>,
     config: UShapeConfig,
     max_reports_per_peer: usize,
@@ -35,7 +35,7 @@ impl ProbityStore {
     }
 
     /// Ingest a verified report. Caller must have verified the signature already.
-    pub fn ingest(&self, report: ProbityReport) -> Result<(), NodeError> {
+    pub fn ingest(&self, report: ProbityReportRecord) -> Result<(), NodeError> {
         let mut guard = self.reports.write();
         let list = guard.entry(report.subject.clone()).or_default();
         let dup = list.iter().any(|r| {
@@ -93,8 +93,8 @@ impl ProbityStore {
 mod tests {
     use super::*;
 
-    fn make_report(subject: &str, reporter: &str, ts: u64) -> ProbityReport {
-        ProbityReport {
+    fn make_report(subject: &str, reporter: &str, ts: u64) -> ProbityReportRecord {
+        ProbityReportRecord {
             subject: subject.to_string(),
             reporter: reporter.to_string(),
             attribute: "correctness".to_string(),
@@ -137,7 +137,7 @@ mod tests {
 
         // V↔W mutual vouching gives both positive pass-1 scores → credibility in pass 2
         store
-            .ingest(ProbityReport {
+            .ingest(ProbityReportRecord {
                 subject: "W".into(),
                 reporter: "V".into(),
                 attribute: "correctness".into(),
@@ -149,7 +149,7 @@ mod tests {
             })
             .unwrap();
         store
-            .ingest(ProbityReport {
+            .ingest(ProbityReportRecord {
                 subject: "V".into(),
                 reporter: "W".into(),
                 attribute: "correctness".into(),
@@ -163,7 +163,7 @@ mod tests {
 
         // W→Z→X chain gives Z and X positive pass-1 scores
         store
-            .ingest(ProbityReport {
+            .ingest(ProbityReportRecord {
                 subject: "Z".into(),
                 reporter: "W".into(),
                 attribute: "correctness".into(),
@@ -175,7 +175,7 @@ mod tests {
             })
             .unwrap();
         store
-            .ingest(ProbityReport {
+            .ingest(ProbityReportRecord {
                 subject: "X".into(),
                 reporter: "Z".into(),
                 attribute: "correctness".into(),
@@ -190,7 +190,7 @@ mod tests {
         // X gives strong good report on A (+50), Y gives weak bad report (-20)
         // A pass-1 score = +50 - 20 = +30 → A has credibility in pass 2
         store
-            .ingest(ProbityReport {
+            .ingest(ProbityReportRecord {
                 subject: "A".into(),
                 reporter: "X".into(),
                 attribute: "correctness".into(),
@@ -202,7 +202,7 @@ mod tests {
             })
             .unwrap();
         store
-            .ingest(ProbityReport {
+            .ingest(ProbityReportRecord {
                 subject: "A".into(),
                 reporter: "Y".into(),
                 attribute: "correctness".into(),
@@ -217,7 +217,7 @@ mod tests {
         // A reports badly on Y → Y gets negative pass-1 score
         // In pass 2: Y credibility = 0 (negative pass-1), A's bad report carries weight
         store
-            .ingest(ProbityReport {
+            .ingest(ProbityReportRecord {
                 subject: "Y".into(),
                 reporter: "A".into(),
                 attribute: "correctness".into(),

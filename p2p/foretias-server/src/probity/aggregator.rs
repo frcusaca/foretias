@@ -1,6 +1,6 @@
 //! U-shape time-weighted aggregator for probity reports.
 
-use super::report::ProbityReport;
+use super::report::ProbityReportRecord;
 
 #[derive(Debug, Clone, Copy)]
 pub struct UShapeConfig {
@@ -44,7 +44,7 @@ pub fn u_shape_weight(age_ns: u64, cfg: &UShapeConfig) -> f32 {
 
 /// Aggregate a probity score for one subject from a slice of reports.
 pub fn aggregate(
-    reports: &[ProbityReport],
+    reports: &[ProbityReportRecord],
     now_ns: u64,
     credibility: &dyn Fn(&str) -> f32,
     cfg: &UShapeConfig,
@@ -106,7 +106,7 @@ mod tests {
     fn aggregate_future_dated_rejected() {
         let cfg = UShapeConfig::default();
         let now = 1_000_000_000_000;
-        let reports = vec![ProbityReport {
+        let reports = vec![ProbityReportRecord {
             subject: "x".into(),
             reporter: "y".into(),
             attribute: "correctness".into(),
@@ -125,8 +125,8 @@ mod tests {
     fn aggregate_clamps_to_range() {
         let cfg = UShapeConfig::default();
         let now = 1_000_000_000_000;
-        let reports: Vec<ProbityReport> = (0..1000)
-            .map(|i| ProbityReport {
+        let reports: Vec<ProbityReportRecord> = (0..1000)
+            .map(|i| ProbityReportRecord {
                 subject: "x".into(),
                 reporter: format!("r{}", i),
                 attribute: "correctness".into(),

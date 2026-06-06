@@ -87,13 +87,13 @@ pub(crate) trait CommunerdetteHost: Send + Sync {
     ) -> Result<serde_json::Value, TransportError>;
     /// Execute a liveness ping (Phase 12.1).
     async fn host_execute_ping(&self, peer: &PeerAddr) -> Result<(), TransportError>;
-    /// Sign a ProbityReport (Phase 13.1).
+    /// Sign a ProbityReportRecord (Phase 13.1).
     /// Calendar signing stub — returns signed bytes or error.
     fn host_sign_probity_report(
         &self,
-        report: &crate::probity::ProbityReport,
+        report: &crate::probity::ProbityReportRecord,
     ) -> Result<Vec<u8>, String>;
-    /// Publish a signed ProbityReport via gossip (Phase 13.1).
+    /// Publish a signed ProbityReportRecord via gossip (Phase 13.1).
     fn host_publish_probity_report(&self, signed_bytes: Vec<u8>);
 }
 
@@ -1056,7 +1056,7 @@ impl CommunerdetteExecutor {
             tracing::debug!(target_tbid = %self.target_tbid.to_hex(), "FB emission skipped: no local_calendar_tbid set");
             return;
         };
-        let report = crate::probity::ProbityReport {
+        let report = crate::probity::ProbityReportRecord {
             subject: self.target_tbid.to_hex(),
             reporter: reporter_tbid.clone(),
             attribute: "fb".to_string(),
@@ -2296,7 +2296,7 @@ mod tests {
 
         fn host_sign_probity_report(
             &self,
-            _report: &crate::probity::ProbityReport,
+            _report: &crate::probity::ProbityReportRecord,
         ) -> Result<Vec<u8>, String> {
             Ok(vec![0xAA; 64])
         }
@@ -3613,7 +3613,7 @@ mod tests {
 
         fn host_sign_probity_report(
             &self,
-            _report: &crate::probity::ProbityReport,
+            _report: &crate::probity::ProbityReportRecord,
         ) -> Result<Vec<u8>, String> {
             Ok(vec![0xBB; 64])
         }
@@ -3748,13 +3748,13 @@ mod tests {
 
     /// Mock host that captures sign and publish calls for FB emission assertions.
     struct FBMockHost {
-        sign_calls: std::sync::Arc<Mutex<Vec<crate::probity::ProbityReport>>>,
+        sign_calls: std::sync::Arc<Mutex<Vec<crate::probity::ProbityReportRecord>>>,
         publish_calls: std::sync::Arc<Mutex<Vec<Vec<u8>>>>,
     }
 
     type FbMockHostResult = (
         FBMockHost,
-        std::sync::Arc<Mutex<Vec<crate::probity::ProbityReport>>>,
+        std::sync::Arc<Mutex<Vec<crate::probity::ProbityReportRecord>>>,
         std::sync::Arc<Mutex<Vec<Vec<u8>>>>,
     );
 
@@ -3826,7 +3826,7 @@ mod tests {
         // SIGN(report → host_sign_probity_report)
         fn host_sign_probity_report(
             &self,
-            report: &crate::probity::ProbityReport,
+            report: &crate::probity::ProbityReportRecord,
         ) -> Result<Vec<u8>, String> {
             self.sign_calls.lock().push(report.clone());
             Ok(vec![0xAA; 64])
@@ -4141,7 +4141,7 @@ mod tests {
 
         fn host_sign_probity_report(
             &self,
-            _report: &crate::probity::ProbityReport,
+            _report: &crate::probity::ProbityReportRecord,
         ) -> Result<Vec<u8>, String> {
             Ok(vec![0xCC; 64])
         }

@@ -1,24 +1,24 @@
-//! ProbityReport — signed reputation/timing observations gossiped across the network.
+//! ProbityReportRecord — signed reputation/timing observations gossiped across the network.
 //!
 //! Three-stage type progression:
-//! `UnverifiedSignatureEnvelope<ProbityReport>` (parsed, not trusted)
-//! → `CleanAuthenticated<ProbityReport>` (authenticated + cleansed)
-//! → `Externalized<ProbityReport>` (wire/disk, wraps domain type).
+//! `UnverifiedSignatureEnvelope<ProbityReportRecord>` (parsed, not trusted)
+//! → `CleanAuthenticated<ProbityReportRecord>` (authenticated + cleansed)
+//! → `Externalized<ProbityReportRecord>` (wire/disk, wraps domain type).
 
 use crate::crypto_server::CryptoServer;
 use crate::error::NodeError;
 use crate::foretias::clean_auth::{
-    CleanAuthError, CleanAuthenticated, CleanFullyAuthenticated, Externalized, RecordBase,
+    BaseRecord, CleanAuthError, CleanAuthenticated, CleanFullyAuthenticated, Externalized,
     UnverifiedSignatureEnvelope,
 };
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
-// ProbityReport domain type
+// ProbityReportRecord domain type
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ProbityReport {
+pub struct ProbityReportRecord {
     /// PeerId (hex) of the peer being reported on.
     pub subject: String,
     /// PeerId (hex) of the reporting peer.
@@ -39,7 +39,7 @@ pub struct ProbityReport {
     pub slow_signature: Vec<u8>,
 }
 
-impl ProbityReport {
+impl ProbityReportRecord {
     pub fn subject(&self) -> &str {
         &self.subject
     }
@@ -71,11 +71,11 @@ impl ProbityReport {
         let mut no_sig = self.clone();
         no_sig.signature = Vec::new();
         no_sig.slow_signature = Vec::new();
-        postcard::to_allocvec(&no_sig).expect("postcard serialize ProbityReport")
+        postcard::to_allocvec(&no_sig).expect("postcard serialize ProbityReportRecord")
     }
 }
 
-impl RecordBase for ProbityReport {
+impl BaseRecord for ProbityReportRecord {
     fn always_require_full_signature(&self) -> bool {
         // Bruderschaft and Group-Notification-Feature require full signature
         self.attribute == "fb" || self.attribute == "gnf"
@@ -100,10 +100,10 @@ pub fn pub_key_from_tbid_hex(pub_key_hex: &str) -> Result<Vec<u8>, CleanAuthErro
 }
 
 // ---------------------------------------------------------------------------
-// UnverifiedSignatureEnvelope<ProbityReport> — field accessors + verify
+// UnverifiedSignatureEnvelope<ProbityReportRecord> — field accessors + verify
 // ---------------------------------------------------------------------------
 
-impl UnverifiedSignatureEnvelope<ProbityReport> {
+impl UnverifiedSignatureEnvelope<ProbityReportRecord> {
     pub fn subject(&self) -> &str {
         &self.inner().subject
     }
@@ -133,7 +133,7 @@ impl UnverifiedSignatureEnvelope<ProbityReport> {
     pub fn verify(
         self,
         crypto: &dyn CryptoServer,
-    ) -> Result<CleanAuthenticated<ProbityReport>, CleanAuthError> {
+    ) -> Result<CleanAuthenticated<ProbityReportRecord>, CleanAuthError> {
         let report = self.inner();
 
         if report.curve != 1 {
@@ -163,20 +163,20 @@ impl UnverifiedSignatureEnvelope<ProbityReport> {
     pub fn into_clean_authenticated(
         self,
         crypto: &dyn CryptoServer,
-    ) -> Result<CleanAuthenticated<ProbityReport>, CleanAuthError> {
+    ) -> Result<CleanAuthenticated<ProbityReportRecord>, CleanAuthError> {
         self.verify(crypto)
     }
 
     /// Full-signature inbound gate for FB/GNF reports.
     ///
     /// Verifies both the fast (Ed25519) and slow (SLH-DSA) signatures.
-    /// Returns `CleanFullyAuthenticated<ProbityReport>` on success.
+    /// Returns `CleanFullyAuthenticated<ProbityReportRecord>` on success.
     /// Rejects with `FullSignatureRequired` if `slow_signature` is missing or empty.
     /// Rejects with `InvalidSignature` if either signature verification fails.
     pub fn verify_full(
         self,
         crypto: &dyn CryptoServer,
-    ) -> Result<CleanFullyAuthenticated<ProbityReport>, CleanAuthError> {
+    ) -> Result<CleanFullyAuthenticated<ProbityReportRecord>, CleanAuthError> {
         let report = self.inner();
 
         // 1. Check slow signature presence (full-signature gate)
@@ -225,10 +225,10 @@ impl UnverifiedSignatureEnvelope<ProbityReport> {
 }
 
 // ---------------------------------------------------------------------------
-// CleanAuthenticated<ProbityReport> — field accessors + externalize
+// CleanAuthenticated<ProbityReportRecord> — field accessors + externalize
 // ---------------------------------------------------------------------------
 
-impl CleanAuthenticated<ProbityReport> {
+impl CleanAuthenticated<ProbityReportRecord> {
     pub fn subject(&self) -> &str {
         &self.inner().subject
     }
@@ -252,7 +252,7 @@ impl CleanAuthenticated<ProbityReport> {
     }
 
     /// Outbound gate: wrap the domain type for wire/disk.
-    pub fn externalize(self) -> Externalized<ProbityReport> {
+    pub fn externalize(self) -> Externalized<ProbityReportRecord> {
         Externalized::from_trusted(self.into_inner())
     }
 }
@@ -271,7 +271,7 @@ mod tests {
         crypto_server::new_software(ForetiasCurve::Ed25519).unwrap()
     }
 
-    fn make_signed_report(crypto: &dyn CryptoServer) -> ProbityReport {
+    fn make_signed_report(crypto: &dyn CryptoServer) -> ProbityReportRecord {
         let pub_key = match crypto.public_key() {
             crate::crypto_server::PublicKeyBytes::Ed25519(pk) => pk.bytes.to_vec(),
             _ => panic!("expected Ed25519"),
@@ -280,7 +280,7 @@ mod tests {
         tbid.resize(48, 0);
         let reporter_hex = hex::encode(&tbid);
 
-        let mut report = ProbityReport {
+        let mut report = ProbityReportRecord {
             subject: "peer-A".to_string(),
             reporter: reporter_hex,
             attribute: "correctness".to_string(),
@@ -302,7 +302,7 @@ mod tests {
         let crypto = make_crypto();
         let report = make_signed_report(crypto.as_ref());
         let json = serde_json::to_string(&report).unwrap();
-        let parsed: ProbityReport = serde_json::from_str(&json).unwrap();
+        let parsed: ProbityReportRecord = serde_json::from_str(&json).unwrap();
         assert_eq!(report, parsed);
     }
 
@@ -326,7 +326,8 @@ mod tests {
         let r = make_signed_report(crypto.as_ref());
         let canon = r.canonical();
         // Verify postcard roundtrip: canonical bytes must deserialize back to a signature-free report
-        let decoded: ProbityReport = postcard::from_bytes(&canon).expect("postcard deserialize");
+        let decoded: ProbityReportRecord =
+            postcard::from_bytes(&canon).expect("postcard deserialize");
         assert_eq!(decoded.subject, r.subject);
         assert_eq!(decoded.reporter, r.reporter);
         assert_eq!(decoded.attribute, r.attribute);
@@ -352,13 +353,13 @@ mod tests {
         let crypto = make_crypto();
         let report = make_signed_report(crypto.as_ref());
         let json = serde_json::to_vec(&report).unwrap();
-        let up = UnverifiedSignatureEnvelope::<ProbityReport>::from_bytes(&json).unwrap();
+        let up = UnverifiedSignatureEnvelope::<ProbityReportRecord>::from_bytes(&json).unwrap();
         assert_eq!(up.inner().subject, "peer-A");
     }
 
     #[test]
     fn test_unprocessed_from_invalid_json() {
-        let result = UnverifiedSignatureEnvelope::<ProbityReport>::from_bytes(b"not json");
+        let result = UnverifiedSignatureEnvelope::<ProbityReportRecord>::from_bytes(b"not json");
         assert!(result.is_err());
     }
 
@@ -366,7 +367,7 @@ mod tests {
     fn test_clean_authenticated_from_trusted() {
         let crypto = make_crypto();
         let report = make_signed_report(crypto.as_ref());
-        let ca = CleanAuthenticated::<ProbityReport>::from_trusted(report.clone());
+        let ca = CleanAuthenticated::<ProbityReportRecord>::from_trusted(report.clone());
         assert_eq!(ca.inner().subject, report.subject);
         assert_eq!(ca.into_inner().subject, report.subject);
     }
@@ -406,7 +407,7 @@ mod tests {
     fn test_externalize_roundtrip() {
         let crypto = make_crypto();
         let report = make_signed_report(crypto.as_ref());
-        let ca = CleanAuthenticated::<ProbityReport>::from_trusted(report.clone());
+        let ca = CleanAuthenticated::<ProbityReportRecord>::from_trusted(report.clone());
         let ext = ca.externalize();
         assert_eq!(ext.inner().subject, report.subject);
         assert_eq!(ext.inner().value, report.value);
@@ -433,7 +434,7 @@ mod tests {
 
     #[test]
     fn snapshot_probity_report_externalized() {
-        let report = ProbityReport {
+        let report = ProbityReportRecord {
             subject: "peer-A".to_string(),
             reporter: "peer-123".to_string(),
             attribute: "correctness".to_string(),
@@ -443,7 +444,7 @@ mod tests {
             curve: 1,
             slow_signature: vec![],
         };
-        let ca = CleanAuthenticated::<ProbityReport>::from_trusted(report);
+        let ca = CleanAuthenticated::<ProbityReportRecord>::from_trusted(report);
         let ext = ca.externalize();
         let json_bytes = serde_json::to_vec(&ext).unwrap();
         let v: serde_json::Value = serde_json::from_slice(&json_bytes).unwrap();

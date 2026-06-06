@@ -123,7 +123,7 @@ impl<T> TrustedInner<T> for UnverifiedSignatureEnvelope<T> {
     }
 }
 
-impl<T: RecordBase> UnverifiedSignatureEnvelope<T> {
+impl<T: BaseRecord> UnverifiedSignatureEnvelope<T> {
     /// Gate enforcement: verify all signatures and enforce full-signature requirement.
     ///
     /// Returns `CleanAuthenticated<T>` when the record does not require full signature
@@ -207,7 +207,7 @@ impl<T: RecordBase> UnverifiedSignatureEnvelope<T> {
 
 /// Per-record full-signature requirement trait.
 /// All signature-free payload types implement this common base trait.
-pub trait RecordBase: serde::Serialize {
+pub trait BaseRecord: serde::Serialize {
     /// Must this record reach CleanFullyAuthenticated before it may be used?
     /// Default: false (fast Ed25519 signatures suffice).
     fn always_require_full_signature(&self) -> bool {
@@ -852,12 +852,12 @@ impl CleanAuthenticated<ForetisRecord> {
 }
 
 // ---------------------------------------------------------------------------
-// EpochSnapshot triple (core-engine)
+// EpochSnapshotRecord triple (core-engine)
 // ---------------------------------------------------------------------------
 
-use crate::epoch::snapshot::EpochSnapshot;
+use crate::epoch::snapshot::EpochSnapshotRecord;
 
-impl UnverifiedSignatureEnvelope<EpochSnapshot> {
+impl UnverifiedSignatureEnvelope<EpochSnapshotRecord> {
     pub fn epoch_number(&self) -> &u64 {
         &self.inner.epoch_number
     }
@@ -891,7 +891,7 @@ impl UnverifiedSignatureEnvelope<EpochSnapshot> {
         _crypto: &dyn CryptoServer,
         _committee_pubkeys: &[crate::foretias::types::SignatureBytes],
         _threshold: usize,
-    ) -> Result<CleanAuthenticated<EpochSnapshot>, CleanAuthError> {
+    ) -> Result<CleanAuthenticated<EpochSnapshotRecord>, CleanAuthError> {
         Err(CleanAuthError::NotYetImplemented)
     }
 
@@ -901,12 +901,12 @@ impl UnverifiedSignatureEnvelope<EpochSnapshot> {
         crypto: &dyn CryptoServer,
         committee_pubkeys: &[crate::foretias::types::SignatureBytes],
         threshold: usize,
-    ) -> Result<CleanAuthenticated<EpochSnapshot>, CleanAuthError> {
+    ) -> Result<CleanAuthenticated<EpochSnapshotRecord>, CleanAuthError> {
         self.verify(crypto, committee_pubkeys, threshold)
     }
 }
 
-impl CleanAuthenticated<EpochSnapshot> {
+impl CleanAuthenticated<EpochSnapshotRecord> {
     pub fn epoch_number(&self) -> &u64 {
         &self.inner.epoch_number
     }
@@ -933,7 +933,7 @@ impl CleanAuthenticated<EpochSnapshot> {
     }
 
     /// Outbound gate: wrap the domain type for wire/disk.
-    pub fn externalize(self) -> Externalized<EpochSnapshot> {
+    pub fn externalize(self) -> Externalized<EpochSnapshotRecord> {
         Externalized::from_trusted(self.inner)
     }
 }
@@ -1139,7 +1139,7 @@ mod tests {
     #[test]
     fn snapshot_epoch_snapshot_externalized() {
         use crate::epoch::snapshot::PeerScore;
-        let snapshot = EpochSnapshot {
+        let snapshot = EpochSnapshotRecord {
             epoch_number: 5,
             epoch_start_ns: 1000,
             epoch_end_ns: 2000,
@@ -1158,7 +1158,7 @@ mod tests {
             frost_signature: vec![0xAAu8; 64].into(),
             committee_pubkey: vec![0xBBu8; 32].into(),
         };
-        let ca = CleanAuthenticated::<EpochSnapshot>::from_trusted(snapshot);
+        let ca = CleanAuthenticated::<EpochSnapshotRecord>::from_trusted(snapshot);
         let ext = ca.externalize();
         let json_bytes = serde_json::to_vec(&ext).unwrap();
         let obj: serde_json::Value = serde_json::from_slice(&json_bytes).unwrap();

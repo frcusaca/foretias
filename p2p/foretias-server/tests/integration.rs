@@ -3,8 +3,8 @@
 //! Spawns `foretias serve` as a background process, then exercises
 //! `stamp` and `verify` subcommands end-to-end.
 
-use std::io::Read;
 use foretias_core::foretias::types::Tbid;
+use std::io::Read;
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::thread;
@@ -102,19 +102,31 @@ fn test_stamp_and_verify_e2e() {
         .expect("Failed to parse stamp JSON from stamp output");
 
     // v2 wire format: {foretis, signature, signature_algorithm}
-    let foretis = stamp_json.get("foretis")
+    let foretis = stamp_json
+        .get("foretis")
         .expect("stamp output missing 'foretis' field");
-    let signature = stamp_json.get("signature")
+    let signature = stamp_json
+        .get("signature")
         .expect("stamp output missing 'signature' field");
-    let signature_algorithm = stamp_json.get("signature_algorithm")
+    let signature_algorithm = stamp_json
+        .get("signature_algorithm")
         .expect("stamp output missing 'signature_algorithm' field");
 
-    assert!(foretis.get("chronon_number").is_some(), "Foretis missing chronon_number");
-    assert!(foretis.get("content_hash").is_some(), "Foretis missing content_hash");
+    assert!(
+        foretis.get("chronon_number").is_some(),
+        "Foretis missing chronon_number"
+    );
+    assert!(
+        foretis.get("content_hash").is_some(),
+        "Foretis missing content_hash"
+    );
     assert!(foretis.get("tbid").is_some(), "Foretis missing tbid");
     assert!(foretis.get("echo").is_some(), "Foretis missing echo");
     assert!(foretis.get("tbn").is_some(), "Foretis missing tbn");
-    assert!(foretis.get("time_being_reference_time").is_some(), "Foretis missing time_being_reference_time");
+    assert!(
+        foretis.get("time_being_reference_time").is_some(),
+        "Foretis missing time_being_reference_time"
+    );
 
     let foretis_json = serde_json::to_string(&foretis).unwrap();
     let signature_hex = signature.as_str().unwrap_or("");
@@ -141,8 +153,8 @@ fn test_stamp_and_verify_e2e() {
     );
 
     let verify_output = String::from_utf8_lossy(&verify_result.stdout);
-    let verify_json: Value = serde_json::from_str(verify_output.trim())
-        .expect("Failed to parse verify JSON");
+    let verify_json: Value =
+        serde_json::from_str(verify_output.trim()).expect("Failed to parse verify JSON");
 
     assert!(
         verify_json.get("valid").unwrap().as_bool().unwrap(),
@@ -213,10 +225,8 @@ async fn test_two_nodes_mutual_attest() {
     let addr_a = format!("127.0.0.1:{}", port_a);
     let addr_b = format!("127.0.0.1:{}", port_b);
 
-    let server_b: Arc<TimeFamilyServer> = Arc::new(
-        TimeFamilyServer::new(&addr_b, 100_000_000)
-            .expect("failed to create server B"),
-    );
+    let server_b: Arc<TimeFamilyServer> =
+        Arc::new(TimeFamilyServer::new(&addr_b, 100_000_000).expect("failed to create server B"));
 
     let config = foretias_core::config::CommunerdConfig {
         mutual_attest: foretias_core::config::MutualAttestConfig {
@@ -245,11 +255,13 @@ async fn test_two_nodes_mutual_attest() {
     tokio::time::sleep(Duration::from_millis(200)).await;
 
     if let Some(com) = server_a.communerd() {
-        let result = com.route_stamp(
-            &server_b.get_tbid().to_hex(),
-            &hex::encode(b"auto attest test"),
-            "ma-test",
-        ).await;
+        let result = com
+            .route_stamp(
+                &server_b.get_tbid().to_hex(),
+                &hex::encode(b"auto attest test"),
+                "ma-test",
+            )
+            .await;
         // Peer B may not be listening yet, so error is acceptable
         let _ = result;
     }
@@ -292,15 +304,19 @@ async fn test_peer_unreachable_does_not_crash() {
 
     if let Some(com) = server.communerd() {
         // Use a dummy TBID; the call will fail at transport layer before TBID validation
-        let result = com.route_stamp(
-            "0000000000000000000000000000000000000000000000000000000000000000",
-            &hex::encode(b"test"),
-            "test",
-        ).await;
+        let result = com
+            .route_stamp(
+                "0000000000000000000000000000000000000000000000000000000000000000",
+                &hex::encode(b"test"),
+                "test",
+            )
+            .await;
         assert!(result.is_err(), "Expected error for unreachable peer");
     }
 
-    let stamped = server.chronomatter().stamp(b"still works".to_vec(), "ok".to_string())
+    let stamped = server
+        .chronomatter()
+        .stamp(b"still works".to_vec(), "ok".to_string())
         .expect("Local stamp should work despite unreachable peer");
     assert!(stamped.foretis.chronon_number > 0);
 
@@ -312,7 +328,8 @@ async fn test_peer_unreachable_does_not_crash() {
 fn test_crash_recovery_calendar() {
     use foretias_core::foretias::calendar::Calendar as CoreCalendar;
 
-    let tmp_dir = std::env::temp_dir().join(format!("foretias_crash_recovery_{}", std::process::id()));
+    let tmp_dir =
+        std::env::temp_dir().join(format!("foretias_crash_recovery_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp_dir);
     std::fs::create_dir_all(&tmp_dir).expect("Failed to create temp dir");
 
@@ -359,16 +376,25 @@ fn test_crash_recovery_calendar() {
         };
         cal2.append(record).expect("append failed");
     }
-    cal2.save(tmp_path.to_str().unwrap()).expect("tmp save failed");
+    cal2.save(tmp_path.to_str().unwrap())
+        .expect("tmp save failed");
 
     // Now rename .tmp to simulate a crash recovery scenario
     // The main file has 3 ticks, the .tmp has 5 ticks
     // Load should recover from .tmp
     let recovered = CoreCalendar::load(cal_path.to_str().unwrap());
-    assert!(recovered.is_ok(), "Failed to load calendar: {:?}", recovered.err());
+    assert!(
+        recovered.is_ok(),
+        "Failed to load calendar: {:?}",
+        recovered.err()
+    );
 
     let recovered = recovered.unwrap();
-    assert!(recovered.ticks.len() >= 3, "Recovery should have at least 3 ticks, got {}", recovered.ticks.len());
+    assert!(
+        recovered.ticks.len() >= 3,
+        "Recovery should have at least 3 ticks, got {}",
+        recovered.ticks.len()
+    );
 
     // Cleanup
     let _ = std::fs::remove_dir_all(&tmp_dir);
@@ -376,19 +402,23 @@ fn test_crash_recovery_calendar() {
 
 #[tokio::test]
 async fn two_swarms_connect_and_identify() {
-    use foretias_server::communerd::p2p::swarm::build_and_spawn_swarm;
     use foretias_server::communerd::p2p::events::NetworkEvent;
+    use foretias_server::communerd::p2p::swarm::build_and_spawn_swarm;
 
     let port_a = find_available_port();
     let port_b = find_available_port();
     let ma_a: libp2p::Multiaddr = format!("/ip4/127.0.0.1/tcp/{}", port_a).parse().unwrap();
     let ma_b: libp2p::Multiaddr = format!("/ip4/127.0.0.1/tcp/{}", port_b).parse().unwrap();
 
-    let mut handle_a = build_and_spawn_swarm(Some(ma_a.clone()), vec![], "mainnet", None, None).await.unwrap();
+    let mut handle_a = build_and_spawn_swarm(Some(ma_a.clone()), vec![], "mainnet", None, None)
+        .await
+        .unwrap();
     let peer_id_a = handle_a.local_peer_id;
 
     let dial_a: libp2p::Multiaddr = format!("{}/p2p/{}", ma_a, peer_id_a).parse().unwrap();
-    let mut handle_b = build_and_spawn_swarm(Some(ma_b), vec![dial_a], "mainnet", None, None).await.unwrap();
+    let mut handle_b = build_and_spawn_swarm(Some(ma_b), vec![dial_a], "mainnet", None, None)
+        .await
+        .unwrap();
 
     let mut a_connected = false;
     let mut b_connected = false;
@@ -397,11 +427,8 @@ async fn two_swarms_connect_and_identify() {
 
     let deadline = std::time::Instant::now() + Duration::from_secs(15);
     while std::time::Instant::now() < deadline {
-        while let Ok(Some(event)) = tokio::time::timeout(
-            Duration::from_millis(100),
-            handle_a.events.recv(),
-        )
-        .await
+        while let Ok(Some(event)) =
+            tokio::time::timeout(Duration::from_millis(100), handle_a.events.recv()).await
         {
             match event {
                 NetworkEvent::Connected { .. } => a_connected = true,
@@ -409,11 +436,8 @@ async fn two_swarms_connect_and_identify() {
                 _ => {}
             }
         }
-        while let Ok(Some(event)) = tokio::time::timeout(
-            Duration::from_millis(100),
-            handle_b.events.recv(),
-        )
-        .await
+        while let Ok(Some(event)) =
+            tokio::time::timeout(Duration::from_millis(100), handle_b.events.recv()).await
         {
             match event {
                 NetworkEvent::Connected { .. } => b_connected = true,
@@ -439,8 +463,8 @@ async fn two_swarms_connect_and_identify() {
 
 #[tokio::test]
 async fn dht_discovery_three_nodes() {
-    use foretias_server::communerd::p2p::swarm::{build_and_spawn_swarm, SwarmCommand};
     use foretias_server::communerd::p2p::events::NetworkEvent;
+    use foretias_server::communerd::p2p::swarm::{build_and_spawn_swarm, SwarmCommand};
 
     let port_a = find_available_port();
     let port_b = find_available_port();
@@ -451,29 +475,49 @@ async fn dht_discovery_three_nodes() {
 
     let namespace = "dht-test";
 
-    let mut handle_a = build_and_spawn_swarm(Some(ma_a.clone()), vec![], namespace, None, None).await.unwrap();
+    let mut handle_a = build_and_spawn_swarm(Some(ma_a.clone()), vec![], namespace, None, None)
+        .await
+        .unwrap();
     let peer_id_a = handle_a.local_peer_id;
 
-    let mut handle_b = build_and_spawn_swarm(Some(ma_b.clone()), vec![], namespace, None, None).await.unwrap();
+    let mut handle_b = build_and_spawn_swarm(Some(ma_b.clone()), vec![], namespace, None, None)
+        .await
+        .unwrap();
     let peer_id_b = handle_b.local_peer_id;
 
-    let mut handle_c = build_and_spawn_swarm(Some(ma_c.clone()), vec![], namespace, None, None).await.unwrap();
+    let mut handle_c = build_and_spawn_swarm(Some(ma_c.clone()), vec![], namespace, None, None)
+        .await
+        .unwrap();
     let peer_id_c = handle_c.local_peer_id;
 
     // Wait for all swarms to bind
     let deadline = std::time::Instant::now() + Duration::from_secs(10);
     let mut listen_ready_count = 0u32;
     while std::time::Instant::now() < deadline && listen_ready_count < 3 {
-        while let Ok(Some(event)) = tokio::time::timeout(Duration::from_millis(50), handle_a.events.recv()).await {
-            if matches!(event, NetworkEvent::ListenReady { .. }) { listen_ready_count += 1; }
+        while let Ok(Some(event)) =
+            tokio::time::timeout(Duration::from_millis(50), handle_a.events.recv()).await
+        {
+            if matches!(event, NetworkEvent::ListenReady { .. }) {
+                listen_ready_count += 1;
+            }
         }
-        while let Ok(Some(event)) = tokio::time::timeout(Duration::from_millis(50), handle_b.events.recv()).await {
-            if matches!(event, NetworkEvent::ListenReady { .. }) { listen_ready_count += 1; }
+        while let Ok(Some(event)) =
+            tokio::time::timeout(Duration::from_millis(50), handle_b.events.recv()).await
+        {
+            if matches!(event, NetworkEvent::ListenReady { .. }) {
+                listen_ready_count += 1;
+            }
         }
-        while let Ok(Some(event)) = tokio::time::timeout(Duration::from_millis(50), handle_c.events.recv()).await {
-            if matches!(event, NetworkEvent::ListenReady { .. }) { listen_ready_count += 1; }
+        while let Ok(Some(event)) =
+            tokio::time::timeout(Duration::from_millis(50), handle_c.events.recv()).await
+        {
+            if matches!(event, NetworkEvent::ListenReady { .. }) {
+                listen_ready_count += 1;
+            }
         }
-        if listen_ready_count < 3 { tokio::time::sleep(Duration::from_millis(100)).await; }
+        if listen_ready_count < 3 {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
     }
 
     // Build full multiaddrs
@@ -482,33 +526,60 @@ async fn dht_discovery_three_nodes() {
     let ma_c_full: libp2p::Multiaddr = format!("{}/p2p/{}", ma_c, peer_id_c).parse().unwrap();
 
     // Fully connect: every node dials every other node
-    let _ = handle_a.cmd_tx.send(SwarmCommand::Dial { addr: ma_b_full.clone() });
-    let _ = handle_a.cmd_tx.send(SwarmCommand::Dial { addr: ma_c_full.clone() });
-    let _ = handle_b.cmd_tx.send(SwarmCommand::Dial { addr: ma_a_full.clone() });
-    let _ = handle_b.cmd_tx.send(SwarmCommand::Dial { addr: ma_c_full.clone() });
-    let _ = handle_c.cmd_tx.send(SwarmCommand::Dial { addr: ma_a_full.clone() });
-    let _ = handle_c.cmd_tx.send(SwarmCommand::Dial { addr: ma_b_full.clone() });
+    let _ = handle_a.cmd_tx.send(SwarmCommand::Dial {
+        addr: ma_b_full.clone(),
+    });
+    let _ = handle_a.cmd_tx.send(SwarmCommand::Dial {
+        addr: ma_c_full.clone(),
+    });
+    let _ = handle_b.cmd_tx.send(SwarmCommand::Dial {
+        addr: ma_a_full.clone(),
+    });
+    let _ = handle_b.cmd_tx.send(SwarmCommand::Dial {
+        addr: ma_c_full.clone(),
+    });
+    let _ = handle_c.cmd_tx.send(SwarmCommand::Dial {
+        addr: ma_a_full.clone(),
+    });
+    let _ = handle_c.cmd_tx.send(SwarmCommand::Dial {
+        addr: ma_b_full.clone(),
+    });
 
     // Wait for all connections to establish. Accumulate discovered peers across
     // all polling iterations to avoid missing events under parallel test execution.
     let deadline = std::time::Instant::now() + Duration::from_secs(15);
-    let mut connected_a: std::collections::HashSet<libp2p::PeerId> = std::collections::HashSet::new();
-    let mut connected_b: std::collections::HashSet<libp2p::PeerId> = std::collections::HashSet::new();
-    let mut connected_c: std::collections::HashSet<libp2p::PeerId> = std::collections::HashSet::new();
+    let mut connected_a: std::collections::HashSet<libp2p::PeerId> =
+        std::collections::HashSet::new();
+    let mut connected_b: std::collections::HashSet<libp2p::PeerId> =
+        std::collections::HashSet::new();
+    let mut connected_c: std::collections::HashSet<libp2p::PeerId> =
+        std::collections::HashSet::new();
     let mut all_connected = false;
     while std::time::Instant::now() < deadline {
-        while let Ok(Some(event)) = tokio::time::timeout(Duration::from_millis(20), handle_a.events.recv()).await {
-            if let NetworkEvent::Connected { peer_id } | NetworkEvent::Identified { peer_id, .. } = event {
+        while let Ok(Some(event)) =
+            tokio::time::timeout(Duration::from_millis(20), handle_a.events.recv()).await
+        {
+            if let NetworkEvent::Connected { peer_id } | NetworkEvent::Identified { peer_id, .. } =
+                event
+            {
                 connected_a.insert(peer_id);
             }
         }
-        while let Ok(Some(event)) = tokio::time::timeout(Duration::from_millis(20), handle_b.events.recv()).await {
-            if let NetworkEvent::Connected { peer_id } | NetworkEvent::Identified { peer_id, .. } = event {
+        while let Ok(Some(event)) =
+            tokio::time::timeout(Duration::from_millis(20), handle_b.events.recv()).await
+        {
+            if let NetworkEvent::Connected { peer_id } | NetworkEvent::Identified { peer_id, .. } =
+                event
+            {
                 connected_b.insert(peer_id);
             }
         }
-        while let Ok(Some(event)) = tokio::time::timeout(Duration::from_millis(20), handle_c.events.recv()).await {
-            if let NetworkEvent::Connected { peer_id } | NetworkEvent::Identified { peer_id, .. } = event {
+        while let Ok(Some(event)) =
+            tokio::time::timeout(Duration::from_millis(20), handle_c.events.recv()).await
+        {
+            if let NetworkEvent::Connected { peer_id } | NetworkEvent::Identified { peer_id, .. } =
+                event
+            {
                 connected_c.insert(peer_id);
             }
         }
@@ -526,12 +597,30 @@ async fn dht_discovery_three_nodes() {
     // Add addresses to k-buckets so GetRecord can route to any peer.
     // Dial + identify alone does NOT populate k-buckets in libp2p-kad 0.48.
     // Each node needs to know about every other node's address.
-    let _ = handle_a.cmd_tx.send(SwarmCommand::AddAddress { peer_id: peer_id_b, addr: ma_b_full.clone() });
-    let _ = handle_a.cmd_tx.send(SwarmCommand::AddAddress { peer_id: peer_id_c, addr: ma_c_full.clone() });
-    let _ = handle_b.cmd_tx.send(SwarmCommand::AddAddress { peer_id: peer_id_a, addr: ma_a_full.clone() });
-    let _ = handle_b.cmd_tx.send(SwarmCommand::AddAddress { peer_id: peer_id_c, addr: ma_c_full.clone() });
-    let _ = handle_c.cmd_tx.send(SwarmCommand::AddAddress { peer_id: peer_id_a, addr: ma_a_full.clone() });
-    let _ = handle_c.cmd_tx.send(SwarmCommand::AddAddress { peer_id: peer_id_b, addr: ma_b_full.clone() });
+    let _ = handle_a.cmd_tx.send(SwarmCommand::AddAddress {
+        peer_id: peer_id_b,
+        addr: ma_b_full.clone(),
+    });
+    let _ = handle_a.cmd_tx.send(SwarmCommand::AddAddress {
+        peer_id: peer_id_c,
+        addr: ma_c_full.clone(),
+    });
+    let _ = handle_b.cmd_tx.send(SwarmCommand::AddAddress {
+        peer_id: peer_id_a,
+        addr: ma_a_full.clone(),
+    });
+    let _ = handle_b.cmd_tx.send(SwarmCommand::AddAddress {
+        peer_id: peer_id_c,
+        addr: ma_c_full.clone(),
+    });
+    let _ = handle_c.cmd_tx.send(SwarmCommand::AddAddress {
+        peer_id: peer_id_a,
+        addr: ma_a_full.clone(),
+    });
+    let _ = handle_c.cmd_tx.send(SwarmCommand::AddAddress {
+        peer_id: peer_id_b,
+        addr: ma_b_full.clone(),
+    });
 
     // Allow k-bucket entries to settle
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -549,17 +638,27 @@ async fn dht_discovery_three_nodes() {
         publisher: Some(peer_id_a),
         expires: None,
     };
-    let _ = handle_a.cmd_tx.send(SwarmCommand::StoreRecordLocal { record: record.clone() });
-    let _ = handle_b.cmd_tx.send(SwarmCommand::StoreRecordLocal { record: record.clone() });
-    let _ = handle_c.cmd_tx.send(SwarmCommand::StoreRecordLocal { record });
+    let _ = handle_a.cmd_tx.send(SwarmCommand::StoreRecordLocal {
+        record: record.clone(),
+    });
+    let _ = handle_b.cmd_tx.send(SwarmCommand::StoreRecordLocal {
+        record: record.clone(),
+    });
+    let _ = handle_c
+        .cmd_tx
+        .send(SwarmCommand::StoreRecordLocal { record });
 
     // C queries the DHT for the record - proves DHT routing works across the network
-    let _ = handle_c.cmd_tx.send(SwarmCommand::GetRecord { key: discovery_key.clone() });
+    let _ = handle_c.cmd_tx.send(SwarmCommand::GetRecord {
+        key: discovery_key.clone(),
+    });
 
     let mut c_discovered_a = false;
     let deadline = std::time::Instant::now() + Duration::from_secs(15);
     while std::time::Instant::now() < deadline {
-        while let Ok(Some(event)) = tokio::time::timeout(Duration::from_millis(50), handle_c.events.recv()).await {
+        while let Ok(Some(event)) =
+            tokio::time::timeout(Duration::from_millis(50), handle_c.events.recv()).await
+        {
             if let NetworkEvent::RecordRetrieved { records, .. } = event {
                 for r in records {
                     // Note: libp2p-kad overwrites record.publisher with the storing
@@ -572,7 +671,9 @@ async fn dht_discovery_three_nodes() {
                 }
             }
         }
-        if c_discovered_a { break; }
+        if c_discovered_a {
+            break;
+        }
         tokio::time::sleep(Duration::from_millis(200)).await;
     }
 
@@ -588,9 +689,9 @@ async fn dht_discovery_three_nodes() {
 
 #[tokio::test]
 async fn gossip_probity_propagation() {
-    use foretias_server::communerd::p2p::swarm::{build_and_spawn_swarm, SwarmCommand};
     use foretias_server::communerd::p2p::events::NetworkEvent;
-    use foretias_server::probity::ProbityReport;
+    use foretias_server::communerd::p2p::swarm::{build_and_spawn_swarm, SwarmCommand};
+    use foretias_server::probity::ProbityReportRecord;
 
     let port_a = find_available_port();
     let port_b = find_available_port();
@@ -599,11 +700,15 @@ async fn gossip_probity_propagation() {
 
     let namespace = "testnet";
 
-    let mut handle_a = build_and_spawn_swarm(Some(ma_a.clone()), vec![], namespace, None, None).await.unwrap();
+    let mut handle_a = build_and_spawn_swarm(Some(ma_a.clone()), vec![], namespace, None, None)
+        .await
+        .unwrap();
     let peer_id_a = handle_a.local_peer_id;
 
     let dial_a: libp2p::Multiaddr = format!("{}/p2p/{}", ma_a, peer_id_a).parse().unwrap();
-    let mut handle_b = build_and_spawn_swarm(Some(ma_b), vec![dial_a], namespace, None, None).await.unwrap();
+    let mut handle_b = build_and_spawn_swarm(Some(ma_b), vec![dial_a], namespace, None, None)
+        .await
+        .unwrap();
     let peer_id_b = handle_b.local_peer_id;
 
     let deadline = std::time::Instant::now() + Duration::from_secs(15);
@@ -613,13 +718,23 @@ async fn gossip_probity_propagation() {
         let mut a_conn = false;
         let mut b_conn = false;
 
-        while let Ok(Some(event)) = tokio::time::timeout(Duration::from_millis(100), handle_a.events.recv()).await {
-            if matches!(event, NetworkEvent::Connected { .. } | NetworkEvent::Identified { .. }) {
+        while let Ok(Some(event)) =
+            tokio::time::timeout(Duration::from_millis(100), handle_a.events.recv()).await
+        {
+            if matches!(
+                event,
+                NetworkEvent::Connected { .. } | NetworkEvent::Identified { .. }
+            ) {
                 a_conn = true;
             }
         }
-        while let Ok(Some(event)) = tokio::time::timeout(Duration::from_millis(100), handle_b.events.recv()).await {
-            if matches!(event, NetworkEvent::Connected { .. } | NetworkEvent::Identified { .. }) {
+        while let Ok(Some(event)) =
+            tokio::time::timeout(Duration::from_millis(100), handle_b.events.recv()).await
+        {
+            if matches!(
+                event,
+                NetworkEvent::Connected { .. } | NetworkEvent::Identified { .. }
+            ) {
                 b_conn = true;
             }
         }
@@ -640,7 +755,7 @@ async fn gossip_probity_propagation() {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos() as u64)
         .unwrap_or(0);
-    let report = ProbityReport {
+    let report = ProbityReportRecord {
         subject: peer_id_b.to_string(),
         reporter: peer_id_a.to_string(),
         attribute: "correctness".to_string(),
@@ -659,9 +774,11 @@ async fn gossip_probity_propagation() {
     let mut gossip_received = false;
     let deadline = std::time::Instant::now() + Duration::from_secs(10);
     while std::time::Instant::now() < deadline {
-        while let Ok(Some(event)) = tokio::time::timeout(Duration::from_millis(200), handle_b.events.recv()).await {
+        while let Ok(Some(event)) =
+            tokio::time::timeout(Duration::from_millis(200), handle_b.events.recv()).await
+        {
             if let NetworkEvent::GossipMessage { data, .. } = event {
-                let received: Result<ProbityReport, _> = serde_json::from_slice(&data);
+                let received: Result<ProbityReportRecord, _> = serde_json::from_slice(&data);
                 if let Ok(received_report) = received {
                     assert_eq!(received_report.subject, peer_id_b.to_string());
                     assert_eq!(received_report.reporter, peer_id_a.to_string());
@@ -687,8 +804,10 @@ async fn gossip_probity_propagation() {
 
 #[tokio::test]
 async fn test_libp2p_direct_rpc() {
-    use foretias_server::communerd::p2p::swarm::{build_and_spawn_swarm, CommunerdRpcHandler, SwarmCommand};
     use foretias_server::communerd::p2p::events::NetworkEvent;
+    use foretias_server::communerd::p2p::swarm::{
+        build_and_spawn_swarm, CommunerdRpcHandler, SwarmCommand,
+    };
     use foretias_server::communerd::transport::TransportError;
 
     struct EchoRpcHandler;
@@ -744,11 +863,8 @@ async fn test_libp2p_direct_rpc() {
     let mut b_identified = false;
 
     while std::time::Instant::now() < deadline {
-        while let Ok(Some(event)) = tokio::time::timeout(
-            Duration::from_millis(100),
-            handle_a.events.recv(),
-        )
-        .await
+        while let Ok(Some(event)) =
+            tokio::time::timeout(Duration::from_millis(100), handle_a.events.recv()).await
         {
             match event {
                 NetworkEvent::Connected { .. } => a_connected = true,
@@ -756,11 +872,8 @@ async fn test_libp2p_direct_rpc() {
                 _ => {}
             }
         }
-        while let Ok(Some(event)) = tokio::time::timeout(
-            Duration::from_millis(100),
-            handle_b.events.recv(),
-        )
-        .await
+        while let Ok(Some(event)) =
+            tokio::time::timeout(Duration::from_millis(100), handle_b.events.recv()).await
         {
             match event {
                 NetworkEvent::Connected { .. } => b_connected = true,

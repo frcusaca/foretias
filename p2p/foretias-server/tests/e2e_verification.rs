@@ -4,11 +4,11 @@
 //! is enforced at the protocol level — forged or unsigned data is rejected
 //! before reaching trusted state.
 
+use foretias_core::crypto_server;
 use foretias_core::foretias::calendar::Calendar;
 use foretias_core::foretias::clean_auth::UnverifiedSignatureEnvelope;
 use foretias_core::foretias::tick::ChrononRecord;
 use foretias_core::foretias::types::Tbid;
-use foretias_core::crypto_server;
 
 #[tokio::test]
 async fn test_e2e_calendar_load_integrity() {
@@ -34,7 +34,10 @@ async fn test_e2e_calendar_load_integrity() {
 
     let server = crypto_server::new_software(crypto_server::ForetiasCurve::Ed25519).unwrap();
     let loaded = Calendar::load_and_verify(path, server.as_ref(), &tbid_str, None, None);
-    assert!(loaded.is_ok(), "single tick calendar should pass integrity check");
+    assert!(
+        loaded.is_ok(),
+        "single tick calendar should pass integrity check"
+    );
 
     std::fs::remove_file(path).ok();
 }
@@ -42,13 +45,13 @@ async fn test_e2e_calendar_load_integrity() {
 #[tokio::test]
 async fn test_e2e_gossip_unsigned_rejected() {
     use foretias_server::probity::gossip_handler::handle_gossip_message;
-    use foretias_server::probity::report::ProbityReport;
+    use foretias_server::probity::report::ProbityReportRecord;
     use foretias_server::probity::ProbityStore;
 
     let server = crypto_server::new_software(crypto_server::ForetiasCurve::Ed25519).unwrap();
     let store = ProbityStore::new();
 
-    let unsigned_report = ProbityReport {
+    let unsigned_report = ProbityReportRecord {
         subject: "test-subject".to_string(),
         reporter: "00".repeat(48),
         attribute: "correctness".to_string(),
@@ -56,13 +59,20 @@ async fn test_e2e_gossip_unsigned_rejected() {
         timestamp_ns: 0,
         signature: vec![],
         curve: 1,
-            slow_signature: vec![],
+        slow_signature: vec![],
     };
     let json = serde_json::to_vec(&unsigned_report).unwrap();
 
     let result = handle_gossip_message(&json, &store, server.as_ref(), 0);
-    assert!(result.is_ok(), "unsigned report should be dropped (Ok), not errored");
-    assert_eq!(store.report_count("test-subject"), 0, "unsigned report must not be ingested");
+    assert!(
+        result.is_ok(),
+        "unsigned report should be dropped (Ok), not errored"
+    );
+    assert_eq!(
+        store.report_count("test-subject"),
+        0,
+        "unsigned report must not be ingested"
+    );
 }
 
 #[tokio::test]
@@ -82,7 +92,8 @@ async fn test_e2e_type_discipline_enforced() {
         tb_version: 0,
         tbid: Tbid::default(),
     };
-    let _up: UnverifiedSignatureEnvelope<ChrononRecord> = UnverifiedSignatureEnvelope::<ChrononRecord>::from_parsed(record);
+    let _up: UnverifiedSignatureEnvelope<ChrononRecord> =
+        UnverifiedSignatureEnvelope::<ChrononRecord>::from_parsed(record);
     // The following would NOT compile:
     // let _: CleanAuthenticated<ChrononRecord> = _up;
     // This is the desired behavior — the compiler enforces the gate.

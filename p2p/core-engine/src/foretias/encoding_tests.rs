@@ -7,7 +7,7 @@
 use crate::collision::heartbeat::Heartbeat;
 use crate::crypto_server::SealedBlob;
 use crate::epoch::frost_bridge::FrostMsg;
-use crate::epoch::snapshot::EpochSnapshot;
+use crate::epoch::snapshot::EpochSnapshotRecord;
 use crate::foretias::calendar::Calendar;
 use crate::foretias::encoding::{from_json, to_json, to_json_pretty, FTByteArray, FTByteVector};
 use crate::foretias::external_attestation::ExternalAttestationRecord;
@@ -389,10 +389,10 @@ fn heartbeat_roundtrip() {
     assert_eq!(decoded.signature, hb.signature);
 }
 
-// EpochSnapshot
+// EpochSnapshotRecord
 #[test]
 fn epoch_snapshot_roundtrip() {
-    let snap = EpochSnapshot {
+    let snap = EpochSnapshotRecord {
         epoch_number: 42,
         epoch_start_ns: 1000,
         epoch_end_ns: 2000,
@@ -403,7 +403,7 @@ fn epoch_snapshot_roundtrip() {
         committee_pubkey: FTByteVector::from(vec![0xBB; 32]),
     };
     let json = to_json(&snap).unwrap();
-    let decoded: EpochSnapshot = from_json(&json).unwrap();
+    let decoded: EpochSnapshotRecord = from_json(&json).unwrap();
     assert_eq!(decoded.epoch_number, snap.epoch_number);
     assert_eq!(decoded.frost_signature, snap.frost_signature);
     assert_eq!(decoded.committee_pubkey, snap.committee_pubkey);

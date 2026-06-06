@@ -13,7 +13,7 @@ pub trait CommitteeSelector: Send + Sync {
 /// Default v0.8 selector: top-scoring peers by current probity score.
 pub struct TopProbitySelector {
     pub committee_size: usize,
-    pub threshold_k:    u32,
+    pub threshold_k: u32,
 }
 
 impl CommitteeSelector for TopProbitySelector {
@@ -24,7 +24,8 @@ impl CommitteeSelector for TopProbitySelector {
                 .unwrap_or(Ordering::Equal)
                 .then_with(|| a.0.cmp(&b.0))
         });
-        let members: Vec<String> = scored.into_iter()
+        let members: Vec<String> = scored
+            .into_iter()
             .take(self.committee_size)
             .map(|(id, _)| id)
             .collect();

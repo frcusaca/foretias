@@ -1,3 +1,3 @@
-//! ProbityReport — re-exported from foretias-core.
+//! ProbityReportRecord — re-exported from foretias-core.
 
-pub use foretias_core::probity::ProbityReport;
+pub use foretias_core::probity::ProbityReportRecord;

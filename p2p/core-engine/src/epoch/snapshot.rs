@@ -1,44 +1,60 @@
-//! EpochSnapshot — canonical record of peer scores for an epoch.
+//! EpochSnapshotRecord — canonical record of peer scores for an epoch.
 
 use serde::{Deserialize, Serialize};
 
+use crate::foretias::clean_auth::BaseRecord;
 use crate::foretias::encoding::FTByteVector;
-use crate::foretias::clean_auth::RecordBase;
 
 /// A peer's probity score at a point in time.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PeerScore {
     pub peer_id: String,
-    pub score:   f32,
+    pub score: f32,
 }
 
 /// A signed snapshot of all peer scores for a given epoch.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EpochSnapshot {
-    pub epoch_number:     u64,
-    pub epoch_start_ns:   u64,
-    pub epoch_end_ns:     u64,
+pub struct EpochSnapshotRecord {
+    pub epoch_number: u64,
+    pub epoch_start_ns: u64,
+    pub epoch_end_ns: u64,
     /// All peer scores known to the committee at freeze time, sorted by peer_id.
-    pub peer_scores:      Vec<PeerScore>,
+    pub peer_scores: Vec<PeerScore>,
     /// PeerIds (hex) of the committee members who contributed shares.
-    pub committee:        Vec<String>,
+    pub committee: Vec<String>,
     /// Signing threshold k (k-of-n).
-    pub threshold:        u32,
+    pub threshold: u32,
     /// Aggregate FROST-Ed25519 signature over canonical_bytes().
-    pub frost_signature:  FTByteVector,
+    pub frost_signature: FTByteVector,
     /// FROST group public key for this committee.
     pub committee_pubkey: FTByteVector,
 }
 
-impl EpochSnapshot {
-    pub fn epoch_number(&self) -> &u64 { &self.epoch_number }
-    pub fn epoch_start_ns(&self) -> &u64 { &self.epoch_start_ns }
-    pub fn epoch_end_ns(&self) -> &u64 { &self.epoch_end_ns }
-    pub fn peer_scores(&self) -> &Vec<PeerScore> { &self.peer_scores }
-    pub fn committee(&self) -> &Vec<String> { &self.committee }
-    pub fn threshold(&self) -> &u32 { &self.threshold }
-    pub fn frost_signature(&self) -> &FTByteVector { &self.frost_signature }
-    pub fn committee_pubkey(&self) -> &FTByteVector { &self.committee_pubkey }
+impl EpochSnapshotRecord {
+    pub fn epoch_number(&self) -> &u64 {
+        &self.epoch_number
+    }
+    pub fn epoch_start_ns(&self) -> &u64 {
+        &self.epoch_start_ns
+    }
+    pub fn epoch_end_ns(&self) -> &u64 {
+        &self.epoch_end_ns
+    }
+    pub fn peer_scores(&self) -> &Vec<PeerScore> {
+        &self.peer_scores
+    }
+    pub fn committee(&self) -> &Vec<String> {
+        &self.committee
+    }
+    pub fn threshold(&self) -> &u32 {
+        &self.threshold
+    }
+    pub fn frost_signature(&self) -> &FTByteVector {
+        &self.frost_signature
+    }
+    pub fn committee_pubkey(&self) -> &FTByteVector {
+        &self.committee_pubkey
+    }
 
     /// Canonical bytes for FROST signing — everything except frost_signature.
     pub fn canonical_bytes(&self) -> Vec<u8> {
@@ -47,7 +63,9 @@ impl EpochSnapshot {
         // Sort peer_scores by peer_id for determinism across nodes
         if let Some(arr) = val["peer_scores"].as_array_mut() {
             arr.sort_by(|a, b| {
-                a["peer_id"].as_str().unwrap_or("")
+                a["peer_id"]
+                    .as_str()
+                    .unwrap_or("")
                     .cmp(b["peer_id"].as_str().unwrap_or(""))
             });
         }
@@ -59,7 +77,7 @@ impl EpochSnapshot {
     }
 }
 
-impl RecordBase for EpochSnapshot {
+impl BaseRecord for EpochSnapshotRecord {
     fn always_require_full_signature(&self) -> bool {
         false
     }
@@ -69,14 +87,20 @@ impl RecordBase for EpochSnapshot {
 mod tests {
     use super::*;
 
-    fn make_snapshot(epoch: u64) -> EpochSnapshot {
-        EpochSnapshot {
+    fn make_snapshot(epoch: u64) -> EpochSnapshotRecord {
+        EpochSnapshotRecord {
             epoch_number: epoch,
             epoch_start_ns: 1000,
             epoch_end_ns: 2000,
             peer_scores: vec![
-                PeerScore { peer_id: "B".into(), score: 20.0 },
-                PeerScore { peer_id: "A".into(), score: 10.0 },
+                PeerScore {
+                    peer_id: "B".into(),
+                    score: 20.0,
+                },
+                PeerScore {
+                    peer_id: "A".into(),
+                    score: 10.0,
+                },
             ],
             committee: vec!["C1".into(), "C2".into()],
             threshold: 2,
@@ -105,7 +129,7 @@ mod tests {
     fn epoch_snapshot_json_roundtrip() {
         let s = make_snapshot(42);
         let json = serde_json::to_string(&s).unwrap();
-        let parsed: EpochSnapshot = serde_json::from_str(&json).unwrap();
+        let parsed: EpochSnapshotRecord = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.epoch_number, s.epoch_number);
         assert_eq!(parsed.epoch_start_ns, s.epoch_start_ns);
         assert_eq!(parsed.epoch_end_ns, s.epoch_end_ns);

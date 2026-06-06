@@ -6,7 +6,7 @@
 
 use crate::crypto_server::VerifyOps;
 use crate::error::CryptoError;
-use crate::foretias::clean_auth::RecordBase;
+use crate::foretias::clean_auth::BaseRecord;
 use crate::foretias::types::Tbid;
 use serde::Serialize;
 
@@ -118,7 +118,7 @@ impl FamilyRecord {
     }
 }
 
-impl RecordBase for FamilyRecord {
+impl BaseRecord for FamilyRecord {
     fn always_require_full_signature(&self) -> bool {
         true
     }

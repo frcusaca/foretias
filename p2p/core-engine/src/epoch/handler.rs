@@ -1,7 +1,7 @@
 //! Snapshot adoption handler — verifies and adopts epoch snapshots (stubbed for v0.8).
 
 use crate::epoch::scheduler::EpochScheduler;
-use crate::epoch::snapshot::EpochSnapshot;
+use crate::epoch::snapshot::EpochSnapshotRecord;
 use crate::error::NodeError;
 
 /// Handle an incoming epoch snapshot from the network.
@@ -11,9 +11,9 @@ use crate::error::NodeError;
 pub fn handle_epoch_snapshot(
     data: &[u8],
     scheduler: &EpochScheduler,
-) -> Result<EpochSnapshot, NodeError> {
-    let snapshot: EpochSnapshot = serde_json::from_slice(data)
-        .map_err(|_| NodeError::BadFormat("EpochSnapshot deserialization".to_string()))?;
+) -> Result<EpochSnapshotRecord, NodeError> {
+    let snapshot: EpochSnapshotRecord = serde_json::from_slice(data)
+        .map_err(|_| NodeError::BadFormat("EpochSnapshotRecord deserialization".to_string()))?;
 
     let current = scheduler.current_epoch_number();
     if snapshot.epoch_number != current {
@@ -26,7 +26,9 @@ pub fn handle_epoch_snapshot(
     // Stub verification: FROST signature must be non-empty (64 bytes for Ed25519)
     // TODO v0.9: verify frost_signature against committee_pubkey using FROST-Ed25519
     if snapshot.frost_signature.is_empty() {
-        return Err(NodeError::BadFormat("epoch snapshot has empty FROST signature".to_string()));
+        return Err(NodeError::BadFormat(
+            "epoch snapshot has empty FROST signature".to_string(),
+        ));
     }
     if snapshot.frost_signature.len() != 64 {
         return Err(NodeError::BadFormat(format!(
@@ -47,7 +49,7 @@ mod tests {
     }
 
     fn make_snapshot_json(epoch: u64) -> String {
-        serde_json::to_string(&EpochSnapshot {
+        serde_json::to_string(&EpochSnapshotRecord {
             epoch_number: epoch,
             epoch_start_ns: 1_000,
             epoch_end_ns: 2_000,
@@ -56,7 +58,8 @@ mod tests {
             threshold: 2,
             frost_signature: vec![0xAB; 64].into(),
             committee_pubkey: vec![0xCD; 32].into(),
-        }).unwrap()
+        })
+        .unwrap()
     }
 
     #[test]

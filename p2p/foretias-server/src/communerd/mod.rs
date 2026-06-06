@@ -51,7 +51,7 @@ use self::p2p::swarm::{build_and_spawn_swarm, CommunerdRpcHandler, SwarmCommand}
 use self::peer_pool::PeerPool;
 use self::transport::{PeerAddr, PeerTransport, TransportError};
 use crate::calendar::Calendar;
-use crate::probity::{handle_gossip_message, ProbityReport, ProbityStore};
+use crate::probity::{handle_gossip_message, ProbityReportRecord, ProbityStore};
 use libp2p::kad;
 use std::collections::HashMap;
 
@@ -969,7 +969,7 @@ impl Communerd {
             None => return,
         };
         let crypto = self.crypto.clone();
-        let mut report = ProbityReport {
+        let mut report = ProbityReportRecord {
             subject: subject.to_string(),
             reporter: reporter.clone(),
             attribute: attribute.to_string(),
@@ -1625,7 +1625,7 @@ impl communerdette::CommunerdetteHost for Communerd {
 
     fn host_sign_probity_report(
         &self,
-        report: &crate::probity::ProbityReport,
+        report: &crate::probity::ProbityReportRecord,
     ) -> Result<Vec<u8>, String> {
         let canonical = report.canonical();
         self.crypto

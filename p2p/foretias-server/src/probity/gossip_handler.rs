@@ -7,7 +7,7 @@ use foretias_core::crypto_server::CryptoServer;
 use foretias_core::error::NodeError;
 use foretias_core::foretias::clean_auth::{CleanAuthError, UnverifiedSignatureEnvelope};
 
-use super::report::ProbityReport;
+use super::report::ProbityReportRecord;
 use super::store::ProbityStore;
 
 /// Trait for resolving a reporter's Ed25519 public key from their TBID hex.
@@ -40,10 +40,11 @@ pub fn handle_gossip_message(
     now_ns: u64,
 ) -> Result<(), NodeError> {
     // Parse into unverified envelope
-    let envelope = UnverifiedSignatureEnvelope::<ProbityReport>::from_bytes(data).map_err(|e| {
-        tracing::trace!("gossip parse failed: {e}");
-        NodeError::BadFormat(format!("ProbityReport deserialization: {e}"))
-    })?;
+    let envelope =
+        UnverifiedSignatureEnvelope::<ProbityReportRecord>::from_bytes(data).map_err(|e| {
+            tracing::trace!("gossip parse failed: {e}");
+            NodeError::BadFormat(format!("ProbityReportRecord deserialization: {e}"))
+        })?;
 
     let report = envelope.inner();
 
@@ -106,7 +107,7 @@ pub fn handle_gossip_message(
 /// Reserved for future use in binding proof verification.
 #[allow(dead_code)]
 fn verify_report_signature(
-    report: &ProbityReport,
+    report: &ProbityReportRecord,
     crypto: &dyn CryptoServer,
 ) -> Result<(), NodeError> {
     if report.curve != 1 {
@@ -169,8 +170,8 @@ mod tests {
         crypto_server::new_software(ForetiasCurve::Ed25519).unwrap()
     }
 
-    fn make_report(subject: &str, reporter: &str, ts: u64) -> ProbityReport {
-        ProbityReport {
+    fn make_report(subject: &str, reporter: &str, ts: u64) -> ProbityReportRecord {
+        ProbityReportRecord {
             subject: subject.to_string(),
             reporter: reporter.to_string(),
             attribute: "correctness".to_string(),
@@ -182,7 +183,11 @@ mod tests {
         }
     }
 
-    fn make_signed_report(crypto: &dyn CryptoServer, subject: &str, ts: u64) -> ProbityReport {
+    fn make_signed_report(
+        crypto: &dyn CryptoServer,
+        subject: &str,
+        ts: u64,
+    ) -> ProbityReportRecord {
         let pub_key = match crypto.public_key() {
             foretias_core::crypto_server::PublicKeyBytes::Ed25519(pk) => pk.bytes.to_vec(),
             _ => panic!("expected Ed25519"),
@@ -191,7 +196,7 @@ mod tests {
         tbid.resize(48, 0);
         let reporter_hex = hex::encode(&tbid);
 
-        let mut report = ProbityReport {
+        let mut report = ProbityReportRecord {
             subject: subject.to_string(),
             reporter: reporter_hex.clone(),
             attribute: "correctness".to_string(),
@@ -231,7 +236,7 @@ mod tests {
         // Q vouches for each R -> R has positive pass-1 score -> positive pass-2 credibility
         for i in 0..10 {
             store
-                .ingest(ProbityReport {
+                .ingest(ProbityReportRecord {
                     subject: format!("R{}", i),
                     reporter: "Q".to_string(),
                     attribute: "correctness".to_string(),
@@ -246,7 +251,7 @@ mod tests {
         // Each R reports badly on B
         for i in 0..10 {
             store
-                .ingest(ProbityReport {
+                .ingest(ProbityReportRecord {
                     subject: "B".to_string(),
                     reporter: format!("R{}", i),
                     attribute: "correctness".to_string(),
@@ -305,7 +310,7 @@ mod tests {
         tbid.resize(48, 0);
         let reporter_hex = hex::encode(&tbid);
 
-        let mut report = ProbityReport {
+        let mut report = ProbityReportRecord {
             subject: "A".to_string(),
             reporter: reporter_hex,
             attribute: "fb".to_string(), // FB attribute requires full signature
@@ -346,7 +351,7 @@ mod tests {
         tbid.resize(48, 0);
         let reporter_hex = hex::encode(&tbid);
 
-        let mut report = ProbityReport {
+        let mut report = ProbityReportRecord {
             subject: "A".to_string(),
             reporter: reporter_hex,
             attribute: "gnf".to_string(), // GNF attribute requires full signature

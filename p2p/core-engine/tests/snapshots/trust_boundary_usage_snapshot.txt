@@ -10,11 +10,11 @@ core-engine/src/foretias/clean_auth.rs | ChrononRecord | impl::UnverifiedSignatu
 core-engine/src/foretias/clean_auth.rs | ChrononRecord | impl::UnverifiedSignatureEnvelope::fn::into_clean_authenticated_genesis | - | Y | -
 core-engine/src/foretias/clean_auth.rs | ChrononRecord | impl::UnverifiedSignatureEnvelope::fn::verify | - | Y | -
 core-engine/src/foretias/clean_auth.rs | ChrononRecord | struct::CalendarLookupFromCleanRecord | - | Y | -
-core-engine/src/foretias/clean_auth.rs | EpochSnapshot | impl::CleanAuthenticated | - | Y | -
-core-engine/src/foretias/clean_auth.rs | EpochSnapshot | impl::CleanAuthenticated::fn::externalize | - | - | Y
-core-engine/src/foretias/clean_auth.rs | EpochSnapshot | impl::UnverifiedSignatureEnvelope | Y | - | -
-core-engine/src/foretias/clean_auth.rs | EpochSnapshot | impl::UnverifiedSignatureEnvelope::fn::into_clean_authenticated | - | Y | -
-core-engine/src/foretias/clean_auth.rs | EpochSnapshot | impl::UnverifiedSignatureEnvelope::fn::verify | - | Y | -
+core-engine/src/foretias/clean_auth.rs | EpochSnapshotRecord | impl::CleanAuthenticated | - | Y | -
+core-engine/src/foretias/clean_auth.rs | EpochSnapshotRecord | impl::CleanAuthenticated::fn::externalize | - | - | Y
+core-engine/src/foretias/clean_auth.rs | EpochSnapshotRecord | impl::UnverifiedSignatureEnvelope | Y | - | -
+core-engine/src/foretias/clean_auth.rs | EpochSnapshotRecord | impl::UnverifiedSignatureEnvelope::fn::into_clean_authenticated | - | Y | -
+core-engine/src/foretias/clean_auth.rs | EpochSnapshotRecord | impl::UnverifiedSignatureEnvelope::fn::verify | - | Y | -
 core-engine/src/foretias/clean_auth.rs | FamilyRecord | impl::UnverifiedSignatureEnvelope | Y | - | -
 core-engine/src/foretias/clean_auth.rs | ForetisRecord | impl::CleanAuthenticated | - | Y | -
 core-engine/src/foretias/clean_auth.rs | ForetisRecord | impl::CleanAuthenticated::fn::externalize | - | - | Y
@@ -31,11 +31,11 @@ core-engine/src/foretias/clean_auth.rs | T | impl::UnverifiedSignatureEnvelope::
 core-engine/src/foretias/clean_auth.rs | T | other | Y | - | -
 core-engine/src/foretias/clean_auth.rs | u32 | fn::clean_authenticated_is_authenticated_quickly | - | Y | -
 core-engine/src/foretias/clean_auth.rs | u32 | fn::clean_fully_authenticated_converts_to_clean_authenticated | - | Y | -
-core-engine/src/probity/report.rs | ProbityReport | impl::CleanAuthenticated | - | Y | -
-core-engine/src/probity/report.rs | ProbityReport | impl::CleanAuthenticated::fn::externalize | - | - | Y
-core-engine/src/probity/report.rs | ProbityReport | impl::UnverifiedSignatureEnvelope | Y | - | -
-core-engine/src/probity/report.rs | ProbityReport | impl::UnverifiedSignatureEnvelope::fn::into_clean_authenticated | - | Y | -
-core-engine/src/probity/report.rs | ProbityReport | impl::UnverifiedSignatureEnvelope::fn::verify | - | Y | -
+core-engine/src/probity/report.rs | ProbityReportRecord | impl::CleanAuthenticated | - | Y | -
+core-engine/src/probity/report.rs | ProbityReportRecord | impl::CleanAuthenticated::fn::externalize | - | - | Y
+core-engine/src/probity/report.rs | ProbityReportRecord | impl::UnverifiedSignatureEnvelope | Y | - | -
+core-engine/src/probity/report.rs | ProbityReportRecord | impl::UnverifiedSignatureEnvelope::fn::into_clean_authenticated | - | Y | -
+core-engine/src/probity/report.rs | ProbityReportRecord | impl::UnverifiedSignatureEnvelope::fn::verify | - | Y | -
 foretias-server/src/calendar_store/encrypted_jsonl.rs | ChrononRecord | fn::make_tick | - | - | Y
 foretias-server/src/calendar_store/encrypted_jsonl.rs | ChrononRecord | fn::merkle_root_sixty_four_ticks | - | - | Y
 foretias-server/src/calendar_store/encrypted_jsonl.rs | ChrononRecord | fn::migrate_plaintext | - | - | Y
@@ -74,21 +74,21 @@ foretias-server/src/server/handlers.rs | ForetisRecord | fn::cross_node_verify |
 crate | wrapper | inner | count
 ================================================================================
 core-engine | CleanAuthenticated | ChrononRecord | 9
-core-engine | CleanAuthenticated | EpochSnapshot | 3
+core-engine | CleanAuthenticated | EpochSnapshotRecord | 3
 core-engine | CleanAuthenticated | ForetisRecord | 3
-core-engine | CleanAuthenticated | ProbityReport | 3
+core-engine | CleanAuthenticated | ProbityReportRecord | 3
 core-engine | CleanAuthenticated | T | 6
 core-engine | CleanAuthenticated | u32 | 2
 core-engine | Externalized | ChrononRecord | 1
-core-engine | Externalized | EpochSnapshot | 1
+core-engine | Externalized | EpochSnapshotRecord | 1
 core-engine | Externalized | ForetisRecord | 1
-core-engine | Externalized | ProbityReport | 1
+core-engine | Externalized | ProbityReportRecord | 1
 core-engine | Externalized | T | 3
 core-engine | UnverifiedSignatureEnvelope | ChrononRecord | 2
-core-engine | UnverifiedSignatureEnvelope | EpochSnapshot | 1
+core-engine | UnverifiedSignatureEnvelope | EpochSnapshotRecord | 1
 core-engine | UnverifiedSignatureEnvelope | FamilyRecord | 1
 core-engine | UnverifiedSignatureEnvelope | ForetisRecord | 1
-core-engine | UnverifiedSignatureEnvelope | ProbityReport | 1
+core-engine | UnverifiedSignatureEnvelope | ProbityReportRecord | 1
 core-engine | UnverifiedSignatureEnvelope | T | 5
 foretias-server | CleanAuthenticated | AuthenticatedPong | 1
 foretias-server | CleanAuthenticated | ChrononRecord | 16
@@ -113,22 +113,22 @@ wrapper | inner/context | count
 ================================================================================
 CleanAuthenticated | AuthenticatedPong | 1
 CleanAuthenticated | ChrononRecord | 25
-CleanAuthenticated | EpochSnapshot | 3
+CleanAuthenticated | EpochSnapshotRecord | 3
 CleanAuthenticated | ForetisRecord | 12
-CleanAuthenticated | ProbityReport | 3
+CleanAuthenticated | ProbityReportRecord | 3
 CleanAuthenticated | T | 6
 CleanAuthenticated | u32 | 2
 CleanAuthenticated | u8 | 1
 Externalized | ChrononRecord | 6
-Externalized | EpochSnapshot | 1
+Externalized | EpochSnapshotRecord | 1
 Externalized | ForetisRecord | 1
-Externalized | ProbityReport | 1
+Externalized | ProbityReportRecord | 1
 Externalized | T | 3
 Externalized | u8 | 1
 UnverifiedSignatureEnvelope | ChrononRecord | 4
-UnverifiedSignatureEnvelope | EpochSnapshot | 1
+UnverifiedSignatureEnvelope | EpochSnapshotRecord | 1
 UnverifiedSignatureEnvelope | FamilyRecord | 1
 UnverifiedSignatureEnvelope | ForetisRecord | 3
-UnverifiedSignatureEnvelope | ProbityReport | 1
+UnverifiedSignatureEnvelope | ProbityReportRecord | 1
 UnverifiedSignatureEnvelope | T | 5
 UnverifiedSignatureEnvelope | u8 | 1

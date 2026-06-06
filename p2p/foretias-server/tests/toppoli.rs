@@ -355,7 +355,7 @@ impl ToppliBasicTest {
     }
 }
 
-/// Fixture for Fully-Bound gossip and ProbityReport tests (Phase 13).
+/// Fixture for Fully-Bound gossip and ProbityReportRecord tests (Phase 13).
 ///
 /// All peers are started with `with_communerd = true` and a full-mesh topology.
 /// Once Phase 13 is implemented this fixture will expose helpers to wait for

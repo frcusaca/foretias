@@ -5,7 +5,7 @@ use super::super::transport::TransportError;
 use super::behaviour::{ForetiasBehaviour, ForetiasBehaviourEvent, RpcProtocolFactory};
 use super::events::NetworkEvent;
 use super::gossip::{heartbeat_topic, probity_topic};
-use crate::probity::ProbityReport;
+use crate::probity::ProbityReportRecord;
 use async_trait::async_trait;
 use foretias_core::collision::Heartbeat;
 use foretias_core::error::NodeError;
@@ -85,7 +85,7 @@ pub enum SwarmCommand {
     },
     EnterDormancy,
     PublishProbity {
-        report: ProbityReport,
+        report: ProbityReportRecord,
         namespace: String,
     },
     PublishHeartbeat {
@@ -249,7 +249,7 @@ async fn swarm_loop(
                         let bytes = match serde_json::to_vec(&report) {
                             Ok(b) => b,
                             Err(e) => {
-                                tracing::warn!("failed to serialize ProbityReport: {e}");
+                                tracing::warn!("failed to serialize ProbityReportRecord: {e}");
                                 continue;
                             }
                         };

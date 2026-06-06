@@ -1,7 +1,7 @@
 //! EpochScheduler — wall-clock-aligned epoch phase timer.
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::clock::{Clock, SystemClock};
@@ -9,7 +9,7 @@ use crate::clock::{Clock, SystemClock};
 /// Manages epoch numbering and boundary alignment.
 pub struct EpochScheduler {
     epoch_duration: Duration,
-    epoch_number:   AtomicU64,
+    epoch_number: AtomicU64,
     clock: Arc<dyn Clock>,
 }
 
