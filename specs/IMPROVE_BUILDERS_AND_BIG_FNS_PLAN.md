@@ -21,16 +21,26 @@
 
 ### Wave 1: ChrononRecord Builder
 
-- [ ] Add `#[derive(Builder)]` to `ChrononRecord` with `#[builder(finish_fn(vis = "", name = build_internal))]`
-- [ ] Add `#[builder(default)]` for optional fields: `signature_algorithm`, `chronon_stamp_count`, `external_attestations`, `tb_version`, `tbid`
-- [ ] Implement custom `build()` on `ChrononRecordBuilder<S: IsComplete>` returning `Result<ChrononRecord, NodeError>`
-- [ ] Write test: `bon_builder_local_construction` — build with all required fields
-- [ ] Write test: `bon_builder_defaults_applied` — optional fields get defaults
-- [ ] Write test: `bon_builder_validation_zero_chronon` — build with chronon_number=0 → error
-- [ ] Write test: `bon_builder_validation_empty_pubkey` — build with empty public_key → error
-- [ ] Verify: `ChrononRecord` still derives `Deserialize` (strict, no changes)
-- [ ] Run `cargo test -p foretias-core` — all existing tests still pass
-- [ ] Commit: "ChrononRecord: add bon builder with fallible build"
+- [x] Add `#[derive(Builder)]` to `ChrononRecord` with `#[builder(finish_fn(vis = "", name = build_internal))]`
+      (2026-06-06 00:00)
+- [x] Add `#[builder(default)]` for optional fields: `signature_algorithm`, `chronon_stamp_count`, `external_attestations`, `tb_version`, `tbid`
+      (2026-06-06 00:00)
+- [x] Implement custom `build()` on `ChrononRecordBuilder<S: IsComplete>` returning `Result<ChrononRecord, NodeError>`
+      (2026-06-06 00:00)
+- [x] Write test: `bon_builder_local_construction` — build with all required fields
+      (2026-06-06 00:00)
+- [x] Write test: `bon_builder_defaults_applied` — optional fields get defaults
+      (2026-06-06 00:00)
+- [x] Write test: `bon_builder_validation_zero_chronon` — build with chronon_number=0 → error
+      (2026-06-06 00:00)
+- [x] Write test: `bon_builder_validation_empty_pubkey` — build with empty public_key → error
+      (2026-06-06 00:00)
+- [x] Verify: `ChrononRecord` still derives `Deserialize` (strict, no changes)
+      (2026-06-06 00:00)
+- [x] Run `cargo test -p foretias-core` — all existing tests still pass (283 tests)
+      (2026-06-06 00:00)
+- [x] Commit: "ChrononRecord: add bon builder with fallible build"
+      (2026-06-06 00:00)
 
 ### Wave 2: Chronomatter Uses Builder
 
