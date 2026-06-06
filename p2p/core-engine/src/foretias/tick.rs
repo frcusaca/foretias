@@ -1,5 +1,6 @@
 //! Foretias domain types: ChrononRecord, Foretis, and stamp/verify operations.
 
+use bon::Builder;
 use serde::{Deserialize, Serialize};
 
 use super::encoding::{FTByteArray, FTByteVector};
@@ -10,7 +11,8 @@ use crate::crypto_server::CryptoServer;
 use crate::error::NodeError;
 
 /// A single entry in the Calendar, linking consecutive chronons via Foretis attestations.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Builder)]
+#[builder(finish_fn(vis = "", name = build_internal))]
 pub struct ChrononRecord {
     /// The monotonically increasing chronon index.
     #[serde(rename = "tick_number")]
@@ -19,6 +21,7 @@ pub struct ChrononRecord {
     pub public_key: FTByteVector,
     /// Plain-text algorithm identifier for this chronon's key.
     #[serde(default = "default_sig_algorithm")]
+    #[builder(default = "Ed25519".to_string())]
     pub signature_algorithm: String,
     /// Serialized Foretis attesting forward to the next chronon.
     pub forward_foretis: FTByteVector,
@@ -29,16 +32,20 @@ pub struct ChrononRecord {
     pub aa_nonce: FTByteArray<16>,
     /// Number of user-initiated stamps during this chronon (excluding auto-attestation itself,
     /// but including mutual attestations). Persisted for blob reconstruction during verify_pair.
+    #[builder(default)]
     pub chronon_stamp_count: u64,
     /// External attestations from other Time Families.
     #[serde(default)]
+    #[builder(default)]
     pub external_attestations: Vec<super::external_attestation::ExternalAttestation>,
 
     /// TBID protocol version: 0 = legacy (16-byte UUID), 1 = dual-key (96-byte).
     #[serde(default = "default_tb_version")]
+    #[builder(default = 1)]
     pub tb_version: u32,
     /// Time Being ID — identifies which calendar this record belongs to.
     #[serde(default)]
+    #[builder(default)]
     pub tbid: Tbid,
 }
 
@@ -112,6 +119,26 @@ impl ChrononRecord {
     }
     pub fn tbid(&self) -> &Tbid {
         &self.tbid
+    }
+}
+
+/// Fallible builder for ChrononRecord — validates invariants before construction.
+impl<S: chronon_record_builder::IsComplete> ChrononRecordBuilder<S> {
+    /// Build a validated ChrononRecord.
+    ///
+    /// # Errors
+    /// Returns `NodeError::InvalidInput` if `chronon_number` is 0 or `public_key` is empty.
+    pub fn build(self) -> Result<ChrononRecord, NodeError> {
+        let record = self.build_internal();
+        if record.chronon_number == 0 {
+            return Err(NodeError::InvalidInput("chronon_number must be > 0".into()));
+        }
+        if record.public_key.is_empty() {
+            return Err(NodeError::InvalidInput(
+                "public_key must not be empty".into(),
+            ));
+        }
+        Ok(record)
     }
 }
 
@@ -1180,5 +1207,87 @@ mod tests {
         let deserialized_b: Vec<u8> = bincode::deserialize(&bincode_bytes).unwrap();
         assert_eq!(deserialized_p, content);
         assert_eq!(deserialized_b, content);
+    }
+
+    // ── bon builder tests ──
+
+    #[test]
+    fn bon_builder_local_construction() {
+        let record = ChrononRecord::builder()
+            .chronon_number(1)
+            .public_key(vec![0x01u8; 32].into())
+            .forward_foretis(vec![0x02u8; 64].into())
+            .backward_foretis(vec![0x03u8; 64].into())
+            .aa_nonce([0x04u8; 16].into())
+            .build()
+            .expect("build with all required fields should succeed");
+
+        assert_eq!(record.chronon_number, 1);
+        assert_eq!(record.public_key.as_slice(), &[0x01u8; 32]);
+        assert_eq!(record.forward_foretis.as_slice(), &[0x02u8; 64]);
+        assert_eq!(record.backward_foretis.as_slice(), &[0x03u8; 64]);
+        assert_eq!(record.aa_nonce.as_slice(), &[0x04u8; 16]);
+    }
+
+    #[test]
+    fn bon_builder_defaults_applied() {
+        let record = ChrononRecord::builder()
+            .chronon_number(5)
+            .public_key(vec![0xABu8; 32].into())
+            .forward_foretis(vec![0xCDu8; 64].into())
+            .backward_foretis(vec![0xEFu8; 64].into())
+            .aa_nonce([0x12u8; 16].into())
+            .build()
+            .expect("build with only required fields should apply defaults");
+
+        assert_eq!(record.signature_algorithm, "Ed25519");
+        assert_eq!(record.chronon_stamp_count, 0);
+        assert!(record.external_attestations.is_empty());
+        assert_eq!(record.tb_version, 1);
+        assert_eq!(record.tbid, Tbid::default());
+    }
+
+    #[test]
+    fn bon_builder_validation_zero_chronon() {
+        let result = ChrononRecord::builder()
+            .chronon_number(0)
+            .public_key(vec![0x01u8; 32].into())
+            .forward_foretis(vec![].into())
+            .backward_foretis(vec![].into())
+            .aa_nonce([0u8; 16].into())
+            .build();
+
+        assert!(
+            result.is_err(),
+            "build with chronon_number=0 must return an error"
+        );
+        let err = result.unwrap_err();
+        let err_str = format!("{err}");
+        assert!(
+            err_str.contains("chronon_number"),
+            "error message should mention chronon_number, got: {err_str}"
+        );
+    }
+
+    #[test]
+    fn bon_builder_validation_empty_pubkey() {
+        let result = ChrononRecord::builder()
+            .chronon_number(1)
+            .public_key(vec![].into())
+            .forward_foretis(vec![].into())
+            .backward_foretis(vec![].into())
+            .aa_nonce([0u8; 16].into())
+            .build();
+
+        assert!(
+            result.is_err(),
+            "build with empty public_key must return an error"
+        );
+        let err = result.unwrap_err();
+        let err_str = format!("{err}");
+        assert!(
+            err_str.contains("public_key"),
+            "error message should mention public_key, got: {err_str}"
+        );
     }
 }
