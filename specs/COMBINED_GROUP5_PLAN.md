@@ -201,6 +201,23 @@
 - [x] `g5-b-crash-recovery` merged 2026-05-22: corrupt `.tmp` is removed
 - [x] `g5-d-agents-rules` merged 2026-05-22: AGENTS.md gap-fill complete (4 rules added)
 - [x] `g5-a-clock-inject` merged 2026-05-23 (b7927f0): zero `SystemTime::now()` calls outside `clock.rs`
-- [x] `g5-c-rpc-auth` decision made: Option B (mTLS) — dedicated mTLS spec required; g5-c deferred to separate plan
+- [x] `g5-c-rpc-auth` decision made: Option B (mTLS) — but mTLS is NOT needed for Foretias as an open project. TLS + TBID stamps are sufficient. See rationale below.
 - [x] `cargo test --workspace` passes deterministically (511 tests, 2 ignored, 0 failed — verified 2026-05-26)
 - [x] `cargo build --workspace` zero warnings
+
+### g5-c (JSON-RPC Auth) — Decision: Not Needed
+
+**Rationale (2026-06-05):** mTLS is unnecessary for Foretias as an open project.
+
+- Foretias is an **open network** — any time being can join
+- TBID stamps already authenticate the sender — a time being proves it owns a TBID by signing with that TBID's key
+- TLS encrypts the channel (prevents eavesdropping/modification)
+- mTLS would require a certificate authority or trust store — who issues certificates? Who decides which time beings are "trusted"? That contradicts the open model
+- mTLS would only make sense for a **closed network** where only pre-approved servers can connect
+
+**Current security model is sufficient:**
+1. TLS — encrypts the channel
+2. TBID stamp verification — verifies sender identity
+3. Open network — any time being welcome
+
+**If future deployment requires closed-network security:** Implement mTLS at that time with a dedicated spec. Not needed now.
