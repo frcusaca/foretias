@@ -399,7 +399,121 @@ pub enum ThrottleReason {
 
 ---
 
-## 4. Implementation Notes
+## 4. Communerdette as Unruliness Status Maintainer
+
+**Communerdette** is the natural maintainer of unruliness status for each TBID. It already maintains per-TBID state (binding status, stats, backoff, route stats). Adding unruliness status extends this existing pattern.
+
+### 4.1 Unruliness Status
+
+```rust
+/// Unruliness status for a TBID (maintained by Communerdette).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UnrulinessStatus {
+    /// Normal — no rate violations detected.
+    Normal,
+    /// Warning — rate approaching thresholds (e.g., >80% of detection threshold).
+    Warning,
+    /// Throttled — rate exceeded thresholds, requests being rejected.
+    Throttled {
+        /// When throttling started.
+        started_ns: u64,
+        /// Reason for throttling.
+        reason: ThrottleReason,
+        /// Number of requests rejected while throttled.
+        rejected_count: u64,
+    },
+    /// Alerted — received gossip alert from another peer, monitoring closely.
+    Alerted {
+        /// TBID of the reporting peer.
+        reporter_tbid: String,
+        /// When the alert was received.
+        alerted_at_ns: u64,
+    },
+}
+```
+
+### 4.2 Integration with CommunerdetteState
+
+```rust
+// In CommunerdetteState (existing per-TBID state)
+pub struct CommunerdetteState {
+    // ... existing fields (binding, stats, backoff, route_stats, etc.) ...
+
+    /// Unruliness status for this TBID.
+    pub unruliness: UnrulinessStatus,
+
+    /// Rate tracker for inbound requests from this TBID.
+    pub rate_tracker: RateCounter,
+
+    /// Last time unruliness status was checked.
+    pub last_unruliness_check_ns: u64,
+}
+```
+
+### 4.3 CommunerdetteLine API
+
+CommunerdetteLine (the narrow capability handle used by Calendar/Chronomatter) exposes unruliness queries:
+
+```rust
+impl CommunerdetteLine {
+    /// Check if this TBID is unruly.
+    pub fn is_unruly(&self) -> bool {
+        matches!(self.state.unruliness, UnrulinessStatus::Throttled { .. })
+    }
+
+    /// Get the unruliness status for this TBID.
+    pub fn unruliness_status(&self) -> UnrulinessStatus {
+        self.state.unruliness.clone()
+    }
+
+    /// Record an inbound request (updates rate tracker).
+    pub fn record_inbound_request(&self, request_type: RequestType) {
+        self.state.rate_tracker.record(request_type, now_ns());
+        self.check_unruliness_thresholds();
+    }
+}
+```
+
+### 4.4 Query API for Unruliness
+
+The query API ("do you know about TBID-X being unruly?") reads from Communerdette:
+
+```rust
+/// Query handler: returns unruliness status for a TBID.
+fn handle_query_unruliness(tbid: &str) -> Option<UnrulinessStatus> {
+    // Look up Communerdette for this TBID
+    communerd.line_for_tbid(tbid).ok().map(|line| line.unruliness_status())
+}
+```
+
+### 4.5 Rate Tracking Integration
+
+Communerdette already tracks per-TBID stats (success/failure counts, RTT). Rate tracking extends this:
+
+```rust
+// In Communerdette::handle_inbound_request()
+fn handle_inbound_request(&self, tbid: &str, request_type: RequestType) {
+    // Existing: update stats
+    self.record_route_success(route, now_ns);
+
+    // New: update rate tracker
+    if let Ok(line) = self.line_for_tbid(tbid) {
+        line.record_inbound_request(request_type);
+    }
+
+    // New: check unruliness
+    if let Ok(line) = self.line_for_tbid(tbid) {
+        if line.is_unruly() {
+            // Reject request with error code
+            return Err(TransportError::RateLimited(tbid.to_string()));
+        }
+    }
+}
+```
+
+---
+
+## 5. Implementation Notes
 
 ### 4.1 Sliding Window Counters
 
