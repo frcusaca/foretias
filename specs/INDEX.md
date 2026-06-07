@@ -128,13 +128,13 @@
 
 | File | Open | Done | Status |
 |------|------|------|--------|
-| `specs/COMBINED_GROUP5_PLAN.md` | 30 | 20 | Partially complete |
+| `specs/COMBINED_GROUP5_PLAN.md` | 0 | 50 | **COMPLETE** — g5-c closed (mTLS not needed) |
 
 **Status:**
 - g5-b (crash recovery): ✅ merged
 - g5-d (AGENTS.md): ✅ merged
 - g5-a (clock injection): ✅ merged
-- g5-c (JSON-RPC auth): **BLOCKED** — Option B (mTLS) chosen, needs dedicated spec/plan
+- g5-c (JSON-RPC auth): **CLOSED** — mTLS not needed for open project. TLS + TBID stamps sufficient.
 
 ---
 
