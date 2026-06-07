@@ -222,9 +222,68 @@ impl RateAlertRecord {
 }
 ```
 
-### 3.4 Gossip Topic
+### 3.4 Notification Strategy: Two-Pronged + Broadcast
 
-New gossip topic: `/foretias/{namespace}/rate-alert/v1`
+Rate alerts use a **three-tier notification strategy** that prioritizes peers most likely to be affected by the offending TBID (OTBID):
+
+#### Tier 1: RTBID → OTBID's Peers (DHT-based, immediate)
+
+OTBID's peers are those that OTBID can easily find on the DHT. These peers are likely interacting with OTBID and should be notified first.
+
+```rust
+/// Notify OTBID's peers via DHT lookup + direct request_response.
+async fn notify_otbid_peers(
+    alert: &RateAlertRecord,
+    communerd: &Communerd,
+    otbid: &str,
+) {
+    // 1. Query DHT for OTBID's registration record
+    //    Key: /foretias/{namespace}/tbid/{otbid_hex}/v1
+    if let Some(record) = communerd.lookup_tbid(otbid).await {
+        // 2. Find peers near OTBID's DHT key (Kademlia XOR distance)
+        let nearby_peers = communerd.get_closest_peers(&record.peer_id).await;
+
+        // 3. Send rate alert directly to each peer via request_response
+        for peer in nearby_peers {
+            communerd.send_rate_alert(&peer, alert).await;
+        }
+    }
+}
+```
+
+**Why this works:** Peers near OTBID's DHT key are likely interacting with OTBID (they're in OTBID's "neighborhood" on the Kademlia XOR distance metric). They receive the alert immediately via direct RPC, before the GossipSub broadcast reaches them.
+
+#### Tier 2: RTBID → Its Own Social Graph (direct)
+
+RTBID transmits the alert to its own trusted peers — TBIDs that RTBID has recently interacted with:
+
+```rust
+/// Notify RTBID's social graph via direct request_response.
+async fn notify_rtbid_peers(
+    alert: &RateAlertRecord,
+    communerdette_line: &CommunerdetteLine,
+) {
+    // Get TBIDs that RTBID has recently interacted with
+    let social_graph = communerdette_line.get_active_relationships().await;
+
+    for peer_tbid in social_graph {
+        // Send rate alert directly via CommunerdetteLine
+        if let Ok(line) = communerdette_line.for_tbid(&peer_tbid) {
+            line.send_rate_alert(alert).await;
+        }
+    }
+}
+```
+
+**Social graph includes:**
+- **FullyBound (FB) relationships** — peers that have completed mutual attestation
+- **Recent helpers** — peers that provided stamp/verify/getCalendar in the recent past
+- **Active mirror peers** — peers currently mirroring RTBID's calendar
+- **DHT neighbors** — peers in RTBID's DHT neighborhood
+
+#### Tier 3: GossipSub Broadcast (eventual)
+
+Also publish to the namespace-wide topic for all other peers:
 
 ```rust
 // In gossip.rs
@@ -237,9 +296,24 @@ pub fn publish_rate_alert(alert: &RateAlertRecord) -> Vec<u8> {
 }
 ```
 
+#### Notification Flow
+
+```
+RTBID detects OTBID exceeding thresholds
+    │
+    ├─→ Tier 1: DHT lookup for OTBID's peers → direct RPC (immediate)
+    │
+    ├─→ Tier 2: RTBID's social graph → direct RPC (immediate)
+    │
+    └─→ Tier 3: GossipSub broadcast → all peers (eventual, ~100-500ms)
+```
+
+**Why not per-TBID GossipSub topics?**
+Per-TBID topics don't scale. Each topic creates a separate mesh (D=6 peers), subscription messages broadcast to all connected peers, and with many TBIDs this is prohibitive. The two-pronged approach achieves targeted notification without topic overhead.
+
 ### 3.5 Receiving Peer Behavior
 
-When a peer receives a rate alert gossip message:
+When a peer receives a rate alert (via **direct RPC** or **GossipSub broadcast**):
 
 1. **Verify signature** — check reporter's Ed25519 signature over canonical bytes
 2. **Check reporter credibility** — reporter must have probity score > threshold (e.g., > -50.0)
