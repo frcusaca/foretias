@@ -277,6 +277,24 @@
 
 These features are explicitly out of active scope. They remain as specifications for future reintroduction.
 
+### Enterprise mTLS for Mirror-Only Peers
+
+| File | Open | Done | Status |
+|------|------|------|--------|
+| `specs/ENT_MTLS_SPEC.md` | ~10 | 0 | **PROPOSED** — enterprise feature, optional for corporate deployments |
+
+**Description:** Optional mTLS layer for mirror connections. When enabled, mirror server requires client certificate. Uses rustls + tokio-rustls + rcgen. Not needed for open network.
+
+### Gossip Rate Tracking and Peer Alerting
+
+| File | Open | Done | Status |
+|------|------|------|--------|
+| `specs/GOSSIP_RATE_TRACKING_SPEC.md` | ~12 | 0 | **PROPOSED** — per-TBID rate tracking with gossip alerts |
+
+**Description:** Track request rates per TBID across multiple time windows. When thresholds exceeded, gossip signed alert to peers. Receiving peers apply lower threshold. Local throttling with cooldown.
+
+---
+
 ### Python Bindings (Thin Client)
 
 | File | Open | Done | Status |
