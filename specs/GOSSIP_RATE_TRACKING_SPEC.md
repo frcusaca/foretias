@@ -222,40 +222,13 @@ impl RateAlertRecord {
 }
 ```
 
-### 3.4 Notification Strategy: Two-Pronged + Broadcast
+### 3.4 Notification Strategy: Direct + Broadcast + Query API
 
-Rate alerts use a **three-tier notification strategy** that prioritizes peers most likely to be affected by the offending TBID (OTBID):
+Rate alerts use a **three-tier notification strategy**:
 
-#### Tier 1: RTBID → OTBID's Peers (DHT-based, immediate)
+#### Tier 1: RTBID → Its Own Social Graph (direct, immediate)
 
-OTBID's peers are those that OTBID can easily find on the DHT. These peers are likely interacting with OTBID and should be notified first.
-
-```rust
-/// Notify OTBID's peers via DHT lookup + direct request_response.
-async fn notify_otbid_peers(
-    alert: &RateAlertRecord,
-    communerd: &Communerd,
-    otbid: &str,
-) {
-    // 1. Query DHT for OTBID's registration record
-    //    Key: /foretias/{namespace}/tbid/{otbid_hex}/v1
-    if let Some(record) = communerd.lookup_tbid(otbid).await {
-        // 2. Find peers near OTBID's DHT key (Kademlia XOR distance)
-        let nearby_peers = communerd.get_closest_peers(&record.peer_id).await;
-
-        // 3. Send rate alert directly to each peer via request_response
-        for peer in nearby_peers {
-            communerd.send_rate_alert(&peer, alert).await;
-        }
-    }
-}
-```
-
-**Why this works:** Peers near OTBID's DHT key are likely interacting with OTBID (they're in OTBID's "neighborhood" on the Kademlia XOR distance metric). They receive the alert immediately via direct RPC, before the GossipSub broadcast reaches them.
-
-#### Tier 2: RTBID → Its Own Social Graph (direct)
-
-RTBID transmits the alert to its own trusted peers — TBIDs that RTBID has recently interacted with:
+RTBID transmits the alert directly to its own trusted peers:
 
 ```rust
 /// Notify RTBID's social graph via direct request_response.
@@ -263,11 +236,9 @@ async fn notify_rtbid_peers(
     alert: &RateAlertRecord,
     communerdette_line: &CommunerdetteLine,
 ) {
-    // Get TBIDs that RTBID has recently interacted with
     let social_graph = communerdette_line.get_active_relationships().await;
 
     for peer_tbid in social_graph {
-        // Send rate alert directly via CommunerdetteLine
         if let Ok(line) = communerdette_line.for_tbid(&peer_tbid) {
             line.send_rate_alert(alert).await;
         }
@@ -281,9 +252,9 @@ async fn notify_rtbid_peers(
 - **Active mirror peers** — peers currently mirroring RTBID's calendar
 - **DHT neighbors** — peers in RTBID's DHT neighborhood
 
-#### Tier 3: GossipSub Broadcast (eventual)
+#### Tier 2: GossipSub Broadcast About OTBID (eventual)
 
-Also publish to the namespace-wide topic for all other peers:
+Broadcast the alert to the namespace-wide topic. The alert is **about OTBID** — any peer that receives it can check if they've interacted with OTBID:
 
 ```rust
 // In gossip.rs
@@ -296,20 +267,54 @@ pub fn publish_rate_alert(alert: &RateAlertRecord) -> Vec<u8> {
 }
 ```
 
+#### Tier 3: Query API (on-demand)
+
+Peers can query other peers: "do you know about TBID-X being unruly?" This is a **request-response endpoint**, not gossip.
+
+```rust
+/// Query a peer for rate alerts about a specific TBID.
+async fn query_rate_alerts(
+    peer: &PeerAddr,
+    target_tbid: &str,
+) -> Result<Vec<RateAlertRecord>, TransportError> {
+    // Send request: { "method": "query_rate_alerts", "params": { "tbid": target_tbid } }
+    // Response: list of RateAlertRecord for that TBID (if any)
+}
+```
+
+**When to use the query API:**
+- Peer X encounters OTBID for the first time — queries its known peers for alerts
+- Peer X receives a request from OTBID — queries before processing
+- Peer X is about to mirror OTBID's calendar — queries for alerts first
+- Periodic background check — query peers about TBIDs in the PeerPool
+
+**Why this works:**
+- Peers that interact with OTBID will naturally discover alerts when they query
+- No need for RTBID to find OTBID's peers — they find the alerts themselves
+- The query is cheap (single request_response) and can be cached locally
+
 #### Notification Flow
 
 ```
 RTBID detects OTBID exceeding thresholds
     │
-    ├─→ Tier 1: DHT lookup for OTBID's peers → direct RPC (immediate)
+    ├─→ Tier 1: RTBID's social graph → direct RPC (immediate)
+    │   (FB, recent helpers, mirrors, DHT neighbors)
     │
-    ├─→ Tier 2: RTBID's social graph → direct RPC (immediate)
+    └─→ Tier 2: GossipSub broadcast about OTBID → all peers (eventual)
+        (any peer can check if they've interacted with OTBID)
+
+Meanwhile, other peers:
     │
-    └─→ Tier 3: GossipSub broadcast → all peers (eventual, ~100-500ms)
+    └─→ Tier 3: Query API → "do you know about OTBID?" (on-demand)
+        (peers query when they encounter OTBID)
 ```
 
 **Why not per-TBID GossipSub topics?**
-Per-TBID topics don't scale. Each topic creates a separate mesh (D=6 peers), subscription messages broadcast to all connected peers, and with many TBIDs this is prohibitive. The two-pronged approach achieves targeted notification without topic overhead.
+Per-TBID topics don't scale. Each topic creates a separate mesh (D=6 peers), subscription messages broadcast to all connected peers, and with many TBIDs this is prohibitive.
+
+**Why not DHT-based notification?**
+DHT-based notification requires RTBID to find OTBID's peers, which is expensive (DHT queries) and may miss peers. The query API flips the direction: peers that encounter OTBID query for alerts, which is cheaper and more reliable.
 
 ### 3.5 Receiving Peer Behavior
 
