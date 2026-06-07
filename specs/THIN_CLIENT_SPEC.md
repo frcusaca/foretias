@@ -570,3 +570,40 @@ This spec is language-agnostic. The following notes guide implementation but are
 ### General
 - The thin client is a **single class** with three construction paths. Do not create separate classes per level — the level is a construction-time concern, not a type-system concern.
 - The `Foretis` return type must have a `to_json()` method for serialization. The deserialization counterpart is `Foretis.from_json(json_str)`.
+
+---
+
+## PLANNED UPDATES (not yet implemented)
+
+> These updates are documented as TODOs. They will be applied when thin client bindings are reintroduced.
+
+### Naming Convention Update
+
+When `IMPROVE_BUILDERS_AND_BIG_FNS_PLAN.md` is executed, the following renames will affect this spec:
+
+| Current Name | Planned Name | Reason |
+|-------------|-------------|--------|
+| `Foretis` | `ForetisRecord` | All important data structures use `*Record` suffix |
+| `TickRecord` | `ChrononRecord` | Already renamed in codebase |
+| `EpochSnapshot` | `EpochSnapshotRecord` | Consistent naming |
+| `RecordBase` | `BaseRecord` | Trait rename |
+
+**Action:** Update all references in this spec after the renames are implemented.
+
+### Mirror Access (Programmatic)
+
+Thin clients should support programmatic access to mirrors for:
+- Fetching calendar slices from mirror nodes
+- Verifying against mirror-stored calendars
+- Querying mirror health and availability
+
+**Action:** Add mirror-specific operations to the thin client API when mirror features stabilize. See `CALENDAR_ACTIVE_MIRRORING_PLAN.md` for mirror architecture.
+
+### `BaseRecord` Trait
+
+All domain types returned by the thin client should implement `BaseRecord`. This ensures:
+- Consistent serialization (`Serialize`)
+- Thread safety (`Send + Sync`)
+- Cloneability for local processing
+
+**Action:** Ensure thin client return types implement `BaseRecord` after the trait is introduced.

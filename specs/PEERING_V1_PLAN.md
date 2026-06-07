@@ -528,6 +528,8 @@ Java CLI uses JNI to this FFI layer.
 
 ### Phase 4 — Multi-Language Expansion (PARTIAL)
 
+> **Note (2026-06-05):** Thin client specs (`THIN_CLIENT_SPEC.md`) updated with planned naming convention changes and mirror access TODOs. See "PLANNED UPDATES" section at end of spec.
+
 - [x](2026-05-08 12:30) Update Python CLI (`foretias-python/src/cli.py`) to match CLI spec — foretias_cli.py:236-241, has --p2p-port-range, --known-servers, --max-discovered-peers
 - [ ] Update PyO3 bindings to expose auto-port and known-servers — GAP: PyNodeConfig missing p2p_port_range, known_servers, max_discovered_peers; no Python-accessible find_free_port()
 - [ ] Ensure Python TimeFamily can register to DHT and discover peers — GAP: PyTimeFamily/PyTimeFamilyServer expose stamp/verify/calendar only, no DHT/peer discovery methods
