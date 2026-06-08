@@ -257,7 +257,7 @@ pub fn migrate_plaintext(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use foretias_core::{clock::FixedClock, crypto_server, foretias::Tbid};
+    use foretias_core::{clock::FixedClock, crypto_server};
 
     fn make_server() -> Arc<dyn CryptoServer> {
         let server: Box<dyn CryptoServer> =

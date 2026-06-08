@@ -456,7 +456,7 @@ mod tests {
     use super::*;
     use foretias_core::crypto_server;
     use foretias_core::foretias::clean_auth::CleanAuthenticated;
-    use foretias_core::foretias::{ChrononRecord, Tbid};
+    use foretias_core::foretias::{ChrononRecord};
 
     fn make_server() -> Arc<dyn foretias_core::crypto_server::CryptoServer> {
         let server: Box<dyn foretias_core::crypto_server::CryptoServer> =

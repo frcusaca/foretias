@@ -114,7 +114,6 @@ pub fn compute_hash_sanity(records: &[ChrononRecord]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use foretias_core::foretias::Tbid;
 
     fn make_tick(chronon_number: u64) -> ChrononRecord {
         ChrononRecord::builder()

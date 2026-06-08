@@ -339,19 +339,14 @@ fn test_crash_recovery_calendar() {
     // Create a calendar with 3 ticks
     let mut cal = CoreCalendar::new(Tbid::default(), "crash-test");
     for i in 0..3u64 {
-        let record = foretias_core::foretias::tick::ChrononRecord {
-            chronon_number: i,
-            public_key: vec![0u8; 32].into(),
-            signature_algorithm: "Ed25519".to_string(),
-            forward_foretis: vec![].into(),
-            backward_foretis: vec![].into(),
-            aa_nonce: [0u8; 16].into(),
-            chronon_stamp_count: 0,
-            external_attestations: Vec::new(),
-
-            tb_version: 0,
-            tbid: Tbid::default(),
-        };
+        let record = foretias_core::foretias::tick::ChrononRecord::builder()
+            .chronon_number(i)
+            .public_key(vec![0u8; 32].into())
+            .forward_foretis(vec![].into())
+            .backward_foretis(vec![].into())
+            .aa_nonce([0u8; 16].into())
+            .tb_version(0)
+            .build_unchecked();
         cal.append(record).expect("append failed");
     }
 
@@ -361,19 +356,14 @@ fn test_crash_recovery_calendar() {
     // Simulate crash: write a newer state to .tmp (more ticks than main)
     let mut cal2 = CoreCalendar::new(Tbid::default(), "crash-test");
     for i in 0..5u64 {
-        let record = foretias_core::foretias::tick::ChrononRecord {
-            chronon_number: i,
-            public_key: vec![0u8; 32].into(),
-            signature_algorithm: "Ed25519".to_string(),
-            forward_foretis: vec![].into(),
-            backward_foretis: vec![].into(),
-            aa_nonce: [0u8; 16].into(),
-            chronon_stamp_count: 0,
-            external_attestations: Vec::new(),
-
-            tb_version: 0,
-            tbid: Tbid::default(),
-        };
+        let record = foretias_core::foretias::tick::ChrononRecord::builder()
+            .chronon_number(i)
+            .public_key(vec![0u8; 32].into())
+            .forward_foretis(vec![].into())
+            .backward_foretis(vec![].into())
+            .aa_nonce([0u8; 16].into())
+            .tb_version(0)
+            .build_unchecked();
         cal2.append(record).expect("append failed");
     }
     cal2.save(tmp_path.to_str().unwrap())

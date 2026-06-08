@@ -113,20 +113,17 @@ fn make_externalized_tick(
     chronon_number: u64,
 ) -> foretias_core::foretias::clean_auth::Externalized<foretias_core::foretias::ChrononRecord> {
     use foretias_core::foretias::clean_auth::CleanAuthenticated;
-    use foretias_core::foretias::{types::Tbid, ChrononRecord};
+    use foretias_core::foretias::ChrononRecord;
 
-    let record = ChrononRecord {
-        chronon_number,
-        public_key: vec![0u8; 32].into(),
-        signature_algorithm: "Ed25519".to_string(),
-        forward_foretis: vec![].into(),
-        backward_foretis: vec![].into(),
-        aa_nonce: [0u8; 16].into(),
-        chronon_stamp_count: 0,
-        external_attestations: Vec::new(),
-        tb_version: 0,
-        tbid: Tbid::default(),
-    };
+    let record = ChrononRecord::builder()
+        .chronon_number(chronon_number)
+        .public_key(vec![0u8; 32].into())
+        .forward_foretis(vec![].into())
+        .backward_foretis(vec![].into())
+        .aa_nonce([0u8; 16].into())
+        .tb_version(0)
+        .build()
+        .unwrap();
     CleanAuthenticated::<ChrononRecord>::from_trusted(record).externalize()
 }
 

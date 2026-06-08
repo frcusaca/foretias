@@ -17,18 +17,15 @@ async fn test_e2e_calendar_load_integrity() {
     let tbid_str = tbid.to_hex();
 
     let mut cal = Calendar::new(tbid, "e2e-integrity");
-    let tick = foretias_core::foretias::tick::ChrononRecord {
-        chronon_number: 1,
-        public_key: vec![0u8; 32].into(),
-        signature_algorithm: "Ed25519".to_string(),
-        forward_foretis: vec![].into(),
-        backward_foretis: vec![].into(),
-        aa_nonce: [0u8; 16].into(),
-        chronon_stamp_count: 0,
-        external_attestations: Vec::new(),
-        tb_version: 0,
-        tbid: Tbid::default(),
-    };
+    let tick = foretias_core::foretias::tick::ChrononRecord::builder()
+        .chronon_number(1)
+        .public_key(vec![0u8; 32].into())
+        .forward_foretis(vec![].into())
+        .backward_foretis(vec![].into())
+        .aa_nonce([0u8; 16].into())
+        .tb_version(0)
+        .build()
+        .unwrap();
     cal.append(tick).unwrap();
     cal.save(path).unwrap();
 
@@ -80,18 +77,15 @@ async fn test_e2e_type_discipline_enforced() {
     // The compile-time gate: UnverifiedSignatureEnvelope<ChrononRecord> CANNOT be directly
     // assigned to CleanAuthenticated<ChrononRecord>. The compiler enforces this.
     // If this test compiles with a direct assignment, the discipline has failed.
-    let record = ChrononRecord {
-        chronon_number: 1,
-        public_key: vec![0u8; 32].into(),
-        signature_algorithm: "Ed25519".to_string(),
-        forward_foretis: vec![].into(),
-        backward_foretis: vec![].into(),
-        aa_nonce: [0u8; 16].into(),
-        chronon_stamp_count: 0,
-        external_attestations: Vec::new(),
-        tb_version: 0,
-        tbid: Tbid::default(),
-    };
+    let record = ChrononRecord::builder()
+        .chronon_number(1)
+        .public_key(vec![0u8; 32].into())
+        .forward_foretis(vec![].into())
+        .backward_foretis(vec![].into())
+        .aa_nonce([0u8; 16].into())
+        .tb_version(0)
+        .build()
+        .unwrap();
     let _up: UnverifiedSignatureEnvelope<ChrononRecord> =
         UnverifiedSignatureEnvelope::<ChrononRecord>::from_parsed(record);
     // The following would NOT compile:

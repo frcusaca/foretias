@@ -2394,7 +2394,6 @@ mod tests {
     #[test]
     fn handle_history_dump_chunk_rejects_non_genesis_first_record() {
         use foretias_core::foretias::tick::ChrononRecord;
-        use foretias_core::foretias::types::Tbid;
         let server = make_server();
         let bad_record = ChrononRecord::builder()
             .chronon_number(999)
