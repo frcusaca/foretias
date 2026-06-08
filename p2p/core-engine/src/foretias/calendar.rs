@@ -10,13 +10,13 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Calendar {
     /// TimeBeing identifier of this calendar's owner.
-    pub tbid: Tbid,
+    pub(crate) tbid: Tbid,
     /// TimeBeing name (human-readable identifier).
-    pub tbn: String,
+    pub(crate) tbn: String,
     /// Stamp TimeBeing identifier used for attestation.
-    pub stamp_tbid: Tbid,
+    pub(crate) stamp_tbid: Tbid,
     /// Ordered list of tick records.
-    pub ticks: Vec<ChrononRecord>,
+    pub(crate) ticks: Vec<ChrononRecord>,
 }
 
 impl Calendar {
@@ -28,6 +28,51 @@ impl Calendar {
             stamp_tbid: tbid,
             ticks: Vec::new(),
         }
+    }
+
+    /// Returns a slice of all tick records.
+    pub fn ticks(&self) -> &[ChrononRecord] {
+        &self.ticks
+    }
+
+    /// Returns the tick record with the given chronon number, if present.
+    pub fn tick_at(&self, n: u64) -> Option<&ChrononRecord> {
+        self.ticks.iter().find(|t| t.chronon_number == n)
+    }
+
+    /// Returns the most recent tick record, or `None` if the calendar is empty.
+    pub fn latest_tick(&self) -> Option<&ChrononRecord> {
+        self.ticks.last()
+    }
+
+    /// Returns the number of tick records in the calendar.
+    pub fn tick_count(&self) -> usize {
+        self.ticks.len()
+    }
+
+    /// Returns a reference to the TimeBeing identifier.
+    pub fn tbid(&self) -> &Tbid {
+        &self.tbid
+    }
+
+    /// Returns the TimeBeing name (human-readable identifier).
+    pub fn tbn(&self) -> &str {
+        &self.tbn
+    }
+
+    /// Returns a reference to the stamp TimeBeing identifier.
+    pub fn stamp_tbid(&self) -> &Tbid {
+        &self.stamp_tbid
+    }
+
+    /// Sets the TimeBeing identifier. Used by Chronomatter after key generation.
+    pub fn set_tbid(&mut self, tbid: Tbid) {
+        self.tbid = tbid;
+    }
+
+    /// Sets the TimeBeing name. Used by Chronomatter after key generation.
+    pub fn set_tbn(&mut self, tbn: &str) {
+        self.tbn = tbn.to_string();
     }
 
     /// Appends a tick record; returns an error if the tick number is not strictly greater than the last.

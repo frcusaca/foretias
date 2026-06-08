@@ -707,7 +707,7 @@ fn cmd_inspect_attestations(calendar_path: String) -> Result<(), Box<dyn std::er
     let mut valid_count = 0u64;
     let mut invalid_count = 0u64;
 
-    for tick in &calendar.ticks {
+    for tick in calendar.ticks() {
         for att in tick.external_attestations() {
             total_attestations += 1;
 
@@ -790,7 +790,7 @@ impl CalendarLookup for CalendarInspect<'_> {
     ) -> Result<Vec<ChrononRecord>, foretias_core::error::NodeError> {
         Ok(self
             .calendar
-            .ticks
+            .ticks()
             .iter()
             .skip(start as usize)
             .take(count)
@@ -799,15 +799,15 @@ impl CalendarLookup for CalendarInspect<'_> {
     }
 
     fn latest(&self) -> Option<u64> {
-        self.calendar.ticks.last().map(|t| *t.chronon_number())
+        self.calendar.latest_tick().map(|t| *t.chronon_number())
     }
 
     fn tbid(&self) -> foretias_core::foretias::types::Tbid {
-        self.calendar.tbid
+        *self.calendar.tbid()
     }
 
     fn tbn(&self) -> &str {
-        &self.calendar.tbn
+        self.calendar.tbn()
     }
 }
 

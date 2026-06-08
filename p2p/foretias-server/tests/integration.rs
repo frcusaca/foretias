@@ -381,9 +381,9 @@ fn test_crash_recovery_calendar() {
 
     let recovered = recovered.unwrap();
     assert!(
-        recovered.ticks.len() >= 3,
+        recovered.tick_count() >= 3,
         "Recovery should have at least 3 ticks, got {}",
-        recovered.ticks.len()
+        recovered.tick_count()
     );
 
     // Cleanup

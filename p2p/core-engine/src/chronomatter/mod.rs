@@ -625,8 +625,8 @@ mod tests {
             Arc::from(crypto_server::new_software(crypto_server::ForetiasCurve::Ed25519).unwrap());
         let cm = Chronomatter::new(1_000_000_000, observer, crypto)
             .expect("failed to create Chronomatter");
-        calendar.write().tbid = cm.get_tbid();
-        calendar.write().tbn = cm.get_tbn().to_string();
+        calendar.write().set_tbid(cm.get_tbid());
+        calendar.write().set_tbn(cm.get_tbn());
         (Arc::new(cm), last_tick, calendar)
     }
 

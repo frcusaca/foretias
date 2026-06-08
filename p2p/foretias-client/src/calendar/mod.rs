@@ -33,7 +33,7 @@ impl Calendar {
     pub fn from_persisted(path: &str) -> Result<Self, NodeError> {
         let cal = CoreCalendar::load(path)?;
         let tbid = cal.tbid();
-        let tbn = cal.tbn.clone();
+        let tbn = cal.tbn().to_string();
         info!(component = "calendar", tbid = %tbid.to_hex(), tbn = %tbn, "calendar loaded from persisted: {}", path);
         Ok(Self {
             inner: Arc::new(RwLock::new(cal)),
@@ -47,7 +47,7 @@ impl Calendar {
 
     pub fn save(&self, path: &str) -> Result<(), NodeError> {
         let cal = self.inner.read();
-        let tick_count = cal.ticks.len();
+        let tick_count = cal.tick_count();
         cal.save(path)?;
         info!(component = "calendar", tbid = %cal.tbid().to_hex(), tick_count, "calendar saved to: {}", path);
         Ok(())
@@ -67,7 +67,7 @@ impl Calendar {
                 calendar_config: CalendarConfig::default(),
             },
             ticks: cal
-                .ticks
+                .ticks()
                 .iter()
                 .map(|t| serde_json::to_value(t).unwrap_or_default())
                 .collect(),
@@ -93,7 +93,7 @@ impl TickObserver for Calendar {
         if let Err(e) = cal.append(tick_record.clone()) {
             tracing::error!(component = "calendar", tbid = %cal.tbid().to_hex(), tick = chronon_number.0, "calendar: on_tick_advance failed: {}", e);
         } else {
-            debug!(component = "calendar", tbid = %cal.tbid().to_hex(), tick = chronon_number.0, tick_count = cal.ticks.len(), "calendar: heartbeat");
+            debug!(component = "calendar", tbid = %cal.tbid().to_hex(), tick = chronon_number.0, tick_count = cal.tick_count(), "calendar: heartbeat");
         }
     }
 }
@@ -108,7 +108,7 @@ impl CalendarLookup for Calendar {
     }
 
     fn tbid(&self) -> Tbid {
-        self.inner.read().tbid()
+        *self.inner.read().tbid()
     }
 
     fn tbn(&self) -> &str {
@@ -213,6 +213,6 @@ mod tests {
     fn inner_returns_arc() {
         let cal = Calendar::new(Tbid::from_raw([0x08; 96]), "arc-test");
         let inner = cal.inner();
-        assert_eq!(inner.read().ticks.len(), 0);
+        assert_eq!(inner.read().tick_count(), 0);
     }
 }

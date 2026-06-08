@@ -689,9 +689,9 @@ pub fn handle_mirror_request(server: &TimeFamilyServer, params: Value) -> JsonRp
 
     let cal = server.calendar().inner();
     let cal_read = cal.read();
-    let tick_count = cal_read.ticks.len() as u64;
+    let tick_count = cal_read.tick_count() as u64;
     let latest_tick = cal_read.latest().unwrap_or(0);
-    let hash_sanity = crate::calendar::compute_hash_sanity(&cal_read.ticks);
+    let hash_sanity = crate::calendar::compute_hash_sanity(cal_read.ticks());
     drop(cal_read);
 
     resp_success(
@@ -1028,9 +1028,9 @@ pub fn handle_mirror_mutual(server: &TimeFamilyServer, params: Value) -> JsonRpc
 
     let cal = server.calendar().inner();
     let cal_read = cal.read();
-    let my_tick_count = cal_read.ticks.len() as u64;
+    let my_tick_count = cal_read.tick_count() as u64;
     let my_latest_tick = cal_read.latest().unwrap_or(0);
-    let my_hash_sanity = crate::calendar::compute_hash_sanity(&cal_read.ticks);
+    let my_hash_sanity = crate::calendar::compute_hash_sanity(cal_read.ticks());
     drop(cal_read);
 
     resp_success(

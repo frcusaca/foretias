@@ -178,8 +178,8 @@ impl Foretias {
         let (tbid, tbn_from_cm) = (cm.get_tbid(), cm.get_tbn().to_string());
         let binding = calendar.inner();
         let mut cal_inner = binding.write();
-        cal_inner.tbid = tbid;
-        cal_inner.tbn = tbn_from_cm;
+        cal_inner.set_tbid(tbid);
+        cal_inner.set_tbn(&tbn_from_cm);
 
         let crypto: Arc<dyn CryptoServer> =
             Arc::from(crypto_server::new_software(ForetiasCurve::Ed25519)?);
@@ -511,8 +511,8 @@ impl Foretias {
         let (tbid, tbn_from_cm) = (cm.get_tbid(), cm.get_tbn().to_string());
         let binding = calendar.inner();
         let mut cal_inner = binding.write();
-        cal_inner.tbid = tbid;
-        cal_inner.tbn = tbn_from_cm;
+        cal_inner.set_tbid(tbid);
+        cal_inner.set_tbn(&tbn_from_cm);
         let crypto: Arc<dyn CryptoServer> =
             Arc::from(crypto_server::new_software(ForetiasCurve::Ed25519)?);
         Ok(StandaloneState {

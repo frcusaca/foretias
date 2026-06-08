@@ -703,7 +703,7 @@ async fn handle_initiate_dump(worker_id: usize, mirror: PeerAddr, ctx: &WorkerCo
     // don't hold the lock across the dispatcher's awaits.
     let records: Vec<ChrononRecord> = {
         let cal = ctx.calendar_lookup.read();
-        cal.ticks.clone()
+        cal.ticks().to_vec()
     };
     if records.is_empty() {
         debug!(worker_id, mirror = %mirror.json_rpc, "initiate_dump: no records to send");
