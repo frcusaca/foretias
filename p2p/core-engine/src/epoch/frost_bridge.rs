@@ -121,14 +121,8 @@ mod tests {
     #[tokio::test]
     async fn frost_round_stub_produces_valid_snapshot() {
         let scores = vec![
-            PeerScore {
-                peer_id: "peer-b".into(),
-                score: 90.0,
-            },
-            PeerScore {
-                peer_id: "peer-a".into(),
-                score: 80.0,
-            },
+            PeerScore::new("peer-b".into(), 90.0),
+            PeerScore::new("peer-a".into(), 80.0),
         ];
         let snap = run_frost_round_stub(
             5,
@@ -154,18 +148,9 @@ mod tests {
     #[tokio::test]
     async fn frost_round_stub_peer_scores_sorted() {
         let scores = vec![
-            PeerScore {
-                peer_id: "zzz".into(),
-                score: 10.0,
-            },
-            PeerScore {
-                peer_id: "aaa".into(),
-                score: 99.0,
-            },
-            PeerScore {
-                peer_id: "mmm".into(),
-                score: 50.0,
-            },
+            PeerScore::new("zzz".into(), 10.0),
+            PeerScore::new("aaa".into(), 99.0),
+            PeerScore::new("mmm".into(), 50.0),
         ];
         let snap = run_frost_round_stub(
             1,

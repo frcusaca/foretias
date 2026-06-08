@@ -12,8 +12,25 @@ pub trait CommitteeSelector: Send + Sync {
 
 /// Default v0.8 selector: top-scoring peers by current probity score.
 pub struct TopProbitySelector {
-    pub committee_size: usize,
-    pub threshold_k: u32,
+    pub(crate) committee_size: usize,
+    pub(crate) threshold_k: u32,
+}
+
+impl TopProbitySelector {
+    pub fn new(committee_size: usize, threshold_k: u32) -> Self {
+        Self {
+            committee_size,
+            threshold_k,
+        }
+    }
+
+    pub fn committee_size(&self) -> usize {
+        self.committee_size
+    }
+
+    pub fn threshold_k(&self) -> u32 {
+        self.threshold_k
+    }
 }
 
 impl CommitteeSelector for TopProbitySelector {
@@ -44,10 +61,7 @@ mod tests {
             store.set_score(format!("peer-{}", i), (10 - i) as f32 * 10.0);
         }
         // peer-0=90, peer-1=80, ..., peer-9=0
-        let selector = TopProbitySelector {
-            committee_size: 3,
-            threshold_k: 2,
-        };
+        let selector = TopProbitySelector::new(3, 2);
         let (members, threshold) = selector.select(&store);
         assert_eq!(threshold, 2);
         assert_eq!(members.len(), 3);
@@ -59,10 +73,7 @@ mod tests {
     #[test]
     fn top_probity_selector_empty_store() {
         let store = ProbityStore::new();
-        let selector = TopProbitySelector {
-            committee_size: 5,
-            threshold_k: 3,
-        };
+        let selector = TopProbitySelector::new(5, 3);
         let (members, threshold) = selector.select(&store);
         assert!(members.is_empty());
         assert_eq!(threshold, 3);

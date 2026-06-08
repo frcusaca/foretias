@@ -40,14 +40,14 @@ pub struct SoftwareCryptoServer {
     seal_key: Zeroizing<[u8; 32]>,
     /// In-memory store for FROST threshold signing shares.
     frost_shares: parking_lot::Mutex<HashMap<String, Zeroizing<Vec<u8>>>>,
-    pub sphincs_pub_key: Option<SignatureBytes>,
+    pub(crate) sphincs_pub_key: Option<SignatureBytes>,
     sphincs_secret_key: Option<zeroize::Zeroizing<SignatureBytes>>,
-    pub dilithium_pub_key: Option<SignatureBytes>,
+    pub(crate) dilithium_pub_key: Option<SignatureBytes>,
     dilithium_secret_key: Option<zeroize::Zeroizing<SignatureBytes>>,
-    pub sphincs_sha2_256f_pub_key: Option<SignatureBytes>,
+    pub(crate) sphincs_sha2_256f_pub_key: Option<SignatureBytes>,
     #[allow(dead_code)]
     sphincs_sha2_256f_secret_key: Option<zeroize::Zeroizing<SignatureBytes>>,
-    pub mlkem_pub_key: Option<SignatureBytes>,
+    pub(crate) mlkem_pub_key: Option<SignatureBytes>,
     #[allow(dead_code)]
     mlkem_secret_key: Option<zeroize::Zeroizing<SignatureBytes>>,
 }
@@ -97,6 +97,22 @@ impl SoftwareCryptoServer {
             }
             ForetiasCurve::P256 => Err(CryptoError::Unsupported("P-256 not implemented yet")),
         }
+    }
+
+    pub fn sphincs_pub_key(&self) -> Option<&SignatureBytes> {
+        self.sphincs_pub_key.as_ref()
+    }
+
+    pub fn dilithium_pub_key(&self) -> Option<&SignatureBytes> {
+        self.dilithium_pub_key.as_ref()
+    }
+
+    pub fn sphincs_sha2_256f_pub_key(&self) -> Option<&SignatureBytes> {
+        self.sphincs_sha2_256f_pub_key.as_ref()
+    }
+
+    pub fn mlkem_pub_key(&self) -> Option<&SignatureBytes> {
+        self.mlkem_pub_key.as_ref()
     }
 
     pub fn from_seed(seed: &[u8; 32]) -> Result<Self, CryptoError> {

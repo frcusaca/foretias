@@ -48,28 +48,68 @@ impl Drop for SharedSecret {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SealedBlob {
     /// The 12-byte nonce used for ChaCha20-Poly1305 encryption.
-    pub nonce: FTByteVector,
+    pub(crate) nonce: FTByteVector,
     /// The encrypted payload (plaintext length + 16-byte AEAD tag).
-    pub ciphertext: FTByteVector,
+    pub(crate) ciphertext: FTByteVector,
+}
+
+impl SealedBlob {
+    pub fn nonce(&self) -> &FTByteVector {
+        &self.nonce
+    }
+
+    pub fn ciphertext(&self) -> &FTByteVector {
+        &self.ciphertext
+    }
 }
 
 /// Describes the capabilities and performance characteristics of a crypto backend.
 #[derive(Debug, Clone, Copy)]
 pub struct CryptoServerCapabilities {
     /// Human-readable name of the backend (e.g. `"software"`).
-    pub backend_name: &'static str,
+    pub(crate) backend_name: &'static str,
     /// The curve this backend operates on.
-    pub curve: ForetiasCurve,
+    pub(crate) curve: ForetiasCurve,
     /// Whether the backend can produce a proof of authentic execution.
-    pub supports_proof: bool,
+    pub(crate) supports_proof: bool,
     /// Whether sealing/unsealing operations are supported.
-    pub supports_sealing: bool,
+    pub(crate) supports_sealing: bool,
     /// Maximum size in bytes of data that can be sealed in a single operation.
-    pub max_sealed_bytes: usize,
+    pub(crate) max_sealed_bytes: usize,
     /// Typical signature generation latency in microseconds.
-    pub typical_sign_us: u32,
+    pub(crate) typical_sign_us: u32,
     /// Typical ECDH key exchange latency in microseconds.
-    pub typical_ecdh_us: u32,
+    pub(crate) typical_ecdh_us: u32,
+}
+
+impl CryptoServerCapabilities {
+    pub fn backend_name(&self) -> &'static str {
+        self.backend_name
+    }
+
+    pub fn curve(&self) -> ForetiasCurve {
+        self.curve
+    }
+
+    pub fn supports_proof(&self) -> bool {
+        self.supports_proof
+    }
+
+    pub fn supports_sealing(&self) -> bool {
+        self.supports_sealing
+    }
+
+    pub fn max_sealed_bytes(&self) -> usize {
+        self.max_sealed_bytes
+    }
+
+    pub fn typical_sign_us(&self) -> u32 {
+        self.typical_sign_us
+    }
+
+    pub fn typical_ecdh_us(&self) -> u32 {
+        self.typical_ecdh_us
+    }
 }
 
 const NOT_SUPPORTED: &str = "CryptoServer: operation not supported by this backend";

@@ -43,10 +43,35 @@ pub enum SigAlgorithm {
 /// Each signature covers `postcard(payload) ‖ postcard(&signatures[0..i])`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SignatureEntry {
-    pub role: SignerRole,
-    pub tbid: String,
-    pub algorithm: SigAlgorithm,
-    pub sig: Vec<u8>,
+    pub(crate) role: SignerRole,
+    pub(crate) tbid: String,
+    pub(crate) algorithm: SigAlgorithm,
+    pub(crate) sig: Vec<u8>,
+}
+
+impl SignatureEntry {
+    /// Construct a new signature entry.
+    pub fn new(role: SignerRole, tbid: String, algorithm: SigAlgorithm, sig: Vec<u8>) -> Self {
+        Self {
+            role,
+            tbid,
+            algorithm,
+            sig,
+        }
+    }
+
+    pub fn role(&self) -> &SignerRole {
+        &self.role
+    }
+    pub fn tbid(&self) -> &str {
+        &self.tbid
+    }
+    pub fn algorithm(&self) -> &SigAlgorithm {
+        &self.algorithm
+    }
+    pub fn sig(&self) -> &[u8] {
+        &self.sig
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1144,14 +1169,8 @@ mod tests {
             epoch_start_ns: 1000,
             epoch_end_ns: 2000,
             peer_scores: vec![
-                PeerScore {
-                    peer_id: "A".into(),
-                    score: 10.0,
-                },
-                PeerScore {
-                    peer_id: "B".into(),
-                    score: 20.0,
-                },
+                PeerScore::new("A".into(), 10.0),
+                PeerScore::new("B".into(), 20.0),
             ],
             committee: vec!["C1".into(), "C2".into()],
             threshold: 2,

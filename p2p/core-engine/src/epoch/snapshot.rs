@@ -8,26 +8,35 @@ use crate::foretias::encoding::FTByteVector;
 /// A peer's probity score at a point in time.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PeerScore {
-    pub peer_id: String,
-    pub score: f32,
+    pub(crate) peer_id: String,
+    pub(crate) score: f32,
+}
+
+impl PeerScore {
+    pub fn new(peer_id: String, score: f32) -> Self {
+        Self { peer_id, score }
+    }
+
+    pub fn peer_id(&self) -> &str {
+        &self.peer_id
+    }
+
+    pub fn score(&self) -> f32 {
+        self.score
+    }
 }
 
 /// A signed snapshot of all peer scores for a given epoch.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EpochSnapshotRecord {
-    pub epoch_number: u64,
-    pub epoch_start_ns: u64,
-    pub epoch_end_ns: u64,
-    /// All peer scores known to the committee at freeze time, sorted by peer_id.
-    pub peer_scores: Vec<PeerScore>,
-    /// PeerIds (hex) of the committee members who contributed shares.
-    pub committee: Vec<String>,
-    /// Signing threshold k (k-of-n).
-    pub threshold: u32,
-    /// Aggregate FROST-Ed25519 signature over canonical_bytes().
-    pub frost_signature: FTByteVector,
-    /// FROST group public key for this committee.
-    pub committee_pubkey: FTByteVector,
+    pub(crate) epoch_number: u64,
+    pub(crate) epoch_start_ns: u64,
+    pub(crate) epoch_end_ns: u64,
+    pub(crate) peer_scores: Vec<PeerScore>,
+    pub(crate) committee: Vec<String>,
+    pub(crate) threshold: u32,
+    pub(crate) frost_signature: FTByteVector,
+    pub(crate) committee_pubkey: FTByteVector,
 }
 
 impl EpochSnapshotRecord {
@@ -93,14 +102,8 @@ mod tests {
             epoch_start_ns: 1000,
             epoch_end_ns: 2000,
             peer_scores: vec![
-                PeerScore {
-                    peer_id: "B".into(),
-                    score: 20.0,
-                },
-                PeerScore {
-                    peer_id: "A".into(),
-                    score: 10.0,
-                },
+                PeerScore::new("B".into(), 20.0),
+                PeerScore::new("A".into(), 10.0),
             ],
             committee: vec!["C1".into(), "C2".into()],
             threshold: 2,
