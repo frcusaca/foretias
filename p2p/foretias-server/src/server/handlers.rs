@@ -297,7 +297,7 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
     let crypto = server.chronomatter().crypto_server();
     let calendar = server.calendar().inner();
     let cal_read = calendar.read();
-    let local_valid = if let Ok(recs) = cal_read.get(foretis.chronon_number, 1) {
+    let local_valid = if let Ok(recs) = cal_read.get(*foretis.chronon_number(), 1) {
         !recs.is_empty()
             && foretias_core::foretias::tick::verify(
                 crypto.as_ref(),
@@ -330,8 +330,8 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
         );
     }
 
-    let foretis_tbid_hex = foretis.tbid.to_hex();
-    if foretis.tbid == server.get_tbid() {
+    let foretis_tbid_hex = foretis.tbid().to_hex();
+    if *foretis.tbid() == server.get_tbid() {
         return resp_success(
             server,
             id,
@@ -390,7 +390,7 @@ async fn cross_node_verify(
         foretias_core::foretias::tick::ChrononRecord,
     > = com
         .line_for_tbid(tbid)
-        .get_tick(foretis_ref.chronon_number)
+        .get_tick(*foretis_ref.chronon_number())
         .await
         .map_err(|e| NodeError::Internal(format!("get_tick failed: {e:?}")))?;
 

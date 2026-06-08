@@ -751,7 +751,7 @@ fn cmd_inspect_attestations(calendar_path: String) -> Result<(), Box<dyn std::er
                     "tick={} attester={} attester_tick={} sig=VALID",
                     tick.chronon_number(),
                     att.attester_tbid,
-                    att.foretis.chronon_number
+                    att.foretis.chronon_number()
                 );
                 valid_count += 1;
             } else {
@@ -759,7 +759,7 @@ fn cmd_inspect_attestations(calendar_path: String) -> Result<(), Box<dyn std::er
                     "tick={} attester={} attester_tick={} sig=INVALID",
                     tick.chronon_number(),
                     att.attester_tbid,
-                    att.foretis.chronon_number
+                    att.foretis.chronon_number()
                 );
                 invalid_count += 1;
             }

@@ -397,7 +397,7 @@ impl Foretias {
         signature: &[u8],
         signature_algorithm: &str,
     ) -> Result<VerificationReport, ForetiasError> {
-        let chronon_number = foretis.chronon_number;
+        let chronon_number = *foretis.chronon_number();
         let records = self.calendar_slice(chronon_number, 2).await?;
         if records.is_empty() {
             return Err(ForetiasError::Network(format!(
@@ -410,8 +410,8 @@ impl Foretias {
             crypto_server::new_software(ForetiasCurve::Ed25519).map_err(ForetiasError::from)?;
         let fetched_cal = FetchedCalendar {
             record: records[0].clone(),
-            tbid: foretis.tbid,
-            tbn: foretis.tbn.clone(),
+            tbid: *foretis.tbid(),
+            tbn: foretis.tbn().to_string(),
         };
         let verified = foretias_core::foretias::tick::verify(
             &*crypto,
@@ -686,10 +686,10 @@ mod tests {
                 .await
                 .unwrap()
         });
-        assert_eq!(foretis.chronon_number, 1);
-        assert_eq!(foretis.echo, "test-echo");
-        assert!(!foretis.tbn.is_empty());
-        assert!(!foretis.content_hash.is_empty());
+        assert_eq!(*foretis.chronon_number(), 1);
+        assert_eq!(foretis.echo(), "test-echo");
+        assert!(!foretis.tbn().is_empty());
+        assert!(!foretis.content_hash().is_empty());
         assert!(!sig.is_empty());
     }
 
@@ -726,9 +726,9 @@ mod tests {
         rt.block_on(async {
             let (f1, _, _) = client.stamp(b"first", "echo1".into()).await.unwrap();
             let (f2, _, _) = client.stamp(b"second", "echo2".into()).await.unwrap();
-            assert_ne!(f1.content_hash, f2.content_hash);
-            assert_eq!(f1.echo, "echo1");
-            assert_eq!(f2.echo, "echo2");
+            assert_ne!(f1.content_hash(), f2.content_hash());
+            assert_eq!(f1.echo(), "echo1");
+            assert_eq!(f2.echo(), "echo2");
         });
     }
 
@@ -795,10 +795,10 @@ mod tests {
             let (foretis, _, _) = client.stamp(b"serialize me", "echo".into()).await.unwrap();
             let json = serde_json::to_string(&foretis).unwrap();
             let deserialized: ForetisRecord = serde_json::from_str(&json).unwrap();
-            assert_eq!(foretis.chronon_number, deserialized.chronon_number);
-            assert_eq!(foretis.content_hash, deserialized.content_hash);
-            assert_eq!(foretis.tbid, deserialized.tbid);
-            assert_eq!(foretis.echo, deserialized.echo);
+            assert_eq!(*foretis.chronon_number(), *deserialized.chronon_number());
+            assert_eq!(foretis.content_hash(), deserialized.content_hash());
+            assert_eq!(foretis.tbid(), deserialized.tbid());
+            assert_eq!(foretis.echo(), deserialized.echo());
         });
     }
 
@@ -814,7 +814,7 @@ mod tests {
                 .await
                 .unwrap();
             assert!(report.verified, "valid stamp should verify with proof");
-            assert_eq!(report.chronon_number, foretis.chronon_number);
+            assert_eq!(report.chronon_number, *foretis.chronon_number());
             assert!(
                 !report.calendar_records.is_empty(),
                 "report must include calendar records"
@@ -824,7 +824,7 @@ mod tests {
                 *report.calendar_records[0].chronon_number(),
                 *foretis.chronon_number()
             );
-            assert_eq!(report.foretis.chronon_number, foretis.chronon_number);
+            assert_eq!(*report.foretis.chronon_number(), *foretis.chronon_number());
             assert_eq!(report.method, "verify_with_proof");
         });
     }
@@ -887,7 +887,7 @@ mod tests {
         rt.block_on(async {
             let (f1, sig1, alg1) = client.stamp(b"first stamp", "echo1".into()).await.unwrap();
             let (f2, sig2, alg2) = client.stamp(b"second stamp", "echo2".into()).await.unwrap();
-            assert_ne!(f1.chronon_number, f2.chronon_number);
+            assert_ne!(*f1.chronon_number(), *f2.chronon_number());
             let r1 = client
                 .verify_with_proof(b"first stamp", &f1, &sig1, &alg1)
                 .await

@@ -167,17 +167,17 @@ impl<S: chronon_record_builder::IsComplete> ChrononRecordBuilder<S> {
 #[builder(finish_fn(vis = "", name = build_internal))]
 pub struct ForetisRecord {
     /// The chronon number at which this attestation was created.
-    pub chronon_number: u64,
+    pub(crate) chronon_number: u64,
     /// SHA-256 hash of the attested content.
-    pub content_hash: FTByteArray<32>,
+    pub(crate) content_hash: FTByteArray<32>,
     /// TimeBeing identifier of the signing node.
-    pub tbid: Tbid,
+    pub(crate) tbid: Tbid,
     /// Echo string identifying the chronon (e.g. `"chronon-42"`).
-    pub echo: String,
+    pub(crate) echo: String,
     /// TimeBeing name (human-readable identifier).
-    pub tbn: String,
+    pub(crate) tbn: String,
     /// Server wall-clock time at stamping, in `"UE+<nanoseconds>ns"` format.
-    pub time_being_reference_time: String,
+    pub(crate) time_being_reference_time: String,
 }
 
 impl ForetisRecord {
@@ -247,6 +247,12 @@ impl<S: foretis_record_builder::IsComplete> ForetisRecordBuilder<S> {
             return Err(NodeError::InvalidInput("chronon_number must be > 0".into()));
         }
         Ok(record)
+    }
+
+    /// Build without validation. For test code that intentionally constructs invalid records.
+    #[doc(hidden)]
+    pub fn build_unchecked(self) -> ForetisRecord {
+        self.build_internal()
     }
 }
 

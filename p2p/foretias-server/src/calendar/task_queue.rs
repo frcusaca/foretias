@@ -380,7 +380,7 @@ fn stamp_and_sign_chronon_attestation(
             debug!(
                 worker_id,
                 target_tbid,
-                local_chronon = s.foretis.chronon_number,
+                local_chronon = *s.foretis.chronon_number(),
                 "do_chronon_attestation: local ForetisRecord produced"
             )
         })?;
@@ -405,13 +405,13 @@ async fn transmit_chronon_attestation(
     _calendar_signature: foretias_core::foretias::types::SignatureBytes,
 ) {
     let foretis_bytes = stamped.foretis.sig_input_bytes();
-    let echo = format!("attest-{}", stamped.foretis.chronon_number);
+    let echo = format!("attest-{}", *stamped.foretis.chronon_number());
     match line.stamp(foretis_bytes, echo.clone()).await {
         Ok(remote_foretis) => {
             info!(
                 worker_id,
                 target_tbid,
-                remote_chronon = remote_foretis.inner().chronon_number,
+                remote_chronon = *remote_foretis.inner().chronon_number(),
                 "do_chronon_attestation: mutual attestation complete"
             );
             verify_chronon_attestation_recorded(
@@ -446,9 +446,9 @@ async fn verify_chronon_attestation_recorded(
     match line.get_tick(target_chronon).await {
         Ok(verified_record) => {
             let record = verified_record.inner();
-            let remote_content_hash = remote_foretis.inner().content_hash;
+            let remote_content_hash = *remote_foretis.inner().content_hash();
             let attestation_present = record.external_attestations().iter().any(|att| {
-                att.foretis.echo == echo && att.foretis.content_hash == remote_content_hash
+                att.foretis.echo() == echo && *att.foretis.content_hash() == remote_content_hash
             });
             if attestation_present {
                 debug!(
@@ -573,7 +573,7 @@ fn stamp_and_sign_epoch_attestation(
             debug!(
                 worker_id,
                 target_tbid,
-                local_chronon = s.foretis.chronon_number,
+                local_chronon = *s.foretis.chronon_number(),
                 "do_epoch_attestation: local ForetisRecord produced"
             )
         })?;
@@ -597,13 +597,13 @@ async fn transmit_epoch_attestation(
     _calendar_signature: foretias_core::foretias::types::SignatureBytes,
 ) {
     let foretis_bytes = stamped.foretis.sig_input_bytes();
-    let echo = format!("epoch-attest-{}", stamped.foretis.chronon_number);
+    let echo = format!("epoch-attest-{}", *stamped.foretis.chronon_number());
     match line.stamp(foretis_bytes, echo).await {
         Ok(remote_foretis) => {
             info!(
                 worker_id,
                 target_tbid,
-                remote_chronon = remote_foretis.inner().chronon_number,
+                remote_chronon = *remote_foretis.inner().chronon_number(),
                 "do_epoch_attestation: mutual attestation complete"
             );
         }

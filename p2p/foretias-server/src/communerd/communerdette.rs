@@ -1220,7 +1220,7 @@ impl CommunerdetteExecutor {
         // Structural validation (signature is now in the envelope, not ForetisRecord)
         {
             let f = unprocessed.inner();
-            if f.chronon_number == 0 {
+            if *f.chronon_number() == 0 {
                 return Err(CommunerdetteError::Structural(
                     "structurally invalid ForetisRecord: chronon_number == 0".into(),
                 ));
@@ -2452,14 +2452,15 @@ mod tests {
     }
 
     fn make_test_foretis(tbid: &Tbid) -> ForetisRecord {
-        ForetisRecord {
-            chronon_number: 1,
-            content_hash: FTByteArray::from([5u8; 32]),
-            tbid: *tbid,
-            echo: "test".to_string(),
-            tbn: "test-tb".to_string(),
-            time_being_reference_time: "UE+1000000000ns".to_string(),
-        }
+        ForetisRecord::builder()
+            .chronon_number(1)
+            .content_hash(FTByteArray::from([5u8; 32]))
+            .tbid(*tbid)
+            .echo("test".to_string())
+            .tbn("test-tb".to_string())
+            .time_being_reference_time("UE+1000000000ns".to_string())
+            .build()
+            .expect("make_test_foretis")
     }
 
     #[test]
@@ -2644,14 +2645,14 @@ mod tests {
             None,
         );
 
-        let bad_foretis = ForetisRecord {
-            chronon_number: 0,
-            content_hash: FTByteArray::from([0u8; 32]),
-            tbid,
-            echo: "test".to_string(),
-            tbn: "test".to_string(),
-            time_being_reference_time: "UE+0ns".to_string(),
-        };
+        let bad_foretis = ForetisRecord::builder()
+            .chronon_number(0)
+            .content_hash(FTByteArray::from([0u8; 32]))
+            .tbid(tbid)
+            .echo("test".to_string())
+            .tbn("test".to_string())
+            .time_being_reference_time("UE+0ns".to_string())
+            .build_unchecked();
         let json = serde_json::json!({ "foretis": bad_foretis });
         let rec = dummy_chronon_record(&tbid);
 
@@ -2684,14 +2685,15 @@ mod tests {
             None,
         );
 
-        let bad_foretis = ForetisRecord {
-            chronon_number: 1,
-            content_hash: FTByteArray::from([0u8; 32]),
-            tbid,
-            echo: "test".to_string(),
-            tbn: "test".to_string(),
-            time_being_reference_time: "UE+0ns".to_string(),
-        };
+        let bad_foretis = ForetisRecord::builder()
+            .chronon_number(1)
+            .content_hash(FTByteArray::from([0u8; 32]))
+            .tbid(tbid)
+            .echo("test".to_string())
+            .tbn("test".to_string())
+            .time_being_reference_time("UE+0ns".to_string())
+            .build()
+            .expect("bad_foretis");
         let json = serde_json::json!({ "foretis": bad_foretis });
         let rec = dummy_chronon_record(&tbid);
 
@@ -2724,14 +2726,15 @@ mod tests {
             None,
         );
 
-        let bad_foretis = ForetisRecord {
-            chronon_number: 1,
-            content_hash: FTByteArray::from([0u8; 32]),
-            tbid,
-            echo: "test".to_string(),
-            tbn: "test".to_string(),
-            time_being_reference_time: "UE+0ns".to_string(),
-        };
+        let bad_foretis = ForetisRecord::builder()
+            .chronon_number(1)
+            .content_hash(FTByteArray::from([0u8; 32]))
+            .tbid(tbid)
+            .echo("test".to_string())
+            .tbn("test".to_string())
+            .time_being_reference_time("UE+0ns".to_string())
+            .build()
+            .expect("bad_foretis");
         let json = serde_json::json!({ "foretis": bad_foretis });
         let rec = dummy_chronon_record(&tbid);
 
@@ -2800,14 +2803,15 @@ mod tests {
         // v2: sign the postcard-encoded ForetisRecordRecord (not tbid || chronon_number || content)
         let content_hash = crypto.sha256(content).expect("sha256");
 
-        let foretis_for_signing = ForetisRecord {
-            chronon_number,
-            content_hash: FTByteArray::from(content_hash.bytes),
-            tbid: target_tbid,
-            echo: "test".to_string(),
-            tbn: "test-tb".to_string(),
-            time_being_reference_time: "UE+1000000000ns".to_string(),
-        };
+        let foretis_for_signing = ForetisRecord::builder()
+            .chronon_number(chronon_number)
+            .content_hash(FTByteArray::from(content_hash.bytes))
+            .tbid(target_tbid)
+            .echo("test".to_string())
+            .tbn("test-tb".to_string())
+            .time_being_reference_time("UE+1000000000ns".to_string())
+            .build()
+            .expect("foretis_for_signing");
         let sig_input = foretis_for_signing.sig_input_bytes();
 
         let sig = crypto
@@ -2832,14 +2836,15 @@ mod tests {
                 .expect("chronon_record"),
         );
 
-        let foretis = ForetisRecord {
-            chronon_number,
-            content_hash: FTByteArray::from(content_hash.bytes),
-            tbid: target_tbid,
-            echo: "test".to_string(),
-            tbn: "test-tb".to_string(),
-            time_being_reference_time: "UE+1000000000ns".to_string(),
-        };
+        let foretis = ForetisRecord::builder()
+            .chronon_number(chronon_number)
+            .content_hash(FTByteArray::from(content_hash.bytes))
+            .tbid(target_tbid)
+            .echo("test".to_string())
+            .tbn("test-tb".to_string())
+            .time_being_reference_time("UE+1000000000ns".to_string())
+            .build()
+            .expect("foretis");
 
         let executor = CommunerdetteExecutor::new(
             Arc::new(MockHost {
@@ -2905,14 +2910,15 @@ mod tests {
         );
 
         // Wrong signature — 64 bytes of garbage, not a real Ed25519 signature
-        let foretis = ForetisRecord {
-            chronon_number,
-            content_hash: FTByteArray::from(content_hash.bytes),
-            tbid: target_tbid,
-            echo: "test".to_string(),
-            tbn: "test-tb".to_string(),
-            time_being_reference_time: "UE+1000000000ns".to_string(),
-        };
+        let foretis = ForetisRecord::builder()
+            .chronon_number(chronon_number)
+            .content_hash(FTByteArray::from(content_hash.bytes))
+            .tbid(target_tbid)
+            .echo("test".to_string())
+            .tbn("test-tb".to_string())
+            .time_being_reference_time("UE+1000000000ns".to_string())
+            .build()
+            .expect("foretis");
 
         let executor = CommunerdetteExecutor::new(
             Arc::new(MockHost {
@@ -3325,14 +3331,15 @@ mod tests {
                 .expect("chronon_record"),
         );
 
-        let foretis_bad_sig = ForetisRecord {
-            chronon_number: 1,
-            content_hash: FTByteArray::from(content_hash.bytes),
-            tbid: target_tbid,
-            echo: "test".to_string(),
-            tbn: "test-tb".to_string(),
-            time_being_reference_time: "UE+1000000000ns".to_string(),
-        };
+        let foretis_bad_sig = ForetisRecord::builder()
+            .chronon_number(1)
+            .content_hash(FTByteArray::from(content_hash.bytes))
+            .tbid(target_tbid)
+            .echo("test".to_string())
+            .tbn("test-tb".to_string())
+            .time_being_reference_time("UE+1000000000ns".to_string())
+            .build()
+            .expect("foretis_bad_sig");
         let garbage_sig = vec![0xDEu8; 64];
         let json = serde_json::json!({
             "foretis": foretis_bad_sig,
@@ -3664,14 +3671,15 @@ mod tests {
         // v2: sign the postcard-encoded ForetisRecord
         let content_hash = crypto.sha256(content).expect("sha256");
 
-        let foretis_for_signing = ForetisRecord {
-            chronon_number,
-            content_hash: FTByteArray::from(content_hash.bytes),
-            tbid,
-            echo: "test".to_string(),
-            tbn: "test-tb".to_string(),
-            time_being_reference_time: "UE+1000000000ns".to_string(),
-        };
+        let foretis_for_signing = ForetisRecord::builder()
+            .chronon_number(chronon_number)
+            .content_hash(FTByteArray::from(content_hash.bytes))
+            .tbid(tbid)
+            .echo("test".to_string())
+            .tbn("test-tb".to_string())
+            .time_being_reference_time("UE+1000000000ns".to_string())
+            .build()
+            .expect("foretis_for_signing");
         let sig = crypto
             .sign_with(
                 &foretis_for_signing.sig_input_bytes(),
@@ -4435,14 +4443,15 @@ mod tests {
         // Build the ForetisRecord that L3's execute_stamp will receive
         let content = b"liveness-probe";
         let content_hash = crypto.sha256(content).expect("sha256");
-        let foretis_for_signing = ForetisRecord {
-            chronon_number: 1,
-            content_hash: FTByteArray::from(content_hash.bytes),
-            tbid: target_tbid,
-            echo: "liveness".to_string(),
-            tbn: "test-tb".to_string(),
-            time_being_reference_time: "UE+1000000000ns".to_string(),
-        };
+        let foretis_for_signing = ForetisRecord::builder()
+            .chronon_number(1)
+            .content_hash(FTByteArray::from(content_hash.bytes))
+            .tbid(target_tbid)
+            .echo("liveness".to_string())
+            .tbn("test-tb".to_string())
+            .time_being_reference_time("UE+1000000000ns".to_string())
+            .build()
+            .expect("foretis_for_signing");
         // SIGN(foretis_sig_input_bytes)
         let sig = crypto
             .sign_with(
@@ -4710,14 +4719,15 @@ mod tests {
         let chronon_number: u64 = 1;
 
         let content_hash = crypto.sha256(&serialized).expect("sha256");
-        let foretis_for_signing = ForetisRecord {
-            chronon_number,
-            content_hash: FTByteArray::from(content_hash.bytes),
-            tbid,
-            echo: "test".to_string(),
-            tbn: "test-tb".to_string(),
-            time_being_reference_time: "UE+1000000000ns".to_string(),
-        };
+        let foretis_for_signing = ForetisRecord::builder()
+            .chronon_number(chronon_number)
+            .content_hash(FTByteArray::from(content_hash.bytes))
+            .tbid(tbid)
+            .echo("test".to_string())
+            .tbn("test-tb".to_string())
+            .time_being_reference_time("UE+1000000000ns".to_string())
+            .build()
+            .expect("foretis_for_signing");
         let sig = crypto
             .sign_with(
                 &foretis_for_signing.sig_input_bytes(),
@@ -4790,14 +4800,15 @@ mod tests {
         let chronon_number: u64 = 1;
 
         let content_hash = crypto.sha256(&serialized).expect("sha256");
-        let foretis_for_signing = ForetisRecord {
-            chronon_number,
-            content_hash: FTByteArray::from(content_hash.bytes),
-            tbid,
-            echo: "test".to_string(),
-            tbn: "test-tb".to_string(),
-            time_being_reference_time: "UE+1000000000ns".to_string(),
-        };
+        let foretis_for_signing = ForetisRecord::builder()
+            .chronon_number(chronon_number)
+            .content_hash(FTByteArray::from(content_hash.bytes))
+            .tbid(tbid)
+            .echo("test".to_string())
+            .tbn("test-tb".to_string())
+            .time_being_reference_time("UE+1000000000ns".to_string())
+            .build()
+            .expect("foretis_for_signing");
         let sig = crypto
             .sign_with(
                 &foretis_for_signing.sig_input_bytes(),

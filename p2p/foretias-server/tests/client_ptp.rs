@@ -51,8 +51,8 @@ async fn ptp_stamp_and_verify() {
         .await
         .expect("stamp succeeds");
 
-    assert_eq!(foretis.echo, "ptp-test");
-    assert!(!foretis.content_hash.is_empty());
+    assert_eq!(foretis.echo(), "ptp-test");
+    assert!(!foretis.content_hash().is_empty());
 
     let valid = client
         .verify(b"hello world", &foretis, &sig, &alg)
