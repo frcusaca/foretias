@@ -717,7 +717,7 @@ fn cmd_inspect_attestations(calendar_path: String) -> Result<(), Box<dyn std::er
                     println!(
                         "tick={} attester={} sig=INVALID (serialize error: {})",
                         tick.chronon_number(),
-                        att.attester_tbid,
+                        att.attester_tbid(),
                         e
                     );
                     invalid_count += 1;
@@ -727,9 +727,9 @@ fn cmd_inspect_attestations(calendar_path: String) -> Result<(), Box<dyn std::er
 
             let valid = match foretias_core::foretias::tick::verify(
                 &*crypto,
-                &att.foretis,
-                &att.signature,
-                &att.signature_algorithm,
+                att.foretis(),
+                att.signature(),
+                att.signature_algorithm(),
                 &content,
                 &cal_lookup,
             ) {
@@ -738,7 +738,7 @@ fn cmd_inspect_attestations(calendar_path: String) -> Result<(), Box<dyn std::er
                     println!(
                         "tick={} attester={} sig=INVALID (verify error: {})",
                         tick.chronon_number(),
-                        att.attester_tbid,
+                        att.attester_tbid(),
                         e
                     );
                     invalid_count += 1;
@@ -750,16 +750,16 @@ fn cmd_inspect_attestations(calendar_path: String) -> Result<(), Box<dyn std::er
                 println!(
                     "tick={} attester={} attester_tick={} sig=VALID",
                     tick.chronon_number(),
-                    att.attester_tbid,
-                    att.foretis.chronon_number()
+                    att.attester_tbid(),
+                    att.foretis().chronon_number()
                 );
                 valid_count += 1;
             } else {
                 println!(
                     "tick={} attester={} attester_tick={} sig=INVALID",
                     tick.chronon_number(),
-                    att.attester_tbid,
-                    att.foretis.chronon_number()
+                    att.attester_tbid(),
+                    att.foretis().chronon_number()
                 );
                 invalid_count += 1;
             }

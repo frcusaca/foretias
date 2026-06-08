@@ -40,8 +40,8 @@ impl std::error::Error for FamilyError {}
 /// (Ed25519 ‖ SLH-DSA) signature of member i over member j's TBID.
 #[derive(Debug, Clone, Serialize, serde::Deserialize, PartialEq)]
 pub struct FamilyRecord {
-    pub members: Vec<String>,
-    pub matrix: Vec<Vec<Vec<u8>>>,
+    pub(crate) members: Vec<String>,
+    pub(crate) matrix: Vec<Vec<Vec<u8>>>,
 }
 
 impl FamilyRecord {
@@ -78,6 +78,13 @@ impl FamilyRecord {
     /// Returns the family size k.
     pub fn k(&self) -> usize {
         self.members.len()
+    }
+
+    pub fn members(&self) -> &[String] {
+        &self.members
+    }
+    pub fn matrix(&self) -> &[Vec<Vec<u8>>] {
+        &self.matrix
     }
 
     /// Verify the k×k cross-signing matrix.

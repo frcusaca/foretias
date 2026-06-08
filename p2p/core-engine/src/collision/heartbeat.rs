@@ -8,14 +8,49 @@ use crate::foretias::encoding::{FTByteArray, FTByteVector};
 /// Carries a random nonce so replays are detectable.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Heartbeat {
-    pub peer_id: String,
-    pub timestamp_ns: u64,
-    pub nonce: FTByteArray<16>,
-    pub curve: u8,
-    pub signature: FTByteVector,
+    pub(crate) peer_id: String,
+    pub(crate) timestamp_ns: u64,
+    pub(crate) nonce: FTByteArray<16>,
+    pub(crate) curve: u8,
+    pub(crate) signature: FTByteVector,
 }
 
 impl Heartbeat {
+    pub fn new(
+        peer_id: String,
+        timestamp_ns: u64,
+        nonce: FTByteArray<16>,
+        curve: u8,
+        signature: FTByteVector,
+    ) -> Self {
+        Self {
+            peer_id,
+            timestamp_ns,
+            nonce,
+            curve,
+            signature,
+        }
+    }
+
+    pub fn peer_id(&self) -> &str {
+        &self.peer_id
+    }
+    pub fn timestamp_ns(&self) -> &u64 {
+        &self.timestamp_ns
+    }
+    pub fn nonce(&self) -> &FTByteArray<16> {
+        &self.nonce
+    }
+    pub fn curve(&self) -> &u8 {
+        &self.curve
+    }
+    pub fn signature(&self) -> &FTByteVector {
+        &self.signature
+    }
+    pub fn signature_mut(&mut self) -> &mut FTByteVector {
+        &mut self.signature
+    }
+
     pub fn canonical(&self) -> Vec<u8> {
         let mut buf = Vec::new();
         // Length-prefixed peer_id to prevent canonicalization collision attacks

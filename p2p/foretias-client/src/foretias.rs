@@ -356,11 +356,8 @@ impl Foretias {
         if let Some(ref path) = self.persist_path {
             let _ = self.save_calendar(path);
         }
-        Ok((
-            stamped.foretis,
-            stamped.signature_bytes,
-            stamped.signature_algorithm,
-        ))
+        let (foretis, signature_bytes, signature_algorithm) = stamped.into_parts();
+        Ok((foretis, signature_bytes, signature_algorithm))
     }
 
     pub async fn verify(

@@ -334,9 +334,25 @@ pub trait CalendarLookup: Send + Sync {
 /// The `ForetisRecord` payload is signature-free. The `signature_bytes` and `signature_algorithm`
 /// are stored in the `UnverifiedSignatureEnvelope` / `CleanAuthenticated` wrappers.
 pub struct StampedForetis {
-    pub foretis: ForetisRecord,
-    pub signature_bytes: Vec<u8>,
-    pub signature_algorithm: String,
+    pub(crate) foretis: ForetisRecord,
+    pub(crate) signature_bytes: Vec<u8>,
+    pub(crate) signature_algorithm: String,
+}
+
+impl StampedForetis {
+    pub fn foretis(&self) -> &ForetisRecord {
+        &self.foretis
+    }
+    pub fn signature_bytes(&self) -> &[u8] {
+        &self.signature_bytes
+    }
+    pub fn signature_algorithm(&self) -> &str {
+        &self.signature_algorithm
+    }
+    /// Consume self and return the parts: (foretis, signature_bytes, signature_algorithm).
+    pub fn into_parts(self) -> (ForetisRecord, Vec<u8>, String) {
+        (self.foretis, self.signature_bytes, self.signature_algorithm)
+    }
 }
 
 /// Stamp content under the current tick's key.

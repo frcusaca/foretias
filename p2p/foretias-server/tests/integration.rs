@@ -318,7 +318,7 @@ async fn test_peer_unreachable_does_not_crash() {
         .chronomatter()
         .stamp(b"still works".to_vec(), "ok".to_string())
         .expect("Local stamp should work despite unreachable peer");
-    assert!(*stamped.foretis.chronon_number() > 0);
+    assert!(*stamped.foretis().chronon_number() > 0);
 
     handle.abort();
     server.stop_daemon_arc();

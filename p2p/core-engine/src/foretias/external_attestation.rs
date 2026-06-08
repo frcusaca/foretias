@@ -13,21 +13,48 @@ use crate::error::NodeError;
 #[builder(finish_fn(vis = "", name = build_internal))]
 pub struct ExternalAttestationRecord {
     /// Hex-encoded TBID of the attesting peer.
-    pub attester_tbid: String,
+    pub(crate) attester_tbid: String,
     /// B's stamp of A's tick record (signature-free payload).
-    pub foretis: super::tick::ForetisRecord,
+    pub(crate) foretis: super::tick::ForetisRecord,
     /// v2: Signature covering postcard-encoded ForetisRecord payload (base64-encoded in JSON).
     #[serde(default)]
     #[builder(default)]
-    pub signature: FTByteVector,
+    pub(crate) signature: FTByteVector,
     /// v2: Signature algorithm identifier (e.g. "Ed25519").
     #[serde(default = "default_sig_algorithm")]
     #[builder(default = "Ed25519".to_string())]
-    pub signature_algorithm: String,
+    pub(crate) signature_algorithm: String,
     /// B's tick at attestation time (for offline re-verify).
-    pub attester_tick_record: ChrononRecord,
+    pub(crate) attester_tick_record: ChrononRecord,
     /// Wall-clock receive time in nanoseconds.
-    pub received_at_ns: u64,
+    pub(crate) received_at_ns: u64,
+}
+
+impl ExternalAttestationRecord {
+    /// Hex-encoded TBID of the attesting peer.
+    pub fn attester_tbid(&self) -> &str {
+        &self.attester_tbid
+    }
+    /// B's stamp of A's tick record (signature-free payload).
+    pub fn foretis(&self) -> &super::tick::ForetisRecord {
+        &self.foretis
+    }
+    /// Signature covering postcard-encoded ForetisRecord payload.
+    pub fn signature(&self) -> &FTByteVector {
+        &self.signature
+    }
+    /// Signature algorithm identifier (e.g. "Ed25519").
+    pub fn signature_algorithm(&self) -> &str {
+        &self.signature_algorithm
+    }
+    /// B's tick at attestation time (for offline re-verify).
+    pub fn attester_tick_record(&self) -> &ChrononRecord {
+        &self.attester_tick_record
+    }
+    /// Wall-clock receive time in nanoseconds.
+    pub fn received_at_ns(&self) -> &u64 {
+        &self.received_at_ns
+    }
 }
 
 /// Fallible builder for ExternalAttestationRecord — validates invariants before construction.

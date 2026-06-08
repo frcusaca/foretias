@@ -434,7 +434,7 @@ impl Communerd {
     /// Insert a verified FamilyRecord into the family cache.
     /// Indexes by every member TBID for O(1) reverse lookup.
     pub fn family_cache_insert(&self, record: Arc<CleanFullyAuthenticated<FamilyRecord>>) {
-        for member_tbid_hex in record.inner().members.iter() {
+        for member_tbid_hex in record.inner().members().iter() {
             self.family_cache
                 .insert(member_tbid_hex.clone(), Arc::clone(&record));
         }
@@ -732,15 +732,15 @@ impl Communerd {
             }
             detector.register_own_nonce(nonce);
             let timestamp_ns = clock.now_ns().unwrap_or(0);
-            let mut hb = foretias_core::collision::Heartbeat {
-                peer_id: peer_id_str.clone(),
+            let mut hb = foretias_core::collision::Heartbeat::new(
+                peer_id_str.clone(),
                 timestamp_ns,
-                nonce: nonce.into(),
-                curve: 1,
-                signature: vec![].into(),
-            };
+                nonce.into(),
+                1,
+                vec![].into(),
+            );
             if let Ok(sig) = crypto.sign(&hb.canonical()) {
-                hb.signature = sig.bytes.to_vec().into();
+                *hb.signature_mut() = sig.bytes.to_vec().into();
             }
             if let Some(ref tx) = cmd_tx {
                 let n = ns.lock().clone();
@@ -820,8 +820,8 @@ impl Communerd {
             return;
         };
         tracing::error!(
-            peer_id = %foreign_heartbeat.peer_id,
-            nonce = ?foreign_heartbeat.nonce,
+            peer_id = %foreign_heartbeat.peer_id(),
+            nonce = ?foreign_heartbeat.nonce(),
             "identity collision detected! entering dormancy"
         );
         if let Some(ref tx) = cmd_tx {
@@ -1257,7 +1257,7 @@ impl Communerd {
             }
         };
         // Publish under each member's family key
-        for member_tbid_hex in &record.members {
+        for member_tbid_hex in record.members() {
             let key =
                 kad::RecordKey::new(&format!("/foretias/{}/family/{}/v1", ns, member_tbid_hex));
             let kad_record = kad::Record {
@@ -1271,7 +1271,7 @@ impl Communerd {
                 record: kad_record,
             });
         }
-        tracing::debug!(component = "communerd", members = %record.members.len(), "communerd: FamilyRecord published to DHT");
+        tracing::debug!(component = "communerd", members = %record.members().len(), "communerd: FamilyRecord published to DHT");
     }
 
     /// Fetch FamilyRecord from DHT, verify (full gate), insert into family cache.

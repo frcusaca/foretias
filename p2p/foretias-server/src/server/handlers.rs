@@ -90,9 +90,9 @@ pub fn handle_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse
                 server,
                 id,
                 serde_json::json!({
-                    "foretis": stamped.foretis,
-                    "signature": hex::encode(&stamped.signature_bytes),
-                    "signature_algorithm": stamped.signature_algorithm,
+                    "foretis": stamped.foretis(),
+                    "signature": hex::encode(stamped.signature_bytes()),
+                    "signature_algorithm": stamped.signature_algorithm(),
                 }),
             )
         }

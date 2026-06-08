@@ -49,11 +49,11 @@ impl Evaluator for ServerStampEvaluator {
                 .stamp(msg.as_bytes().to_vec(), msg.clone())
                 .map_err(|e| format!("Stamp failed for '{}': {}", msg, e))?;
             stamps.push((
-                serde_json::to_value(&stamped.foretis)
+                serde_json::to_value(stamped.foretis())
                     .map_err(|e| format!("Failed to serialize ForetisRecord: {}", e))?,
-                serde_json::to_value(&stamped.signature_bytes)
+                serde_json::to_value(stamped.signature_bytes())
                     .map_err(|e| format!("Failed to serialize signature: {}", e))?,
-                serde_json::to_value(&stamped.signature_algorithm)
+                serde_json::to_value(stamped.signature_algorithm())
                     .map_err(|e| format!("Failed to serialize algorithm: {}", e))?,
             ));
         }
