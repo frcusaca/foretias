@@ -297,10 +297,19 @@ These features are explicitly out of active scope. They remain as specifications
 
 | File | Open | Done | Status |
 |------|------|------|--------|
-| `specs/ENCAPSULATION_REMEDIATION_PLAN.md` | ~50 | 0 | **PROPOSED** — make domain type fields private, add accessors |
+| `specs/ENCAPSULATION_REMEDIATION_PLAN.md` | 0 | ~50 | **COMPLETE** — all 8 waves done, merged to alpha |
 | `specs/ENCAPSULATION_REMEDIATION_SPEC.md` | — | — | Spec (paired) |
 
-**Description:** Audit found domain types with public fields bypassing construction invariants. 7 waves: ChrononRecord, ForetisRecord, ExternalAttestationRecord+, Calendar, SignatureEntry+, SoftwareCryptoServer, final verification.
+**Completed 2026-06-07:**
+- Wave 1: ✅ ChrononRecord — 10 fields pub(crate), ~60 access sites fixed
+- Wave 2: ✅ ForetisRecord — 6 fields pub(crate), ~25 access sites fixed
+- Wave 3: ✅ ExternalAttestationRecord + StampedForetis + Heartbeat + FamilyRecord — accessors + private fields
+- Wave 4: ✅ Calendar — 4 fields pub(crate), ticks() accessor prevents append() bypass
+- Wave 5: ✅ WorkerContext + PeerRegistrationRecord + MirrorState + LivenessCycleFlags — signing_key protected
+- Wave 6: ✅ SignatureEntry + ProbityReportRecord + EpochSnapshotRecord — pub(crate) fields
+- Wave 7: ✅ SoftwareCryptoServer + lower risk types — private fields + accessors
+
+**Result:** Zero clippy warnings, 588 tests pass, merged to alpha (f284df58)
 
 ---
 
