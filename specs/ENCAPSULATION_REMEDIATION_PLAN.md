@@ -62,7 +62,19 @@
 - [ ] Run `cargo test -p foretias-core -p foretias-client -p foretias-server --lib --bins`
 - [ ] Commit: "Calendar: private fields + accessor methods"
 
-### Wave 5: SignatureEntry + ProbityReportRecord + EpochSnapshotRecord
+### Wave 5: WorkerContext + PeerRegistrationRecord + MirrorState + LivenessCycleFlags
+
+- [ ] Make WorkerContext fields `pub(crate)`, add accessor methods
+- [ ] Make `signing_key` private, add `fn sign_with_calendar_key()` method
+- [ ] Make `communerd` private, expose only `CommunerdetteLine` via accessor
+- [ ] Make PeerRegistrationRecord fields `pub(crate)`, add validated constructor
+- [ ] Make MirrorState fields private, add accessor methods with invariant enforcement
+- [ ] Make LivenessCycleFlags fields private, add setter methods that log transitions
+- [ ] Fix all direct field access sites
+- [ ] Run `cargo test -p foretias-server --lib --bins`
+- [ ] Commit: "WorkerContext, PeerRegistrationRecord, MirrorState, LivenessCycleFlags: private fields"
+
+### Wave 6: SignatureEntry + ProbityReportRecord + EpochSnapshotRecord
 
 - [ ] Make SignatureEntry fields `pub(crate)` in `core-engine/src/foretias/clean_auth.rs`
 - [ ] Make ProbityReportRecord fields `pub(crate)` in `core-engine/src/probity/report.rs`

@@ -38,10 +38,15 @@ The codebase audit revealed that domain types have public fields that allow bypa
 
 | Type | File | Public Fields | Accessors | Status |
 |------|------|--------------|-----------|--------|
+| `WorkerContext` | `foretias-server/calendar/task_queue.rs` | 7 | **ZERO** | ❌ **CRITICAL**: `signing_key` (PrivKeyHandle!) and `communerd` exposed |
+| `PeerRegistrationRecord` | `foretias-server/communerd/mod.rs` | 8 | **ZERO** | ❌ DHT record with no structural integrity |
+| `MirrorState` | `foretias-server/calendar/task_queue.rs` | 5 | **ZERO** | ❌ Mirror state behind pub RwLock, no invariant enforcement |
+| `LivenessCycleFlags` | `foretias-server/communerd/communerdette.rs` | 4 | **ZERO** | ❌ Cross-task run-order enforcement defeated |
 | `SignatureEntry` | `core-engine/foretias/clean_auth.rs` | 4 | **ZERO** | ⚠️ Used in trust-boundary chains |
 | `ProbityReportRecord` | `core-engine/probity/report.rs` | 8 | All 8 | ⚠️ Fields still writable |
 | `EpochSnapshotRecord` | `core-engine/epoch/snapshot.rs` | 8 | All 8 | ⚠️ Fields still writable |
 | `SoftwareCryptoServer` | `core-engine/crypto_server/software.rs` | 4 PQC keys | **ZERO** | ⚠️ Key replacement risk |
+| `NodeMetrics` | `foretias-server/metrics.rs` | 10 | `inc()` + `as_json()` | ⚠️ Counters directly mutable |
 
 ### Tier 3: Lower Risk
 
