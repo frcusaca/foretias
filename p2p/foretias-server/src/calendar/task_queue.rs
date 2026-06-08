@@ -335,7 +335,7 @@ async fn handle_do_chronon_attestation(worker_id: usize, target_tbid: &str, ctx:
             return;
         }
     };
-    let target_chronon = target_record.inner().chronon_number;
+    let target_chronon = *target_record.inner().chronon_number();
     info!(
         worker_id,
         target_tbid, target_chronon, "do_chronon_attestation: fetched target's latest chronon"
@@ -447,7 +447,7 @@ async fn verify_chronon_attestation_recorded(
         Ok(verified_record) => {
             let record = verified_record.inner();
             let remote_content_hash = remote_foretis.inner().content_hash;
-            let attestation_present = record.external_attestations.iter().any(|att| {
+            let attestation_present = record.external_attestations().iter().any(|att| {
                 att.foretis.echo == echo && att.foretis.content_hash == remote_content_hash
             });
             if attestation_present {
@@ -548,7 +548,7 @@ async fn get_target_latest_epoch(
         );
     })?;
 
-    let target_chronon = target_record.inner().chronon_number;
+    let target_chronon = *target_record.inner().chronon_number();
     info!(
         worker_id,
         target_tbid, target_chronon, "do_epoch_attestation: fetched target's latest epoch"
@@ -870,7 +870,7 @@ async fn get_verify_latest_chronon(
     line: &crate::communerd::CommunerdetteLine,
 ) -> Option<u64> {
     let record = line.get_tick(u64::MAX).await.ok()?;
-    let latest_chronon = record.inner().chronon_number;
+    let latest_chronon = *record.inner().chronon_number();
     if latest_chronon == 0 {
         info!(
             worker_id,
@@ -926,7 +926,7 @@ fn log_verify_coverage(
 
     let records_with_attestations = records
         .iter()
-        .filter(|r| !r.inner().external_attestations.is_empty())
+        .filter(|r| !r.inner().external_attestations().is_empty())
         .count();
 
     info!(

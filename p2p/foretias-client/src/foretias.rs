@@ -633,7 +633,7 @@ struct FetchedCalendar {
 
 impl CalendarLookup for FetchedCalendar {
     fn get(&self, start: u64, count: usize) -> Result<Vec<ChrononRecord>, NodeError> {
-        if start == self.record.chronon_number && count >= 1 {
+        if start == *self.record.chronon_number() && count >= 1 {
             Ok(vec![self.record.clone()])
         } else {
             Ok(vec![])
@@ -641,7 +641,7 @@ impl CalendarLookup for FetchedCalendar {
     }
 
     fn latest(&self) -> Option<u64> {
-        Some(self.record.chronon_number)
+        Some(*self.record.chronon_number())
     }
 
     fn tbid(&self) -> Tbid {
@@ -821,8 +821,8 @@ mod tests {
             );
             assert_eq!(report.calendar_records.len(), 1);
             assert_eq!(
-                report.calendar_records[0].chronon_number,
-                foretis.chronon_number
+                *report.calendar_records[0].chronon_number(),
+                *foretis.chronon_number()
             );
             assert_eq!(report.foretis.chronon_number, foretis.chronon_number);
             assert_eq!(report.method, "verify_with_proof");
@@ -860,9 +860,9 @@ mod tests {
             assert!(report.verified);
             assert!(report.chronon_number > 0, "chronon_number must be positive");
             assert_eq!(report.calendar_records.len(), 1);
-            assert!(!report.calendar_records[0].public_key.is_empty());
-            assert!(!report.calendar_records[0].forward_foretis.is_empty());
-            assert!(!report.calendar_records[0].signature_algorithm.is_empty());
+            assert!(!report.calendar_records[0].public_key().is_empty());
+            assert!(!report.calendar_records[0].forward_foretis().is_empty());
+            assert!(!report.calendar_records[0].signature_algorithm().is_empty());
         });
     }
 
@@ -898,8 +898,14 @@ mod tests {
                 .unwrap();
             assert!(r1.verified);
             assert!(r2.verified);
-            assert_eq!(r1.calendar_records[0].chronon_number, f1.chronon_number);
-            assert_eq!(r2.calendar_records[0].chronon_number, f2.chronon_number);
+            assert_eq!(
+                *r1.calendar_records[0].chronon_number(),
+                *f1.chronon_number()
+            );
+            assert_eq!(
+                *r2.calendar_records[0].chronon_number(),
+                *f2.chronon_number()
+            );
         });
     }
 }

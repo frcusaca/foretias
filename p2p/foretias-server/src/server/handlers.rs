@@ -832,7 +832,7 @@ pub fn handle_ship_ack(server: &TimeFamilyServer, params: Value) -> JsonRpcRespo
     let mut verified: Vec<CleanAuthenticated<ChrononRecord>> = Vec::new();
     for (i, unproc) in unprocessed.into_iter().enumerate() {
         let clean = if i == 0 {
-            if unproc.inner().chronon_number == 1 {
+            if *unproc.inner().chronon_number() == 1 {
                 unproc.into_clean_authenticated_genesis(crypto.as_ref())
             } else {
                 return resp_error(
@@ -933,7 +933,7 @@ pub fn handle_stream_tick(server: &TimeFamilyServer, params: Value) -> JsonRpcRe
             unproc.into_clean_authenticated(crypto.as_ref(), &prev)
         }
         None => {
-            if unproc.inner().chronon_number == 1 {
+            if *unproc.inner().chronon_number() == 1 {
                 unproc.into_clean_authenticated_genesis(crypto.as_ref())
             } else {
                 return resp_error(
@@ -1308,7 +1308,7 @@ pub fn handle_history_dump_chunk(server: &TimeFamilyServer, params: Value) -> Js
         } else if let Some(prev_trusted) = mirror_store.latest_record(&tbid) {
             let prev = CleanAuthenticated::<ChrononRecord>::from_trusted(prev_trusted);
             unproc.into_clean_authenticated(crypto.as_ref(), &prev)
-        } else if unproc.inner().chronon_number == 1 {
+        } else if *unproc.inner().chronon_number() == 1 {
             unproc.into_clean_authenticated_genesis(crypto.as_ref())
         } else {
             return resp_error(
@@ -2396,18 +2396,15 @@ mod tests {
         use foretias_core::foretias::tick::ChrononRecord;
         use foretias_core::foretias::types::Tbid;
         let server = make_server();
-        let bad_record = ChrononRecord {
-            chronon_number: 999,
-            public_key: vec![0u8; 32].into(),
-            signature_algorithm: "Ed25519".to_string(),
-            forward_foretis: vec![].into(),
-            backward_foretis: vec![].into(),
-            aa_nonce: [0u8; 16].into(),
-            chronon_stamp_count: 0,
-            external_attestations: Vec::new(),
-            tb_version: 0,
-            tbid: Tbid::default(),
-        };
+        let bad_record = ChrononRecord::builder()
+            .chronon_number(999)
+            .public_key(vec![0u8; 32].into())
+            .forward_foretis(vec![].into())
+            .backward_foretis(vec![].into())
+            .aa_nonce([0u8; 16].into())
+            .tb_version(0)
+            .build()
+            .expect("bad_record");
         let bad_json = serde_json::to_value(&bad_record).expect("serialize bad record");
         let params = serde_json::json!({
             "tbid": sample_tbid_hex(),

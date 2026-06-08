@@ -121,19 +121,15 @@ mod tests {
     use super::*;
 
     fn make_tick(chronon_number: u64) -> ChrononRecord {
-        ChrononRecord {
-            chronon_number,
-            public_key: vec![0u8; 32].into(),
-            signature_algorithm: "Ed25519".to_string(),
-            forward_foretis: vec![].into(),
-            backward_foretis: vec![].into(),
-            aa_nonce: [0u8; 16].into(),
-            chronon_stamp_count: 0,
-            external_attestations: Vec::new(),
-
-            tb_version: 0,
-            tbid: Tbid::default(),
-        }
+        ChrononRecord::builder()
+            .chronon_number(chronon_number)
+            .public_key(vec![0u8; 32].into())
+            .forward_foretis(vec![].into())
+            .backward_foretis(vec![].into())
+            .aa_nonce([0u8; 16].into())
+            .tb_version(0)
+            .build()
+            .expect("make_tick")
     }
 
     #[test]
@@ -144,7 +140,7 @@ mod tests {
         assert_eq!(cal.latest(), Some(1));
         let records = cal.get(1, 10).unwrap();
         assert_eq!(records.len(), 1);
-        assert_eq!(records[0].chronon_number, 1);
+        assert_eq!(*records[0].chronon_number(), 1);
     }
 
     #[test]
@@ -166,7 +162,7 @@ mod tests {
         cal.on_tick_advance(TickNumber(3), &[0u8; 32], &make_tick(3));
         let records = cal.get(2, 10).unwrap();
         assert_eq!(records.len(), 2);
-        assert_eq!(records[0].chronon_number, 2);
+        assert_eq!(*records[0].chronon_number(), 2);
     }
 
     #[test]

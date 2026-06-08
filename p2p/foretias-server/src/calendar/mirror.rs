@@ -48,12 +48,12 @@ impl MirrorStore {
         let entry = mirrors.entry(tbid_hex.to_string()).or_default();
         if entry
             .iter()
-            .any(|r| r.chronon_number == record.chronon_number)
+            .any(|r| r.chronon_number() == record.chronon_number())
         {
             return Ok(());
         }
         entry.push(record);
-        entry.sort_by_key(|r| r.chronon_number);
+        entry.sort_by_key(|r| *r.chronon_number());
         Ok(())
     }
 
@@ -69,7 +69,7 @@ impl MirrorStore {
             .ok_or(NodeError::NotFound("mirrored calendar"))?;
         Ok(records
             .iter()
-            .skip_while(|r| r.chronon_number < chronon_number)
+            .skip_while(|r| *r.chronon_number() < chronon_number)
             .take(count)
             .cloned()
             .collect())
@@ -89,7 +89,7 @@ impl MirrorStore {
             return None;
         }
         let tick_count = records.len() as u64;
-        let latest_tick = records.last()?.chronon_number;
+        let latest_tick = *records.last()?.chronon_number();
         let hash_sanity = compute_hash_sanity(records);
         Some((tick_count, latest_tick, hash_sanity))
     }
@@ -109,7 +109,7 @@ impl Clone for MirrorStore {
 pub fn compute_hash_sanity(records: &[ChrononRecord]) -> String {
     let mut data = Vec::with_capacity(records.len() * 8);
     for record in records {
-        data.extend_from_slice(&record.chronon_number.to_be_bytes());
+        data.extend_from_slice(&record.chronon_number().to_be_bytes());
     }
     let hash = match foretias_core::core::hashing::sha256(&data) {
         Ok(h) => h,
@@ -124,19 +124,15 @@ mod tests {
     use foretias_core::foretias::Tbid;
 
     fn make_tick(chronon_number: u64) -> ChrononRecord {
-        ChrononRecord {
-            chronon_number,
-            public_key: vec![0u8; 32].into(),
-            signature_algorithm: "Ed25519".to_string(),
-            forward_foretis: vec![].into(),
-            backward_foretis: vec![].into(),
-            aa_nonce: [0u8; 16].into(),
-            chronon_stamp_count: 0,
-            external_attestations: Vec::new(),
-
-            tb_version: 0,
-            tbid: Tbid::default(),
-        }
+        ChrononRecord::builder()
+            .chronon_number(chronon_number)
+            .public_key(vec![0u8; 32].into())
+            .forward_foretis(vec![].into())
+            .backward_foretis(vec![].into())
+            .aa_nonce([0u8; 16].into())
+            .tb_version(0)
+            .build()
+            .expect("make_tick")
     }
 
     #[test]
@@ -169,8 +165,8 @@ mod tests {
 
         let records = store.get_mirrored("tbid1", 2, 10).unwrap();
         assert_eq!(records.len(), 2);
-        assert_eq!(records[0].chronon_number, 2);
-        assert_eq!(records[1].chronon_number, 3);
+        assert_eq!(*records[0].chronon_number(), 2);
+        assert_eq!(*records[1].chronon_number(), 3);
     }
 
     #[test]
@@ -190,9 +186,9 @@ mod tests {
         store.insert_mirrored("tbid1", make_tick(2)).unwrap();
 
         let records = store.get_mirrored("tbid1", 0, 10).unwrap();
-        assert_eq!(records[0].chronon_number, 1);
-        assert_eq!(records[1].chronon_number, 2);
-        assert_eq!(records[2].chronon_number, 3);
+        assert_eq!(*records[0].chronon_number(), 1);
+        assert_eq!(*records[1].chronon_number(), 2);
+        assert_eq!(*records[2].chronon_number(), 3);
     }
 
     #[test]

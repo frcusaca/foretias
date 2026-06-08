@@ -2439,18 +2439,16 @@ mod tests {
     // ── Phase 4.4: Unit tests for calendar slice, tick, stamp ────────────
 
     fn make_test_chronon_record(tbid: &Tbid, chronon_number: u64) -> ChrononRecord {
-        ChrononRecord {
-            chronon_number,
-            public_key: FTByteVector::from(vec![1u8; 32]),
-            signature_algorithm: "Ed25519".to_string(),
-            forward_foretis: FTByteVector::from(vec![2u8; 64]),
-            backward_foretis: FTByteVector::from(vec![3u8; 64]),
-            aa_nonce: FTByteArray::from([4u8; 16]),
-            chronon_stamp_count: 0,
-            external_attestations: vec![],
-            tb_version: 0,
-            tbid: *tbid,
-        }
+        ChrononRecord::builder()
+            .chronon_number(chronon_number)
+            .public_key(FTByteVector::from(vec![1u8; 32]))
+            .forward_foretis(FTByteVector::from(vec![2u8; 64]))
+            .backward_foretis(FTByteVector::from(vec![3u8; 64]))
+            .aa_nonce(FTByteArray::from([4u8; 16]))
+            .tbid(*tbid)
+            .tb_version(0)
+            .build()
+            .expect("make_test_chronon_record")
     }
 
     fn make_test_foretis(tbid: &Tbid) -> ForetisRecord {
@@ -2489,18 +2487,15 @@ mod tests {
             None,
         );
 
-        let bad_record = ChrononRecord {
-            chronon_number: 0,
-            public_key: FTByteVector::from(vec![1u8; 32]),
-            signature_algorithm: "Ed25519".to_string(),
-            forward_foretis: FTByteVector::from(vec![]),
-            backward_foretis: FTByteVector::from(vec![]),
-            aa_nonce: FTByteArray::from([0u8; 16]),
-            chronon_stamp_count: 0,
-            external_attestations: vec![],
-            tb_version: 0,
-            tbid: Tbid::from_raw([0u8; 96]),
-        };
+        let bad_record = ChrononRecord::builder()
+            .chronon_number(0)
+            .public_key(FTByteVector::from(vec![1u8; 32]))
+            .forward_foretis(FTByteVector::from(vec![]))
+            .backward_foretis(FTByteVector::from(vec![]))
+            .aa_nonce(FTByteArray::from([0u8; 16]))
+            .tbid(Tbid::from_raw([0u8; 96]))
+            .tb_version(0)
+            .build_unchecked();
 
         let result = executor.gate_chronon_records(vec![bad_record]);
         assert!(matches!(result, Err(CommunerdetteError::Structural(_))));
@@ -2531,18 +2526,15 @@ mod tests {
             None,
         );
 
-        let bad_record = ChrononRecord {
-            chronon_number: 1,
-            public_key: FTByteVector::from(vec![]),
-            signature_algorithm: "Ed25519".to_string(),
-            forward_foretis: FTByteVector::from(vec![]),
-            backward_foretis: FTByteVector::from(vec![]),
-            aa_nonce: FTByteArray::from([0u8; 16]),
-            chronon_stamp_count: 0,
-            external_attestations: vec![],
-            tb_version: 0,
-            tbid: Tbid::from_raw([0u8; 96]),
-        };
+        let bad_record = ChrononRecord::builder()
+            .chronon_number(1)
+            .public_key(FTByteVector::from(vec![]))
+            .forward_foretis(FTByteVector::from(vec![]))
+            .backward_foretis(FTByteVector::from(vec![]))
+            .aa_nonce(FTByteArray::from([0u8; 16]))
+            .tbid(Tbid::from_raw([0u8; 96]))
+            .tb_version(0)
+            .build_unchecked();
 
         let result = executor.gate_chronon_records(vec![bad_record]);
         assert!(matches!(result, Err(CommunerdetteError::Structural(_))));
@@ -2824,21 +2816,21 @@ mod tests {
         let pub_key = crypto.public_key();
 
         // ChrononRecord with the CryptoServer's real public key (from_trusted: test-local data)
-        let chronon_record = CleanAuthenticated::from_trusted(ChrononRecord {
-            chronon_number,
-            public_key: FTByteVector::from(match pub_key {
-                foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
-                _ => panic!("expected Ed25519"),
-            }),
-            signature_algorithm: "Ed25519".to_string(),
-            forward_foretis: FTByteVector::from(vec![]),
-            backward_foretis: FTByteVector::from(vec![]),
-            aa_nonce: FTByteArray::from([0u8; 16]),
-            chronon_stamp_count: 0,
-            external_attestations: vec![],
-            tb_version: 0,
-            tbid: target_tbid,
-        });
+        let chronon_record = CleanAuthenticated::from_trusted(
+            ChrononRecord::builder()
+                .chronon_number(chronon_number)
+                .public_key(FTByteVector::from(match pub_key {
+                    foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
+                    _ => panic!("expected Ed25519"),
+                }))
+                .forward_foretis(FTByteVector::from(vec![]))
+                .backward_foretis(FTByteVector::from(vec![]))
+                .aa_nonce(FTByteArray::from([0u8; 16]))
+                .tbid(target_tbid)
+                .tb_version(0)
+                .build()
+                .expect("chronon_record"),
+        );
 
         let foretis = ForetisRecord {
             chronon_number,
@@ -2896,21 +2888,21 @@ mod tests {
         let content_hash = crypto.sha256(content).expect("sha256");
         let pub_key = crypto.public_key();
 
-        let chronon_record = CleanAuthenticated::from_trusted(ChrononRecord {
-            chronon_number,
-            public_key: FTByteVector::from(match pub_key {
-                foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
-                _ => panic!("expected Ed25519"),
-            }),
-            signature_algorithm: "Ed25519".to_string(),
-            forward_foretis: FTByteVector::from(vec![]),
-            backward_foretis: FTByteVector::from(vec![]),
-            aa_nonce: FTByteArray::from([0u8; 16]),
-            chronon_stamp_count: 0,
-            external_attestations: vec![],
-            tb_version: 0,
-            tbid: target_tbid,
-        });
+        let chronon_record = CleanAuthenticated::from_trusted(
+            ChrononRecord::builder()
+                .chronon_number(chronon_number)
+                .public_key(FTByteVector::from(match pub_key {
+                    foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
+                    _ => panic!("expected Ed25519"),
+                }))
+                .forward_foretis(FTByteVector::from(vec![]))
+                .backward_foretis(FTByteVector::from(vec![]))
+                .aa_nonce(FTByteArray::from([0u8; 16]))
+                .tbid(target_tbid)
+                .tb_version(0)
+                .build()
+                .expect("chronon_record"),
+        );
 
         // Wrong signature — 64 bytes of garbage, not a real Ed25519 signature
         let foretis = ForetisRecord {
@@ -3317,21 +3309,21 @@ mod tests {
         let content_hash = crypto.sha256(content).expect("sha256");
         let pub_key = crypto.public_key();
 
-        let chronon_record = CleanAuthenticated::from_trusted(ChrononRecord {
-            chronon_number: 1,
-            public_key: FTByteVector::from(match pub_key {
-                foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
-                _ => panic!("expected Ed25519"),
-            }),
-            signature_algorithm: "Ed25519".to_string(),
-            forward_foretis: FTByteVector::from(vec![]),
-            backward_foretis: FTByteVector::from(vec![]),
-            aa_nonce: FTByteArray::from([0u8; 16]),
-            chronon_stamp_count: 0,
-            external_attestations: vec![],
-            tb_version: 0,
-            tbid: target_tbid,
-        });
+        let chronon_record = CleanAuthenticated::from_trusted(
+            ChrononRecord::builder()
+                .chronon_number(1)
+                .public_key(FTByteVector::from(match pub_key {
+                    foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
+                    _ => panic!("expected Ed25519"),
+                }))
+                .forward_foretis(FTByteVector::from(vec![]))
+                .backward_foretis(FTByteVector::from(vec![]))
+                .aa_nonce(FTByteArray::from([0u8; 16]))
+                .tbid(target_tbid)
+                .tb_version(0)
+                .build()
+                .expect("chronon_record"),
+        );
 
         let foretis_bad_sig = ForetisRecord {
             chronon_number: 1,
@@ -3692,18 +3684,16 @@ mod tests {
         };
 
         // ChrononRecord whose public_key matches the crypto server — genesis, tb_version=0.
-        let chronon_record = ChrononRecord {
-            chronon_number,
-            public_key: FTByteVector::from(pub_key_bytes),
-            signature_algorithm: "Ed25519".to_string(),
-            forward_foretis: FTByteVector::from(vec![2u8; 64]),
-            backward_foretis: FTByteVector::from(vec![3u8; 64]),
-            aa_nonce: FTByteArray::from([4u8; 16]),
-            chronon_stamp_count: 0,
-            external_attestations: vec![],
-            tb_version: 0,
-            tbid,
-        };
+        let chronon_record = ChrononRecord::builder()
+            .chronon_number(chronon_number)
+            .public_key(FTByteVector::from(pub_key_bytes))
+            .forward_foretis(FTByteVector::from(vec![2u8; 64]))
+            .backward_foretis(FTByteVector::from(vec![3u8; 64]))
+            .aa_nonce(FTByteArray::from([4u8; 16]))
+            .tbid(tbid)
+            .tb_version(0)
+            .build()
+            .expect("chronon_record");
 
         let host = Arc::new(ConfigurableMockHost::new(Some(make_record(
             "peer-1",
@@ -4462,18 +4452,16 @@ mod tests {
             .expect("sign");
 
         // ChrononRecord with matching public key (genesis, tb_version=0)
-        let chronon_record = ChrononRecord {
-            chronon_number: 1,
-            public_key: FTByteVector::from(pub_key),
-            signature_algorithm: "Ed25519".to_string(),
-            forward_foretis: FTByteVector::from(vec![2u8; 64]),
-            backward_foretis: FTByteVector::from(vec![3u8; 64]),
-            aa_nonce: FTByteArray::from([4u8; 16]),
-            chronon_stamp_count: 0,
-            external_attestations: vec![],
-            tb_version: 0,
-            tbid: target_tbid,
-        };
+        let chronon_record = ChrononRecord::builder()
+            .chronon_number(1)
+            .public_key(FTByteVector::from(pub_key))
+            .forward_foretis(FTByteVector::from(vec![2u8; 64]))
+            .backward_foretis(FTByteVector::from(vec![3u8; 64]))
+            .aa_nonce(FTByteArray::from([4u8; 16]))
+            .tbid(target_tbid)
+            .tb_version(0)
+            .build()
+            .expect("chronon_record");
 
         let record = make_record("peer-1", "127.0.0.1:4002");
         let host = Arc::new(LivenessMockHost::new(Some(record), true));
@@ -4740,18 +4728,16 @@ mod tests {
             foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
             _ => panic!("expected Ed25519"),
         };
-        let chronon_record = ChrononRecord {
-            chronon_number,
-            public_key: FTByteVector::from(pub_key_bytes),
-            signature_algorithm: "Ed25519".to_string(),
-            forward_foretis: FTByteVector::from(vec![2u8; 64]),
-            backward_foretis: FTByteVector::from(vec![3u8; 64]),
-            aa_nonce: FTByteArray::from([4u8; 16]),
-            chronon_stamp_count: 0,
-            external_attestations: vec![],
-            tb_version: 0,
-            tbid,
-        };
+        let chronon_record = ChrononRecord::builder()
+            .chronon_number(chronon_number)
+            .public_key(FTByteVector::from(pub_key_bytes))
+            .forward_foretis(FTByteVector::from(vec![2u8; 64]))
+            .backward_foretis(FTByteVector::from(vec![3u8; 64]))
+            .aa_nonce(FTByteArray::from([4u8; 16]))
+            .tbid(tbid)
+            .tb_version(0)
+            .build()
+            .expect("chronon_record");
 
         let host = Arc::new(ConfigurableMockHost::new(Some(make_record(
             "peer-1",
@@ -4822,18 +4808,16 @@ mod tests {
             foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
             _ => panic!("expected Ed25519"),
         };
-        let chronon_record = ChrononRecord {
-            chronon_number,
-            public_key: FTByteVector::from(pub_key_bytes),
-            signature_algorithm: "Ed25519".to_string(),
-            forward_foretis: FTByteVector::from(vec![2u8; 64]),
-            backward_foretis: FTByteVector::from(vec![3u8; 64]),
-            aa_nonce: FTByteArray::from([4u8; 16]),
-            chronon_stamp_count: 0,
-            external_attestations: vec![],
-            tb_version: 0,
-            tbid,
-        };
+        let chronon_record = ChrononRecord::builder()
+            .chronon_number(chronon_number)
+            .public_key(FTByteVector::from(pub_key_bytes))
+            .forward_foretis(FTByteVector::from(vec![2u8; 64]))
+            .backward_foretis(FTByteVector::from(vec![3u8; 64]))
+            .aa_nonce(FTByteArray::from([4u8; 16]))
+            .tbid(tbid)
+            .tb_version(0)
+            .build()
+            .expect("chronon_record");
 
         let host = Arc::new(ConfigurableMockHost::new(Some(make_record(
             "peer-1",

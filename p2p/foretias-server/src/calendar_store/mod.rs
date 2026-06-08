@@ -127,7 +127,7 @@ impl CalendarStore {
 
         for block in &blocks {
             let has_overlap = block.ticks.iter().any(|t| {
-                let cn = t.inner().chronon_number;
+                let cn = *t.inner().chronon_number();
                 cn >= req.chronon_start && cn <= req.chronon_end
             });
             if !has_overlap {
@@ -221,10 +221,10 @@ impl CalendarStore {
         let blocks = self.inner.read_all().ok()?;
         for block in &blocks {
             for tick in &block.ticks {
-                if tick.inner().chronon_number == chronon_number {
+                if *tick.inner().chronon_number() == chronon_number {
                     let mut record = tick.inner().clone();
                     if !include_attestations {
-                        record.external_attestations.clear();
+                        record.external_attestations_mut().clear();
                     }
                     return Some(CleanAuthenticated::from_trusted(record));
                 }
@@ -270,11 +270,11 @@ impl CalendarStore {
         let mut found: Vec<(u64, CleanAuthenticated<ChrononRecord>)> = Vec::new();
         for block in &blocks {
             for tick in &block.ticks {
-                let cn = tick.inner().chronon_number;
+                let cn = *tick.inner().chronon_number();
                 if cn >= chronon_start && cn <= chronon_end {
                     let mut record = tick.inner().clone();
                     if !include_attestations {
-                        record.external_attestations.clear();
+                        record.external_attestations_mut().clear();
                     }
                     found.push((cn, CleanAuthenticated::from_trusted(record)));
                 }
@@ -406,7 +406,7 @@ fn find_tick_index(
 ) -> usize {
     ticks
         .iter()
-        .position(|t| t.inner().chronon_number >= target)
+        .position(|t| *t.inner().chronon_number() >= target)
         .unwrap_or(ticks.len())
 }
 
@@ -419,7 +419,7 @@ fn find_tick_index_after(
 ) -> usize {
     ticks
         .iter()
-        .rposition(|t| t.inner().chronon_number <= target)
+        .rposition(|t| *t.inner().chronon_number() <= target)
         .map(|i| i + 1)
         .unwrap_or(0)
 }
@@ -433,7 +433,7 @@ fn find_gaps(
     let mut expected = start;
 
     for record in records {
-        let cn = record.inner().chronon_number;
+        let cn = *record.inner().chronon_number();
         if cn > expected {
             gaps.push(expected..cn);
         }
@@ -468,18 +468,14 @@ mod tests {
     fn make_tick(
         chronon_number: u64,
     ) -> foretias_core::foretias::clean_auth::Externalized<ChrononRecord> {
-        let record = ChrononRecord {
-            chronon_number,
-            public_key: vec![0u8; 32].into(),
-            signature_algorithm: "Ed25519".to_string(),
-            forward_foretis: vec![].into(),
-            backward_foretis: vec![].into(),
-            aa_nonce: [0u8; 16].into(),
-            chronon_stamp_count: 0,
-            external_attestations: Vec::new(),
-            tb_version: 0,
-            tbid: Tbid::default(),
-        };
+        let record = ChrononRecord::builder()
+            .chronon_number(chronon_number)
+            .public_key(vec![0u8; 32].into())
+            .forward_foretis(vec![].into())
+            .backward_foretis(vec![].into())
+            .aa_nonce([0u8; 16].into())
+            .tb_version(0)
+            .build_unchecked();
         CleanAuthenticated::<ChrononRecord>::from_trusted(record).externalize()
     }
 
@@ -677,15 +673,15 @@ mod tests {
 
         let result = store.get_chronon("test", 4, true);
         assert!(result.is_some());
-        assert_eq!(result.unwrap().inner().chronon_number, 4);
+        assert_eq!(*result.unwrap().inner().chronon_number(), 4);
 
         let result = store.get_chronon("test", 0, true);
         assert!(result.is_some());
-        assert_eq!(result.unwrap().inner().chronon_number, 0);
+        assert_eq!(*result.unwrap().inner().chronon_number(), 0);
 
         let result = store.get_chronon("test", 5, true);
         assert!(result.is_some());
-        assert_eq!(result.unwrap().inner().chronon_number, 5);
+        assert_eq!(*result.unwrap().inner().chronon_number(), 5);
 
         std::fs::remove_dir_all(&tmp).ok();
     }
@@ -709,10 +705,10 @@ mod tests {
         let store = make_store(&tmp, 1, 3);
 
         let with_att = store.get_chronon("test", 0, true).unwrap();
-        assert!(with_att.inner().external_attestations.is_empty());
+        assert!(with_att.inner().external_attestations().is_empty());
 
         let without_att = store.get_chronon("test", 0, false).unwrap();
-        assert!(without_att.inner().external_attestations.is_empty());
+        assert!(without_att.inner().external_attestations().is_empty());
 
         std::fs::remove_dir_all(&tmp).ok();
     }
@@ -730,7 +726,7 @@ mod tests {
                 assert_eq!(coverage.requested, 6);
                 assert_eq!(coverage.returned, 6);
                 for (i, r) in records.iter().enumerate() {
-                    assert_eq!(r.inner().chronon_number, 2 + i as u64);
+                    assert_eq!(*r.inner().chronon_number(), 2 + i as u64);
                 }
             }
             other => panic!("expected Complete, got {:?}", other),

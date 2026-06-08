@@ -267,19 +267,14 @@ mod tests {
     }
 
     fn make_tick(chronon_number: u64) -> Externalized<ChrononRecord> {
-        let record = ChrononRecord {
-            chronon_number,
-            public_key: vec![0u8; 32].into(),
-            signature_algorithm: "Ed25519".to_string(),
-            forward_foretis: vec![].into(),
-            backward_foretis: vec![].into(),
-            aa_nonce: [0u8; 16].into(),
-            chronon_stamp_count: 0,
-            external_attestations: Vec::new(),
-
-            tb_version: 0,
-            tbid: Tbid::default(),
-        };
+        let record = ChrononRecord::builder()
+            .chronon_number(chronon_number)
+            .public_key(vec![0u8; 32].into())
+            .forward_foretis(vec![].into())
+            .backward_foretis(vec![].into())
+            .aa_nonce([0u8; 16].into())
+            .tb_version(0)
+            .build_unchecked();
         CleanAuthenticated::<ChrononRecord>::from_trusted(record).externalize()
     }
 
@@ -306,8 +301,8 @@ mod tests {
         for (i, block) in blocks.iter().enumerate() {
             assert_eq!(block.block_id, i as u64);
             assert_eq!(block.ticks.len(), 2);
-            assert_eq!(block.ticks[0].inner().chronon_number, i as u64);
-            assert_eq!(block.ticks[1].inner().chronon_number, (i as u64 + 100));
+            assert_eq!(*block.ticks[0].inner().chronon_number(), i as u64);
+            assert_eq!(*block.ticks[1].inner().chronon_number(), (i as u64 + 100));
             assert_eq!(block.written_at_ns, FIXED_NS);
         }
 
@@ -370,8 +365,8 @@ mod tests {
         let blocks = store.read_all().unwrap();
         assert_eq!(blocks.len(), 1);
         assert_eq!(blocks[0].ticks.len(), 2);
-        assert_eq!(blocks[0].ticks[0].inner().chronon_number, 1);
-        assert_eq!(blocks[0].ticks[1].inner().chronon_number, 2);
+        assert_eq!(*blocks[0].ticks[0].inner().chronon_number(), 1);
+        assert_eq!(*blocks[0].ticks[1].inner().chronon_number(), 2);
 
         // Cleanup
         std::fs::remove_file(&plaintext_path).ok();
@@ -410,14 +405,14 @@ mod tests {
 
         // Verify fields preserved through serialization roundtrip
         assert_eq!(block.ticks.len(), 2);
-        assert_eq!(block.ticks[0].inner().chronon_number, 42);
-        assert_eq!(block.ticks[1].inner().chronon_number, 43);
-        assert_eq!(block.ticks[0].inner().signature_algorithm, "Ed25519");
-        assert_eq!(block.ticks[0].inner().public_key.as_slice(), &[0u8; 32]);
-        assert_eq!(&*block.ticks[0].inner().aa_nonce, &[0u8; 16]);
-        assert!(block.ticks[0].inner().forward_foretis.is_empty());
-        assert!(block.ticks[0].inner().backward_foretis.is_empty());
-        assert!(block.ticks[0].inner().external_attestations.is_empty());
+        assert_eq!(*block.ticks[0].inner().chronon_number(), 42);
+        assert_eq!(*block.ticks[1].inner().chronon_number(), 43);
+        assert_eq!(block.ticks[0].inner().signature_algorithm(), "Ed25519");
+        assert_eq!(block.ticks[0].inner().public_key().as_slice(), &[0u8; 32]);
+        assert_eq!(&**block.ticks[0].inner().aa_nonce(), &[0u8; 16]);
+        assert!(block.ticks[0].inner().forward_foretis().is_empty());
+        assert!(block.ticks[0].inner().backward_foretis().is_empty());
+        assert!(block.ticks[0].inner().external_attestations().is_empty());
 
         // Cleanup
         std::fs::remove_file(&path).ok();

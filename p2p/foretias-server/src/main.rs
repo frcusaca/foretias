@@ -708,7 +708,7 @@ fn cmd_inspect_attestations(calendar_path: String) -> Result<(), Box<dyn std::er
     let mut invalid_count = 0u64;
 
     for tick in &calendar.ticks {
-        for att in &tick.external_attestations {
+        for att in tick.external_attestations() {
             total_attestations += 1;
 
             let content = match serde_json::to_vec(&tick) {
@@ -716,7 +716,9 @@ fn cmd_inspect_attestations(calendar_path: String) -> Result<(), Box<dyn std::er
                 Err(e) => {
                     println!(
                         "tick={} attester={} sig=INVALID (serialize error: {})",
-                        tick.chronon_number, att.attester_tbid, e
+                        tick.chronon_number(),
+                        att.attester_tbid,
+                        e
                     );
                     invalid_count += 1;
                     continue;
@@ -735,7 +737,9 @@ fn cmd_inspect_attestations(calendar_path: String) -> Result<(), Box<dyn std::er
                 Err(e) => {
                     println!(
                         "tick={} attester={} sig=INVALID (verify error: {})",
-                        tick.chronon_number, att.attester_tbid, e
+                        tick.chronon_number(),
+                        att.attester_tbid,
+                        e
                     );
                     invalid_count += 1;
                     continue;
@@ -745,13 +749,17 @@ fn cmd_inspect_attestations(calendar_path: String) -> Result<(), Box<dyn std::er
             if valid {
                 println!(
                     "tick={} attester={} attester_tick={} sig=VALID",
-                    tick.chronon_number, att.attester_tbid, att.foretis.chronon_number
+                    tick.chronon_number(),
+                    att.attester_tbid,
+                    att.foretis.chronon_number
                 );
                 valid_count += 1;
             } else {
                 println!(
                     "tick={} attester={} attester_tick={} sig=INVALID",
-                    tick.chronon_number, att.attester_tbid, att.foretis.chronon_number
+                    tick.chronon_number(),
+                    att.attester_tbid,
+                    att.foretis.chronon_number
                 );
                 invalid_count += 1;
             }
@@ -791,7 +799,7 @@ impl CalendarLookup for CalendarInspect<'_> {
     }
 
     fn latest(&self) -> Option<u64> {
-        self.calendar.ticks.last().map(|t| t.chronon_number)
+        self.calendar.ticks.last().map(|t| *t.chronon_number())
     }
 
     fn tbid(&self) -> foretias_core::foretias::types::Tbid {

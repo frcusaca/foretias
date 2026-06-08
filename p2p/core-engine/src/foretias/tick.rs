@@ -16,37 +16,37 @@ use crate::error::NodeError;
 pub struct ChrononRecord {
     /// The monotonically increasing chronon index.
     #[serde(rename = "tick_number")]
-    pub chronon_number: u64,
+    pub(crate) chronon_number: u64,
     /// The public key active at this chronon.
-    pub public_key: FTByteVector,
+    pub(crate) public_key: FTByteVector,
     /// Plain-text algorithm identifier for this chronon's key.
     #[serde(default = "default_sig_algorithm")]
     #[builder(default = "Ed25519".to_string())]
-    pub signature_algorithm: String,
+    pub(crate) signature_algorithm: String,
     /// Serialized ForetisRecord attesting forward to the next chronon.
-    pub forward_foretis: FTByteVector,
+    pub(crate) forward_foretis: FTByteVector,
     /// Serialized ForetisRecord attesting backward to the previous chronon.
-    pub backward_foretis: FTByteVector,
+    pub(crate) backward_foretis: FTByteVector,
     /// Cryptographic nonce (16 bytes) used in the auto-attestation blob for this chronon pair.
     /// This prevents replay attacks by ensuring each blob is unique even if the chronon data repeats.
-    pub aa_nonce: FTByteArray<16>,
+    pub(crate) aa_nonce: FTByteArray<16>,
     /// Number of user-initiated stamps during this chronon (excluding auto-attestation itself,
     /// but including mutual attestations). Persisted for blob reconstruction during verify_pair.
     #[builder(default)]
-    pub chronon_stamp_count: u64,
+    pub(crate) chronon_stamp_count: u64,
     /// External attestations from other Time Families.
     #[serde(default)]
     #[builder(default)]
-    pub external_attestations: Vec<super::external_attestation::ExternalAttestationRecord>,
+    pub(crate) external_attestations: Vec<super::external_attestation::ExternalAttestationRecord>,
 
     /// TBID protocol version: 0 = legacy (16-byte UUID), 1 = dual-key (96-byte).
     #[serde(default = "default_tb_version")]
     #[builder(default = 1)]
-    pub tb_version: u32,
+    pub(crate) tb_version: u32,
     /// Time Being ID — identifies which calendar this record belongs to.
     #[serde(default)]
     #[builder(default)]
-    pub tbid: Tbid,
+    pub(crate) tbid: Tbid,
 }
 
 impl ChrononRecord {
@@ -120,6 +120,11 @@ impl ChrononRecord {
     ) -> &Vec<super::external_attestation::ExternalAttestationRecord> {
         &self.external_attestations
     }
+    pub fn external_attestations_mut(
+        &mut self,
+    ) -> &mut Vec<super::external_attestation::ExternalAttestationRecord> {
+        &mut self.external_attestations
+    }
     pub fn tb_version(&self) -> &u32 {
         &self.tb_version
     }
@@ -145,6 +150,12 @@ impl<S: chronon_record_builder::IsComplete> ChrononRecordBuilder<S> {
             ));
         }
         Ok(record)
+    }
+
+    /// Build without validation. For test code that intentionally constructs invalid records.
+    #[doc(hidden)]
+    pub fn build_unchecked(self) -> ChrononRecord {
+        self.build_internal()
     }
 }
 
