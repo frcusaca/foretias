@@ -293,6 +293,15 @@ These features are explicitly out of active scope. They remain as specifications
 
 **Description:** Track request rates per TBID across multiple time windows. When thresholds exceeded, gossip signed alert to peers. Receiving peers apply lower threshold. Local throttling with cooldown.
 
+### Encapsulation Remediation
+
+| File | Open | Done | Status |
+|------|------|------|--------|
+| `specs/ENCAPSULATION_REMEDIATION_PLAN.md` | ~50 | 0 | **PROPOSED** — make domain type fields private, add accessors |
+| `specs/ENCAPSULATION_REMEDIATION_SPEC.md` | — | — | Spec (paired) |
+
+**Description:** Audit found domain types with public fields bypassing construction invariants. 7 waves: ChrononRecord, ForetisRecord, ExternalAttestationRecord+, Calendar, SignatureEntry+, SoftwareCryptoServer, final verification.
+
 ---
 
 ### Python Bindings (Thin Client)
