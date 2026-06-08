@@ -149,17 +149,44 @@ pub trait MirrorDispatcher: Send + Sync {
 pub struct MirrorState {
     /// Hex TBID of the local TimeFamily being mirrored. Set by
     /// `Calendar::set_local_tbid` before the queue is useful.
-    pub local_tbid_hex: parking_lot::RwLock<String>,
+    pub(crate) local_tbid_hex: parking_lot::RwLock<String>,
     /// Active mirrors that have accepted the relationship.
-    pub mirrors: parking_lot::RwLock<std::collections::HashSet<String>>,
+    pub(crate) mirrors: parking_lot::RwLock<std::collections::HashSet<String>>,
     /// Per-mirror consecutive failures from `mirror_health_check`. After
     /// `MAX_HEALTH_FAILURES`, the worker enqueues `ExpireMirror`.
-    pub health_failures: parking_lot::RwLock<std::collections::HashMap<String, u32>>,
+    pub(crate) health_failures: parking_lot::RwLock<std::collections::HashMap<String, u32>>,
     /// Lower-bound mirror count target. Below this, `ExpireMirror` enqueues
     /// a fresh `FindNewMirror`.
-    pub min_mirrors: parking_lot::RwLock<usize>,
+    pub(crate) min_mirrors: parking_lot::RwLock<usize>,
     /// Upper-bound mirror count target. `FindNewMirror` stops when reached.
-    pub target_mirrors: parking_lot::RwLock<usize>,
+    pub(crate) target_mirrors: parking_lot::RwLock<usize>,
+}
+
+impl MirrorState {
+    /// Read-only snapshot of the local TBID hex.
+    pub fn local_tbid_hex(&self) -> String {
+        self.local_tbid_hex.read().clone()
+    }
+
+    /// Read-only snapshot of the active mirror set.
+    pub fn mirrors(&self) -> std::collections::HashSet<String> {
+        self.mirrors.read().clone()
+    }
+
+    /// Read-only snapshot of per-mirror health failure counts.
+    pub fn health_failures(&self) -> std::collections::HashMap<String, u32> {
+        self.health_failures.read().clone()
+    }
+
+    /// Current minimum mirror count target.
+    pub fn min_mirrors(&self) -> usize {
+        *self.min_mirrors.read()
+    }
+
+    /// Current maximum mirror count target.
+    pub fn target_mirrors(&self) -> usize {
+        *self.target_mirrors.read()
+    }
 }
 
 /// Threshold for `mirror_health_check` failures before a mirror is expired.
@@ -193,21 +220,62 @@ pub struct WorkerPool {
 /// via the `TimeFamilyServer`; test/placeholder mode leaves them `None`.
 #[derive(Clone)]
 pub struct WorkerContext {
-    pub dispatcher: Option<Arc<dyn MirrorDispatcher>>,
-    pub mirror_state: Arc<MirrorState>,
-    pub task_tx: CalendarTaskSender,
-    pub calendar_lookup: Arc<parking_lot::RwLock<foretias_core::foretias::Calendar>>,
+    pub(crate) dispatcher: Option<Arc<dyn MirrorDispatcher>>,
+    pub(crate) mirror_state: Arc<MirrorState>,
+    pub(crate) task_tx: CalendarTaskSender,
+    pub(crate) calendar_lookup: Arc<parking_lot::RwLock<foretias_core::foretias::Calendar>>,
     /// Communerd reference — needed by `DoChrononAttestation` to obtain a
     /// `CommunerdetteLine` for a target TBID. `None` in placeholder mode.
-    pub communerd: Option<Arc<crate::communerd::Communerd>>,
+    pub(crate) communerd: Option<Arc<crate::communerd::Communerd>>,
     /// Chronomatter reference — needed by `DoChrononAttestation` to produce
     /// an internal ForetisRecord (stamp-free, within trust boundary). `None` in
     /// placeholder mode.
-    pub chronomatter: Option<Arc<foretias_core::chronomatter::Chronomatter>>,
+    pub(crate) chronomatter: Option<Arc<foretias_core::chronomatter::Chronomatter>>,
     /// Calendar's Ed25519 signing key, shared via Arc from Calendar.
     /// Used by attestation handlers to sign stamp payloads.
-    pub signing_key:
+    pub(crate) signing_key:
         Option<Arc<parking_lot::Mutex<Option<foretias_core::core::identity::PrivKeyHandle>>>>,
+}
+
+impl WorkerContext {
+    pub fn dispatcher(&self) -> Option<&Arc<dyn MirrorDispatcher>> {
+        self.dispatcher.as_ref()
+    }
+
+    pub fn mirror_state(&self) -> &Arc<MirrorState> {
+        &self.mirror_state
+    }
+
+    pub fn task_tx(&self) -> &CalendarTaskSender {
+        &self.task_tx
+    }
+
+    pub fn calendar_lookup(&self) -> &Arc<parking_lot::RwLock<foretias_core::foretias::Calendar>> {
+        &self.calendar_lookup
+    }
+
+    pub fn communerd(&self) -> Option<&Arc<crate::communerd::Communerd>> {
+        self.communerd.as_ref()
+    }
+
+    pub fn chronomatter(&self) -> Option<&Arc<foretias_core::chronomatter::Chronomatter>> {
+        self.chronomatter.as_ref()
+    }
+
+    /// Sign data with Calendar's Ed25519 key. Returns `None` if the key is
+    /// not available or signing fails.
+    pub fn sign_with_calendar_key(&self, data: &[u8]) -> Option<Vec<u8>> {
+        let signing_key = self.signing_key.as_ref()?;
+        let guard = signing_key.lock();
+        let key = guard.as_ref()?;
+        match key.sign(data) {
+            Ok(sig) => Some(sig.bytes.to_vec()),
+            Err(e) => {
+                warn!(error = %e, "calendar key signing failed");
+                None
+            }
+        }
+    }
 }
 
 /// Spawn `worker_count` worker tasks that pull from `rx`, dispatch via the
@@ -617,16 +685,7 @@ async fn transmit_epoch_attestation(
 }
 
 fn sign_with_calendar_key(ctx: &WorkerContext, data: &[u8]) -> Option<Vec<u8>> {
-    let signing_key = ctx.signing_key.as_ref()?;
-    let guard = signing_key.lock();
-    let key = guard.as_ref()?;
-    match key.sign(data) {
-        Ok(sig) => Some(sig.bytes.to_vec()),
-        Err(e) => {
-            warn!(error = %e, "calendar key signing failed");
-            None
-        }
-    }
+    ctx.sign_with_calendar_key(data)
 }
 
 async fn handle_find_new_mirror(worker_id: usize, ctx: &WorkerContext) {

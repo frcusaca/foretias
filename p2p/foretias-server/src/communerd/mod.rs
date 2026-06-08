@@ -185,19 +185,19 @@ impl RegistrationConfig {
 /// (TODO(post-v0.7): require signature).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PeerRegistrationRecord {
-    pub peer_id: String,
-    pub tbid: String,
-    pub multiaddr: String,
-    pub json_rpc: String,
-    pub chronon_ns: u64,
-    pub registered_at_ns: u64,
+    pub(crate) peer_id: String,
+    pub(crate) tbid: String,
+    pub(crate) multiaddr: String,
+    pub(crate) json_rpc: String,
+    pub(crate) chronon_ns: u64,
+    pub(crate) registered_at_ns: u64,
     #[serde(default = "default_capabilities")]
-    pub capabilities: Vec<PeerCapability>,
+    pub(crate) capabilities: Vec<PeerCapability>,
     /// Ed25519 signature over canonical_payload(). `#[serde(default)]` allows
     /// legacy un-signed records from pre-signing peers to deserialize; the
     /// consume path treats empty as "legacy" and logs a warn.
     #[serde(default)]
-    pub signature: Vec<u8>,
+    pub(crate) signature: Vec<u8>,
 }
 
 fn default_capabilities() -> Vec<PeerCapability> {
@@ -215,6 +215,71 @@ fn capability_discriminant(cap: &PeerCapability) -> u8 {
 }
 
 impl PeerRegistrationRecord {
+    pub fn new(
+        peer_id: String,
+        tbid: String,
+        multiaddr: String,
+        json_rpc: String,
+        chronon_ns: u64,
+        registered_at_ns: u64,
+        capabilities: Vec<PeerCapability>,
+    ) -> Self {
+        Self {
+            peer_id,
+            tbid,
+            multiaddr,
+            json_rpc,
+            chronon_ns,
+            registered_at_ns,
+            capabilities,
+            signature: Vec::new(),
+        }
+    }
+
+    pub fn peer_id(&self) -> &str {
+        &self.peer_id
+    }
+
+    pub fn tbid(&self) -> &str {
+        &self.tbid
+    }
+
+    pub fn multiaddr(&self) -> &str {
+        &self.multiaddr
+    }
+
+    pub fn json_rpc(&self) -> &str {
+        &self.json_rpc
+    }
+
+    pub fn chronon_ns(&self) -> u64 {
+        self.chronon_ns
+    }
+
+    pub fn registered_at_ns(&self) -> u64 {
+        self.registered_at_ns
+    }
+
+    pub fn capabilities(&self) -> &[PeerCapability] {
+        &self.capabilities
+    }
+
+    pub fn signature(&self) -> &[u8] {
+        &self.signature
+    }
+
+    pub fn set_signature(&mut self, sig: Vec<u8>) {
+        self.signature = sig;
+    }
+
+    pub fn set_multiaddr(&mut self, addr: String) {
+        self.multiaddr = addr;
+    }
+
+    pub fn set_peer_id(&mut self, id: String) {
+        self.peer_id = id;
+    }
+
     /// Canonical byte representation for signing — postcard encoding, signature excluded.
     pub fn canonical_payload(&self) -> Vec<u8> {
         let mut no_sig = self.clone();

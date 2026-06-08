@@ -20,16 +20,15 @@ fn tbid_from_pubkey(pubkey_32: &[u8; 32]) -> String {
 
 /// Construct a PeerRegistrationRecord matching the given TBID with empty signature.
 fn make_record(tbid_hex: String) -> PeerRegistrationRecord {
-    PeerRegistrationRecord {
-        peer_id: "peer-dht-test".to_string(),
-        tbid: tbid_hex,
-        multiaddr: "/ip4/127.0.0.1/tcp/9911".to_string(),
-        json_rpc: "127.0.0.1:4011".to_string(),
-        chronon_ns: 60_000_000_000,
-        registered_at_ns: 1_700_000_000_000_000_000,
-        capabilities: Vec::new(),
-        signature: Vec::new(),
-    }
+    PeerRegistrationRecord::new(
+        "peer-dht-test".to_string(),
+        tbid_hex,
+        "/ip4/127.0.0.1/tcp/9911".to_string(),
+        "127.0.0.1:4011".to_string(),
+        60_000_000_000,
+        1_700_000_000_000_000_000,
+        Vec::new(),
+    )
 }
 
 /// Extract the 32-byte Ed25519 pubkey from a CryptoServer's public_key().
@@ -49,7 +48,7 @@ fn legacy_record_without_signature_accepted_with_warn() {
         crypto_server::new_software(ForetiasCurve::Ed25519).expect("libsodium must be available");
     let pubkey = ed25519_pub_of(&*crypto);
     let mut record = make_record(tbid_from_pubkey(&pubkey));
-    record.signature.clear(); // explicit: legacy peers omit the field
+    record.set_signature(Vec::new()); // explicit: legacy peers omit the field
 
     let result = validate_peer_registration(&record, &*crypto);
     match result {
@@ -69,7 +68,7 @@ fn valid_signature_accepted() {
 
     let canonical = record.canonical_payload();
     let sig = crypto.sign(&canonical).expect("sign canonical payload");
-    record.signature = sig.bytes.to_vec();
+    record.set_signature(sig.bytes.to_vec());
 
     let result = validate_peer_registration(&record, &*crypto);
     match result {
@@ -90,10 +89,10 @@ fn tampered_record_rejected() {
     // Sign with the original multiaddr.
     let canonical = record.canonical_payload();
     let sig = crypto.sign(&canonical).expect("sign canonical payload");
-    record.signature = sig.bytes.to_vec();
+    record.set_signature(sig.bytes.to_vec());
 
     // Tamper: flip the multiaddr after signing.
-    record.multiaddr = "/ip4/10.0.0.66/tcp/9911".to_string();
+    record.set_multiaddr("/ip4/10.0.0.66/tcp/9911".to_string());
 
     let result = validate_peer_registration(&record, &*crypto);
     match result {
@@ -120,7 +119,7 @@ fn wrong_pubkey_rejected() {
     // ...but sign canonical_payload using key A.
     let canonical = record.canonical_payload();
     let sig = crypto_a.sign(&canonical).expect("sign with key A");
-    record.signature = sig.bytes.to_vec();
+    record.set_signature(sig.bytes.to_vec());
 
     // Verification extracts pubkey from record.tbid (= key B), checks the
     // signature against key B, finds it doesn't validate → Ok(false).
@@ -139,7 +138,7 @@ fn structurally_invalid_record_rejected_even_without_signature() {
         crypto_server::new_software(ForetiasCurve::Ed25519).expect("libsodium must be available");
     let pubkey = ed25519_pub_of(&*crypto);
     let mut record = make_record(tbid_from_pubkey(&pubkey));
-    record.peer_id.clear(); // structurally invalid
+    record.set_peer_id(String::new()); // structurally invalid
 
     let result = validate_peer_registration(&record, &*crypto);
     match result {
@@ -158,7 +157,7 @@ fn canonical_payload_excludes_signature_field() {
     let mut record = make_record(tbid_from_pubkey(&pubkey));
 
     let before = record.canonical_payload();
-    record.signature = vec![0xAB; 64];
+    record.set_signature(vec![0xAB; 64]);
     let after = record.canonical_payload();
 
     assert_eq!(

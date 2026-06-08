@@ -128,7 +128,7 @@ async fn source_dumps_history_to_mirror() {
         .calendar()
         .mirror_state()
         .expect("A's mirror_state should be populated after start_task_queue_with_dispatcher");
-    let recorded_tbid = mirror_state_a.local_tbid_hex.read().clone();
+    let recorded_tbid = mirror_state_a.local_tbid_hex();
     assert_eq!(
         recorded_tbid, tbid_a_hex,
         "MirrorState's local_tbid_hex must match A's actual TBID"
@@ -190,7 +190,7 @@ async fn find_new_mirror_stops_at_target() {
     // No assertion on mirror state — the point is no panic / no deadlock
     // when the dispatcher is absent.
     let state = server_a.calendar().mirror_state().expect("mirror state");
-    assert!(state.mirrors.read().is_empty());
+    assert!(state.mirrors().is_empty());
 }
 
 #[tokio::test]
@@ -200,11 +200,11 @@ async fn mirror_state_defaults_are_reasonable() {
     let cal = Calendar::new(Tbid::from_raw([7u8; 96]), "mirror-state-test");
     cal.start_task_queue();
     let state = cal.mirror_state().expect("state present after start");
-    assert!(*state.target_mirrors.read() >= *state.min_mirrors.read());
-    assert!(state.mirrors.read().is_empty());
-    assert!(state.health_failures.read().is_empty());
+    assert!(state.target_mirrors() >= state.min_mirrors());
+    assert!(state.mirrors().is_empty());
+    assert!(state.health_failures().is_empty());
     assert_eq!(
-        *state.local_tbid_hex.read(),
+        state.local_tbid_hex(),
         Tbid::from_raw([7u8; 96]).to_hex(),
         "MirrorState's local_tbid_hex must be set from Calendar's TBID"
     );
@@ -325,15 +325,15 @@ async fn find_new_mirror_enrolls_peer_in_mirror_state() {
     let state = server_a.calendar().mirror_state().expect("state");
     let deadline = std::time::Instant::now() + Duration::from_secs(10);
     while std::time::Instant::now() < deadline {
-        if state.mirrors.read().contains(&addr_b) {
+        if state.mirrors().contains(&addr_b) {
             break;
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     assert!(
-        state.mirrors.read().contains(&addr_b),
+        state.mirrors().contains(&addr_b),
         "FindNewMirror must enroll B into MirrorState.mirrors; observed: {:?}",
-        state.mirrors.read()
+        state.mirrors()
     );
 
     handle_b.abort();

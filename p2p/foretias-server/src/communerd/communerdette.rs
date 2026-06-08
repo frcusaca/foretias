@@ -1368,7 +1368,7 @@ impl Communerdette {
                                     let result = Self::execute_calendar_slice(&exec, tick_start, count, timeout).await;
                                     if result.is_ok() {
                                         let now_ns = exec.clock.now_ns().unwrap_or(0);
-                                        liveness_flags.last_application_rpc_ns.store(now_ns, Ordering::Relaxed);
+                                        liveness_flags.set_last_application_rpc_ns(now_ns);
                                     }
                                     let _ = reply.send(result);
                                 }
@@ -1376,7 +1376,7 @@ impl Communerdette {
                                     let result = Self::execute_stamp(&exec, content, echo, timeout).await;
                                     if result.is_ok() {
                                         let now_ns = exec.clock.now_ns().unwrap_or(0);
-                                        liveness_flags.last_application_rpc_ns.store(now_ns, Ordering::Relaxed);
+                                        liveness_flags.set_last_application_rpc_ns(now_ns);
                                     }
                                     let _ = reply.send(result);
                                 }
@@ -1529,7 +1529,6 @@ impl Communerdette {
         flags: Arc<LivenessCycleFlags>,
     ) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
-            use std::sync::atomic::Ordering;
             let mut interval = tokio::time::interval(TokioDuration::from_millis(interval_ms));
             loop {
                 tokio::select! {
@@ -1539,7 +1538,7 @@ impl Communerdette {
 
                 // Primary signal: check if a recent application RPC succeeded.
                 let now_ns = executor.clock.now_ns().unwrap_or(0);
-                let last_rpc_ns = flags.last_application_rpc_ns.load(Ordering::Relaxed);
+                let last_rpc_ns = flags.last_application_rpc_ns();
                 if last_rpc_ns > 0 {
                     let elapsed_ns = now_ns.saturating_sub(last_rpc_ns);
                     let threshold_ns = interval_ms.saturating_mul(1_000_000);
@@ -1549,7 +1548,7 @@ impl Communerdette {
                             elapsed_ms = elapsed_ns / 1_000_000,
                             "L1 ok via recent application RPC"
                         );
-                        flags.l1_last_ok.store(true, Ordering::Relaxed);
+                        flags.set_l1_ok(true);
                         continue;
                     }
                 }
@@ -1558,7 +1557,7 @@ impl Communerdette {
                 let peer = match executor.resolve_peer().await {
                     Ok(p) => p,
                     Err(_) => {
-                        flags.l1_last_ok.store(false, Ordering::Relaxed);
+                        flags.set_l1_ok(false);
                         continue;
                     }
                 };
@@ -1581,7 +1580,7 @@ impl Communerdette {
                         false
                     }
                 };
-                flags.l1_last_ok.store(ok, Ordering::Relaxed);
+                flags.set_l1_ok(ok);
             }
         })
     }
@@ -1669,7 +1668,6 @@ impl Communerdette {
     ) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
             use rand::Rng;
-            use std::sync::atomic::Ordering;
             let mut interval = tokio::time::interval(TokioDuration::from_millis(interval_ms));
             loop {
                 tokio::select! {
@@ -1677,15 +1675,15 @@ impl Communerdette {
                     _ = interval.tick() => {},
                 }
                 // Run-order: skip if L1 failed this cycle.
-                if !flags.l1_last_ok.load(Ordering::Relaxed) {
+                if !flags.l1_last_ok() {
                     tracing::trace!(target_tbid = %executor.target_tbid.to_hex(), "L2 skipped: L1 failed");
-                    flags.l2_last_ok.store(false, Ordering::Relaxed);
+                    flags.set_l2_ok(false);
                     continue;
                 }
                 let peer = match executor.resolve_peer().await {
                     Ok(p) => p,
                     Err(_) => {
-                        flags.l2_last_ok.store(false, Ordering::Relaxed);
+                        flags.set_l2_ok(false);
                         continue;
                     }
                 };
@@ -1703,7 +1701,7 @@ impl Communerdette {
                 {
                     Ok(Ok(v)) => v,
                     _ => {
-                        flags.l2_last_ok.store(false, Ordering::Relaxed);
+                        flags.set_l2_ok(false);
                         continue;
                     }
                 };
@@ -1712,7 +1710,7 @@ impl Communerdette {
                     match UnverifiedSignatureEnvelopeAuthenticatedPong::from_json_value(raw) {
                         Ok(u) => u,
                         Err(_) => {
-                            flags.l2_last_ok.store(false, Ordering::Relaxed);
+                            flags.set_l2_ok(false);
                             continue;
                         }
                     };
@@ -1730,7 +1728,7 @@ impl Communerdette {
                         false
                     }
                 };
-                flags.l2_last_ok.store(ok, Ordering::Relaxed);
+                flags.set_l2_ok(ok);
             }
         })
     }
@@ -1750,7 +1748,6 @@ impl Communerdette {
         flags: Arc<LivenessCycleFlags>,
     ) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
-            use std::sync::atomic::Ordering;
             let mut interval = tokio::time::interval(TokioDuration::from_millis(interval_ms));
             loop {
                 tokio::select! {
@@ -1758,11 +1755,11 @@ impl Communerdette {
                     _ = interval.tick() => {},
                 }
                 // Run-order: skip if L2 failed or binding is Rejected.
-                if !flags.l2_last_ok.load(Ordering::Relaxed) {
+                if !flags.l2_last_ok() {
                     tracing::trace!(target_tbid = %executor.target_tbid.to_hex(), "L3 skipped: L2 failed");
                     continue;
                 }
-                if flags.binding_rejected.load(Ordering::Relaxed) {
+                if flags.binding_rejected() {
                     tracing::trace!(target_tbid = %executor.target_tbid.to_hex(), "L3 skipped: binding rejected");
                     continue;
                 }
@@ -1796,14 +1793,14 @@ impl Communerdette {
 /// L1 writes `l1_last_ok`; L2 reads it before running and writes `l2_last_ok`;
 /// L3 reads both. `binding_rejected` is set by Communerdette state transitions.
 pub(super) struct LivenessCycleFlags {
-    pub l1_last_ok: std::sync::atomic::AtomicBool,
-    pub l2_last_ok: std::sync::atomic::AtomicBool,
+    l1_last_ok: std::sync::atomic::AtomicBool,
+    l2_last_ok: std::sync::atomic::AtomicBool,
     /// Set to true when TbidBindingStatus transitions to Rejected.
-    pub binding_rejected: std::sync::atomic::AtomicBool,
+    binding_rejected: std::sync::atomic::AtomicBool,
     /// Monotonic timestamp (ns) of last successful application RPC.
     /// Updated by queue task on stamp/get_tick/get_calendar_slice success.
     /// Read by L1 liveness task as the primary liveness signal.
-    pub last_application_rpc_ns: AtomicU64,
+    last_application_rpc_ns: AtomicU64,
 }
 
 impl LivenessCycleFlags {
@@ -1814,6 +1811,39 @@ impl LivenessCycleFlags {
             binding_rejected: std::sync::atomic::AtomicBool::new(false),
             last_application_rpc_ns: AtomicU64::new(0),
         })
+    }
+
+    pub fn l1_last_ok(&self) -> bool {
+        self.l1_last_ok.load(Ordering::SeqCst)
+    }
+
+    pub fn set_l1_ok(&self, ok: bool) {
+        self.l1_last_ok.store(ok, Ordering::SeqCst);
+    }
+
+    pub fn l2_last_ok(&self) -> bool {
+        self.l2_last_ok.load(Ordering::SeqCst)
+    }
+
+    pub fn set_l2_ok(&self, ok: bool) {
+        self.l2_last_ok.store(ok, Ordering::SeqCst);
+    }
+
+    pub fn binding_rejected(&self) -> bool {
+        self.binding_rejected.load(Ordering::SeqCst)
+    }
+
+    #[allow(dead_code)]
+    pub fn set_binding_rejected(&self, rejected: bool) {
+        self.binding_rejected.store(rejected, Ordering::SeqCst);
+    }
+
+    pub fn last_application_rpc_ns(&self) -> u64 {
+        self.last_application_rpc_ns.load(Ordering::SeqCst)
+    }
+
+    pub fn set_last_application_rpc_ns(&self, ns: u64) {
+        self.last_application_rpc_ns.store(ns, Ordering::SeqCst);
     }
 }
 
@@ -1871,9 +1901,7 @@ impl CommunerdetteLine {
         if result.is_ok() {
             let now_ns = self.clock.now_ns().unwrap_or(0);
             let flags = self.inner.liveness_flags();
-            flags
-                .last_application_rpc_ns
-                .store(now_ns, std::sync::atomic::Ordering::Relaxed);
+            flags.set_last_application_rpc_ns(now_ns);
         }
         result
     }
@@ -1898,9 +1926,7 @@ impl CommunerdetteLine {
         if result.is_ok() {
             let now_ns = self.clock.now_ns().unwrap_or(0);
             let flags = self.inner.liveness_flags();
-            flags
-                .last_application_rpc_ns
-                .store(now_ns, std::sync::atomic::Ordering::Relaxed);
+            flags.set_last_application_rpc_ns(now_ns);
         }
         result
     }
@@ -1929,9 +1955,7 @@ impl CommunerdetteLine {
         if result.is_ok() {
             let now_ns = self.clock.now_ns().unwrap_or(0);
             let flags = self.inner.liveness_flags();
-            flags
-                .last_application_rpc_ns
-                .store(now_ns, std::sync::atomic::Ordering::Relaxed);
+            flags.set_last_application_rpc_ns(now_ns);
         }
         result
     }
@@ -4177,7 +4201,7 @@ mod tests {
         tokio::time::sleep(TokioDuration::from_millis(200)).await;
 
         assert!(
-            flags.l1_last_ok.load(std::sync::atomic::Ordering::Relaxed),
+            flags.l1_last_ok(),
             "L1 must record success when ping returns Ok"
         );
 
@@ -4213,7 +4237,7 @@ mod tests {
         tokio::time::sleep(TokioDuration::from_millis(200)).await;
 
         assert!(
-            !flags.l1_last_ok.load(std::sync::atomic::Ordering::Relaxed),
+            !flags.l1_last_ok(),
             "L1 must record failure when ping returns Err"
         );
 
@@ -4262,7 +4286,7 @@ mod tests {
         tokio::time::sleep(TokioDuration::from_millis(300)).await;
 
         assert!(
-            flags.l2_last_ok.load(std::sync::atomic::Ordering::Relaxed),
+            flags.l2_last_ok(),
             "L2 must record success when auth-ping verifies correctly"
         );
 
@@ -4308,7 +4332,7 @@ mod tests {
         tokio::time::sleep(TokioDuration::from_millis(300)).await;
 
         assert!(
-            !flags.l2_last_ok.load(std::sync::atomic::Ordering::Relaxed),
+            !flags.l2_last_ok(),
             "L2 must fail when responder_tbid doesn't match target"
         );
 
@@ -4356,7 +4380,7 @@ mod tests {
         tokio::time::sleep(TokioDuration::from_millis(300)).await;
 
         assert!(
-            !flags.l2_last_ok.load(std::sync::atomic::Ordering::Relaxed),
+            !flags.l2_last_ok(),
             "L2 must fail when challenge_echo doesn't match the challenge"
         );
 
@@ -4411,7 +4435,7 @@ mod tests {
         tokio::time::sleep(TokioDuration::from_millis(300)).await;
 
         assert!(
-            !flags.l2_last_ok.load(std::sync::atomic::Ordering::Relaxed),
+            !flags.l2_last_ok(),
             "L2 must fail when signature is invalid (wrong key)"
         );
 
@@ -4529,9 +4553,7 @@ mod tests {
         ));
         let flags = LivenessCycleFlags::new();
         // L2 is OK but binding is rejected — L3 must skip
-        flags
-            .binding_rejected
-            .store(true, std::sync::atomic::Ordering::Relaxed);
+        flags.set_binding_rejected(true);
         let cancel = CancellationToken::new();
 
         let handle =
@@ -4583,9 +4605,7 @@ mod tests {
 
         // Record a recent application RPC success.
         let now_ns = executor.clock.now_ns().unwrap_or(0);
-        flags
-            .last_application_rpc_ns
-            .store(now_ns, std::sync::atomic::Ordering::Relaxed);
+        flags.set_last_application_rpc_ns(now_ns);
 
         let handle =
             Communerdette::spawn_l1_liveness_task(executor, 500, cancel.clone(), flags.clone());
@@ -4593,7 +4613,7 @@ mod tests {
         tokio::time::sleep(TokioDuration::from_millis(200)).await;
 
         assert!(
-            flags.l1_last_ok.load(std::sync::atomic::Ordering::Relaxed),
+            flags.l1_last_ok(),
             "L1 must record success when recent application RPC exists (even if ping would fail)"
         );
 
@@ -4631,7 +4651,7 @@ mod tests {
         tokio::time::sleep(TokioDuration::from_millis(200)).await;
 
         assert!(
-            flags.l1_last_ok.load(std::sync::atomic::Ordering::Relaxed),
+            flags.l1_last_ok(),
             "L1 must record success via transport ping when no recent application RPC"
         );
 
@@ -4668,7 +4688,7 @@ mod tests {
         tokio::time::sleep(TokioDuration::from_millis(200)).await;
 
         assert!(
-            !flags.l1_last_ok.load(std::sync::atomic::Ordering::Relaxed),
+            !flags.l1_last_ok(),
             "L1 must fail when no application RPC and ping fails"
         );
 
