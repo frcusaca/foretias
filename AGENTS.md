@@ -837,6 +837,16 @@ Do not pass unrelated byte arrays, strings, or integers through the same generic
 
 **Stubs return errors, not false success.** A handler that has not yet implemented its operation must return an explicit error (`Err(NodeError::Unsupported(...))`, JSON-RPC error object, etc.) rather than a success value like `valid: true` or a zero signature. Mark with `todo!("TRACKING: <issue>")` for cases where a panic is acceptable in dev-only paths.
 
+### Encapsulation
+
+A type (struct or enum) owns its data, the methods that mutate that data, the logic that reasons about itself, and the methods that report its information. Behavior lives in the impl block for the type that holds the data — do not write free functions that reach into data structures.
+
+**State and methods travel together.** Fields are strictly private; callers must go through methods. A type's invariants are enforced by its own constructor/methods, making it impossible to bypass them from the outside (e.g., `Timestamp::new` validates the data; there is no way to construct an invalid instance).
+
+**Self-mutation takes `&mut self`.** An operation that changes a value without changing its type mutates in place. Use the Typestate Pattern when a value must become a different type (e.g., a `DontUse<T>` becoming `CleanAuthenticated<T>`). In this case, consume `self` and return the new type for the caller to swap in.
+
+**A type answers questions about itself.** Predicates and projections (e.g., `state()`, `is_authenticated()`, `as_inner()`) must be methods on the type. Hide match statements inside these methods rather than forcing the caller to match on external tags or variants. Reports should return owned values or short-lived borrows — never a long-lived handle that allows a caller to mutate shared state behind the owner's back.
+
 ### Error Handling
 
 Use `Result<T, E>` for recoverable failures.
@@ -1389,6 +1399,12 @@ Before finishing Rust changes, check:
 * Are `.unwrap()` and `.expect(...)` reachable from external input? Bounded checks must precede slice indexing; parse errors from JSON-RPC params must surface as `INVALID_PARAMS`, not silent `.ok()` discards.
 
 If a change affects security, protocol compatibility, storage compatibility, language semantics, or public bindings, treat it as high-risk and document the reasoning in the code, tests, or commit notes.
+
+### Final Rule
+
+When uncertain, choose the design that is easiest to prove correct, easiest to test, and easiest for the next human to understand.
+
+Correctness first. Then readability and maintainability. Then efficiency. Then principles and aesthetics.
 
 ### MISC
 
