@@ -48,16 +48,16 @@ async fn test_e2e_gossip_unsigned_rejected() {
     let server = crypto_server::new_software(crypto_server::ForetiasCurve::Ed25519).unwrap();
     let store = ProbityStore::new();
 
-    let unsigned_report = ProbityReportRecord {
-        subject: "test-subject".to_string(),
-        reporter: "00".repeat(48),
-        attribute: "correctness".to_string(),
-        value: 1.0,
-        timestamp_ns: 0,
-        signature: vec![],
-        curve: 1,
-        slow_signature: vec![],
-    };
+    let unsigned_report = ProbityReportRecord::new(
+        "test-subject".to_string(),
+        "00".repeat(48),
+        "correctness".to_string(),
+        1.0,
+        0,
+        vec![],
+        1,
+        vec![],
+    );
     let json = serde_json::to_vec(&unsigned_report).unwrap();
 
     let result = handle_gossip_message(&json, &store, server.as_ref(), 0);

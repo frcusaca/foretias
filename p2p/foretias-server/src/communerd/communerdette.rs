@@ -1056,16 +1056,16 @@ impl CommunerdetteExecutor {
             tracing::debug!(target_tbid = %self.target_tbid.to_hex(), "FB emission skipped: no local_calendar_tbid set");
             return;
         };
-        let report = crate::probity::ProbityReportRecord {
-            subject: self.target_tbid.to_hex(),
-            reporter: reporter_tbid.clone(),
-            attribute: "fb".to_string(),
+        let report = crate::probity::ProbityReportRecord::new(
+            self.target_tbid.to_hex(),
+            reporter_tbid.clone(),
+            "fb".to_string(),
             value,
-            timestamp_ns: self.clock.now_ns().unwrap_or(0),
-            signature: Vec::new(),
-            curve: 1,
-            slow_signature: vec![],
-        };
+            self.clock.now_ns().unwrap_or(0),
+            Vec::new(),
+            1,
+            vec![],
+        );
         match self.host.host_sign_probity_report(&report) {
             Ok(signed) => self.host.host_publish_probity_report(signed),
             Err(e) => {
@@ -3889,20 +3889,21 @@ mod tests {
             "host_sign_probity_report must be called exactly once"
         );
         let report = &calls[0];
-        assert_eq!(report.attribute, "fb", "attribute must be 'fb'");
-        assert_eq!(report.value, 1.0, "value must be 1.0 for established");
+        assert_eq!(report.attribute(), "fb", "attribute must be 'fb'");
+        assert_eq!(*report.value(), 1.0, "value must be 1.0 for established");
         assert_eq!(
-            report.reporter, "local-cal-tbid-hex",
+            report.reporter(),
+            "local-cal-tbid-hex",
             "reporter must be local_calendar_tbid"
         );
         assert_eq!(
-            report.subject,
-            target_tbid.to_hex(),
+            report.subject(),
+            &target_tbid.to_hex(),
             "subject must be target_tbid"
         );
-        assert_eq!(report.curve, 1, "curve must be Ed25519 (1)");
+        assert_eq!(*report.curve(), 1, "curve must be Ed25519 (1)");
         assert!(
-            report.signature.is_empty(),
+            report.signature().is_empty(),
             "signature must be empty (pre-sign)"
         );
         drop(calls);
@@ -3951,15 +3952,16 @@ mod tests {
             "host_sign_probity_report must be called exactly once"
         );
         let report = &calls[0];
-        assert_eq!(report.attribute, "fb", "attribute must be 'fb'");
-        assert_eq!(report.value, -1.0, "value must be -1.0 for lost");
+        assert_eq!(report.attribute(), "fb", "attribute must be 'fb'");
+        assert_eq!(*report.value(), -1.0, "value must be -1.0 for lost");
         assert_eq!(
-            report.reporter, "local-cal-tbid-hex",
+            report.reporter(),
+            "local-cal-tbid-hex",
             "reporter must be local_calendar_tbid"
         );
         assert_eq!(
-            report.subject,
-            target_tbid.to_hex(),
+            report.subject(),
+            &target_tbid.to_hex(),
             "subject must be target_tbid"
         );
         drop(calls);

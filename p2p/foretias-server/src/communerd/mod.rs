@@ -1037,18 +1037,18 @@ impl Communerd {
             None => return,
         };
         let crypto = self.crypto.clone();
-        let mut report = ProbityReportRecord {
-            subject: subject.to_string(),
-            reporter: reporter.clone(),
-            attribute: attribute.to_string(),
+        let mut report = ProbityReportRecord::new(
+            subject.to_string(),
+            reporter.clone(),
+            attribute.to_string(),
             value,
-            timestamp_ns: now_ns,
-            signature: vec![],
-            curve: 1u8,
-            slow_signature: vec![],
-        };
+            now_ns,
+            vec![],
+            1u8,
+            vec![],
+        );
         if let Ok(sig) = crypto.sign(&report.canonical()) {
-            report.signature = sig.bytes.to_vec();
+            report.set_signature(sig.bytes.to_vec());
         }
         let _ = self.probity_store.ingest(report.clone());
         if let Some(cmd_tx) = self.p2p_cmd_tx.get() {

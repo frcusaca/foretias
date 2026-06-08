@@ -51,13 +51,13 @@ pub fn aggregate(
 ) -> f32 {
     let mut score = 0.0f32;
     for r in reports {
-        if r.timestamp_ns > now_ns {
+        if *r.timestamp_ns() > now_ns {
             continue;
         }
-        let age = now_ns - r.timestamp_ns;
+        let age = now_ns - *r.timestamp_ns();
         let w = u_shape_weight(age, cfg);
-        let cr = credibility(&r.reporter).max(0.0);
-        score += w * cr * r.value;
+        let cr = credibility(r.reporter()).max(0.0);
+        score += w * cr * *r.value();
     }
     score.clamp(-100.0, 100.0)
 }
@@ -106,16 +106,16 @@ mod tests {
     fn aggregate_future_dated_rejected() {
         let cfg = UShapeConfig::default();
         let now = 1_000_000_000_000;
-        let reports = vec![ProbityReportRecord {
-            subject: "x".into(),
-            reporter: "y".into(),
-            attribute: "correctness".into(),
-            value: -50.0,
-            timestamp_ns: now + 1_000_000_000, // future
-            signature: vec![],
-            curve: 1,
-            slow_signature: vec![],
-        }];
+        let reports = vec![ProbityReportRecord::new(
+            "x".into(),
+            "y".into(),
+            "correctness".into(),
+            -50.0,
+            now + 1_000_000_000,
+            vec![],
+            1,
+            vec![],
+        )];
         let cred = |_: &str| 1.0f32;
         let score = aggregate(&reports, now, &cred, &cfg);
         assert_eq!(score, 0.0);
@@ -126,15 +126,17 @@ mod tests {
         let cfg = UShapeConfig::default();
         let now = 1_000_000_000_000;
         let reports: Vec<ProbityReportRecord> = (0..1000)
-            .map(|i| ProbityReportRecord {
-                subject: "x".into(),
-                reporter: format!("r{}", i),
-                attribute: "correctness".into(),
-                value: 100.0,
-                timestamp_ns: now - 1_000_000,
-                signature: vec![],
-                curve: 1,
-                slow_signature: vec![],
+            .map(|i| {
+                ProbityReportRecord::new(
+                    "x".into(),
+                    format!("r{}", i),
+                    "correctness".into(),
+                    100.0,
+                    now - 1_000_000,
+                    vec![],
+                    1,
+                    vec![],
+                )
             })
             .collect();
         let cred = |_: &str| 1.0f32;

@@ -37,18 +37,18 @@ impl ProbityStore {
     /// Ingest a verified report. Caller must have verified the signature already.
     pub fn ingest(&self, report: ProbityReportRecord) -> Result<(), NodeError> {
         let mut guard = self.reports.write();
-        let list = guard.entry(report.subject.clone()).or_default();
+        let list = guard.entry(report.subject().to_string()).or_default();
         let dup = list.iter().any(|r| {
-            r.reporter == report.reporter
-                && r.attribute == report.attribute
-                && r.timestamp_ns == report.timestamp_ns
+            r.reporter() == report.reporter()
+                && r.attribute() == report.attribute()
+                && r.timestamp_ns() == report.timestamp_ns()
         });
         if dup {
             return Ok(());
         }
         list.push(report);
         if list.len() > self.max_reports_per_peer {
-            list.sort_by_key(|r| r.timestamp_ns);
+            list.sort_by_key(|r| *r.timestamp_ns());
             let excess = list.len() - self.max_reports_per_peer;
             list.drain(0..excess);
         }
@@ -94,16 +94,16 @@ mod tests {
     use super::*;
 
     fn make_report(subject: &str, reporter: &str, ts: u64) -> ProbityReportRecord {
-        ProbityReportRecord {
-            subject: subject.to_string(),
-            reporter: reporter.to_string(),
-            attribute: "correctness".to_string(),
-            value: -10.0,
-            timestamp_ns: ts,
-            signature: vec![],
-            curve: 1,
-            slow_signature: vec![],
-        }
+        ProbityReportRecord::new(
+            subject.to_string(),
+            reporter.to_string(),
+            "correctness".to_string(),
+            -10.0,
+            ts,
+            vec![],
+            1,
+            vec![],
+        )
     }
 
     #[test]
@@ -127,7 +127,7 @@ mod tests {
         // Oldest two should have been evicted
         let reports = store.reports.read();
         let list = reports.get("A").unwrap();
-        assert!(list.iter().all(|r| r.timestamp_ns >= 2));
+        assert!(list.iter().all(|r| *r.timestamp_ns() >= 2));
     }
 
     #[test]
@@ -137,96 +137,96 @@ mod tests {
 
         // V↔W mutual vouching gives both positive pass-1 scores → credibility in pass 2
         store
-            .ingest(ProbityReportRecord {
-                subject: "W".into(),
-                reporter: "V".into(),
-                attribute: "correctness".into(),
-                value: 90.0,
-                timestamp_ns: now - 1_000_000,
-                signature: vec![],
-                curve: 1,
-                slow_signature: vec![],
-            })
+            .ingest(ProbityReportRecord::new(
+                "W".into(),
+                "V".into(),
+                "correctness".into(),
+                90.0,
+                now - 1_000_000,
+                vec![],
+                1,
+                vec![],
+            ))
             .unwrap();
         store
-            .ingest(ProbityReportRecord {
-                subject: "V".into(),
-                reporter: "W".into(),
-                attribute: "correctness".into(),
-                value: 80.0,
-                timestamp_ns: now - 1_000_000,
-                signature: vec![],
-                curve: 1,
-                slow_signature: vec![],
-            })
+            .ingest(ProbityReportRecord::new(
+                "V".into(),
+                "W".into(),
+                "correctness".into(),
+                80.0,
+                now - 1_000_000,
+                vec![],
+                1,
+                vec![],
+            ))
             .unwrap();
 
         // W→Z→X chain gives Z and X positive pass-1 scores
         store
-            .ingest(ProbityReportRecord {
-                subject: "Z".into(),
-                reporter: "W".into(),
-                attribute: "correctness".into(),
-                value: 90.0,
-                timestamp_ns: now - 1_000_000,
-                signature: vec![],
-                curve: 1,
-                slow_signature: vec![],
-            })
+            .ingest(ProbityReportRecord::new(
+                "Z".into(),
+                "W".into(),
+                "correctness".into(),
+                90.0,
+                now - 1_000_000,
+                vec![],
+                1,
+                vec![],
+            ))
             .unwrap();
         store
-            .ingest(ProbityReportRecord {
-                subject: "X".into(),
-                reporter: "Z".into(),
-                attribute: "correctness".into(),
-                value: 50.0,
-                timestamp_ns: now - 1_000_000,
-                signature: vec![],
-                curve: 1,
-                slow_signature: vec![],
-            })
+            .ingest(ProbityReportRecord::new(
+                "X".into(),
+                "Z".into(),
+                "correctness".into(),
+                50.0,
+                now - 1_000_000,
+                vec![],
+                1,
+                vec![],
+            ))
             .unwrap();
 
         // X gives strong good report on A (+50), Y gives weak bad report (-20)
         // A pass-1 score = +50 - 20 = +30 → A has credibility in pass 2
         store
-            .ingest(ProbityReportRecord {
-                subject: "A".into(),
-                reporter: "X".into(),
-                attribute: "correctness".into(),
-                value: 50.0,
-                timestamp_ns: now - 1_000_000,
-                signature: vec![],
-                curve: 1,
-                slow_signature: vec![],
-            })
+            .ingest(ProbityReportRecord::new(
+                "A".into(),
+                "X".into(),
+                "correctness".into(),
+                50.0,
+                now - 1_000_000,
+                vec![],
+                1,
+                vec![],
+            ))
             .unwrap();
         store
-            .ingest(ProbityReportRecord {
-                subject: "A".into(),
-                reporter: "Y".into(),
-                attribute: "correctness".into(),
-                value: -20.0,
-                timestamp_ns: now - 1_000_000,
-                signature: vec![],
-                curve: 1,
-                slow_signature: vec![],
-            })
+            .ingest(ProbityReportRecord::new(
+                "A".into(),
+                "Y".into(),
+                "correctness".into(),
+                -20.0,
+                now - 1_000_000,
+                vec![],
+                1,
+                vec![],
+            ))
             .unwrap();
 
         // A reports badly on Y → Y gets negative pass-1 score
         // In pass 2: Y credibility = 0 (negative pass-1), A's bad report carries weight
         store
-            .ingest(ProbityReportRecord {
-                subject: "Y".into(),
-                reporter: "A".into(),
-                attribute: "correctness".into(),
-                value: -100.0,
-                timestamp_ns: now - 1_000_000,
-                signature: vec![],
-                curve: 1,
-                slow_signature: vec![],
-            })
+            .ingest(ProbityReportRecord::new(
+                "Y".into(),
+                "A".into(),
+                "correctness".into(),
+                -100.0,
+                now - 1_000_000,
+                vec![],
+                1,
+                vec![],
+            ))
             .unwrap();
 
         store.recompute_all(now);

@@ -745,16 +745,16 @@ async fn gossip_probity_propagation() {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos() as u64)
         .unwrap_or(0);
-    let report = ProbityReportRecord {
-        subject: peer_id_b.to_string(),
-        reporter: peer_id_a.to_string(),
-        attribute: "correctness".to_string(),
-        value: 10.0,
-        timestamp_ns: now_ns,
-        signature: vec![],
-        curve: 1u8,
-        slow_signature: vec![],
-    };
+    let report = ProbityReportRecord::new(
+        peer_id_b.to_string(),
+        peer_id_a.to_string(),
+        "correctness".to_string(),
+        10.0,
+        now_ns,
+        vec![],
+        1u8,
+        vec![],
+    );
     let _ = handle_a.cmd_tx.send(SwarmCommand::PublishProbity {
         report: report.clone(),
         namespace: namespace.to_string(),
@@ -770,10 +770,10 @@ async fn gossip_probity_propagation() {
             if let NetworkEvent::GossipMessage { data, .. } = event {
                 let received: Result<ProbityReportRecord, _> = serde_json::from_slice(&data);
                 if let Ok(received_report) = received {
-                    assert_eq!(received_report.subject, peer_id_b.to_string());
-                    assert_eq!(received_report.reporter, peer_id_a.to_string());
-                    assert_eq!(received_report.attribute, "correctness");
-                    assert_eq!(received_report.value, 10.0);
+                    assert_eq!(received_report.subject(), peer_id_b.to_string());
+                    assert_eq!(received_report.reporter(), peer_id_a.to_string());
+                    assert_eq!(received_report.attribute(), "correctness");
+                    assert_eq!(*received_report.value(), 10.0);
                     gossip_received = true;
                 }
             }

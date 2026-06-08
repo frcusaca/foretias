@@ -55,16 +55,16 @@ pub fn storage_proof_to_probity(
         (STORAGE_PARTIAL, penalty)
     };
 
-    ProbityReportRecord {
-        subject: subject.to_string(),
-        reporter: reporter.to_string(),
-        attribute: attribute.to_string(),
+    ProbityReportRecord::new(
+        subject.to_string(),
+        reporter.to_string(),
+        attribute.to_string(),
         value,
         timestamp_ns,
-        signature: vec![],
-        curve: 1,
-        slow_signature: vec![],
-    }
+        vec![],
+        1,
+        vec![],
+    )
 }
 
 #[cfg(test)]
@@ -78,13 +78,13 @@ mod storage_proof_tests {
             coverage_ratio: 1.0,
         };
         let report = storage_proof_to_probity(&result, "peer-A", "peer-B", 1_000_000);
-        assert_eq!(report.attribute, STORAGE_VERIFIED);
-        assert_eq!(report.value, 1.0);
-        assert_eq!(report.subject, "peer-A");
-        assert_eq!(report.reporter, "peer-B");
-        assert_eq!(report.timestamp_ns, 1_000_000);
-        assert!(report.signature.is_empty());
-        assert_eq!(report.curve, 1);
+        assert_eq!(report.attribute(), STORAGE_VERIFIED);
+        assert_eq!(*report.value(), 1.0);
+        assert_eq!(report.subject(), "peer-A");
+        assert_eq!(report.reporter(), "peer-B");
+        assert_eq!(*report.timestamp_ns(), 1_000_000);
+        assert!(report.signature().is_empty());
+        assert_eq!(*report.curve(), 1);
     }
 
     #[test]
@@ -94,8 +94,8 @@ mod storage_proof_tests {
             coverage_ratio: 0.0,
         };
         let report = storage_proof_to_probity(&result, "peer-A", "peer-B", 2_000_000);
-        assert_eq!(report.attribute, STORAGE_FAILED);
-        assert_eq!(report.value, -1.0);
+        assert_eq!(report.attribute(), STORAGE_FAILED);
+        assert_eq!(*report.value(), -1.0);
     }
 
     #[test]
@@ -105,9 +105,9 @@ mod storage_proof_tests {
             coverage_ratio: 0.6,
         };
         let report = storage_proof_to_probity(&result, "peer-A", "peer-B", 3_000_000);
-        assert_eq!(report.attribute, STORAGE_PARTIAL);
+        assert_eq!(report.attribute(), STORAGE_PARTIAL);
         // -0.5 * (1.0 - 0.6) = -0.2
-        assert!((report.value - (-0.2)).abs() < 1e-6);
+        assert!((*report.value() - (-0.2)).abs() < 1e-6);
     }
 
     #[test]
@@ -117,9 +117,9 @@ mod storage_proof_tests {
             coverage_ratio: 0.99,
         };
         let report = storage_proof_to_probity(&result, "peer-A", "peer-B", 4_000_000);
-        assert_eq!(report.attribute, STORAGE_PARTIAL);
+        assert_eq!(report.attribute(), STORAGE_PARTIAL);
         // -0.5 * (1.0 - 0.99) = -0.005
-        assert!((report.value - (-0.005)).abs() < 1e-6);
+        assert!((*report.value() - (-0.005)).abs() < 1e-6);
     }
 
     #[test]
@@ -130,9 +130,9 @@ mod storage_proof_tests {
             coverage_ratio: 0.01,
         };
         let report = storage_proof_to_probity(&result, "peer-A", "peer-B", 5_000_000);
-        assert_eq!(report.attribute, STORAGE_PARTIAL);
+        assert_eq!(report.attribute(), STORAGE_PARTIAL);
         // -0.5 * (1.0 - 0.01) = -0.495
-        assert!((report.value - (-0.495)).abs() < 1e-6);
+        assert!((*report.value() - (-0.495)).abs() < 1e-6);
     }
 
     #[test]
@@ -143,7 +143,7 @@ mod storage_proof_tests {
             coverage_ratio: 0.8,
         };
         let report = storage_proof_to_probity(&result, "peer-A", "peer-B", 6_000_000);
-        assert_eq!(report.attribute, STORAGE_VERIFIED);
-        assert_eq!(report.value, 1.0);
+        assert_eq!(report.attribute(), STORAGE_VERIFIED);
+        assert_eq!(*report.value(), 1.0);
     }
 }

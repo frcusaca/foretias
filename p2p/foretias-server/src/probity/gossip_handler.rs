@@ -49,18 +49,18 @@ pub fn handle_gossip_message(
     let report = envelope.inner();
 
     // 1. Reject future-dated reports (> 5 min clock skew tolerance)
-    if report.timestamp_ns > now_ns + 5 * 60 * 1_000_000_000 {
+    if *report.timestamp_ns() > now_ns + 5 * 60 * 1_000_000_000 {
         return Err(NodeError::Stale("future-dated probity report".to_string()));
     }
 
     // 2. Reject reports from peers with score < -50 (too dishonourable to report)
-    if store.score(&report.reporter) < -50.0 {
+    if store.score(report.reporter()) < -50.0 {
         return Ok(());
     }
 
     // Clone attribute/reporter before consuming envelope
-    let attribute = report.attribute.clone();
-    let reporter = report.reporter.clone();
+    let attribute = report.attribute().to_string();
+    let reporter = report.reporter().to_string();
 
     // 3. Route through appropriate verification gate
     let authenticated = if attribute == "fb" || attribute == "gnf" {
@@ -110,22 +110,22 @@ fn verify_report_signature(
     report: &ProbityReportRecord,
     crypto: &dyn CryptoServer,
 ) -> Result<(), NodeError> {
-    if report.curve != 1 {
+    if *report.curve() != 1 {
         return Err(NodeError::Unsupported(
             "only Ed25519 probity signatures in v0.6",
         ));
     }
-    if report.signature.len() < 64 {
+    if report.signature().len() < 64 {
         return Err(NodeError::BadFormat(format!(
             "probity report signature too short: {} bytes (expected 64)",
-            report.signature.len()
+            report.signature().len()
         )));
     }
 
     // Get the reporter's public key from their TBID.
     // The TBID hex encodes the identity. For Ed25519 (curve=1),
     // the first 64 hex chars (32 bytes) of the TBID are the Ed25519 public key.
-    let tbid_bytes = match hex::decode(&report.reporter) {
+    let tbid_bytes = match hex::decode(report.reporter()) {
         Ok(b) => b,
         Err(e) => {
             return Err(NodeError::BadFormat(format!(
@@ -147,13 +147,13 @@ fn verify_report_signature(
     // Verify Ed25519 signature over canonical bytes
     let canonical = report.canonical();
     let valid = crypto
-        .verify_with(&public_key, "Ed25519", &canonical, &report.signature)
+        .verify_with(&public_key, "Ed25519", &canonical, report.signature())
         .map_err(NodeError::Crypto)?;
 
     if !valid {
         return Err(NodeError::BadFormat(format!(
             "probity report signature verification failed for reporter {}",
-            report.reporter
+            report.reporter()
         )));
     }
 
@@ -171,16 +171,16 @@ mod tests {
     }
 
     fn make_report(subject: &str, reporter: &str, ts: u64) -> ProbityReportRecord {
-        ProbityReportRecord {
-            subject: subject.to_string(),
-            reporter: reporter.to_string(),
-            attribute: "correctness".to_string(),
-            value: -10.0,
-            timestamp_ns: ts,
-            signature: vec![0xAB; 64],
-            curve: 1,
-            slow_signature: vec![],
-        }
+        ProbityReportRecord::new(
+            subject.to_string(),
+            reporter.to_string(),
+            "correctness".to_string(),
+            -10.0,
+            ts,
+            vec![0xAB; 64],
+            1,
+            vec![],
+        )
     }
 
     fn make_signed_report(
@@ -196,20 +196,20 @@ mod tests {
         tbid.resize(48, 0);
         let reporter_hex = hex::encode(&tbid);
 
-        let mut report = ProbityReportRecord {
-            subject: subject.to_string(),
-            reporter: reporter_hex.clone(),
-            attribute: "correctness".to_string(),
-            value: -10.0,
-            timestamp_ns: ts,
-            signature: vec![],
-            curve: 1,
-            slow_signature: vec![],
-        };
+        let mut report = ProbityReportRecord::new(
+            subject.to_string(),
+            reporter_hex.clone(),
+            "correctness".to_string(),
+            -10.0,
+            ts,
+            vec![],
+            1,
+            vec![],
+        );
 
         let canonical = report.canonical();
         let sig = crypto.sign(&canonical).unwrap();
-        report.signature = sig.bytes.to_vec();
+        report.set_signature(sig.bytes.to_vec());
         report
     }
 
@@ -236,31 +236,31 @@ mod tests {
         // Q vouches for each R -> R has positive pass-1 score -> positive pass-2 credibility
         for i in 0..10 {
             store
-                .ingest(ProbityReportRecord {
-                    subject: format!("R{}", i),
-                    reporter: "Q".to_string(),
-                    attribute: "correctness".to_string(),
-                    value: 80.0,
-                    timestamp_ns: now - 1_000_000,
-                    signature: vec![],
-                    curve: 1,
-                    slow_signature: vec![],
-                })
+                .ingest(ProbityReportRecord::new(
+                    format!("R{}", i),
+                    "Q".into(),
+                    "correctness".into(),
+                    80.0,
+                    now - 1_000_000,
+                    vec![],
+                    1,
+                    vec![],
+                ))
                 .unwrap();
         }
         // Each R reports badly on B
         for i in 0..10 {
             store
-                .ingest(ProbityReportRecord {
-                    subject: "B".to_string(),
-                    reporter: format!("R{}", i),
-                    attribute: "correctness".to_string(),
-                    value: -10.0,
-                    timestamp_ns: now - 1_000_000,
-                    signature: vec![],
-                    curve: 1,
-                    slow_signature: vec![],
-                })
+                .ingest(ProbityReportRecord::new(
+                    "B".into(),
+                    format!("R{}", i),
+                    "correctness".into(),
+                    -10.0,
+                    now - 1_000_000,
+                    vec![],
+                    1,
+                    vec![],
+                ))
                 .unwrap();
         }
         store.recompute_all(now);
@@ -310,20 +310,20 @@ mod tests {
         tbid.resize(48, 0);
         let reporter_hex = hex::encode(&tbid);
 
-        let mut report = ProbityReportRecord {
-            subject: "A".to_string(),
-            reporter: reporter_hex,
-            attribute: "fb".to_string(), // FB attribute requires full signature
-            value: 1.0,
-            timestamp_ns: now - 1_000_000,
-            signature: vec![],
-            curve: 1,
-            slow_signature: vec![], // Empty — should trigger FullSignatureRequired
-        };
+        let mut report = ProbityReportRecord::new(
+            "A".to_string(),
+            reporter_hex,
+            "fb".to_string(),
+            1.0,
+            now - 1_000_000,
+            vec![],
+            1,
+            vec![],
+        );
 
         let canonical = report.canonical();
         let sig = crypto.sign(&canonical).unwrap();
-        report.signature = sig.bytes.to_vec();
+        report.set_signature(sig.bytes.to_vec());
 
         let data = serde_json::to_vec(&report).unwrap();
         let result = handle_gossip_message(&data, &store, crypto.as_ref(), now);
@@ -351,20 +351,20 @@ mod tests {
         tbid.resize(48, 0);
         let reporter_hex = hex::encode(&tbid);
 
-        let mut report = ProbityReportRecord {
-            subject: "A".to_string(),
-            reporter: reporter_hex,
-            attribute: "gnf".to_string(), // GNF attribute requires full signature
-            value: 1.0,
-            timestamp_ns: now - 1_000_000,
-            signature: vec![],
-            curve: 1,
-            slow_signature: vec![], // Empty — should trigger FullSignatureRequired
-        };
+        let mut report = ProbityReportRecord::new(
+            "A".to_string(),
+            reporter_hex,
+            "fb".to_string(),
+            1.0,
+            now - 1_000_000,
+            vec![],
+            1,
+            vec![],
+        );
 
         let canonical = report.canonical();
         let sig = crypto.sign(&canonical).unwrap();
-        report.signature = sig.bytes.to_vec();
+        report.set_signature(sig.bytes.to_vec());
 
         let data = serde_json::to_vec(&report).unwrap();
         let result = handle_gossip_message(&data, &store, crypto.as_ref(), now);
@@ -384,9 +384,14 @@ mod tests {
         let now = 1_000_000_000_000;
 
         let report = make_signed_report(crypto.as_ref(), "A", now - 1_000_000);
-        assert_ne!(report.attribute, "fb", "test helper should not produce FB");
         assert_ne!(
-            report.attribute, "gnf",
+            report.attribute(),
+            "fb",
+            "test helper should not produce FB"
+        );
+        assert_ne!(
+            report.attribute(),
+            "gnf",
             "test helper should not produce GNF"
         );
 

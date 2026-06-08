@@ -19,27 +19,45 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProbityReportRecord {
-    /// PeerId (hex) of the peer being reported on.
-    pub subject: String,
-    /// PeerId (hex) of the reporting peer.
-    pub reporter: String,
-    /// Opaque attribute name, e.g. "correctness", "liveness", "response_time".
-    pub attribute: String,
-    /// Signed magnitude. Convention: positive = good, negative = bad.
-    pub value: f32,
-    /// Observation time, nanoseconds since UNIX epoch.
-    pub timestamp_ns: u64,
-    /// Ed25519 or P-256 signature over canonical() bytes.
-    pub signature: Vec<u8>,
-    /// 1 = Ed25519, 2 = P-256.
-    pub curve: u8,
-    /// Optional SLH-DSA (slow) signature for full-signature gate.
-    /// Present on FB/GNF reports that require CleanFullyAuthenticated.
+    pub(crate) subject: String,
+    pub(crate) reporter: String,
+    pub(crate) attribute: String,
+    pub(crate) value: f32,
+    pub(crate) timestamp_ns: u64,
+    pub(crate) signature: Vec<u8>,
+    pub(crate) curve: u8,
     #[serde(default)]
-    pub slow_signature: Vec<u8>,
+    pub(crate) slow_signature: Vec<u8>,
 }
 
 impl ProbityReportRecord {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        subject: String,
+        reporter: String,
+        attribute: String,
+        value: f32,
+        timestamp_ns: u64,
+        signature: Vec<u8>,
+        curve: u8,
+        slow_signature: Vec<u8>,
+    ) -> Self {
+        Self {
+            subject,
+            reporter,
+            attribute,
+            value,
+            timestamp_ns,
+            signature,
+            curve,
+            slow_signature,
+        }
+    }
+
+    pub fn set_signature(&mut self, sig: Vec<u8>) {
+        self.signature = sig;
+    }
+
     pub fn subject(&self) -> &str {
         &self.subject
     }
