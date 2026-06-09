@@ -274,10 +274,22 @@ impl PeerRegistrationRecord {
 
     pub fn set_multiaddr(&mut self, addr: String) {
         self.multiaddr = addr;
+        self.signature.clear();
     }
 
     pub fn set_peer_id(&mut self, id: String) {
         self.peer_id = id;
+        self.signature.clear();
+    }
+
+    pub fn set_json_rpc(&mut self, addr: String) {
+        self.json_rpc = addr;
+        self.signature.clear();
+    }
+
+    pub fn set_capabilities(&mut self, caps: Vec<PeerCapability>) {
+        self.capabilities = caps;
+        self.signature.clear();
     }
 
     /// Canonical byte representation for signing — postcard encoding, signature excluded.
@@ -1140,7 +1152,7 @@ impl Communerd {
             .crypto
             .sign(&canonical)
             .map_err(|e| NodeError::Internal(format!("DHT record sign: {e}")))?;
-        peer_record.signature = sig.bytes.to_vec();
+        peer_record.set_signature(sig.bytes.to_vec());
 
         let record = kad::Record {
             key: key.clone(),
@@ -1239,7 +1251,7 @@ impl Communerd {
         let canonical = peer_record.canonical_payload();
         match crypto.sign(&canonical) {
             Ok(sig) => {
-                peer_record.signature = sig.bytes.to_vec();
+                peer_record.set_signature(sig.bytes.to_vec());
             }
             Err(e) => {
                 tracing::warn!("failed to sign refresh peer record: {e}");

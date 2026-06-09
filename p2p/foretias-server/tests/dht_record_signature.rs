@@ -91,8 +91,10 @@ fn tampered_record_rejected() {
     let sig = crypto.sign(&canonical).expect("sign canonical payload");
     record.set_signature(sig.bytes.to_vec());
 
-    // Tamper: flip the multiaddr after signing.
+    // Tamper: flip the multiaddr and re-apply the old (now-stale) signature
+    // to simulate a malicious actor who modifies a field but keeps the original sig.
     record.set_multiaddr("/ip4/10.0.0.66/tcp/9911".to_string());
+    record.set_signature(sig.bytes.to_vec());
 
     let result = validate_peer_registration(&record, &*crypto);
     match result {
@@ -164,4 +166,77 @@ fn canonical_payload_excludes_signature_field() {
         before, after,
         "canonical_payload must be identical regardless of the signature field's contents"
     );
+}
+
+#[test]
+fn set_multiaddr_clears_signature() {
+    // After calling set_multiaddr, the signature must be cleared because the
+    // canonical payload has changed and any prior signature is no longer valid.
+    let crypto =
+        crypto_server::new_software(ForetiasCurve::Ed25519).expect("libsodium must be available");
+    let pubkey = ed25519_pub_of(&*crypto);
+    let mut record = make_record(tbid_from_pubkey(&pubkey));
+
+    // Sign the record.
+    let canonical = record.canonical_payload();
+    let sig = crypto.sign(&canonical).expect("sign canonical payload");
+    record.set_signature(sig.bytes.to_vec());
+    assert!(!record.signature().is_empty(), "signature must be set");
+
+    // Mutate multiaddr — signature must be cleared.
+    record.set_multiaddr("/ip4/10.0.0.99/tcp/8000".to_string());
+    assert!(
+        record.signature().is_empty(),
+        "set_multiaddr must clear signature"
+    );
+}
+
+#[test]
+fn set_peer_id_clears_signature() {
+    // After calling set_peer_id, the signature must be cleared.
+    let crypto =
+        crypto_server::new_software(ForetiasCurve::Ed25519).expect("libsodium must be available");
+    let pubkey = ed25519_pub_of(&*crypto);
+    let mut record = make_record(tbid_from_pubkey(&pubkey));
+
+    let canonical = record.canonical_payload();
+    let sig = crypto.sign(&canonical).expect("sign canonical payload");
+    record.set_signature(sig.bytes.to_vec());
+    assert!(!record.signature().is_empty());
+
+    record.set_peer_id("new-peer-id".to_string());
+    assert!(
+        record.signature().is_empty(),
+        "set_peer_id must clear signature"
+    );
+}
+
+#[test]
+fn set_multiaddr_then_resign() {
+    // Full cycle: sign → mutate → clear → re-sign → verify.
+    let crypto =
+        crypto_server::new_software(ForetiasCurve::Ed25519).expect("libsodium must be available");
+    let pubkey = ed25519_pub_of(&*crypto);
+    let mut record = make_record(tbid_from_pubkey(&pubkey));
+
+    // Sign original.
+    let canonical = record.canonical_payload();
+    let sig = crypto.sign(&canonical).expect("sign canonical payload");
+    record.set_signature(sig.bytes.to_vec());
+
+    // Mutate (clears signature).
+    record.set_multiaddr("/ip4/10.0.0.99/tcp/8000".to_string());
+    assert!(record.signature().is_empty());
+
+    // Re-sign with updated payload.
+    let canonical2 = record.canonical_payload();
+    let sig2 = crypto.sign(&canonical2).expect("re-sign after mutation");
+    record.set_signature(sig2.bytes.to_vec());
+
+    // Verify passes.
+    let result = validate_peer_registration(&record, &*crypto);
+    match result {
+        Ok(true) => {}
+        other => panic!("re-signed record must be accepted, got {other:?}"),
+    }
 }

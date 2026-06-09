@@ -832,7 +832,7 @@ pub fn handle_ship_ack(server: &TimeFamilyServer, params: Value) -> JsonRpcRespo
     let mut verified: Vec<CleanAuthenticated<ChrononRecord>> = Vec::new();
     for (i, unproc) in unprocessed.into_iter().enumerate() {
         let clean = if i == 0 {
-            if *unproc.inner().chronon_number() == 1 {
+            if unproc.inner().is_genesis() {
                 unproc.into_clean_authenticated_genesis(crypto.as_ref())
             } else {
                 return resp_error(
@@ -933,7 +933,7 @@ pub fn handle_stream_tick(server: &TimeFamilyServer, params: Value) -> JsonRpcRe
             unproc.into_clean_authenticated(crypto.as_ref(), &prev)
         }
         None => {
-            if *unproc.inner().chronon_number() == 1 {
+            if unproc.inner().is_genesis() {
                 unproc.into_clean_authenticated_genesis(crypto.as_ref())
             } else {
                 return resp_error(
@@ -1308,7 +1308,7 @@ pub fn handle_history_dump_chunk(server: &TimeFamilyServer, params: Value) -> Js
         } else if let Some(prev_trusted) = mirror_store.latest_record(&tbid) {
             let prev = CleanAuthenticated::<ChrononRecord>::from_trusted(prev_trusted);
             unproc.into_clean_authenticated(crypto.as_ref(), &prev)
-        } else if *unproc.inner().chronon_number() == 1 {
+        } else if unproc.inner().is_genesis() {
             unproc.into_clean_authenticated_genesis(crypto.as_ref())
         } else {
             return resp_error(
