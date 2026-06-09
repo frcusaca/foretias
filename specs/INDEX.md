@@ -315,11 +315,20 @@ These features are explicitly out of active scope. They remain as specifications
 
 | File | Open | Done | Status |
 |------|------|------|--------|
-| `specs/ENCAPSULATION_REVIEW_FIXES_PLAN.md` | ~25 | 0 | **PROPOSED** — fix 9 OCR findings, add regression tests |
+| `specs/ENCAPSULATION_REVIEW_FIXES_PLAN.md` | 0 | ~25 | **COMPLETE** — all 8 waves done, merged to alpha |
 | `specs/ENCAPSULATION_REVIEW_FIXES_SPEC.md` | — | — | Spec (paired) |
 
-**Source:** Alibaba Open Code Review of encapsulation remediation commits
-**Key findings:** Setters clear signature, is_genesis(), Calendar validation, binary search, atomic ordering
+**Completed 2026-06-08:**
+- Wave 1: ✅ Setters clear signature on canonical-payload mutation
+- Wave 2: ✅ Internal signing flow uses setter methods
+- Wave 3: ✅ handlers.rs uses is_genesis()
+- Wave 4: ✅ Calendar setters have debug_assert! validation
+- Wave 5: ✅ tick_at() uses binary search O(log n)
+- Wave 6: ✅ LivenessCycleFlags uses Acquire/Release ordering
+- Wave 7: ✅ Removed unnecessary clone, documented dead code
+- Wave 8: ✅ Final verification — zero clippy warnings, 593 tests pass
+
+**Result:** Zero clippy warnings, 593 tests pass, merged to alpha (9acabce7)
 
 ---
 
