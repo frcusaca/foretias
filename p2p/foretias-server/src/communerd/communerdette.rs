@@ -1838,6 +1838,8 @@ impl LivenessCycleFlags {
         self.binding_rejected.load(Ordering::Acquire)
     }
 
+    /// Test infrastructure: allows tests to simulate binding rejection.
+    /// Not used in production code — binding rejection is handled by the state machine.
     #[allow(dead_code)]
     pub fn set_binding_rejected(&self, rejected: bool) {
         self.binding_rejected.store(rejected, Ordering::Release);

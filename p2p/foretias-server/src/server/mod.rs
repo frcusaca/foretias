@@ -91,7 +91,7 @@ impl TimeFamilyServer {
         let binding = calendar.inner();
         let mut cal_inner = binding.write();
         cal_inner.set_tbid(tbid);
-        cal_inner.set_tbn(&tbn.clone());
+        cal_inner.set_tbn(&tbn);
         let communerd = config.map(|c| {
             let com = Arc::new(Communerd::new(c));
             com.set_calendar(Arc::clone(&calendar));
