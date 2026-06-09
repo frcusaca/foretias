@@ -78,7 +78,7 @@ impl TimeFamilyServer {
         config: Option<CommunerdConfig>,
     ) -> Result<Self, NodeError> {
         let metrics = Arc::new(NodeMetrics::new());
-        let calendar = Arc::new(Calendar::new(Tbid::default(), "init"));
+        let calendar = Arc::new(Calendar::new(Tbid::default(), ""));
         let crypto: Arc<dyn crypto_server::CryptoServer> =
             Arc::from(crypto_server::new_software(ForetiasCurve::Ed25519)?);
         let mut cm = Chronomatter::new(

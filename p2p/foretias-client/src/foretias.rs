@@ -156,9 +156,9 @@ pub struct Foretias {
 }
 
 impl Foretias {
-    pub fn new(tbn: String, persist_path: Option<PathBuf>) -> Result<Self, ForetiasError> {
+    pub fn new(_tbn: String, persist_path: Option<PathBuf>) -> Result<Self, ForetiasError> {
         let chronon_ns = 60_000_000_000u64;
-        let calendar = Arc::new(Calendar::new(Tbid::default(), &tbn));
+        let calendar = Arc::new(Calendar::new(Tbid::default(), ""));
         let crypto = Arc::from(crypto_server::new_software(ForetiasCurve::Ed25519)?);
         let mut cm = Chronomatter::new(
             chronon_ns,
@@ -491,9 +491,9 @@ impl Foretias {
         Ok(())
     }
 
-    fn create_standalone_state(tbn: &str) -> Result<StandaloneState, ForetiasError> {
+    fn create_standalone_state(_tbn: &str) -> Result<StandaloneState, ForetiasError> {
         let chronon_ns = 60_000_000_000u64;
-        let calendar = Arc::new(Calendar::new(Tbid::default(), tbn));
+        let calendar = Arc::new(Calendar::new(Tbid::default(), ""));
         let crypto = Arc::from(crypto_server::new_software(ForetiasCurve::Ed25519)?);
         let mut cm = Chronomatter::new(
             chronon_ns,

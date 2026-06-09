@@ -1792,6 +1792,11 @@ impl Communerdette {
 ///
 /// L1 writes `l1_last_ok`; L2 reads it before running and writes `l2_last_ok`;
 /// L3 reads both. `binding_rejected` is set by Communerdette state transitions.
+///
+/// Acquire/Release ordering is sufficient here because these are independent
+/// liveness signals. Acquire ensures we see writes from other threads, Release
+/// ensures our writes are visible. SeqCst is not needed since there are no
+/// cross-variable ordering constraints between these flags.
 pub(super) struct LivenessCycleFlags {
     l1_last_ok: std::sync::atomic::AtomicBool,
     l2_last_ok: std::sync::atomic::AtomicBool,
@@ -1814,36 +1819,36 @@ impl LivenessCycleFlags {
     }
 
     pub fn l1_last_ok(&self) -> bool {
-        self.l1_last_ok.load(Ordering::SeqCst)
+        self.l1_last_ok.load(Ordering::Acquire)
     }
 
     pub fn set_l1_ok(&self, ok: bool) {
-        self.l1_last_ok.store(ok, Ordering::SeqCst);
+        self.l1_last_ok.store(ok, Ordering::Release);
     }
 
     pub fn l2_last_ok(&self) -> bool {
-        self.l2_last_ok.load(Ordering::SeqCst)
+        self.l2_last_ok.load(Ordering::Acquire)
     }
 
     pub fn set_l2_ok(&self, ok: bool) {
-        self.l2_last_ok.store(ok, Ordering::SeqCst);
+        self.l2_last_ok.store(ok, Ordering::Release);
     }
 
     pub fn binding_rejected(&self) -> bool {
-        self.binding_rejected.load(Ordering::SeqCst)
+        self.binding_rejected.load(Ordering::Acquire)
     }
 
     #[allow(dead_code)]
     pub fn set_binding_rejected(&self, rejected: bool) {
-        self.binding_rejected.store(rejected, Ordering::SeqCst);
+        self.binding_rejected.store(rejected, Ordering::Release);
     }
 
     pub fn last_application_rpc_ns(&self) -> u64 {
-        self.last_application_rpc_ns.load(Ordering::SeqCst)
+        self.last_application_rpc_ns.load(Ordering::Acquire)
     }
 
     pub fn set_last_application_rpc_ns(&self, ns: u64) {
-        self.last_application_rpc_ns.store(ns, Ordering::SeqCst);
+        self.last_application_rpc_ns.store(ns, Ordering::Release);
     }
 }
 

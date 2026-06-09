@@ -613,10 +613,7 @@ mod tests {
 
     fn make_chronomatter() -> (Arc<Chronomatter>, Arc<AtomicU64Std>, Arc<RwLock<Calendar>>) {
         let last_tick = Arc::new(AtomicU64Std::new(0));
-        let calendar = Arc::new(RwLock::new(Calendar::new(
-            Tbid::from_raw([0u8; 96]),
-            "test",
-        )));
+        let calendar = Arc::new(RwLock::new(Calendar::new(Tbid::from_raw([0u8; 96]), "")));
         let observer = Arc::new(DummyObserver {
             last_tick: Arc::clone(&last_tick),
             calendar: Arc::clone(&calendar),

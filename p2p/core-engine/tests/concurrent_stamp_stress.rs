@@ -29,10 +29,7 @@ impl TickObserver for StressObserver {
 #[tokio::test]
 async fn concurrent_stamps_no_conflicts() {
     let last_tick = Arc::new(AtomicU64::new(0));
-    let calendar = Arc::new(RwLock::new(Calendar::new(
-        Tbid::from_raw([0u8; 96]),
-        "stress-test",
-    )));
+    let calendar = Arc::new(RwLock::new(Calendar::new(Tbid::from_raw([0u8; 96]), "")));
     let observer = Arc::new(StressObserver {
         last_tick: Arc::clone(&last_tick),
         calendar: Arc::clone(&calendar),

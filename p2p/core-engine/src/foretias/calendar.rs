@@ -36,8 +36,14 @@ impl Calendar {
     }
 
     /// Returns the tick record with the given chronon number, if present.
+    ///
+    /// Ticks are maintained in ascending order by `append()`, so binary search
+    /// provides O(log n) lookup instead of O(n) linear scan.
     pub fn tick_at(&self, n: u64) -> Option<&ChrononRecord> {
-        self.ticks.iter().find(|t| t.chronon_number == n)
+        self.ticks
+            .binary_search_by(|t| t.chronon_number.cmp(&n))
+            .ok()
+            .map(|idx| &self.ticks[idx])
     }
 
     /// Returns the most recent tick record, or `None` if the calendar is empty.
@@ -67,11 +73,19 @@ impl Calendar {
 
     /// Sets the TimeBeing identifier. Used by Chronomatter after key generation.
     pub fn set_tbid(&mut self, tbid: Tbid) {
+        debug_assert!(
+            self.tbid == Tbid::default(),
+            "set_tbid called on already-initialized calendar"
+        );
         self.tbid = tbid;
     }
 
     /// Sets the TimeBeing name. Used by Chronomatter after key generation.
     pub fn set_tbn(&mut self, tbn: &str) {
+        debug_assert!(
+            self.tbn.is_empty(),
+            "set_tbn called on already-initialized calendar"
+        );
         self.tbn = tbn.to_string();
     }
 
@@ -730,5 +744,48 @@ mod tests {
         assert!(loaded.is_err());
 
         std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    #[should_panic(expected = "set_tbid called on already-initialized calendar")]
+    fn test_set_tbid_twice_panics() {
+        let mut cal = Calendar::new(Tbid::from_raw([0u8; 96]), "test");
+        cal.set_tbid(Tbid::from_raw([1u8; 96]));
+        cal.set_tbid(Tbid::from_raw([2u8; 96]));
+    }
+
+    #[test]
+    fn test_tick_at_finds_existing() {
+        let mut cal = Calendar::new(Tbid::from_raw([0u8; 96]), "test");
+        for n in 1..=5 {
+            cal.append(make_tick(n)).unwrap();
+        }
+        let tick = cal.tick_at(3).unwrap();
+        assert_eq!(tick.chronon_number, 3);
+    }
+
+    #[test]
+    fn test_tick_at_missing_returns_none() {
+        let mut cal = Calendar::new(Tbid::from_raw([0u8; 96]), "test");
+        for n in 1..=5 {
+            cal.append(make_tick(n)).unwrap();
+        }
+        assert!(cal.tick_at(999).is_none());
+    }
+
+    #[test]
+    fn test_tick_at_first_and_last() {
+        let mut cal = Calendar::new(Tbid::from_raw([0u8; 96]), "test");
+        for n in 1..=5 {
+            cal.append(make_tick(n)).unwrap();
+        }
+        assert_eq!(cal.tick_at(1).unwrap().chronon_number, 1);
+        assert_eq!(cal.tick_at(5).unwrap().chronon_number, 5);
+    }
+
+    #[test]
+    fn test_tick_at_empty_calendar() {
+        let cal = Calendar::new(Tbid::from_raw([0u8; 96]), "test");
+        assert!(cal.tick_at(1).is_none());
     }
 }
