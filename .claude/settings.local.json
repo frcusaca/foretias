@@ -21,7 +21,12 @@
       "Bash(xargs ls -la)",
       "Bash(mv COMBINED_GROUP6_TYPE_BASED_SAFETY_ENFORCEMENT_TAKE_3_SPEC.md COMBINED_GROUP1_TYPE_BASED_SAFETY_ENFORCEMENT_TAKE_3_SPEC.md)",
       "Bash(mv COMBINED_GROUP6_TYPE_BASED_SAFETY_ENFORCEMENT_TAKE_3_PLAN.md COMBINED_GROUP1_TYPE_BASED_SAFETY_ENFORCEMENT_TAKE_3_PLAN.md)",
-      "Bash(sort -t'-' -k1,5)"
+      "Bash(sort -t'-' -k1,5)",
+      "Bash(cp AGENTS.md /tmp/AGENTS.md.bak)",
+      "Bash(sed -i '759,1407d' AGENTS.md)",
+      "Bash(sed -n '753,766p' AGENTS.md)",
+      "Bash(grep -nE '^#{1,4} ' AGENTS.md)",
+      "Bash(grep -nE '^#{2,4} ' AGENTS.md)"
     ]
   }
 }
