@@ -311,6 +311,16 @@ These features are explicitly out of active scope. They remain as specifications
 
 **Result:** Zero clippy warnings, 588 tests pass, merged to alpha (f284df58)
 
+### Encapsulation Review Fixes (OCR Findings)
+
+| File | Open | Done | Status |
+|------|------|------|--------|
+| `specs/ENCAPSULATION_REVIEW_FIXES_PLAN.md` | ~25 | 0 | **PROPOSED** — fix 9 OCR findings, add regression tests |
+| `specs/ENCAPSULATION_REVIEW_FIXES_SPEC.md` | — | — | Spec (paired) |
+
+**Source:** Alibaba Open Code Review of encapsulation remediation commits
+**Key findings:** Setters clear signature, is_genesis(), Calendar validation, binary search, atomic ordering
+
 ---
 
 ### Python Bindings (Thin Client)
