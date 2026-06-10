@@ -153,6 +153,31 @@ Prescribed instructions, each stated with the condition that triggers it.
 - **When matching on your own enum**, enumerate variants — avoid a catch-all `_`
   so new variants force a compile error.
 
+### BaseRecord — Naming Convention for Important Data Structures
+
+All important data structures that are **signed**, **stored**, or **transmitted** must:
+- Be named `*Record` (e.g., `ChrononRecord`, `ForetisRecord`, `FamilyRecord`)
+- Implement the `BaseRecord` trait
+- Have a **private constructor** (no `pub fn new()` or public struct literal)
+- Use `#[derive(Builder)]` for construction (public builder pattern)
+
+**Current implementations:**
+
+| Type | File | `BaseRecord` |
+|------|------|:---:|
+| `ChrononRecord` | `tick.rs` | ✅ |
+| `ForetisRecord` | `tick.rs` | ✅ |
+| `ExternalAttestationRecord` | `external_attestation.rs` | ✅ |
+| `EpochSnapshotRecord` | `epoch/snapshot.rs` | ✅ |
+| `FamilyRecord` | `family_record.rs` | ✅ |
+| `ProbityReportRecord` | `probity/report.rs` | ✅ |
+
+**Types that do NOT implement `BaseRecord`** (not important data structures):
+- `Tbid` — identifier, not a record
+- `SignatureEntry` — internal, not transmitted independently
+- `Calendar` — container, not a record
+- Config structs — internal, not signed/stored/transmitted
+
 ### Loops & matching
 - **When transforming or filtering a collection**, use an iterator chain
   (`map`/`filter`/`filter_map`/`fold`/`zip`/`enumerate`/`windows`/`chunks`) and
