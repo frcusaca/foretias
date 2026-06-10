@@ -1,0 +1,10 @@
+{
+  "id": "T-5674b563-4180-4c25-ac10-bd97438bfa2a",
+  "subject": "Wave 2: Internal signing flow uses setter methods",
+  "description": "Replace direct struct field access for signature with set_signature() calls in the internal signing flow in communerd/mod.rs.",
+  "status": "completed",
+  "activeForm": "Updating internal signing flow",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_153b689b1ffeGm2FAHpJg7S4bR"
+}

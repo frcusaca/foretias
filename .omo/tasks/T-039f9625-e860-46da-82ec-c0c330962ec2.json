@@ -1,0 +1,10 @@
+{
+  "id": "T-039f9625-e860-46da-82ec-c0c330962ec2",
+  "subject": "Change TopProbitySelector 2 fields to pub(crate) + add accessors",
+  "description": "Change committee_size and threshold_k from pub to pub(crate). Add accessor methods.",
+  "status": "completed",
+  "activeForm": "Encapsulating TopProbitySelector fields",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_156ec5287ffeEXNk3GjHPtenOy"
+}

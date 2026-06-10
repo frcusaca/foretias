@@ -1,0 +1,10 @@
+{
+  "id": "T-8e21a024-d245-4f84-af9a-3e3916ebce05",
+  "subject": "Change ForetisRecord fields from pub to pub(crate)",
+  "description": "Change all 6 fields in tick.rs and fix external crate access sites",
+  "status": "completed",
+  "activeForm": "Encapsulating ForetisRecord fields",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_15714f3a1ffedUcxtZUxthUrDE"
+}

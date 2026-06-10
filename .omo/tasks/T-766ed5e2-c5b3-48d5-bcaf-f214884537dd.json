@@ -1,0 +1,10 @@
+{
+  "id": "T-766ed5e2-c5b3-48d5-bcaf-f214884537dd",
+  "subject": "Change SealedBlob 2 fields to pub(crate) + add accessors",
+  "description": "Change nonce and ciphertext from pub to pub(crate). Add accessor methods.",
+  "status": "completed",
+  "activeForm": "Encapsulating SealedBlob fields",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_156ec5287ffeEXNk3GjHPtenOy"
+}

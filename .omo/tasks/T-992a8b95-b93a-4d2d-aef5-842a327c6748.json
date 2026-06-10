@@ -1,0 +1,9 @@
+{
+  "id": "T-992a8b95-b93a-4d2d-aef5-842a327c6748",
+  "subject": "Calendar: private fields + accessor methods",
+  "description": "Make Calendar fields pub(crate), add accessor methods, fix external access sites, verify with clippy",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_15701fdccffe1okN9rwYNNhVpm"
+}

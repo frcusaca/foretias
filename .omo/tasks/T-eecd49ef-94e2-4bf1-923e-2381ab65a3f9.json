@@ -1,0 +1,10 @@
+{
+  "id": "T-eecd49ef-94e2-4bf1-923e-2381ab65a3f9",
+  "subject": "Verify build and tests pass",
+  "description": "Run cargo test -p foretias-core -p foretias-client -p foretias-server --lib --bins to verify everything compiles and tests pass",
+  "status": "completed",
+  "activeForm": "Verifying build and tests",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_157356a88ffefJO9ykcABc3AEH"
+}

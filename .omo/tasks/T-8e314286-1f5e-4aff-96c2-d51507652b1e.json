@@ -1,0 +1,10 @@
+{
+  "id": "T-8e314286-1f5e-4aff-96c2-d51507652b1e",
+  "subject": "Wave 5: Encapsulate WorkerContext, PeerRegistrationRecord, MirrorState, LivenessCycleFlags",
+  "description": "Make fields private and add accessor methods for 4 foretias-server internal types with security implications.",
+  "status": "completed",
+  "activeForm": "Encapsulating WorkerContext, PeerRegistrationRecord, MirrorState, LivenessCycleFlags fields",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_156f62f93ffeWZzVSt48SoTSg8"
+}

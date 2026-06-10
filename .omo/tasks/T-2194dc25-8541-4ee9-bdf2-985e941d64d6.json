@@ -1,0 +1,10 @@
+{
+  "id": "T-2194dc25-8541-4ee9-bdf2-985e941d64d6",
+  "subject": "Fix direct field access sites to use accessor methods",
+  "description": "Fix all direct field access to ChrononRecord fields across core-engine, foretias-server, and foretias-client to use accessor methods instead",
+  "status": "completed",
+  "activeForm": "Fixing field access sites",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_157356a88ffefJO9ykcABc3AEH"
+}

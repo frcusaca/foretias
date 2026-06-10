@@ -1,0 +1,10 @@
+{
+  "id": "T-d9fd3980-da05-4b9e-8cd2-b98f8c898992",
+  "subject": "Change PeerScore 2 fields to pub(crate) + add accessors",
+  "description": "Change peer_id and score from pub to pub(crate). Add accessor methods.",
+  "status": "completed",
+  "activeForm": "Encapsulating PeerScore fields",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_156ec5287ffeEXNk3GjHPtenOy"
+}

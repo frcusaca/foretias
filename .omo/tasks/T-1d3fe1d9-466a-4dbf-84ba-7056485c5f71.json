@@ -1,0 +1,9 @@
+{
+  "id": "T-1d3fe1d9-466a-4dbf-84ba-7056485c5f71",
+  "subject": "Make fields pub(crate) for SignatureEntry, ProbityReportRecord, EpochSnapshotRecord",
+  "description": "Change fields from pub to pub(crate) for 3 types, fix all access sites, verify with clippy",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_156ec62faffe55S8wWUNF4gHBd"
+}

@@ -1,0 +1,10 @@
+{
+  "id": "T-dd5b4c36-e681-4809-be9e-7afcf10c9175",
+  "subject": "Verify: cargo clippy --workspace --all-targets zero warnings + commit",
+  "description": "Run clippy to verify zero warnings, then commit.",
+  "status": "completed",
+  "activeForm": "Verifying clippy and committing",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_156ec5287ffeEXNk3GjHPtenOy"
+}

@@ -1,0 +1,10 @@
+{
+  "id": "T-d5e38dba-d5b7-4cdd-8cbd-62021f979499",
+  "subject": "Change SoftwareCryptoServer 4 PQC fields to pub(crate) + add accessors",
+  "description": "Change sphincs_pub_key, dilithium_pub_key, sphincs_sha2_256f_pub_key, mlkem_pub_key from pub to pub(crate). Add accessor methods.",
+  "status": "completed",
+  "activeForm": "Encapsulating SoftwareCryptoServer PQC fields",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_156ec5287ffeEXNk3GjHPtenOy"
+}

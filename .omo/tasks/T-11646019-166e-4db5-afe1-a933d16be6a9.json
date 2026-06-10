@@ -1,0 +1,10 @@
+{
+  "id": "T-11646019-166e-4db5-afe1-a933d16be6a9",
+  "subject": "Wave 1: Update PeerRegistrationRecord setters to clear signature",
+  "description": "Update set_multiaddr, set_peer_id, set_json_rpc, set_capabilities to clear signature on mutation. Add tests.",
+  "status": "completed",
+  "activeForm": "Updating PeerRegistrationRecord setters",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_153b689b1ffeGm2FAHpJg7S4bR"
+}

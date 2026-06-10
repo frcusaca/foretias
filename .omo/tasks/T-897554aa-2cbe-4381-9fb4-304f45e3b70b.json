@@ -1,0 +1,10 @@
+{
+  "id": "T-897554aa-2cbe-4381-9fb4-304f45e3b70b",
+  "subject": "Change ChrononRecord fields to pub(crate)",
+  "description": "In p2p/core-engine/src/foretias/tick.rs, change all 10 ChrononRecord fields from pub to pub(crate)",
+  "status": "completed",
+  "activeForm": "Changing ChrononRecord field visibility",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_157356a88ffefJO9ykcABc3AEH"
+}

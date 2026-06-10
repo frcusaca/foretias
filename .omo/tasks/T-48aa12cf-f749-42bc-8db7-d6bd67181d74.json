@@ -1,0 +1,10 @@
+{
+  "id": "T-48aa12cf-f749-42bc-8db7-d6bd67181d74",
+  "subject": "Change CryptoServerCapabilities 7 fields to pub(crate) + add accessors",
+  "description": "Change all 7 fields from pub to pub(crate). Add accessor methods.",
+  "status": "completed",
+  "activeForm": "Encapsulating CryptoServerCapabilities fields",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_156ec5287ffeEXNk3GjHPtenOy"
+}

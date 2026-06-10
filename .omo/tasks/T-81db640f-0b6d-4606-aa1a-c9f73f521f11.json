@@ -1,0 +1,10 @@
+{
+  "id": "T-81db640f-0b6d-4606-aa1a-c9f73f521f11",
+  "subject": "Wave 3: Use is_genesis() in handlers.rs",
+  "description": "In handlers.rs, replace `*unproc.inner().chronon_number() == 1` with `unproc.inner().is_genesis()`.",
+  "status": "completed",
+  "activeForm": "Replacing manual chronon_number checks with is_genesis()",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_153b689b1ffeGm2FAHpJg7S4bR"
+}

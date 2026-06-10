@@ -1,0 +1,10 @@
+{
+  "id": "T-f7144819-0a58-43b5-a3ea-e0c74a51abff",
+  "subject": "Wave 4: Calendar setter validation with debug_assert",
+  "description": "Add debug_assert! to set_tbid and set_tbn in calendar.rs. Add test_set_tbid_twice_panics test.",
+  "status": "completed",
+  "activeForm": "Adding Calendar setter validation",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_153b67869ffe9N00JuGEXqI54c"
+}

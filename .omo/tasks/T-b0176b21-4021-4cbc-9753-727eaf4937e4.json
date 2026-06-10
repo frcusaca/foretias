@@ -1,0 +1,10 @@
+{
+  "id": "T-b0176b21-4021-4cbc-9753-727eaf4937e4",
+  "subject": "Change ForetisRecord field visibility to pub(crate)",
+  "description": "Change all 6 ForetisRecord fields from pub to pub(crate) in tick.rs",
+  "status": "completed",
+  "activeForm": "Changing field visibility",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_15714f3a1ffedUcxtZUxthUrDE"
+}

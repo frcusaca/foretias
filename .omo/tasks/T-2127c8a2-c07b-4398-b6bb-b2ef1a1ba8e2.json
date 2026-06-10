@@ -1,0 +1,10 @@
+{
+  "id": "T-2127c8a2-c07b-4398-b6bb-b2ef1a1ba8e2",
+  "subject": "Fix external crate field access to use accessor methods",
+  "description": "Fix all direct field access on ForetisRecord from foretias-server and foretias-client to use accessor methods",
+  "status": "completed",
+  "activeForm": "Fixing external crate access sites",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_15714f3a1ffedUcxtZUxthUrDE"
+}

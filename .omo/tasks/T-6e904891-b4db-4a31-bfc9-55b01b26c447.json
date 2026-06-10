@@ -1,0 +1,10 @@
+{
+  "id": "T-6e904891-b4db-4a31-bfc9-55b01b26c447",
+  "subject": "Add accessor methods and make fields pub(crate) for 4 types",
+  "description": "ExternalAttestationRecord, StampedForetis, Heartbeat, FamilyRecord - add accessors, change fields to pub(crate), fix all direct field access sites.",
+  "status": "completed",
+  "activeForm": "Completed encapsulation Wave 3",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_1570a6627ffePcwZJ8q8Q9JhjA"
+}

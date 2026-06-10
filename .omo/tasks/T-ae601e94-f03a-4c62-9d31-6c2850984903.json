@@ -1,0 +1,10 @@
+{
+  "id": "T-ae601e94-f03a-4c62-9d31-6c2850984903",
+  "subject": "Wave 5: Binary search in tick_at()",
+  "description": "Replace iter().find() with binary_search_by in tick_at(). Add 4 tests for tick_at.",
+  "status": "completed",
+  "activeForm": "Implementing binary search tick_at",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_153b67869ffe9N00JuGEXqI54c"
+}

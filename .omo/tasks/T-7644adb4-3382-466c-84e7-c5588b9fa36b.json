@@ -1,0 +1,10 @@
+{
+  "id": "T-7644adb4-3382-466c-84e7-c5588b9fa36b",
+  "subject": "Wave 6: Atomic ordering Acquire/Release for LivenessCycleFlags",
+  "description": "Change SeqCst to Acquire/Release in LivenessCycleFlags load/store operations. Add explanatory comment.",
+  "status": "completed",
+  "activeForm": "Fixing atomic ordering",
+  "blocks": [],
+  "blockedBy": [],
+  "threadID": "ses_153b67869ffe9N00JuGEXqI54c"
+}
