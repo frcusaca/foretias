@@ -181,22 +181,38 @@ Within each phase, items are ordered by estimated effort (smallest first, to bui
 
 ### Item 2.7: Split Large Functions (Section 2.7)
 
-- [ ] **`server/handlers.rs:216` — `handle_verify` (156 lines):** Extract `parse_verify_params()`, `validate_verify_params()`, `build_verify_response()`
-- [ ] **`server/handlers.rs:1867` — `handle_get_chronon_chain` (117 lines):** Extract `parse_chronon_chain_params()`, `build_chronon_chain_response()`
-- [ ] **`server/handlers.rs:108` — `handle_route_stamp` (107 lines):** Extract `parse_stamp_params()`, `build_stamp_response()`
-- [ ] **`server/handlers.rs:789` — `handle_ship_ack` (101 lines):** Extract validation from response building
-- [ ] **`server/handlers.rs:1255` — `handle_history_dump_chunk` (97 lines):** Extract `parse_chunk_params()`, `validate_chunk_boundaries()`
-- [ ] **`server/handlers.rs:1527` — `handle_storage_proof_request` (93 lines):** Extract `parse_storage_proof_params()`, `compute_storage_proof()`
-- [ ] **`server/handlers.rs:891` — `handle_stream_tick` (91 lines):** Extract `parse_stream_params()`, `validate_tick_range()`
-- [ ] **`main.rs:334` — `cmd_serve` (187 lines):** Extract `build_server_config()`, `init_crypto_providers()`, `init_persistence()`, `start_communerd()`, `start_calendar_daemon()`
-- [ ] **`main.rs:852` — `main` (100 lines):** Extract each subcommand branch into `cmd_serve_main()`, `cmd_stamp_main()`, `cmd_verify_main()`, `cmd_prove_verification_main()`, `cmd_inspect_attestations_main()`
-- [ ] **`calendar/task_queue.rs:431` — `stamp_and_sign_chronon_attestation` (196 lines):** Extract `prepare_chronon_record()`, `sign_chronon_record()`, `store_chronon_record()`
-- [ ] **`calendar/task_queue.rs:971` — `log_verify_coverage` (219 lines):** Split into `compute_verify_coverage()`, `format_verify_report()`, `emit_verify_log()`
-- [ ] **`calendar_store/mod.rs:114` — `prove_storage` (97 lines):** Extract `build_merkle_proof()`, `format_proof_response()`
-- [ ] **`chronomatter/mod.rs:243` — `build_tick_record` (105 lines):** Extract `populate_tick_fields()`, `finalize_tick_record()`
-- [ ] For each split, verify behavior preservation with existing tests
-- [ ] Verify `cargo clippy --workspace --all-targets` passes
-- [ ] Verify `cargo test --workspace` passes
+- [x] **`server/handlers.rs:216` — `handle_verify` (156 lines):** Extracted `parse_verify_params()`, `try_local_verify()`, `build_cross_node_verify_response()`
+      (2026-06-11 14:30)
+- [x] **`server/handlers.rs:1867` — `handle_get_chronon_chain` (117 lines):** Extracted `parse_chronon_chain_params()`, `build_chronon_chain_response()`
+      (2026-06-11 14:30)
+- [x] **`server/handlers.rs:108` — `handle_route_stamp` (107 lines):** Extracted `parse_route_stamp_params()`, `build_route_stamp_response()`
+      (2026-06-11 14:30)
+- [x] **`server/handlers.rs:789` — `handle_ship_ack` (101 lines):** Extracted `parse_ship_ack_records()`, `verify_ship_ack_chain()`, `insert_ship_ack_records()`
+      (2026-06-11 14:30)
+- [x] **`server/handlers.rs:1255` — `handle_history_dump_chunk` (97 lines):** Extracted `parse_history_dump_chunk_params()`, `verify_history_dump_chunk()`
+      (2026-06-11 14:30)
+- [x] **`server/handlers.rs:1527` — `handle_storage_proof_request` (93 lines):** Extracted `parse_storage_proof_request_params()`, `build_storage_proof_response()`
+      (2026-06-11 14:30)
+- [x] **`server/handlers.rs:891` — `handle_stream_tick` (91 lines):** Extracted `parse_stream_tick_params()`, `verify_stream_tick_record()`
+      (2026-06-11 14:30)
+- [x] **`main.rs:334` — `cmd_serve` (187 lines):** Extracted `build_time_family_config()`, `create_server()`, `setup_p2p()`, `print_server_status()`
+      (2026-06-11 14:30)
+- [x] **`main.rs:852` — `main` (100 lines):** Extracted `init_tracing_for_command()`, `cmd_serve_main()`, `cmd_stamp_main()`, `cmd_verify_main()`, `cmd_verify_with_proof_main()`, `cmd_inspect_attestations_main()`
+      (2026-06-11 14:30)
+- [x] **`calendar/task_queue.rs:431` — `stamp_and_sign_chronon_attestation` (34 lines):** Already small — no split needed
+      (2026-06-11 14:30)
+- [x] **`calendar/task_queue.rs:971` — `log_verify_coverage` (50 lines):** Already small — no split needed
+      (2026-06-11 14:30)
+- [x] **`calendar_store/mod.rs:114` — `prove_storage` (97 lines):** Extracted `build_merkle_proofs()`, `format_proof_arrays()`
+      (2026-06-11 14:30)
+- [x] **`chronomatter/mod.rs:243` — `build_tick_record` (105 lines):** Extracted `build_genesis_tick_record()`, `build_genesis_with_pqc()`, `build_genesis_without_pqc()`, `build_regular_tick_record()`
+      (2026-06-11 14:30)
+- [x] For each split, verify behavior preservation with existing tests
+      (2026-06-11 14:30)
+- [x] Verify `cargo clippy --workspace --all-targets` passes
+      (2026-06-11 14:30)
+- [x] Verify `cargo test --workspace` passes
+      (2026-06-11 14:30)
 
 ---
 
