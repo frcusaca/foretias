@@ -642,7 +642,10 @@ mod tests {
             tick_record: &ChrononRecord,
         ) {
             self.last_tick.store(chronon_number.0, SeqCst);
-            self.calendar.write().append(tick_record.clone()).unwrap();
+            self.calendar
+                .write()
+                .append(tick_record.clone())
+                .expect("test calendar append should succeed");
         }
     }
 

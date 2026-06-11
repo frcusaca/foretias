@@ -94,22 +94,35 @@ Within each phase, items are ordered by estimated effort (smallest first, to bui
 
 ### Item 2.5: `&Vec<T>` → `&[T]` Return Types (Section 2.5)
 
-- [ ] `core-engine/src/foretias/clean_auth.rs` — `external_attestations()`, `peer_scores()`, `committee()` (6 occurrences)
-- [ ] `core-engine/src/epoch/snapshot.rs` — `peer_scores()`, `committee()`
-- [ ] `core-engine/src/probity/report.rs` — `signature()`, `slow_signature()`
-- [ ] `core-engine/src/foretias/tick.rs` — `external_attestations()`
-- [ ] Verify `cargo check --workspace` passes (slice auto-coerce should make this transparent)
-- [ ] Verify `cargo test --workspace` passes
+- [x] `core-engine/src/foretias/clean_auth.rs` — `external_attestations()`, `peer_scores()`, `committee()` (6 occurrences)
+      (2026-06-11 14:25)
+- [x] `core-engine/src/epoch/snapshot.rs` — `peer_scores()`, `committee()`
+      (2026-06-11 14:25)
+- [x] `core-engine/src/probity/report.rs` — `signature()`, `slow_signature()`
+      (2026-06-11 14:25)
+- [x] `core-engine/src/foretias/tick.rs` — `external_attestations()`
+      (2026-06-11 14:25)
+- [x] Verify `cargo check --workspace` passes (slice auto-coerce should make this transparent)
+      (2026-06-11 14:25)
+- [x] Verify `cargo test --workspace` passes
+      (2026-06-11 14:25)
 
 ### Item 2.4: Manual `Debug` for `CleanAuthenticated<T>` and `UnverifiedSignatureEnvelope<T>` (Section 2.4)
 
-- [ ] In `core-engine/src/foretias/clean_auth.rs`, remove `Debug` from the derive of `CleanAuthenticated<T>` and `UnverifiedSignatureEnvelope<T>`
-- [ ] Add manual `impl<T> fmt::Debug for CleanAuthenticated<T> { ... }` showing only structural metadata (type name, status) without delegating to `T: Debug`
-- [ ] Add manual `impl<T> fmt::Debug for UnverifiedSignatureEnvelope<T> { ... }` similarly
-- [ ] For `Externalized<T>`, keep `Debug` if the externalized data is intentionally inspectable
-- [ ] Verify logging calls don't break (grep for `{:?}`, `{:#?}` on these types)
-- [ ] Verify `cargo check --workspace` passes
-- [ ] Verify `cargo test --workspace` passes
+- [x] In `core-engine/src/foretias/clean_auth.rs`, remove `Debug` from the derive of `CleanAuthenticated<T>` and `UnverifiedSignatureEnvelope<T>`
+      (2026-06-11 14:22)
+- [x] Add manual `impl<T> fmt::Debug for CleanAuthenticated<T> { ... }` showing only structural metadata (type name, status) without delegating to `T: Debug`
+      (2026-06-11 14:22)
+- [x] Add manual `impl<T> fmt::Debug for UnverifiedSignatureEnvelope<T> { ... }` similarly
+      (2026-06-11 14:22)
+- [x] For `Externalized<T>`, keep `Debug` if the externalized data is intentionally inspectable
+      (2026-06-11 14:22)
+- [x] Verify logging calls don't break (grep for `{:?}`, `{:#?}` on these types)
+      (2026-06-11 14:22)
+- [x] Verify `cargo check --workspace` passes
+      (2026-06-11 14:22)
+- [x] Verify `cargo test --workspace` passes
+      (2026-06-11 14:22)
 
 ### Item 2.10: Fix `from_trusted()` Documentation Contradiction (Section 2.10)
 
@@ -222,10 +235,14 @@ Within each phase, items are ordered by estimated effort (smallest first, to bui
 
 ### Item 2.14: Propagate Error from Calendar Append Unwrap (Section 2.14)
 
-- [ ] In `core-engine/src/chronomatter/mod.rs:610`, replace `.unwrap()` with `?` (return `Result` from the function)
-- [ ] Update callers of the function to propagate the error
-- [ ] Verify `cargo check --workspace` passes
-- [ ] Verify `cargo test --workspace` passes
+- [x] In `core-engine/src/chronomatter/mod.rs:645`, replace `.unwrap()` with `.expect("test calendar append should succeed")`
+      (2026-06-11 14:35)
+- [x] Update callers of the function to propagate the error (N/A — test-only code, `TickObserver` trait returns `()`)
+      (2026-06-11 14:35)
+- [x] Verify `cargo check --workspace` passes
+      (2026-06-11 14:35)
+- [x] Verify `cargo test --workspace` passes
+      (2026-06-11 14:35)
 
 ### Item 2.11: Rename `mod.rs` → Path-Based Modules (Section 2.11)
 
@@ -249,21 +266,26 @@ Within each phase, items are ordered by estimated effort (smallest first, to bui
 
 ### Item 2.15: Standardize `// SAFETY:` in Test Code (Section 2.15)
 
-- [ ] In `core-engine/tests/privkey_encrypt_decrypt.rs`, replace `// Safe:` with `// SAFETY:`
-- [ ] Grep for any other lowercase `// Safe:` occurrences in test files; standardize all
+- [x] In `core-engine/tests/privkey_encrypt_decrypt.rs`, replace `// Safe:` with `// SAFETY:` (N/A — no occurrences found)
+      (2026-06-11 14:38)
+- [x] Grep for any other lowercase `// Safe:` occurrences in test files; standardize all (zero found)
+      (2026-06-11 14:38)
 
 ### Item 2.13: Finalize Deprecated `new()` Constructors (Section 2.13)
 
-- [ ] In `core-engine/src/foretias/tick.rs`, either:
-  - Option A: Remove `pub fn new()` from `ChrononRecord` and `ForetisRecord` (semver-major, safe if all callers use builder)
-  - Option B: Keep `#[deprecated]` with a `#[doc(hidden)]` attribute so it disappears from docs but compiles
-- [ ] Audit all call sites of `ChrononRecord::new()` and `ForetisRecord::new()` — ensure zero production callers remain
-- [ ] Verify `cargo check --workspace` passes
+- [x] In `core-engine/src/foretias/tick.rs`, Option B already applied: `#[deprecated]` + `#[doc(hidden)]` present on both `ChrononRecord::new()` and `ForetisRecord::new()`
+      (2026-06-11 14:40)
+- [x] Audit all call sites of `ChrononRecord::new()` and `ForetisRecord::new()` — zero production callers found
+      (2026-06-11 14:40)
+- [x] Verify `cargo check --workspace` passes
+      (2026-06-11 14:40)
 
 ### Item 2.16: Inline Format in Trust Boundary Test (Section 2.16)
 
-- [ ] In `core-engine/tests/trust_boundary_type_usage.rs`, convert `format!("trust_boundary_{}", i)` to `format!("trust_boundary_{i}")`
-- [ ] Convert any other positional format macros in the same test file
+- [x] In `core-engine/tests/trust_boundary_type_usage.rs`, convert `format!("trust_boundary_{}", i)` to `format!("trust_boundary_{i}")` (N/A — pattern not found)
+      (2026-06-11 14:40)
+- [x] Convert any other positional format macros in the same test file (none found)
+      (2026-06-11 14:40)
 
 ---
 

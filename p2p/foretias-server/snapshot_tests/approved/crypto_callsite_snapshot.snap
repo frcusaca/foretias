@@ -14,8 +14,8 @@ core-engine/src/chronomatter/mod.rs                              160  sign    .s
 core-engine/src/chronomatter/mod.rs                              202  sign    let sig = kp.priv_key.sign(msg).map_err(NodeError::Crypto)?;
 core-engine/src/chronomatter/mod.rs                              302  sign    let genesis_sig = secret.sign(&genesis_blob).map_err(NodeError::Crypto)?;
 core-engine/src/chronomatter/mod.rs                              484  gate    unprocessed: crate::foretias::clean_auth::UnverifiedSignatureEnvelope<
-core-engine/src/chronomatter/mod.rs                              692  verify  .verify(
-core-engine/src/chronomatter/mod.rs                              708  verify  .verify(
+core-engine/src/chronomatter/mod.rs                              695  verify  .verify(
+core-engine/src/chronomatter/mod.rs                              711  verify  .verify(
 core-engine/src/collision/detector.rs                             60  verify  .verify_ed25519(&self.my_pub_key, &hb.canonical(), &sig)
 core-engine/src/collision/detector.rs                             96  sign    let sig = server.sign(&hb.canonical()).unwrap();
 core-engine/src/core/signing.rs                                   29  sign    handle.sign(msg)
@@ -233,5 +233,5 @@ crypto_callsite_snapshot — update with UPDATE_SNAPSHOT=1 when adding new crypt
 SIGNATURES:
 Public key: 4193efbf702cde19fbae087ea53189f67e7768ebe888e0816e24a27282a5b030
 Input signature: XjHNYkZ6L7a87pFmkmHyBj39ofhWg0Gh2EmeGLitRFPtupEN6ZFsd0Nl+Sx3sbFTcEuWuPCDF+duRzvKVNFzAQ==
-Result signature: SYMYly/Im55qEzeCuxH3XvUt6gFprsP3xOOIp7qJlZIINbccg02mMdqEg6rNxIp51v3Cv6DjzfKE7KCLTm7cBA==
-Comments signature: l/aC0/npuvbJN7Aof8bP2UHXC969st9nz1gU7ozQFZNP9QEZRCU72MjkA/J4cydkn4B/3JN8NPmKEvjpPq2VAA==
+Result signature: ou40jnoNuqZsO76+EjlZeww7KdsJ0zf/7Dxh0hMq34ykvvGhq82O5aEB/TQS8SjlLUT+/vqQtYZvjRd4A7SIDw==
+Comments signature: mVkq7uU0lRieidsU6+J+v/JB1FIT3LqGaCsj7un1Nbr81ZVRd1FRgL9oYVKdAJ/PVPH5hEBKu0uMTkvkn+i1Cw==
