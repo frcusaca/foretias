@@ -400,15 +400,17 @@ async fn two_swarms_connect_and_identify() {
     let ma_a: libp2p::Multiaddr = format!("/ip4/127.0.0.1/tcp/{}", port_a).parse().unwrap();
     let ma_b: libp2p::Multiaddr = format!("/ip4/127.0.0.1/tcp/{}", port_b).parse().unwrap();
 
-    let mut handle_a = build_and_spawn_swarm(Some(ma_a.clone()), vec![], "mainnet", None, None)
+    let mut init_a = build_and_spawn_swarm(Some(ma_a.clone()), vec![], "mainnet", None, None)
         .await
-        .unwrap();
-    let peer_id_a = handle_a.local_peer_id;
+        .unwrap()
+        .extract_for_init();
+    let peer_id_a = init_a.local_peer_id;
 
     let dial_a: libp2p::Multiaddr = format!("{}/p2p/{}", ma_a, peer_id_a).parse().unwrap();
-    let mut handle_b = build_and_spawn_swarm(Some(ma_b), vec![dial_a], "mainnet", None, None)
+    let mut init_b = build_and_spawn_swarm(Some(ma_b), vec![dial_a], "mainnet", None, None)
         .await
-        .unwrap();
+        .unwrap()
+        .extract_for_init();
 
     let mut a_connected = false;
     let mut b_connected = false;
@@ -418,7 +420,7 @@ async fn two_swarms_connect_and_identify() {
     let deadline = std::time::Instant::now() + Duration::from_secs(15);
     while std::time::Instant::now() < deadline {
         while let Ok(Some(event)) =
-            tokio::time::timeout(Duration::from_millis(100), handle_a.events.recv()).await
+            tokio::time::timeout(Duration::from_millis(100), init_a.events.recv()).await
         {
             match event {
                 NetworkEvent::Connected { .. } => a_connected = true,
@@ -427,7 +429,7 @@ async fn two_swarms_connect_and_identify() {
             }
         }
         while let Ok(Some(event)) =
-            tokio::time::timeout(Duration::from_millis(100), handle_b.events.recv()).await
+            tokio::time::timeout(Duration::from_millis(100), init_b.events.recv()).await
         {
             match event {
                 NetworkEvent::Connected { .. } => b_connected = true,
@@ -445,10 +447,10 @@ async fn two_swarms_connect_and_identify() {
     assert!(b_connected, "Swarm B never connected");
     assert!(a_identified, "Swarm A never identified B");
     assert!(b_identified, "Swarm B never identified A");
-    assert_ne!(peer_id_a, handle_b.local_peer_id);
+    assert_ne!(peer_id_a, init_b.local_peer_id);
 
-    handle_a.task.abort();
-    handle_b.task.abort();
+    init_a.task.abort();
+    init_b.task.abort();
 }
 
 #[tokio::test]
@@ -465,41 +467,44 @@ async fn dht_discovery_three_nodes() {
 
     let namespace = "dht-test";
 
-    let mut handle_a = build_and_spawn_swarm(Some(ma_a.clone()), vec![], namespace, None, None)
+    let mut init_a = build_and_spawn_swarm(Some(ma_a.clone()), vec![], namespace, None, None)
         .await
-        .unwrap();
-    let peer_id_a = handle_a.local_peer_id;
+        .unwrap()
+        .extract_for_init();
+    let peer_id_a = init_a.local_peer_id;
 
-    let mut handle_b = build_and_spawn_swarm(Some(ma_b.clone()), vec![], namespace, None, None)
+    let mut init_b = build_and_spawn_swarm(Some(ma_b.clone()), vec![], namespace, None, None)
         .await
-        .unwrap();
-    let peer_id_b = handle_b.local_peer_id;
+        .unwrap()
+        .extract_for_init();
+    let peer_id_b = init_b.local_peer_id;
 
-    let mut handle_c = build_and_spawn_swarm(Some(ma_c.clone()), vec![], namespace, None, None)
+    let mut init_c = build_and_spawn_swarm(Some(ma_c.clone()), vec![], namespace, None, None)
         .await
-        .unwrap();
-    let peer_id_c = handle_c.local_peer_id;
+        .unwrap()
+        .extract_for_init();
+    let peer_id_c = init_c.local_peer_id;
 
     // Wait for all swarms to bind
     let deadline = std::time::Instant::now() + Duration::from_secs(10);
     let mut listen_ready_count = 0u32;
     while std::time::Instant::now() < deadline && listen_ready_count < 3 {
         while let Ok(Some(event)) =
-            tokio::time::timeout(Duration::from_millis(50), handle_a.events.recv()).await
+            tokio::time::timeout(Duration::from_millis(50), init_a.events.recv()).await
         {
             if matches!(event, NetworkEvent::ListenReady { .. }) {
                 listen_ready_count += 1;
             }
         }
         while let Ok(Some(event)) =
-            tokio::time::timeout(Duration::from_millis(50), handle_b.events.recv()).await
+            tokio::time::timeout(Duration::from_millis(50), init_b.events.recv()).await
         {
             if matches!(event, NetworkEvent::ListenReady { .. }) {
                 listen_ready_count += 1;
             }
         }
         while let Ok(Some(event)) =
-            tokio::time::timeout(Duration::from_millis(50), handle_c.events.recv()).await
+            tokio::time::timeout(Duration::from_millis(50), init_c.events.recv()).await
         {
             if matches!(event, NetworkEvent::ListenReady { .. }) {
                 listen_ready_count += 1;
@@ -516,22 +521,22 @@ async fn dht_discovery_three_nodes() {
     let ma_c_full: libp2p::Multiaddr = format!("{}/p2p/{}", ma_c, peer_id_c).parse().unwrap();
 
     // Fully connect: every node dials every other node
-    let _ = handle_a.cmd_tx.send(SwarmCommand::Dial {
+    let _ = init_a.cmd_tx.send(SwarmCommand::Dial {
         addr: ma_b_full.clone(),
     });
-    let _ = handle_a.cmd_tx.send(SwarmCommand::Dial {
+    let _ = init_a.cmd_tx.send(SwarmCommand::Dial {
         addr: ma_c_full.clone(),
     });
-    let _ = handle_b.cmd_tx.send(SwarmCommand::Dial {
+    let _ = init_b.cmd_tx.send(SwarmCommand::Dial {
         addr: ma_a_full.clone(),
     });
-    let _ = handle_b.cmd_tx.send(SwarmCommand::Dial {
+    let _ = init_b.cmd_tx.send(SwarmCommand::Dial {
         addr: ma_c_full.clone(),
     });
-    let _ = handle_c.cmd_tx.send(SwarmCommand::Dial {
+    let _ = init_c.cmd_tx.send(SwarmCommand::Dial {
         addr: ma_a_full.clone(),
     });
-    let _ = handle_c.cmd_tx.send(SwarmCommand::Dial {
+    let _ = init_c.cmd_tx.send(SwarmCommand::Dial {
         addr: ma_b_full.clone(),
     });
 
@@ -547,7 +552,7 @@ async fn dht_discovery_three_nodes() {
     let mut all_connected = false;
     while std::time::Instant::now() < deadline {
         while let Ok(Some(event)) =
-            tokio::time::timeout(Duration::from_millis(20), handle_a.events.recv()).await
+            tokio::time::timeout(Duration::from_millis(20), init_a.events.recv()).await
         {
             if let NetworkEvent::Connected { peer_id } | NetworkEvent::Identified { peer_id, .. } =
                 event
@@ -556,7 +561,7 @@ async fn dht_discovery_three_nodes() {
             }
         }
         while let Ok(Some(event)) =
-            tokio::time::timeout(Duration::from_millis(20), handle_b.events.recv()).await
+            tokio::time::timeout(Duration::from_millis(20), init_b.events.recv()).await
         {
             if let NetworkEvent::Connected { peer_id } | NetworkEvent::Identified { peer_id, .. } =
                 event
@@ -565,7 +570,7 @@ async fn dht_discovery_three_nodes() {
             }
         }
         while let Ok(Some(event)) =
-            tokio::time::timeout(Duration::from_millis(20), handle_c.events.recv()).await
+            tokio::time::timeout(Duration::from_millis(20), init_c.events.recv()).await
         {
             if let NetworkEvent::Connected { peer_id } | NetworkEvent::Identified { peer_id, .. } =
                 event
@@ -587,27 +592,27 @@ async fn dht_discovery_three_nodes() {
     // Add addresses to k-buckets so GetRecord can route to any peer.
     // Dial + identify alone does NOT populate k-buckets in libp2p-kad 0.48.
     // Each node needs to know about every other node's address.
-    let _ = handle_a.cmd_tx.send(SwarmCommand::AddAddress {
+    let _ = init_a.cmd_tx.send(SwarmCommand::AddAddress {
         peer_id: peer_id_b,
         addr: ma_b_full.clone(),
     });
-    let _ = handle_a.cmd_tx.send(SwarmCommand::AddAddress {
+    let _ = init_a.cmd_tx.send(SwarmCommand::AddAddress {
         peer_id: peer_id_c,
         addr: ma_c_full.clone(),
     });
-    let _ = handle_b.cmd_tx.send(SwarmCommand::AddAddress {
+    let _ = init_b.cmd_tx.send(SwarmCommand::AddAddress {
         peer_id: peer_id_a,
         addr: ma_a_full.clone(),
     });
-    let _ = handle_b.cmd_tx.send(SwarmCommand::AddAddress {
+    let _ = init_b.cmd_tx.send(SwarmCommand::AddAddress {
         peer_id: peer_id_c,
         addr: ma_c_full.clone(),
     });
-    let _ = handle_c.cmd_tx.send(SwarmCommand::AddAddress {
+    let _ = init_c.cmd_tx.send(SwarmCommand::AddAddress {
         peer_id: peer_id_a,
         addr: ma_a_full.clone(),
     });
-    let _ = handle_c.cmd_tx.send(SwarmCommand::AddAddress {
+    let _ = init_c.cmd_tx.send(SwarmCommand::AddAddress {
         peer_id: peer_id_b,
         addr: ma_b_full.clone(),
     });
@@ -628,18 +633,18 @@ async fn dht_discovery_three_nodes() {
         publisher: Some(peer_id_a),
         expires: None,
     };
-    let _ = handle_a.cmd_tx.send(SwarmCommand::StoreRecordLocal {
+    let _ = init_a.cmd_tx.send(SwarmCommand::StoreRecordLocal {
         record: record.clone(),
     });
-    let _ = handle_b.cmd_tx.send(SwarmCommand::StoreRecordLocal {
+    let _ = init_b.cmd_tx.send(SwarmCommand::StoreRecordLocal {
         record: record.clone(),
     });
-    let _ = handle_c
+    let _ = init_c
         .cmd_tx
         .send(SwarmCommand::StoreRecordLocal { record });
 
     // C queries the DHT for the record - proves DHT routing works across the network
-    let _ = handle_c.cmd_tx.send(SwarmCommand::GetRecord {
+    let _ = init_c.cmd_tx.send(SwarmCommand::GetRecord {
         key: discovery_key.clone(),
     });
 
@@ -647,7 +652,7 @@ async fn dht_discovery_three_nodes() {
     let deadline = std::time::Instant::now() + Duration::from_secs(15);
     while std::time::Instant::now() < deadline {
         while let Ok(Some(event)) =
-            tokio::time::timeout(Duration::from_millis(50), handle_c.events.recv()).await
+            tokio::time::timeout(Duration::from_millis(50), init_c.events.recv()).await
         {
             if let NetworkEvent::RecordRetrieved { records, .. } = event {
                 for r in records {
@@ -672,9 +677,9 @@ async fn dht_discovery_three_nodes() {
         "C never discovered A through DHT - fully connected network with bootstrap should allow GetRecord to find records published by any node"
     );
 
-    handle_a.task.abort();
-    handle_b.task.abort();
-    handle_c.task.abort();
+    init_a.task.abort();
+    init_b.task.abort();
+    init_c.task.abort();
 }
 
 #[tokio::test]
@@ -690,16 +695,18 @@ async fn gossip_probity_propagation() {
 
     let namespace = "testnet";
 
-    let mut handle_a = build_and_spawn_swarm(Some(ma_a.clone()), vec![], namespace, None, None)
+    let mut init_a = build_and_spawn_swarm(Some(ma_a.clone()), vec![], namespace, None, None)
         .await
-        .unwrap();
-    let peer_id_a = handle_a.local_peer_id;
+        .unwrap()
+        .extract_for_init();
+    let peer_id_a = init_a.local_peer_id;
 
     let dial_a: libp2p::Multiaddr = format!("{}/p2p/{}", ma_a, peer_id_a).parse().unwrap();
-    let mut handle_b = build_and_spawn_swarm(Some(ma_b), vec![dial_a], namespace, None, None)
+    let mut init_b = build_and_spawn_swarm(Some(ma_b), vec![dial_a], namespace, None, None)
         .await
-        .unwrap();
-    let peer_id_b = handle_b.local_peer_id;
+        .unwrap()
+        .extract_for_init();
+    let peer_id_b = init_b.local_peer_id;
 
     let deadline = std::time::Instant::now() + Duration::from_secs(15);
     let mut both_connected = false;
@@ -709,7 +716,7 @@ async fn gossip_probity_propagation() {
         let mut b_conn = false;
 
         while let Ok(Some(event)) =
-            tokio::time::timeout(Duration::from_millis(100), handle_a.events.recv()).await
+            tokio::time::timeout(Duration::from_millis(100), init_a.events.recv()).await
         {
             if matches!(
                 event,
@@ -719,7 +726,7 @@ async fn gossip_probity_propagation() {
             }
         }
         while let Ok(Some(event)) =
-            tokio::time::timeout(Duration::from_millis(100), handle_b.events.recv()).await
+            tokio::time::timeout(Duration::from_millis(100), init_b.events.recv()).await
         {
             if matches!(
                 event,
@@ -755,7 +762,7 @@ async fn gossip_probity_propagation() {
         1u8,
         vec![],
     );
-    let _ = handle_a.cmd_tx.send(SwarmCommand::PublishProbity {
+    let _ = init_a.cmd_tx.send(SwarmCommand::PublishProbity {
         report: report.clone(),
         namespace: namespace.to_string(),
     });
@@ -765,7 +772,7 @@ async fn gossip_probity_propagation() {
     let deadline = std::time::Instant::now() + Duration::from_secs(10);
     while std::time::Instant::now() < deadline {
         while let Ok(Some(event)) =
-            tokio::time::timeout(Duration::from_millis(200), handle_b.events.recv()).await
+            tokio::time::timeout(Duration::from_millis(200), init_b.events.recv()).await
         {
             if let NetworkEvent::GossipMessage { data, .. } = event {
                 let received: Result<ProbityReportRecord, _> = serde_json::from_slice(&data);
@@ -786,8 +793,8 @@ async fn gossip_probity_propagation() {
 
     assert!(gossip_received, "B never received gossip message from A");
 
-    handle_a.task.abort();
-    handle_b.task.abort();
+    init_a.task.abort();
+    init_b.task.abort();
 }
 
 // ── libp2p direct RPC test ─────────────────────────────────────────────
@@ -823,7 +830,7 @@ async fn test_libp2p_direct_rpc() {
     let ma_b: libp2p::Multiaddr = format!("/ip4/127.0.0.1/tcp/{}", port_b).parse().unwrap();
 
     let handler_a = std::sync::Arc::new(EchoRpcHandler);
-    let mut handle_a = build_and_spawn_swarm(
+    let mut init_a = build_and_spawn_swarm(
         Some(ma_a.clone()),
         vec![],
         "libp2p-rpc-test",
@@ -831,12 +838,13 @@ async fn test_libp2p_direct_rpc() {
         Some(handler_a),
     )
     .await
-    .unwrap();
-    let peer_id_a = handle_a.local_peer_id;
+    .unwrap()
+    .extract_for_init();
+    let peer_id_a = init_a.local_peer_id;
 
     let handler_b = std::sync::Arc::new(EchoRpcHandler);
     let dial_a: libp2p::Multiaddr = format!("{}/p2p/{}", ma_a, peer_id_a).parse().unwrap();
-    let mut handle_b = build_and_spawn_swarm(
+    let mut init_b = build_and_spawn_swarm(
         Some(ma_b),
         vec![dial_a.clone()],
         "libp2p-rpc-test",
@@ -844,7 +852,8 @@ async fn test_libp2p_direct_rpc() {
         Some(handler_b),
     )
     .await
-    .unwrap();
+    .unwrap()
+    .extract_for_init();
 
     let deadline = std::time::Instant::now() + Duration::from_secs(15);
     let mut a_connected = false;
@@ -854,7 +863,7 @@ async fn test_libp2p_direct_rpc() {
 
     while std::time::Instant::now() < deadline {
         while let Ok(Some(event)) =
-            tokio::time::timeout(Duration::from_millis(100), handle_a.events.recv()).await
+            tokio::time::timeout(Duration::from_millis(100), init_a.events.recv()).await
         {
             match event {
                 NetworkEvent::Connected { .. } => a_connected = true,
@@ -863,7 +872,7 @@ async fn test_libp2p_direct_rpc() {
             }
         }
         while let Ok(Some(event)) =
-            tokio::time::timeout(Duration::from_millis(100), handle_b.events.recv()).await
+            tokio::time::timeout(Duration::from_millis(100), init_b.events.recv()).await
         {
             match event {
                 NetworkEvent::Connected { .. } => b_connected = true,
@@ -888,7 +897,7 @@ async fn test_libp2p_direct_rpc() {
         "id": 1,
     });
     let (tx, rx) = tokio::sync::oneshot::channel();
-    handle_b
+    init_b
         .cmd_tx
         .send(SwarmCommand::RequestResponse {
             peer_id: peer_id_a,
@@ -906,7 +915,7 @@ async fn test_libp2p_direct_rpc() {
     assert_eq!(resp_val["method"], "ping");
     assert_eq!(resp_val["params"]["from"], "peer_b");
 
-    let peer_id_b = handle_b.local_peer_id;
+    let peer_id_b = init_b.local_peer_id;
     let request = serde_json::json!({
         "jsonrpc": "2.0",
         "method": "echo",
@@ -914,7 +923,7 @@ async fn test_libp2p_direct_rpc() {
         "id": 2,
     });
     let (tx, rx) = tokio::sync::oneshot::channel();
-    handle_a
+    init_a
         .cmd_tx
         .send(SwarmCommand::RequestResponse {
             peer_id: peer_id_b,
@@ -932,6 +941,6 @@ async fn test_libp2p_direct_rpc() {
     assert_eq!(resp_val["method"], "echo");
     assert_eq!(resp_val["params"]["message"], "hello_from_a");
 
-    handle_a.task.abort();
-    handle_b.task.abort();
+    init_a.task.abort();
+    init_b.task.abort();
 }

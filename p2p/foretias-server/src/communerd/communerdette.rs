@@ -525,11 +525,11 @@ impl Communerdette {
         let mut state = self.state.write();
         state.stats.libp2p_successes = match route {
             ActiveRoute::Libp2pDirect => state.stats.libp2p_successes + 1,
-            _ => state.stats.libp2p_successes,
+            ActiveRoute::NoiseJsonRpc | ActiveRoute::Unavailable => state.stats.libp2p_successes,
         };
         state.stats.noise_successes = match route {
             ActiveRoute::NoiseJsonRpc => state.stats.noise_successes + 1,
-            _ => state.stats.noise_successes,
+            ActiveRoute::Libp2pDirect | ActiveRoute::Unavailable => state.stats.noise_successes,
         };
         state.stats.last_success_ns = Some(now_ns);
         state.stats.consecutive_failures = 0;
@@ -554,11 +554,11 @@ impl Communerdette {
         let mut state = self.state.write();
         state.stats.libp2p_failures = match route {
             ActiveRoute::Libp2pDirect => state.stats.libp2p_failures + 1,
-            _ => state.stats.libp2p_failures,
+            ActiveRoute::NoiseJsonRpc | ActiveRoute::Unavailable => state.stats.libp2p_failures,
         };
         state.stats.noise_failures = match route {
             ActiveRoute::NoiseJsonRpc => state.stats.noise_failures + 1,
-            _ => state.stats.noise_failures,
+            ActiveRoute::Libp2pDirect | ActiveRoute::Unavailable => state.stats.noise_failures,
         };
         state.stats.last_failure_ns = Some(now_ns);
         state.stats.consecutive_failures += 1;

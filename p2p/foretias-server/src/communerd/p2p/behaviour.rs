@@ -8,11 +8,11 @@ use std::sync::Arc;
 
 #[derive(NetworkBehaviour)]
 pub struct ForetiasBehaviour {
-    pub identify: identify::Behaviour,
-    pub ping: ping::Behaviour,
-    pub kad: kad::Behaviour<kad::store::MemoryStore>,
-    pub gossip: gossipsub::Behaviour,
-    pub request_response: request_response::Behaviour<super::rpc_protocol::ForetiasRpcCodec>,
+    pub(super) identify: identify::Behaviour,
+    pub(super) ping: ping::Behaviour,
+    pub(super) kad: kad::Behaviour<kad::store::MemoryStore>,
+    pub(super) gossip: gossipsub::Behaviour,
+    pub(super) request_response: request_response::Behaviour<super::rpc_protocol::ForetiasRpcCodec>,
 }
 
 impl ForetiasBehaviour {

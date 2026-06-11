@@ -49,10 +49,10 @@ impl EpochSnapshotRecord {
     pub fn epoch_end_ns(&self) -> &u64 {
         &self.epoch_end_ns
     }
-    pub fn peer_scores(&self) -> &Vec<PeerScore> {
+    pub fn peer_scores(&self) -> &[PeerScore] {
         &self.peer_scores
     }
-    pub fn committee(&self) -> &Vec<String> {
+    pub fn committee(&self) -> &[String] {
         &self.committee
     }
     pub fn threshold(&self) -> &u32 {

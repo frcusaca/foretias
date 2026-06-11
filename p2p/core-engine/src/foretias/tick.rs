@@ -117,7 +117,7 @@ impl ChrononRecord {
     }
     pub fn external_attestations(
         &self,
-    ) -> &Vec<super::external_attestation::ExternalAttestationRecord> {
+    ) -> &[super::external_attestation::ExternalAttestationRecord] {
         &self.external_attestations
     }
     pub fn external_attestations_mut(

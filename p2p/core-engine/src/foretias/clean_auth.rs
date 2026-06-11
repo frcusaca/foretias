@@ -5,8 +5,13 @@
 //!
 //! The compiler enforces that data flows through this progression. You cannot skip the middle step.
 //!
-//! `CleanAuthenticated<X>` has **private constructors** -- only `verify()` (inbound gate)
-//! and `from_trusted()` (local gate) can produce them.
+//! `CleanAuthenticated<X>` has two construction gates:
+//!
+//! - `into_clean_authenticated()` — inbound gate: parses and verifies untrusted data,
+//!   returns `Result<CleanAuthenticated<X>, CleanAuthError>`.
+//! - `from_trusted()` — local gate: `pub` method for internally-produced trusted data
+//!   (e.g., Chronomatter-produced records). The name signals intent; direct struct
+//!   construction is still blocked by private fields.
 //!
 //! `CleanAuthenticated` covers authentication + cleansing, NOT full chain-of-trust to genesis.
 
@@ -18,6 +23,7 @@ use super::types::Tbid;
 use crate::crypto_server::CryptoServer;
 use crate::error::NodeError;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 // ---------------------------------------------------------------------------
 // Signature types (Phase 16a — §21.2)
@@ -94,7 +100,7 @@ pub trait TrustedInner<T>: Sized {
 /// A domain type that has been parsed but not yet verified.
 ///
 /// Raw domain data from the wire/disk. Do NOT trust it.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct UnverifiedSignatureEnvelope<T> {
     inner: T,
     pub(crate) signatures: Vec<SignatureEntry>,
@@ -149,6 +155,15 @@ impl<T> TrustedInner<T> for UnverifiedSignatureEnvelope<T> {
     }
     fn into_inner(self) -> T {
         self.inner
+    }
+}
+
+/// SAFETY: Debug prints only structural metadata, not inner T.
+impl<T> fmt::Debug for UnverifiedSignatureEnvelope<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("UnverifiedSignatureEnvelope")
+            .field("signatures_count", &self.signatures.len())
+            .finish_non_exhaustive()
     }
 }
 
@@ -248,7 +263,7 @@ pub trait BaseRecord: serde::Serialize {
 ///
 /// Due diligence complete. Safe for in-process use.
 /// **Private fields** -- zero external construction.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct CleanAuthenticated<T> {
     inner: T,
     pub(crate) signatures: Vec<SignatureEntry>,
@@ -294,6 +309,15 @@ impl<T> TrustedInner<T> for CleanAuthenticated<T> {
     }
     fn into_inner(self) -> T {
         self.inner
+    }
+}
+
+/// SAFETY: Debug prints only structural metadata, not inner T.
+impl<T> fmt::Debug for CleanAuthenticated<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CleanAuthenticated")
+            .field("signatures_count", &self.signatures.len())
+            .finish_non_exhaustive()
     }
 }
 
@@ -538,6 +562,8 @@ pub enum ParseError {
     InvalidLength(String),
     /// Bad format (missing required fields, wrong structure).
     BadFormat(String),
+    /// Unknown signature algorithm identifier.
+    UnknownAlgorithm(String),
 }
 
 impl std::fmt::Display for ParseError {
@@ -547,6 +573,7 @@ impl std::fmt::Display for ParseError {
             ParseError::TruncatedBytes => write!(f, "truncated bytes"),
             ParseError::InvalidLength(msg) => write!(f, "invalid length: {msg}"),
             ParseError::BadFormat(msg) => write!(f, "bad format: {msg}"),
+            ParseError::UnknownAlgorithm(id) => write!(f, "unknown signature algorithm: {id}"),
         }
     }
 }
@@ -579,7 +606,7 @@ impl UnverifiedSignatureEnvelope<ChrononRecord> {
     pub fn chronon_stamp_count(&self) -> &u64 {
         &self.inner.chronon_stamp_count
     }
-    pub fn external_attestations(&self) -> &Vec<ExternalAttestationRecord> {
+    pub fn external_attestations(&self) -> &[ExternalAttestationRecord] {
         &self.inner.external_attestations
     }
     pub fn tb_version(&self) -> &u32 {
@@ -669,7 +696,7 @@ impl CleanAuthenticated<ChrononRecord> {
     pub fn chronon_stamp_count(&self) -> &u64 {
         &self.inner.chronon_stamp_count
     }
-    pub fn external_attestations(&self) -> &Vec<ExternalAttestationRecord> {
+    pub fn external_attestations(&self) -> &[ExternalAttestationRecord] {
         &self.inner.external_attestations
     }
     pub fn tb_version(&self) -> &u32 {
@@ -745,7 +772,13 @@ impl UnverifiedSignatureEnvelope<ForetisRecord> {
                 if !sig_bytes.is_empty() {
                     let algorithm = match obj.get("signature_algorithm").and_then(|v| v.as_str()) {
                         Some("SLH-DSA") => SigAlgorithm::DualKey,
-                        _ => SigAlgorithm::Ed25519,
+                        Some("Ed25519") => SigAlgorithm::Ed25519,
+                        Some(other) => return Err(ParseError::UnknownAlgorithm(other.to_string())),
+                        None => {
+                            return Err(ParseError::BadFormat(
+                                "missing 'signature_algorithm' field".into(),
+                            ))
+                        }
                     };
                     env.signatures.push(SignatureEntry {
                         role: SignerRole::Chronomatter,
@@ -900,10 +933,10 @@ impl UnverifiedSignatureEnvelope<EpochSnapshotRecord> {
     pub fn epoch_end_ns(&self) -> &u64 {
         &self.inner.epoch_end_ns
     }
-    pub fn peer_scores(&self) -> &Vec<crate::epoch::snapshot::PeerScore> {
+    pub fn peer_scores(&self) -> &[crate::epoch::snapshot::PeerScore] {
         &self.inner.peer_scores
     }
-    pub fn committee(&self) -> &Vec<String> {
+    pub fn committee(&self) -> &[String] {
         &self.inner.committee
     }
     pub fn threshold(&self) -> &u32 {
@@ -949,10 +982,10 @@ impl CleanAuthenticated<EpochSnapshotRecord> {
     pub fn epoch_end_ns(&self) -> &u64 {
         &self.inner.epoch_end_ns
     }
-    pub fn peer_scores(&self) -> &Vec<crate::epoch::snapshot::PeerScore> {
+    pub fn peer_scores(&self) -> &[crate::epoch::snapshot::PeerScore] {
         &self.inner.peer_scores
     }
-    pub fn committee(&self) -> &Vec<String> {
+    pub fn committee(&self) -> &[String] {
         &self.inner.committee
     }
     pub fn threshold(&self) -> &u32 {

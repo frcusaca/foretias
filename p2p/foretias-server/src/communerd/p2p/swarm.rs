@@ -46,6 +46,42 @@ pub fn find_free_port(range: std::ops::Range<u16>) -> Result<u16, NodeError> {
 }
 
 pub struct SwarmHandle {
+    local_peer_id: PeerId,
+    local_multiaddr: Arc<Mutex<Option<libp2p::Multiaddr>>>,
+    events: mpsc::UnboundedReceiver<NetworkEvent>,
+    cmd_tx: mpsc::UnboundedSender<SwarmCommand>,
+    task: tokio::task::JoinHandle<()>,
+}
+
+impl SwarmHandle {
+    pub fn local_peer_id(&self) -> PeerId {
+        self.local_peer_id
+    }
+
+    pub fn local_multiaddr(&self) -> Option<libp2p::Multiaddr> {
+        self.local_multiaddr.lock().clone()
+    }
+
+    pub fn cmd_tx(&self) -> mpsc::UnboundedSender<SwarmCommand> {
+        self.cmd_tx.clone()
+    }
+
+    /// Extract init data (events receiver + task handle) for Communerd setup.
+    /// Consumes the handle; the remaining fields are still accessible via the
+    /// returned init data's peer_id, multiaddr, and cmd_tx.
+    pub fn extract_for_init(self) -> SwarmInitData {
+        SwarmInitData {
+            local_peer_id: self.local_peer_id,
+            local_multiaddr: Arc::clone(&self.local_multiaddr),
+            events: self.events,
+            cmd_tx: self.cmd_tx,
+            task: self.task,
+        }
+    }
+}
+
+/// Data extracted from a SwarmHandle for initializing Communerd.
+pub struct SwarmInitData {
     pub local_peer_id: PeerId,
     pub local_multiaddr: Arc<Mutex<Option<libp2p::Multiaddr>>>,
     pub events: mpsc::UnboundedReceiver<NetworkEvent>,
@@ -375,7 +411,9 @@ async fn swarm_loop(
                             identify::Event::Error { peer_id, error, .. } => {
                                 tracing::warn!(peer = %peer_id, ?error, "libp2p identify error");
                             }
-                            _ => {}
+                            other => {
+                                tracing::trace!("unhandled libp2p event: {other:?}");
+                            }
                         }
                     }
                     SwarmEvent::Behaviour(ForetiasBehaviourEvent::Ping(event)) => {
@@ -438,7 +476,9 @@ async fn swarm_loop(
                                         tracing::info!(peer = %peer_id, "DHT: discovered peer via providers");
                                     }
                                 }
-                                 _ => {}
+                                 other => {
+                                     tracing::trace!("unhandled libp2p event: {other:?}");
+                                 }
                             }
                       SwarmEvent::Behaviour(ForetiasBehaviourEvent::RequestResponse(event)) => {
                           match event {
@@ -506,15 +546,19 @@ async fn swarm_loop(
                                   }
                               }
                               request_response::Event::OutboundFailure { request_id, error, peer, .. } => {
-                                  if let Some(sender) = pending_rpc.remove(&request_id) {
-                                      let err = match error {
-                                          request_response::OutboundFailure::Timeout => TransportError::Timeout,
-                                          _ => TransportError::Connect(error.to_string()),
-                                      };
-                                      let _ = sender.send(Err(err));
-                                      tracing::warn!(peer = %peer, ?error, "libp2p RPC outbound failure");
-                                  }
-                              }
+                                   let error_str = error.to_string();
+                                   if let Some(sender) = pending_rpc.remove(&request_id) {
+                                        let err = match &error {
+                                            request_response::OutboundFailure::Timeout => TransportError::Timeout,
+                                            other_failure => {
+                                                tracing::trace!("unhandled libp2p event: {other_failure:?}");
+                                                TransportError::Connect(other_failure.to_string())
+                                            },
+                                        };
+                                       let _ = sender.send(Err(err));
+                                       tracing::warn!(peer = %peer, error = %error_str, "libp2p RPC outbound failure");
+                                   }
+                               }
                               request_response::Event::InboundFailure { .. } => {}
                               request_response::Event::ResponseSent { .. } => {}
                           }
@@ -545,10 +589,14 @@ async fn swarm_loop(
                             gossipsub::Event::Unsubscribed { peer_id, topic } => {
                                 tracing::info!(peer = %peer_id, ?topic, "peer unsubscribed from gossip topic");
                             }
-                            _ => {}
+                            other => {
+                                tracing::trace!("unhandled libp2p event: {other:?}");
+                            }
                         }
                     }
-                    _ => {}
+                    other => {
+                        tracing::trace!("unhandled libp2p event: {other:?}");
+                    }
                 }
             }
         }
@@ -562,11 +610,12 @@ mod tests {
     #[tokio::test]
     async fn swarm_listen_only() {
         let listen: libp2p::Multiaddr = "/ip4/127.0.0.1/tcp/0".parse().unwrap();
-        let mut handle = build_and_spawn_swarm(Some(listen), vec![], "mainnet", None, None)
+        let handle = build_and_spawn_swarm(Some(listen), vec![], "mainnet", None, None)
             .await
             .unwrap();
-        let _ = tokio::time::timeout(Duration::from_secs(2), handle.events.recv()).await;
-        assert!(!handle.local_peer_id.to_string().is_empty());
-        handle.task.abort();
+        let mut init = handle.extract_for_init();
+        let _ = tokio::time::timeout(Duration::from_secs(2), init.events.recv()).await;
+        assert!(!init.local_peer_id.to_string().is_empty());
+        init.task.abort();
     }
 }

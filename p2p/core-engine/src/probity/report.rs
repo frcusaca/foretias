@@ -73,13 +73,13 @@ impl ProbityReportRecord {
     pub fn timestamp_ns(&self) -> &u64 {
         &self.timestamp_ns
     }
-    pub fn signature(&self) -> &Vec<u8> {
+    pub fn signature(&self) -> &[u8] {
         &self.signature
     }
     pub fn curve(&self) -> &u8 {
         &self.curve
     }
-    pub fn slow_signature(&self) -> &Vec<u8> {
+    pub fn slow_signature(&self) -> &[u8] {
         &self.slow_signature
     }
 
@@ -138,7 +138,7 @@ impl UnverifiedSignatureEnvelope<ProbityReportRecord> {
     pub fn timestamp_ns(&self) -> &u64 {
         &self.inner().timestamp_ns
     }
-    pub fn signature(&self) -> &Vec<u8> {
+    pub fn signature(&self) -> &[u8] {
         &self.inner().signature
     }
     pub fn curve(&self) -> &u8 {
@@ -263,7 +263,7 @@ impl CleanAuthenticated<ProbityReportRecord> {
     pub fn timestamp_ns(&self) -> &u64 {
         &self.inner().timestamp_ns
     }
-    pub fn signature(&self) -> &Vec<u8> {
+    pub fn signature(&self) -> &[u8] {
         &self.inner().signature
     }
     pub fn curve(&self) -> &u8 {

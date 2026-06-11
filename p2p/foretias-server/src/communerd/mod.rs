@@ -700,12 +700,13 @@ impl Communerd {
         let handle =
             build_and_spawn_swarm(listen, dials, namespace, json_rpc_addr, rpc_handler).await?;
 
-        let peer_id = handle.local_peer_id;
+        let init = handle.extract_for_init();
+        let peer_id = init.local_peer_id;
         let _ = self.local_peer_id.set(peer_id);
-        let _ = self.p2p_task.set(handle.task);
-        let _ = self.p2p_cmd_tx.set(handle.cmd_tx.clone());
-        let _ = self.libp2p_transport.set_cmd_tx(handle.cmd_tx);
-        *self._local_multiaddr_arc.lock() = handle.local_multiaddr.lock().clone();
+        let _ = self.p2p_task.set(init.task);
+        let _ = self.p2p_cmd_tx.set(init.cmd_tx.clone());
+        let _ = self.libp2p_transport.set_cmd_tx(init.cmd_tx);
+        *self._local_multiaddr_arc.lock() = init.local_multiaddr.lock().clone();
 
         tracing::info!(component = "communerd", peer = %peer_id, "communerd: libp2p swarm started");
 
@@ -722,7 +723,7 @@ impl Communerd {
         ));
 
         // Start gossip event loop
-        let events = handle.events;
+        let events = init.events;
         let cmd_tx = self.p2p_cmd_tx.get().cloned();
         let probity_store = Arc::clone(&self.probity_store);
         let crypto = Arc::clone(&self.crypto);
@@ -876,7 +877,16 @@ impl Communerd {
                 } => {
                     Self::handle_dht_peer_discovered(&peer_id, &peer_pool, &clock).await;
                 }
-                _ => {}
+                NetworkEvent::Connected { .. }
+                | NetworkEvent::Disconnected { .. }
+                | NetworkEvent::Identified { .. }
+                | NetworkEvent::PingSuccess { .. }
+                | NetworkEvent::DhtBootstrapComplete
+                | NetworkEvent::ListenReady { .. }
+                | NetworkEvent::RecordPutOk { .. }
+                | NetworkEvent::RecordPutError { .. }
+                | NetworkEvent::DhtPeerDiscoveredByCapability { .. }
+                | NetworkEvent::PeerRegistrationRetrieved { .. } => {}
             }
         }
     }
