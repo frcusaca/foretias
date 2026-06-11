@@ -154,7 +154,7 @@ struct SettingsConfig {
 
 fn load_config() -> SettingsConfig {
     let path = std::env::var("HOME")
-        .map(|h| format!("{}/.config/foretias/foretias.settings.json", h))
+        .map(|h| format!("{h}/.config/foretias/foretias.settings.json"))
         .unwrap_or_default();
     let path = PathBuf::from(path);
 
@@ -281,7 +281,7 @@ fn read_foretis(
 fn client_echo() -> String {
     use foretias_core::clock::Clock;
     let now_ns = foretias_core::clock::SystemClock.now_ns().unwrap_or(0);
-    format!("UE+{}ns", now_ns)
+    format!("UE+{now_ns}ns")
 }
 
 // ── Subcommands ─────────────────────────────────────────────────────────────
@@ -400,7 +400,7 @@ async fn cmd_serve(config: ServeConfig) -> Result<(), Box<dyn std::error::Error>
         Some(
             listen_str
                 .parse()
-                .map_err(|e| format!("invalid --p2p-listen {}: {}", listen_str, e))?,
+                .map_err(|e| format!("invalid --p2p-listen {listen_str}: {e}"))?,
         )
     } else if !config.known_servers.is_empty() {
         let port = foretias_server::communerd::p2p::swarm::find_free_port(port_range.clone())
@@ -411,9 +411,9 @@ async fn cmd_serve(config: ServeConfig) -> Result<(), Box<dyn std::error::Error>
                 )
             })?;
         Some(
-            format!("/ip4/0.0.0.0/tcp/{}", port)
+            format!("/ip4/0.0.0.0/tcp/{port}")
                 .parse()
-                .map_err(|e| format!("failed to parse auto listen address: {}", e))?,
+                .map_err(|e| format!("failed to parse auto listen address: {e}"))?,
         )
     } else {
         None
@@ -424,7 +424,7 @@ async fn cmd_serve(config: ServeConfig) -> Result<(), Box<dyn std::error::Error>
         .iter()
         .map(|s| {
             s.parse::<libp2p::Multiaddr>()
-                .map_err(|e| format!("invalid --p2p-dial {}: {}", s, e))
+                .map_err(|e| format!("invalid --p2p-dial {s}: {e}"))
         })
         .collect::<Result<Vec<_>, String>>()?;
 
@@ -440,7 +440,7 @@ async fn cmd_serve(config: ServeConfig) -> Result<(), Box<dyn std::error::Error>
                     Some(handler),
                 )
                 .await
-                .map_err(|e| format!("failed to start libp2p swarm: {}", e))?;
+                .map_err(|e| format!("failed to start libp2p swarm: {e}"))?;
         }
     }
 
@@ -472,10 +472,13 @@ async fn cmd_serve(config: ServeConfig) -> Result<(), Box<dyn std::error::Error>
     }
 
     println!("Foretias TimeFamilyServer starting...");
-    println!("  Listen : {}", addr);
+    println!("  Listen : {addr}");
     println!("  TBN    : {}", server.get_tbn());
     println!("  TBID   : {}", server.get_tbid().to_hex());
-    println!("  Config : TimeFamilyConfig v{}", time_family_cfg.version);
+    println!(
+        "  Config : TimeFamilyConfig v{version}",
+        version = time_family_cfg.version
+    );
     if config.start_dormant {
         println!("  Mode   : dormant (verify-only)");
     } else {
@@ -483,10 +486,10 @@ async fn cmd_serve(config: ServeConfig) -> Result<(), Box<dyn std::error::Error>
     }
     if server.communerd().is_some() {
         if let Some(ma) = &p2p_listen_addr {
-            println!("  P2P Listen : {}", ma);
+            println!("  P2P Listen : {ma}");
         }
         if let Some(peer_id) = server.communerd().and_then(|c| c.local_peer_id()) {
-            println!("  PeerId     : {}", peer_id);
+            println!("  PeerId     : {peer_id}");
         }
     }
     if !config.known_servers.is_empty() {
@@ -513,7 +516,7 @@ async fn cmd_serve(config: ServeConfig) -> Result<(), Box<dyn std::error::Error>
     server.stop_daemon_arc();
 
     if let Err(e) = server.save() {
-        eprintln!("Warning: failed to persist calendar on shutdown: {}", e);
+        eprintln!("Warning: failed to persist calendar on shutdown: {e}");
     }
 
     Ok(())
@@ -530,11 +533,11 @@ fn parse_port_range(range_str: &str) -> Result<std::ops::Range<u16>, String> {
     let start: u16 = parts[0]
         .trim()
         .parse()
-        .map_err(|e| format!("invalid port range start '{}': {}", parts[0], e))?;
+        .map_err(|e| format!("invalid port range start '{}': {e}", parts[0]))?;
     let end: u16 = parts[1]
         .trim()
         .parse()
-        .map_err(|e| format!("invalid port range end '{}': {}", parts[1], e))?;
+        .map_err(|e| format!("invalid port range end '{}': {e}", parts[1]))?;
     if start >= end {
         return Err(format!(
             "port range start ({}) must be less than end ({})",
@@ -558,7 +561,7 @@ async fn cmd_stamp(
     let (foretis, sig, sig_alg) = client
         .stamp(&content, echo)
         .await
-        .map_err(|e| format!("stamp failed: {}", e))?;
+        .map_err(|e| format!("stamp failed: {e}"))?;
 
     let output = serde_json::to_string_pretty(&serde_json::json!({
         "foretis": foretis,
@@ -566,9 +569,10 @@ async fn cmd_stamp(
         "signature_algorithm": sig_alg,
     }))?;
     match stamp_output {
-        Some(path) => std::fs::write(&path, &output)
-            .map_err(|e| format!("Failed to write {}: {}", path, e))?,
-        None => println!("{}", output),
+        Some(path) => {
+            std::fs::write(&path, &output).map_err(|e| format!("Failed to write {path}: {e}"))?
+        }
+        None => println!("{output}"),
     }
     Ok(())
 }
@@ -629,7 +633,7 @@ async fn cmd_verify(config: VerifyConfig) -> Result<(), Box<dyn std::error::Erro
     let valid = client
         .verify(&content, &foretis, &signature_bytes, sig_alg)
         .await
-        .map_err(|e| format!("verify failed: {}", e))?;
+        .map_err(|e| format!("verify failed: {e}"))?;
 
     let result = serde_json::json!({
         "valid": valid,
@@ -638,9 +642,10 @@ async fn cmd_verify(config: VerifyConfig) -> Result<(), Box<dyn std::error::Erro
 
     let output = serde_json::to_string_pretty(&result)?;
     match config.verify_output {
-        Some(path) => std::fs::write(&path, &output)
-            .map_err(|e| format!("Failed to write {}: {}", path, e))?,
-        None => println!("{}", output),
+        Some(path) => {
+            std::fs::write(&path, &output).map_err(|e| format!("Failed to write {path}: {e}"))?
+        }
+        None => println!("{output}"),
     }
     Ok(())
 }
@@ -677,14 +682,15 @@ async fn cmd_verify_with_proof(
     let report = client
         .verify_with_proof(&content, &foretis, &signature, sig_alg)
         .await
-        .map_err(|e| format!("verify with proof failed: {}", e))?;
+        .map_err(|e| format!("verify with proof failed: {e}"))?;
 
     let result = serde_json::to_value(&report)?;
     let output = serde_json::to_string_pretty(&result)?;
     match proof_output {
-        Some(path) => std::fs::write(&path, &output)
-            .map_err(|e| format!("Failed to write {}: {}", path, e))?,
-        None => println!("{}", output),
+        Some(path) => {
+            std::fs::write(&path, &output).map_err(|e| format!("Failed to write {path}: {e}"))?
+        }
+        None => println!("{output}"),
     }
     Ok(())
 }
@@ -694,10 +700,10 @@ async fn cmd_verify_with_proof(
 /// prints results, exits 0 if all valid, 1 if any invalid.
 fn cmd_inspect_attestations(calendar_path: String) -> Result<(), Box<dyn std::error::Error>> {
     let contents = std::fs::read_to_string(&calendar_path)
-        .map_err(|e| format!("Failed to read {}: {}", calendar_path, e))?;
+        .map_err(|e| format!("Failed to read {calendar_path}: {e}"))?;
 
     let calendar: foretias_core::foretias::calendar::Calendar = serde_json::from_str(&contents)
-        .map_err(|e| format!("Failed to parse calendar JSON: {}", e))?;
+        .map_err(|e| format!("Failed to parse calendar JSON: {e}"))?;
 
     let crypto = crypto_server::new_software(crypto_server::ForetiasCurve::Ed25519)?;
     let cal_lookup = CalendarInspect {
@@ -767,9 +773,9 @@ fn cmd_inspect_attestations(calendar_path: String) -> Result<(), Box<dyn std::er
     }
 
     println!("\n--- Summary ---");
-    println!("Total attestations: {}", total_attestations);
-    println!("Valid:              {}", valid_count);
-    println!("Invalid:            {}", invalid_count);
+    println!("Total attestations: {total_attestations}");
+    println!("Valid:              {valid_count}");
+    println!("Invalid:            {invalid_count}");
 
     if invalid_count > 0 {
         std::process::exit(1);

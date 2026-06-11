@@ -170,7 +170,7 @@ mod tests {
 
     #[test]
     fn oversized_family_rejected() {
-        let members: Vec<String> = (0..65).map(|i| format!("tbid{}", i)).collect();
+        let members: Vec<String> = (0..65).map(|i| format!("tbid{i}")).collect();
         let result = FamilyRecord::try_new(members, vec![]);
         assert_eq!(result, Err(FamilyError::OversizedFamily));
     }
@@ -189,7 +189,7 @@ mod tests {
 
     #[test]
     fn max_size_family_accepted() {
-        let members: Vec<String> = (0..64).map(|i| format!("tbid{}", i)).collect();
+        let members: Vec<String> = (0..64).map(|i| format!("tbid{i}")).collect();
         let matrix: Vec<Vec<Vec<u8>>> = (0..64)
             .map(|_| (0..64).map(|_| vec![0u8; 64]).collect())
             .collect();

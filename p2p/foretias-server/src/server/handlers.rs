@@ -53,7 +53,7 @@ pub fn handle_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse
                 server,
                 id,
                 jsonrpc::INVALID_PARAMS,
-                format!("invalid hex: {}", e),
+                format!("invalid hex: {e}"),
             )
         }
     };
@@ -63,10 +63,7 @@ pub fn handle_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse
             server,
             id,
             jsonrpc::INVALID_PARAMS,
-            format!(
-                "content exceeds maximum size of {} bytes",
-                MAX_CONTENT_BYTES
-            ),
+            format!("content exceeds maximum size of {MAX_CONTENT_BYTES} bytes"),
         );
     }
 
@@ -84,7 +81,7 @@ pub fn handle_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse
         Ok(stamped) => {
             server.metrics().inc(MetricField::StampsTotal);
             if let Err(e) = server.save() {
-                tracing::warn!("failed to persist calendar after stamp: {}", e);
+                tracing::warn!("failed to persist calendar after stamp: {e}");
             }
             resp_success(
                 server,
@@ -100,7 +97,7 @@ pub fn handle_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse
             server,
             id,
             jsonrpc::INTERNAL_ERROR,
-            format!("stamp failed: {}", e),
+            format!("stamp failed: {e}"),
         ),
     }
 }
@@ -139,7 +136,7 @@ pub fn handle_route_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcRe
                 server,
                 id,
                 jsonrpc::INVALID_PARAMS,
-                format!("invalid hex: {}", e),
+                format!("invalid hex: {e}"),
             )
         }
     };
@@ -149,10 +146,7 @@ pub fn handle_route_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcRe
             server,
             id,
             jsonrpc::INVALID_PARAMS,
-            format!(
-                "content exceeds maximum size of {} bytes",
-                MAX_CONTENT_BYTES
-            ),
+            format!("content exceeds maximum size of {MAX_CONTENT_BYTES} bytes"),
         );
     }
 
@@ -182,7 +176,7 @@ pub fn handle_route_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcRe
         Ok(ca_foretis) => {
             server.metrics().inc(MetricField::StampsTotal);
             if let Err(e) = server.save() {
-                tracing::warn!("failed to persist calendar after routed stamp: {}", e);
+                tracing::warn!("failed to persist calendar after routed stamp: {e}");
             }
             // Extract signature metadata before consuming the wrapper, then return the
             // same envelope shape as handle_stamp for response-shape consistency.
@@ -208,7 +202,7 @@ pub fn handle_route_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcRe
             server,
             id,
             jsonrpc::INTERNAL_ERROR,
-            format!("route stamp failed: {}", e),
+            format!("route stamp failed: {e}"),
         ),
     }
 }
@@ -259,7 +253,7 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
                 server,
                 id,
                 jsonrpc::INVALID_PARAMS,
-                format!("invalid hex: {}", e),
+                format!("invalid hex: {e}"),
             )
         }
     };
@@ -269,10 +263,7 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
             server,
             id,
             jsonrpc::INVALID_PARAMS,
-            format!(
-                "content exceeds maximum size of {} bytes",
-                MAX_CONTENT_BYTES
-            ),
+            format!("content exceeds maximum size of {MAX_CONTENT_BYTES} bytes"),
         );
     }
 
@@ -283,7 +274,7 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
                 server,
                 id,
                 jsonrpc::INVALID_PARAMS,
-                format!("failed to parse foretis: {}", e),
+                format!("failed to parse foretis: {e}"),
             )
         }
     };
@@ -348,7 +339,7 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
                     server,
                     id,
                     jsonrpc::INVALID_PARAMS,
-                    format!("failed to parse foretis: {}", e),
+                    format!("failed to parse foretis: {e}"),
                 )
             }
         };
@@ -365,7 +356,7 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
             server,
             id,
             jsonrpc::INTERNAL_ERROR,
-            format!("cross-node verify failed: {}", e),
+            format!("cross-node verify failed: {e}"),
         ),
     }
 }
@@ -421,7 +412,7 @@ pub fn handle_get_calendar_slice(server: &TimeFamilyServer, params: Value) -> Js
             server,
             id,
             jsonrpc::INVALID_PARAMS,
-            format!("count exceeds maximum of {}", MAX_CALENDAR_SLICE_COUNT),
+            format!("count exceeds maximum of {MAX_CALENDAR_SLICE_COUNT}"),
         );
     }
 
@@ -429,7 +420,7 @@ pub fn handle_get_calendar_slice(server: &TimeFamilyServer, params: Value) -> Js
     let cal = calendar.read();
     let records = cal
         .get(cal_chronon_start, count)
-        .map_err(|e| NodeError::Internal(format!("calendar lookup failed: {}", e)));
+        .map_err(|e| NodeError::Internal(format!("calendar lookup failed: {e}")));
 
     match records {
         Ok(recs) => resp_success(
@@ -437,7 +428,7 @@ pub fn handle_get_calendar_slice(server: &TimeFamilyServer, params: Value) -> Js
             id,
             serde_json::to_value(&recs).unwrap_or(Value::Null),
         ),
-        Err(e) => resp_error(server, id, jsonrpc::INTERNAL_ERROR, format!("{}", e)),
+        Err(e) => resp_error(server, id, jsonrpc::INTERNAL_ERROR, format!("{e}")),
     }
 }
 
@@ -465,7 +456,7 @@ pub fn handle_integrity_check(server: &TimeFamilyServer, params: Value) -> JsonR
             server,
             id,
             jsonrpc::INTERNAL_ERROR,
-            format!("integrity check failed: {}", e),
+            format!("integrity check failed: {e}"),
         ),
     }
 }
@@ -758,7 +749,7 @@ pub fn handle_ship_batch(server: &TimeFamilyServer, params: Value) -> JsonRpcRes
             server,
             id,
             jsonrpc::INVALID_PARAMS,
-            format!("count exceeds maximum of {}", MAX_CALENDAR_SLICE_COUNT),
+            format!("count exceeds maximum of {MAX_CALENDAR_SLICE_COUNT}"),
         );
     }
 
@@ -766,7 +757,7 @@ pub fn handle_ship_batch(server: &TimeFamilyServer, params: Value) -> JsonRpcRes
     let cal_read = cal.read();
     let records = cal_read
         .get(tick_start, count)
-        .map_err(|e| NodeError::Internal(format!("calendar lookup failed: {}", e)));
+        .map_err(|e| NodeError::Internal(format!("calendar lookup failed: {e}")));
     drop(cal_read);
 
     match records {
@@ -782,7 +773,7 @@ pub fn handle_ship_batch(server: &TimeFamilyServer, params: Value) -> JsonRpcRes
                 }),
             )
         }
-        Err(e) => resp_error(server, id, jsonrpc::INTERNAL_ERROR, format!("{}", e)),
+        Err(e) => resp_error(server, id, jsonrpc::INTERNAL_ERROR, format!("{e}")),
     }
 }
 
@@ -810,7 +801,7 @@ pub fn handle_ship_ack(server: &TimeFamilyServer, params: Value) -> JsonRpcRespo
                 server,
                 id,
                 jsonrpc::INVALID_PARAMS,
-                format!("failed to parse records: {}", e),
+                format!("failed to parse records: {e}"),
             )
         }
     };
@@ -862,7 +853,7 @@ pub fn handle_ship_ack(server: &TimeFamilyServer, params: Value) -> JsonRpcRespo
                     server,
                     id,
                     jsonrpc::INVALID_PARAMS,
-                    format!("chain verification failed at record {}: {}", i, e),
+                    format!("chain verification failed at record {i}: {e}"),
                 );
             }
         }
@@ -871,7 +862,7 @@ pub fn handle_ship_ack(server: &TimeFamilyServer, params: Value) -> JsonRpcRespo
     let mirror_store = server.mirror_store();
     for record in verified {
         if let Err(e) = mirror_store.insert_mirrored(&tbid, record.into_inner()) {
-            tracing::warn!("mirror insert failed for {}: {}", tbid, e);
+            tracing::warn!("mirror insert failed for {tbid}: {e}");
         }
     }
 
@@ -918,7 +909,7 @@ pub fn handle_stream_tick(server: &TimeFamilyServer, params: Value) -> JsonRpcRe
                 server,
                 id,
                 jsonrpc::INVALID_PARAMS,
-                format!("failed to parse record: {}", e),
+                format!("failed to parse record: {e}"),
             )
         }
     };
@@ -952,7 +943,7 @@ pub fn handle_stream_tick(server: &TimeFamilyServer, params: Value) -> JsonRpcRe
                 server,
                 id,
                 jsonrpc::INVALID_PARAMS,
-                format!("verification failed: {}", e),
+                format!("verification failed: {e}"),
             )
         }
     };
@@ -962,7 +953,7 @@ pub fn handle_stream_tick(server: &TimeFamilyServer, params: Value) -> JsonRpcRe
             server,
             id,
             jsonrpc::INTERNAL_ERROR,
-            format!("mirror insert failed: {}", e),
+            format!("mirror insert failed: {e}"),
         );
     }
 
@@ -2179,7 +2170,7 @@ mod tests {
         let server = make_server();
         for i in 0..3 {
             let params = serde_json::json!({
-                "content": hex::encode(format!("item-{}", i).as_bytes()),
+                "content": hex::encode(format!("item-{i}").as_bytes()),
             });
             handle_stamp(&server, params);
         }
@@ -2222,7 +2213,7 @@ mod tests {
         let server = make_server();
         for i in 0..3 {
             let params = serde_json::json!({
-                "content": hex::encode(format!("item-{}", i).as_bytes()),
+                "content": hex::encode(format!("item-{i}").as_bytes()),
             });
             handle_stamp(&server, params);
         }
@@ -2246,7 +2237,7 @@ mod tests {
         let server = make_server();
         for i in 0..5 {
             let params = serde_json::json!({
-                "content": hex::encode(format!("item-{}", i).as_bytes()),
+                "content": hex::encode(format!("item-{i}").as_bytes()),
             });
             handle_stamp(&server, params);
         }

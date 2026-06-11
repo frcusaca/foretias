@@ -1048,7 +1048,7 @@ impl Communerd {
 
     pub async fn publish_attest_willing(&self, namespace: &str) {
         if let Some(cmd_tx) = self.p2p_cmd_tx.get() {
-            let key = kad::RecordKey::new(&format!("{}/foretias/attest-willing/v1", namespace));
+            let key = kad::RecordKey::new(&format!("{namespace}/foretias/attest-willing/v1"));
             let _ = cmd_tx.send(SwarmCommand::Provide { key });
         }
     }
@@ -1147,7 +1147,7 @@ impl Communerd {
         // Build the record with empty signature, sign canonical_payload, then
         // populate the signature field before serialization. Both DHT records
         // (peers/v1 and tbid/v1) carry the same signed PeerRegistrationRecord.
-        let key = kad::RecordKey::new(&format!("/foretias/{}/peers/v1", namespace));
+        let key = kad::RecordKey::new(&format!("/foretias/{namespace}/peers/v1"));
         let mut peer_record = PeerRegistrationRecord {
             peer_id: peer_id.to_string(),
             tbid: tbid.to_hex(),
@@ -1179,8 +1179,7 @@ impl Communerd {
         tracing::info!(component = "communerd", peer = %peer_id, "communerd: self-registration initiated");
 
         let tbid_hex = tbid.to_hex();
-        let tbid_key =
-            kad::RecordKey::new(&format!("/foretias/{}/tbid/{}/v1", namespace, tbid_hex));
+        let tbid_key = kad::RecordKey::new(&format!("/foretias/{namespace}/tbid/{tbid_hex}/v1"));
         let tbid_record = kad::Record {
             key: tbid_key.clone(),
             value: serde_json::to_vec(&peer_record)
@@ -1244,7 +1243,7 @@ impl Communerd {
             crypto,
         } = config;
         let ns = namespace.lock().clone();
-        let key = kad::RecordKey::new(&format!("/foretias/{}/peers/v1", ns));
+        let key = kad::RecordKey::new(&format!("/foretias/{ns}/peers/v1"));
         let ma = match local_multiaddr.lock().clone() {
             Some(m) => m.to_string(),
             None => return,
@@ -1283,7 +1282,7 @@ impl Communerd {
         };
         let _ = cmd_tx.send(SwarmCommand::PutRecord { key, record });
         let tbid_hex = tbid.to_hex();
-        let tbid_key = kad::RecordKey::new(&format!("/foretias/{}/tbid/{}/v1", ns, tbid_hex));
+        let tbid_key = kad::RecordKey::new(&format!("/foretias/{ns}/tbid/{tbid_hex}/v1"));
         let tbid_record = kad::Record {
             key: tbid_key.clone(),
             value: serde_json::to_vec(&peer_record).unwrap_or_default(),
@@ -1310,7 +1309,7 @@ impl Communerd {
             return Some(record);
         }
         let cmd_tx = self.p2p_cmd_tx.get()?;
-        let key = kad::RecordKey::new(&format!("/foretias/{}/tbid/{}/v1", namespace, tbid_hex));
+        let key = kad::RecordKey::new(&format!("/foretias/{namespace}/tbid/{tbid_hex}/v1"));
         let (tx, rx) = tokio::sync::oneshot::channel();
         self.pending_lookups.lock().insert(key.clone(), tx);
         let _ = cmd_tx.send(SwarmCommand::GetRecord { key: key.clone() });
@@ -1346,8 +1345,7 @@ impl Communerd {
         };
         // Publish under each member's family key
         for member_tbid_hex in record.members() {
-            let key =
-                kad::RecordKey::new(&format!("/foretias/{}/family/{}/v1", ns, member_tbid_hex));
+            let key = kad::RecordKey::new(&format!("/foretias/{ns}/family/{member_tbid_hex}/v1"));
             let kad_record = kad::Record {
                 key: key.clone(),
                 value: value.clone(),
@@ -1374,7 +1372,7 @@ impl Communerd {
             return Some(cached);
         }
         // DHT lookup
-        let key = kad::RecordKey::new(&format!("/foretias/{}/family/{}/v1", ns, tbid_hex));
+        let key = kad::RecordKey::new(&format!("/foretias/{ns}/family/{tbid_hex}/v1"));
         let cmd_tx = self.p2p_cmd_tx.get()?;
         let (tx, rx) = tokio::sync::oneshot::channel();
         self.pending_family_lookups.lock().insert(key.clone(), tx);
@@ -1481,7 +1479,7 @@ impl Communerd {
         let owner = self
             .lookup_tbid(tbid_hex, &self.namespace())
             .await
-            .ok_or_else(|| TransportError::Decode(format!("TBID {} not found in DHT", tbid_hex)))?;
+            .ok_or_else(|| TransportError::Decode(format!("TBID {tbid_hex} not found in DHT")))?;
         let peer = PeerAddr {
             json_rpc: owner.json_rpc,
             peer_id: owner.peer_id.parse().ok(),
@@ -1749,17 +1747,17 @@ fn resolve_known_server(addr_str: &str) -> Result<libp2p::Multiaddr, NodeError> 
     let host = parts[1];
 
     if host.parse::<std::net::Ipv4Addr>().is_ok() {
-        Ok(format!("/ip4/{}/tcp/{}", host, port)
+        Ok(format!("/ip4/{host}/tcp/{port}")
             .parse()
-            .map_err(|e| NodeError::Internal(format!("invalid multiaddr parse: {}", e)))?)
+            .map_err(|e| NodeError::Internal(format!("invalid multiaddr parse: {e}")))?)
     } else if host.parse::<std::net::Ipv6Addr>().is_ok() {
-        Ok(format!("/ip6/{}/tcp/{}", host, port)
+        Ok(format!("/ip6/{host}/tcp/{port}")
             .parse()
-            .map_err(|e| NodeError::Internal(format!("invalid multiaddr parse: {}", e)))?)
+            .map_err(|e| NodeError::Internal(format!("invalid multiaddr parse: {e}")))?)
     } else {
-        Ok(format!("/dns/{}/tcp/{}", host, port)
+        Ok(format!("/dns/{host}/tcp/{port}")
             .parse()
-            .map_err(|e| NodeError::Internal(format!("invalid multiaddr parse: {}", e)))?)
+            .map_err(|e| NodeError::Internal(format!("invalid multiaddr parse: {e}")))?)
     }
 }
 

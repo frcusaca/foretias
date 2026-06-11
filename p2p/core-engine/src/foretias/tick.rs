@@ -377,7 +377,7 @@ pub fn stamp(
     let now_ns = clock
         .now_ns()
         .map_err(|e| NodeError::Internal(format!("clock error: {e}")))?;
-    let time_being_reference_time = format!("UE+{}ns", now_ns);
+    let time_being_reference_time = format!("UE+{now_ns}ns");
 
     let foretis = ForetisRecord {
         chronon_number,

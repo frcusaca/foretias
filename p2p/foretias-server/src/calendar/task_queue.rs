@@ -438,7 +438,7 @@ fn stamp_and_sign_chronon_attestation(
     foretias_core::foretias::tick::StampedForetis,
     foretias_core::foretias::types::SignatureBytes,
 )> {
-    let stamp_content = format!("chronon-attest-{}", target_tbid);
+    let stamp_content = format!("chronon-attest-{target_tbid}");
     let stamped = chronomatter
         .stamp(
             stamp_content.into_bytes(),
@@ -634,7 +634,7 @@ fn stamp_and_sign_epoch_attestation(
     foretias_core::foretias::tick::StampedForetis,
     foretias_core::foretias::types::SignatureBytes,
 )> {
-    let stamp_content = format!("epoch-attest-{}", target_tbid);
+    let stamp_content = format!("epoch-attest-{target_tbid}");
     let stamped = chronomatter
         .stamp(stamp_content.into_bytes(), "epoch-attestation".to_string())
         .ok()

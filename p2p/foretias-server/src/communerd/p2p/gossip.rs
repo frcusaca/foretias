@@ -8,12 +8,12 @@ use libp2p::gossipsub::IdentTopic;
 
 /// Probity gossip topic — per-namespace isolation.
 pub fn probity_topic(namespace: &str) -> IdentTopic {
-    IdentTopic::new(format!("/foretias/{}/probity/v1", namespace))
+    IdentTopic::new(format!("/foretias/{namespace}/probity/v1"))
 }
 
 /// Heartbeat topic — per-namespace isolation for collision detection.
 pub fn heartbeat_topic(namespace: &str) -> IdentTopic {
-    IdentTopic::new(format!("/foretias/{}/heartbeat/v1", namespace))
+    IdentTopic::new(format!("/foretias/{namespace}/heartbeat/v1"))
 }
 
 /// Publish a probity report to the gossip network.

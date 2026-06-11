@@ -110,7 +110,7 @@ impl EncryptedJsonlCalendarStore {
         let written_at_ns = self
             .clock
             .now_ns()
-            .map_err(|e| NodeError::Internal(format!("clock error: {}", e)))?;
+            .map_err(|e| NodeError::Internal(format!("clock error: {e}")))?;
 
         let mut block = CalendarBlock {
             block_id,
@@ -128,7 +128,7 @@ impl EncryptedJsonlCalendarStore {
 
         // CBOR encode the sealed blob
         let cbor_bytes = serde_cbor::to_vec(&sealed)
-            .map_err(|e| NodeError::Internal(format!("CBOR encode error: {}", e)))?;
+            .map_err(|e| NodeError::Internal(format!("CBOR encode error: {e}")))?;
 
         // Base64 encode
         let line = STANDARD.encode(&cbor_bytes);
@@ -171,11 +171,11 @@ impl EncryptedJsonlCalendarStore {
             // Base64 decode
             let cbor_bytes = STANDARD
                 .decode(line)
-                .map_err(|e| NodeError::Internal(format!("base64 decode error: {}", e)))?;
+                .map_err(|e| NodeError::Internal(format!("base64 decode error: {e}")))?;
 
             // CBOR decode to SealedBlob
             let sealed: SealedBlob = serde_cbor::from_slice(&cbor_bytes)
-                .map_err(|e| NodeError::Internal(format!("CBOR decode error: {}", e)))?;
+                .map_err(|e| NodeError::Internal(format!("CBOR decode error: {e}")))?;
 
             // Unseal
             let json_bytes = self.server.unseal_for_self(&sealed)?;

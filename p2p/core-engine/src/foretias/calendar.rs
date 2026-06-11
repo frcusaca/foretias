@@ -147,7 +147,7 @@ impl Calendar {
     #[must_use = "calendar save may fail and the error must be handled"]
     pub fn save(&self, path: &str) -> Result<(), NodeError> {
         let data = serde_json::to_string_pretty(self)?;
-        let tmp_path = format!("{}.tmp", path);
+        let tmp_path = format!("{path}.tmp");
         // Ensure parent directory exists
         if let Some(parent) = std::path::Path::new(path).parent() {
             std::fs::create_dir_all(parent)?;
@@ -168,7 +168,7 @@ impl Calendar {
     /// 3. If only the main file exists, load it normally.
     #[must_use = "calendar load may fail and the error must be handled"]
     pub fn load(path: &str) -> Result<Self, NodeError> {
-        let tmp_path = format!("{}.tmp", path);
+        let tmp_path = format!("{path}.tmp");
 
         // Try loading the main file
         let main_cal = std::fs::read_to_string(path)
@@ -562,7 +562,7 @@ mod tests {
     fn calendar_save_is_atomic() {
         use std::path::Path;
         let path = "/tmp/foretias-test-atomic-save.json";
-        let tmp_path = format!("{}.tmp", path);
+        let tmp_path = format!("{path}.tmp");
 
         let mut cal = Calendar::new(Tbid::from_raw([0xAA; 96]), "atomic-test");
         cal.append(make_tick(1)).unwrap();
@@ -584,7 +584,7 @@ mod tests {
     #[test]
     fn calendar_crash_recovery_from_tmp() {
         let path = "/tmp/foretias-test-crash-recovery.json";
-        let tmp_path = format!("{}.tmp", path);
+        let tmp_path = format!("{path}.tmp");
 
         // Simulate crash: main file has 1 tick, .tmp has 2 ticks (write completed, rename didn't)
         let mut main_cal = Calendar::new(Tbid::from_raw([0xBB; 96]), "crash-recovery");
@@ -612,7 +612,7 @@ mod tests {
     #[test]
     fn calendar_crash_recovery_ignores_stale_tmp() {
         let path = "/tmp/foretias-test-stale-tmp.json";
-        let tmp_path = format!("{}.tmp", path);
+        let tmp_path = format!("{path}.tmp");
 
         // Main file has 3 ticks, .tmp has only 1 (stale/corrupt .tmp)
         let mut main_cal = Calendar::new(Tbid::from_raw([0xCC; 96]), "stale-tmp");
@@ -644,7 +644,7 @@ mod tests {
     #[test]
     fn calendar_crash_recovery_corrupt_tmp() {
         let path = "/tmp/foretias-test-corrupt-tmp.json";
-        let tmp_path = format!("{}.tmp", path);
+        let tmp_path = format!("{path}.tmp");
 
         // Main file is valid, .tmp contains garbage
         let mut cal = Calendar::new(Tbid::from_raw([0xDD; 96]), "corrupt-tmp");

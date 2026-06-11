@@ -38,7 +38,7 @@ fn default_listen_addr() -> String {
 
 fn default_log_dir() -> String {
     std::env::var("HOME")
-        .map(|h| format!("{}/.local/share/foretias/log", h))
+        .map(|h| format!("{h}/.local/share/foretias/log"))
         .unwrap_or_else(|_| "/tmp/foretias-log".to_string())
 }
 
@@ -158,7 +158,7 @@ impl TimeFamilyConfig {
     /// Returns the default path: ~/.config/foretias/foretias.json
     pub fn default_path() -> String {
         std::env::var("HOME")
-            .map(|h| format!("{}/.config/foretias/foretias.json", h))
+            .map(|h| format!("{h}/.config/foretias/foretias.json"))
             .unwrap_or_else(|_| ".config/foretias/foretias.json".to_string())
     }
 

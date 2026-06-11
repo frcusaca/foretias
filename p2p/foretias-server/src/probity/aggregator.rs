@@ -129,7 +129,7 @@ mod tests {
             .map(|i| {
                 ProbityReportRecord::new(
                     "x".into(),
-                    format!("r{}", i),
+                    format!("r{i}"),
                     "correctness".into(),
                     100.0,
                     now - 1_000_000,

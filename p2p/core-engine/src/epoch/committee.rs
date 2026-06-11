@@ -58,7 +58,7 @@ mod tests {
     fn top_probity_selector_selects_top_n() {
         let store = ProbityStore::new();
         for i in 0..10u8 {
-            store.set_score(format!("peer-{}", i), (10 - i) as f32 * 10.0);
+            store.set_score(format!("peer-{i}"), (10 - i) as f32 * 10.0);
         }
         // peer-0=90, peer-1=80, ..., peer-9=0
         let selector = TopProbitySelector::new(3, 2);

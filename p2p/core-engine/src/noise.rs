@@ -406,13 +406,13 @@ pub async fn noise_send(
     let ct = session.send(plaintext)?;
     write_length_prefix(writer, ct.len() as u32)
         .await
-        .map_err(|e| CryptoError::IoWrite(format!("length prefix: {}", e)))?;
+        .map_err(|e| CryptoError::IoWrite(format!("length prefix: {e}")))?;
     tokio::io::AsyncWriteExt::write_all(writer, &ct)
         .await
-        .map_err(|e| CryptoError::IoWrite(format!("ciphertext write: {}", e)))?;
+        .map_err(|e| CryptoError::IoWrite(format!("ciphertext write: {e}")))?;
     tokio::io::AsyncWriteExt::flush(writer)
         .await
-        .map_err(|e| CryptoError::IoWrite(format!("flush: {}", e)))?;
+        .map_err(|e| CryptoError::IoWrite(format!("flush: {e}")))?;
     Ok(())
 }
 
@@ -425,12 +425,11 @@ pub async fn noise_recv(
 ) -> Result<Vec<u8>, CryptoError> {
     let ct_len = read_length_prefix(reader)
         .await
-        .map_err(|e| CryptoError::IoRead(format!("length prefix: {}", e)))?
-        as usize;
+        .map_err(|e| CryptoError::IoRead(format!("length prefix: {e}")))? as usize;
     let mut ct_buf = vec![0u8; ct_len];
     tokio::io::AsyncReadExt::read_exact(reader, &mut ct_buf)
         .await
-        .map_err(|e| CryptoError::IoRead(format!("ciphertext read: {}", e)))?;
+        .map_err(|e| CryptoError::IoRead(format!("ciphertext read: {e}")))?;
     session.recv(&ct_buf)
 }
 

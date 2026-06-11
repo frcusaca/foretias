@@ -115,7 +115,7 @@ impl SnapshotSuite {
 
     /// Return the path to the approved snapshot for a given test name.
     fn snapshot_path(&self, test_name: &str) -> PathBuf {
-        self.approved_dir.join(format!("{}.snap", test_name))
+        self.approved_dir.join(format!("{test_name}.snap"))
     }
 
     /// Compare actual output against an approved snapshot.
@@ -134,7 +134,7 @@ impl SnapshotSuite {
 
         let expected = fs::read_to_string(&path).map_err(|e| TestFailure::Error {
             name: test_name.to_string(),
-            message: format!("Failed to read {}: {}", path.display(), e),
+            message: format!("Failed to read {}: {e}", path.display()),
         })?;
 
         if expected.trim_end() != actual.trim_end() {
@@ -275,7 +275,7 @@ pub fn build_snapshot(
     ];
 
     for (i, result) in results.iter().enumerate() {
-        lines.push(format!("[{}] RESULT:", i));
+        lines.push(format!("[{i}] RESULT:"));
         lines.push("```json".to_string());
         lines.push(result.trim_end().to_string());
         lines.push("```".to_string());
@@ -327,9 +327,7 @@ mod tests {
     #[test]
     fn compare_mismatch_when_different() {
         let dir = std::env::temp_dir().join(format!("snapsuite_test_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-
         let approved = dir.join("test_mismatch.snap");
         std::fs::write(&approved, "expected output").unwrap();
 

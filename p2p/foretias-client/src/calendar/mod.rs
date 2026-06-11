@@ -76,11 +76,10 @@ impl Calendar {
                 .collect(),
         };
         let json = serde_json::to_string_pretty(&persisted).map_err(|e| {
-            NodeError::Internal(format!("failed to serialize persisted calendar: {}", e))
+            NodeError::Internal(format!("failed to serialize persisted calendar: {e}"))
         })?;
-        std::fs::write(path, json).map_err(|e| {
-            NodeError::Internal(format!("failed to write persisted calendar: {}", e))
-        })?;
+        std::fs::write(path, json)
+            .map_err(|e| NodeError::Internal(format!("failed to write persisted calendar: {e}")))?;
         Ok(())
     }
 }

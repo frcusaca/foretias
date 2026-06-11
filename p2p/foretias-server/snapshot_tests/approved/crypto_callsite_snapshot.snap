@@ -113,7 +113,7 @@ core-engine/src/snapshot_signature.rs                            112  sign    le
 foretias-client/src/foretias.rs                                  381  verify  let result = cm.verify(
 foretias-client/src/foretias.rs                                  707  verify  let verified = client.verify(content, &foretis, &sig, &alg).await.unwrap();
 foretias-client/src/foretias.rs                                  719  verify  .verify(b"tampered", &foretis, &sig, &alg)
-foretias-server/src/calendar/mod.rs                              231  sign    let sig = key.sign(foretis_bytes)?;
+foretias-server/src/calendar/mod.rs                              230  sign    let sig = key.sign(foretis_bytes)?;
 foretias-server/src/calendar/task_queue.rs                       272  sign    match key.sign(data) {
 foretias-server/src/calendar_store/mod.rs                        230  gate    return Some(CleanAuthenticated::from_trusted(record));
 foretias-server/src/calendar_store/mod.rs                        280  gate    found.push((cn, CleanAuthenticated::from_trusted(record)));
@@ -124,69 +124,69 @@ foretias-server/src/communerd/communerdette.rs                   317  verify  //
 foretias-server/src/communerd/communerdette.rs                   343  verify  .verify_with(
 foretias-server/src/communerd/communerdette.rs                   367  verify  .verify_with(
 foretias-server/src/communerd/communerdette.rs                   418  gate    foretias_core::foretias::clean_auth::CleanFullyAuthenticated::from_dual_verified
-foretias-server/src/communerd/communerdette.rs                  1157  gate    fn gate_chronon_records(
-foretias-server/src/communerd/communerdette.rs                  1188  verify  .verify(crypto, None)
-foretias-server/src/communerd/communerdette.rs                  1215  gate    fn gate_foretis(
-foretias-server/src/communerd/communerdette.rs                  1221  gate    let unprocessed: Result<UnverifiedSignatureEnvelope<ForetisRecord>, _> =
-foretias-server/src/communerd/communerdette.rs                  1261  verify  .verify(&*self.crypto, chronon_record, content)
-foretias-server/src/communerd/communerdette.rs                  1288  gate    executor.gate_chronon_records(raw)
-foretias-server/src/communerd/communerdette.rs                  1334  gate    executor.gate_foretis(raw, &chronon_record, &content)
-foretias-server/src/communerd/communerdette.rs                  1475  verify  // VERIFY(remote-tbid, fast-key+slow-key)
-foretias-server/src/communerd/communerdette.rs                  1624  verify  /// // VERIFY(remote-tbid, fast-key)
-foretias-server/src/communerd/communerdette.rs                  1651  verify  // VERIFY(remote-tbid, fast-key)
-foretias-server/src/communerd/communerdette.rs                  1653  verify  .verify_with(&target_tbid.ed25519_public_key(), "Ed25519", &msg, &sig)
-foretias-server/src/communerd/communerdette.rs                  1662  gate    Ok(CleanAuthenticated::from_trusted(self.inner))
-foretias-server/src/communerd/communerdette.rs                  1723  verify  let ok = match unprocessed.verify(
-foretias-server/src/communerd/communerdette.rs                  2258  gate    std::mem::size_of::<UnverifiedSignatureEnvelope<u8>>() > 0
-foretias-server/src/communerd/communerdette.rs                  2538  gate    let result = executor.gate_chronon_records(vec![bad_record]);
-foretias-server/src/communerd/communerdette.rs                  2577  gate    let result = executor.gate_chronon_records(vec![bad_record]);
-foretias-server/src/communerd/communerdette.rs                  2608  gate    let result = executor.gate_chronon_records(vec![record]);
-foretias-server/src/communerd/communerdette.rs                  2646  gate    let result = executor.gate_chronon_records(vec![record]);
-foretias-server/src/communerd/communerdette.rs                  2657  gate    CleanAuthenticated::from_trusted(make_test_chronon_record(tbid, 1))
-foretias-server/src/communerd/communerdette.rs                  2696  gate    let result = executor.gate_foretis(json, &rec, b"");
-foretias-server/src/communerd/communerdette.rs                  2737  gate    let result = executor.gate_foretis(json, &rec, b"");
-foretias-server/src/communerd/communerdette.rs                  2778  gate    let result = executor.gate_foretis(json, &rec, b"");
-foretias-server/src/communerd/communerdette.rs                  2812  gate    let result = executor.gate_foretis(json, &rec, b"");
-foretias-server/src/communerd/communerdette.rs                  2855  sign    .sign_with(&sig_input, SignatureAlgorithm::Ed25519)
-foretias-server/src/communerd/communerdette.rs                  2860  gate    let chronon_record = CleanAuthenticated::from_trusted(
-foretias-server/src/communerd/communerdette.rs                  2905  gate    let result = executor.gate_foretis(json, &chronon_record, content);
-foretias-server/src/communerd/communerdette.rs                  2933  gate    let chronon_record = CleanAuthenticated::from_trusted(
-foretias-server/src/communerd/communerdette.rs                  2980  gate    let result = executor.gate_foretis(json, &chronon_record, content);
-foretias-server/src/communerd/communerdette.rs                  3016  gate    executor.gate_foretis(serde_json::Value::String("not an object".into()), &rec, b
-foretias-server/src/communerd/communerdette.rs                  3323  gate    let result = executor.gate_chronon_records(vec![record1, record2]);
-foretias-server/src/communerd/communerdette.rs                  3355  gate    let chronon_record = CleanAuthenticated::from_trusted(
-foretias-server/src/communerd/communerdette.rs                  3401  gate    let result = executor.gate_foretis(json, &chronon_record, content);
-foretias-server/src/communerd/communerdette.rs                  3425  sign    let combined = tbid_secret.sign(&msg).expect("sign");
-foretias-server/src/communerd/communerdette.rs                  3721  sign    .sign_with(
-foretias-server/src/communerd/communerdette.rs                  3861  sign    // SIGN(report → host_sign_probity_report)
-foretias-server/src/communerd/communerdette.rs                  4121  sign    // SIGN(challenge || target_tbid_hex)
-foretias-server/src/communerd/communerdette.rs                  4123  sign    .sign_with(
-foretias-server/src/communerd/communerdette.rs                  4494  sign    // SIGN(foretis_sig_input_bytes)
-foretias-server/src/communerd/communerdette.rs                  4496  sign    .sign_with(
-foretias-server/src/communerd/communerdette.rs                  4767  sign    .sign_with(
-foretias-server/src/communerd/communerdette.rs                  4848  sign    .sign_with(
+foretias-server/src/communerd/communerdette.rs                  1155  gate    fn gate_chronon_records(
+foretias-server/src/communerd/communerdette.rs                  1186  verify  .verify(crypto, None)
+foretias-server/src/communerd/communerdette.rs                  1213  gate    fn gate_foretis(
+foretias-server/src/communerd/communerdette.rs                  1219  gate    let unprocessed: Result<UnverifiedSignatureEnvelope<ForetisRecord>, _> =
+foretias-server/src/communerd/communerdette.rs                  1259  verify  .verify(&*self.crypto, chronon_record, content)
+foretias-server/src/communerd/communerdette.rs                  1286  gate    executor.gate_chronon_records(raw)
+foretias-server/src/communerd/communerdette.rs                  1332  gate    executor.gate_foretis(raw, &chronon_record, &content)
+foretias-server/src/communerd/communerdette.rs                  1473  verify  // VERIFY(remote-tbid, fast-key+slow-key)
+foretias-server/src/communerd/communerdette.rs                  1622  verify  /// // VERIFY(remote-tbid, fast-key)
+foretias-server/src/communerd/communerdette.rs                  1649  verify  // VERIFY(remote-tbid, fast-key)
+foretias-server/src/communerd/communerdette.rs                  1651  verify  .verify_with(&target_tbid.ed25519_public_key(), "Ed25519", &msg, &sig)
+foretias-server/src/communerd/communerdette.rs                  1660  gate    Ok(CleanAuthenticated::from_trusted(self.inner))
+foretias-server/src/communerd/communerdette.rs                  1721  verify  let ok = match unprocessed.verify(
+foretias-server/src/communerd/communerdette.rs                  2256  gate    std::mem::size_of::<UnverifiedSignatureEnvelope<u8>>() > 0
+foretias-server/src/communerd/communerdette.rs                  2536  gate    let result = executor.gate_chronon_records(vec![bad_record]);
+foretias-server/src/communerd/communerdette.rs                  2575  gate    let result = executor.gate_chronon_records(vec![bad_record]);
+foretias-server/src/communerd/communerdette.rs                  2606  gate    let result = executor.gate_chronon_records(vec![record]);
+foretias-server/src/communerd/communerdette.rs                  2644  gate    let result = executor.gate_chronon_records(vec![record]);
+foretias-server/src/communerd/communerdette.rs                  2655  gate    CleanAuthenticated::from_trusted(make_test_chronon_record(tbid, 1))
+foretias-server/src/communerd/communerdette.rs                  2694  gate    let result = executor.gate_foretis(json, &rec, b"");
+foretias-server/src/communerd/communerdette.rs                  2735  gate    let result = executor.gate_foretis(json, &rec, b"");
+foretias-server/src/communerd/communerdette.rs                  2776  gate    let result = executor.gate_foretis(json, &rec, b"");
+foretias-server/src/communerd/communerdette.rs                  2810  gate    let result = executor.gate_foretis(json, &rec, b"");
+foretias-server/src/communerd/communerdette.rs                  2853  sign    .sign_with(&sig_input, SignatureAlgorithm::Ed25519)
+foretias-server/src/communerd/communerdette.rs                  2858  gate    let chronon_record = CleanAuthenticated::from_trusted(
+foretias-server/src/communerd/communerdette.rs                  2903  gate    let result = executor.gate_foretis(json, &chronon_record, content);
+foretias-server/src/communerd/communerdette.rs                  2931  gate    let chronon_record = CleanAuthenticated::from_trusted(
+foretias-server/src/communerd/communerdette.rs                  2978  gate    let result = executor.gate_foretis(json, &chronon_record, content);
+foretias-server/src/communerd/communerdette.rs                  3014  gate    executor.gate_foretis(serde_json::Value::String("not an object".into()), &rec, b
+foretias-server/src/communerd/communerdette.rs                  3321  gate    let result = executor.gate_chronon_records(vec![record1, record2]);
+foretias-server/src/communerd/communerdette.rs                  3353  gate    let chronon_record = CleanAuthenticated::from_trusted(
+foretias-server/src/communerd/communerdette.rs                  3399  gate    let result = executor.gate_foretis(json, &chronon_record, content);
+foretias-server/src/communerd/communerdette.rs                  3423  sign    let combined = tbid_secret.sign(&msg).expect("sign");
+foretias-server/src/communerd/communerdette.rs                  3719  sign    .sign_with(
+foretias-server/src/communerd/communerdette.rs                  3859  sign    // SIGN(report → host_sign_probity_report)
+foretias-server/src/communerd/communerdette.rs                  4119  sign    // SIGN(challenge || target_tbid_hex)
+foretias-server/src/communerd/communerdette.rs                  4121  sign    .sign_with(
+foretias-server/src/communerd/communerdette.rs                  4492  sign    // SIGN(foretis_sig_input_bytes)
+foretias-server/src/communerd/communerdette.rs                  4494  sign    .sign_with(
+foretias-server/src/communerd/communerdette.rs                  4765  sign    .sign_with(
+foretias-server/src/communerd/communerdette.rs                  4846  sign    .sign_with(
 foretias-server/src/communerd/mod.rs                             348  verify  .verify_with(&pubkey[..32], "Ed25519", &canonical, &record.signature)
 foretias-server/src/communerd/mod.rs                             820  sign    if let Ok(sig) = crypto.sign(&hb.canonical()) {
 foretias-server/src/communerd/mod.rs                            1073  sign    if let Ok(sig) = crypto.sign(&report.canonical()) {
 foretias-server/src/communerd/mod.rs                            1164  sign    .sign(&canonical)
-foretias-server/src/communerd/mod.rs                            1263  sign    match crypto.sign(&canonical) {
-foretias-server/src/communerd/mod.rs                            1725  sign    .sign(&canonical)
+foretias-server/src/communerd/mod.rs                            1262  sign    match crypto.sign(&canonical) {
+foretias-server/src/communerd/mod.rs                            1723  sign    .sign(&canonical)
 foretias-server/src/communerd/p2p/tbid_handshake.rs               96  sign    .sign(&signed_payload)
 foretias-server/src/communerd/p2p/tbid_handshake.rs              124  verify  .verify_ed25519(
 foretias-server/src/communerd/p2p/tbid_handshake.rs              255  sign    let sig = crypto2.sign(&short_payload).expect("sign short payload");
-foretias-server/src/main.rs                                      630  verify  .verify(&content, &foretis, &signature_bytes, sig_alg)
+foretias-server/src/main.rs                                      634  verify  .verify(&content, &foretis, &signature_bytes, sig_alg)
 foretias-server/src/probity/gossip_handler.rs                     89  verify  match envelope.verify(crypto) {
 foretias-server/src/probity/gossip_handler.rs                    150  verify  .verify_with(&public_key, "Ed25519", &canonical, report.signature())
 foretias-server/src/probity/gossip_handler.rs                    211  sign    let sig = crypto.sign(&canonical).unwrap();
 foretias-server/src/probity/gossip_handler.rs                    325  sign    let sig = crypto.sign(&canonical).unwrap();
 foretias-server/src/probity/gossip_handler.rs                    366  sign    let sig = crypto.sign(&canonical).unwrap();
-foretias-server/src/server/handlers.rs                           375  gate    unproc_foretis: &UnverifiedSignatureEnvelope<ForetisRecord>,
-foretias-server/src/server/handlers.rs                           483  sign    /// // SIGN(local-tbid, fast-key+slow-key)
-foretias-server/src/server/handlers.rs                           511  sign    let combined_sig = match server.sign_tbid_message(&msg) {
-foretias-server/src/server/handlers.rs                           541  sign    /// // SIGN(local-tbid, fast-key)
-foretias-server/src/server/handlers.rs                           562  sign    let combined_sig = match server.sign_tbid_message(&msg) {
-foretias-server/src/server/handlers.rs                           802  gate    let unprocessed: Result<Vec<UnverifiedSignatureEnvelope<ChrononRecord>>, _> = ra
-foretias-server/src/server/handlers.rs                          1283  gate    let unprocessed: Result<Vec<UnverifiedSignatureEnvelope<ChrononRecord>>, _> = ra
+foretias-server/src/server/handlers.rs                           366  gate    unproc_foretis: &UnverifiedSignatureEnvelope<ForetisRecord>,
+foretias-server/src/server/handlers.rs                           474  sign    /// // SIGN(local-tbid, fast-key+slow-key)
+foretias-server/src/server/handlers.rs                           502  sign    let combined_sig = match server.sign_tbid_message(&msg) {
+foretias-server/src/server/handlers.rs                           532  sign    /// // SIGN(local-tbid, fast-key)
+foretias-server/src/server/handlers.rs                           553  sign    let combined_sig = match server.sign_tbid_message(&msg) {
+foretias-server/src/server/handlers.rs                           793  gate    let unprocessed: Result<Vec<UnverifiedSignatureEnvelope<ChrononRecord>>, _> = ra
+foretias-server/src/server/handlers.rs                          1274  gate    let unprocessed: Result<Vec<UnverifiedSignatureEnvelope<ChrononRecord>>, _> = ra
 foretias-server/src/server/mod.rs                                195  sign    /// // SIGN(local-tbid, fast-key+slow-key)
 foretias-server/src/server/mod.rs                                196  sign    pub fn sign_tbid_message(
 foretias-server/src/server/mod.rs                                201  sign    self.chronomatter.sign_tbid_message(msg)
@@ -228,5 +228,5 @@ crypto_callsite_snapshot — update with UPDATE_SNAPSHOT=1 when adding new crypt
 SIGNATURES:
 Public key: 4193efbf702cde19fbae087ea53189f67e7768ebe888e0816e24a27282a5b030
 Input signature: XjHNYkZ6L7a87pFmkmHyBj39ofhWg0Gh2EmeGLitRFPtupEN6ZFsd0Nl+Sx3sbFTcEuWuPCDF+duRzvKVNFzAQ==
-Result signature: IEInprvuapljyHY3sfq4bOH3DaFN/kf9BqFrHFkD9DdzGM/odYadCeM1ZuA1mE6JjIjGEr4MmaVpvggtNzgsBw==
-Comments signature: qux5Jgiv7RHT4RjuWLE5ojt235kB9lVE1JeldqRmeJvGzIWUwioVvo31OFAp5LiJUzF4apuA79xPD2cJ3PLtAw==
+Result signature: dbwlQwOy79Gsx5Iu19b0vXre70SP7nYvm7sIBNNWojtLgw1vN7maZpp4aU0ZV2Z2NQar00b9lPC5wXfA0zHGAg==
+Comments signature: dmWxPOwa0I60QVvDPpLIjnwFh00i5G2pgB/qaRKYqTAX1xZsiu0F5dGlKF+kNqtZoIst9cLUnRKYvr6tA5Y+AQ==

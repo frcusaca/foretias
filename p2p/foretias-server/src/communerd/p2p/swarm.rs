@@ -38,7 +38,7 @@ pub fn find_free_port(range: std::ops::Range<u16>) -> Result<u16, NodeError> {
     let mut ports: Vec<u16> = range.collect();
     ports.shuffle(&mut rand::thread_rng());
     for port in ports {
-        if let Ok(_listener) = TcpListener::bind(format!("0.0.0.0:{}", port)) {
+        if let Ok(_listener) = TcpListener::bind(format!("0.0.0.0:{port}")) {
             return Ok(port);
         }
     }

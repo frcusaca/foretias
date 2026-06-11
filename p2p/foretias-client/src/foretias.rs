@@ -75,7 +75,7 @@ impl From<PtPError> for ForetiasError {
             PtPError::Noise(msg) => ForetiasError::Network(msg),
             PtPError::Decode(msg) => ForetiasError::Network(msg),
             PtPError::Rpc { code, message } => {
-                ForetiasError::Network(format!("RPC {}: {}", code, message))
+                ForetiasError::Network(format!("RPC {code}: {message}"))
             }
         }
     }
@@ -564,7 +564,7 @@ impl Foretias {
         let foretis: ForetisRecord =
             serde_json::from_value(result.get("foretis").cloned().unwrap_or(result.clone()))
                 .map_err(|e| {
-                    ForetiasError::Network(format!("stamp deserialization failed: {}", e))
+                    ForetiasError::Network(format!("stamp deserialization failed: {e}"))
                 })?;
         let sig_hex = result
             .get("signature")
@@ -618,14 +618,14 @@ impl Foretias {
         });
         let result = noise_json_rpc(peer, "get_calendar_slice", params, self.timeout()).await?;
         let records: Vec<ChrononRecord> = serde_json::from_value(result).map_err(|e| {
-            ForetiasError::Network(format!("calendar slice deserialization failed: {}", e))
+            ForetiasError::Network(format!("calendar slice deserialization failed: {e}"))
         })?;
         Ok(records)
     }
 
     fn client_echo() -> String {
         let now_ns = foretias_core::clock::SystemClock.now_ns().unwrap_or(0);
-        format!("UE+{}ns", now_ns)
+        format!("UE+{now_ns}ns")
     }
 }
 

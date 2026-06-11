@@ -1087,9 +1087,7 @@ impl CommunerdetteExecutor {
             .host
             .host_lookup_tbid(&tbid_hex, &ns)
             .await
-            .ok_or_else(|| {
-                TransportError::Connect(format!("TBID {} not found in DHT", tbid_hex))
-            })?;
+            .ok_or_else(|| TransportError::Connect(format!("TBID {tbid_hex} not found in DHT")))?;
 
         let peer = PeerAddr {
             json_rpc: owner.json_rpc.clone(),

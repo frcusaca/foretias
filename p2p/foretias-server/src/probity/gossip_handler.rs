@@ -22,7 +22,7 @@ pub struct DefaultReporterKeyResolver;
 impl ReporterKeyResolver for DefaultReporterKeyResolver {
     fn resolve_public_key(&self, reporter_tbid_hex: &str) -> Result<Vec<u8>, NodeError> {
         let tbid_bytes = hex::decode(reporter_tbid_hex)
-            .map_err(|e| NodeError::BadFormat(format!("invalid reporter TBID hex: {}", e)))?;
+            .map_err(|e| NodeError::BadFormat(format!("invalid reporter TBID hex: {e}")))?;
         if tbid_bytes.len() < 32 {
             return Err(NodeError::BadFormat(format!(
                 "reporter TBID too short for Ed25519: {} bytes (need 32)",
@@ -237,7 +237,7 @@ mod tests {
         for i in 0..10 {
             store
                 .ingest(ProbityReportRecord::new(
-                    format!("R{}", i),
+                    format!("R{i}"),
                     "Q".into(),
                     "correctness".into(),
                     80.0,
@@ -253,7 +253,7 @@ mod tests {
             store
                 .ingest(ProbityReportRecord::new(
                     "B".into(),
-                    format!("R{}", i),
+                    format!("R{i}"),
                     "correctness".into(),
                     -10.0,
                     now - 1_000_000,

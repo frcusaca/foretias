@@ -195,7 +195,7 @@ impl Chronomatter {
         })?;
         let kp = keypairs
             .get(idx)
-            .ok_or_else(|| NodeError::Internal(format!("keypair index {} out of range", idx)))?;
+            .ok_or_else(|| NodeError::Internal(format!("keypair index {idx} out of range")))?;
         let sig = kp.priv_key.sign(msg).map_err(NodeError::Crypto)?;
         Ok(sig.bytes.to_vec())
     }
@@ -391,7 +391,7 @@ impl Chronomatter {
             .clock
             .now_ns()
             .map_err(|e| NodeError::Internal(format!("clock error: {e}")))?;
-        let time_being_reference_time = format!("UE+{}ns", now_ns);
+        let time_being_reference_time = format!("UE+{now_ns}ns");
 
         // V2: ForetisRecord payload is signature-free
         let foretis = ForetisRecord {

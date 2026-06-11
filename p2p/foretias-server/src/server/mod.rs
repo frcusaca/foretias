@@ -573,13 +573,13 @@ pub(crate) fn process_request_from_value(
         _ => Ok(jsonrpc::JsonRpcResponse::error(
             id.cloned(),
             jsonrpc::METHOD_NOT_FOUND,
-            format!("method '{}' not found", method),
+            format!("method '{method}' not found"),
         )),
     }
 }
 
 fn process_request(server: &TimeFamilyServer, line: &str) -> Result<JsonRpcResponse, NodeError> {
-    let req: serde_json::Value = serde_json::from_str(line)
-        .map_err(|e| NodeError::Internal(format!("JSON parse: {}", e)))?;
+    let req: serde_json::Value =
+        serde_json::from_str(line).map_err(|e| NodeError::Internal(format!("JSON parse: {e}")))?;
     process_request_from_value(server, req)
 }

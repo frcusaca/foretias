@@ -24,12 +24,12 @@ impl ForetiasBehaviour {
         let local_peer_id = local_key.public().to_peer_id();
 
         let agent = match json_rpc_addr {
-            Some(addr) => format!("foretias/{} rpc={}", env!("CARGO_PKG_VERSION"), addr),
+            Some(addr) => format!("foretias/{} rpc={addr}", env!("CARGO_PKG_VERSION")),
             None => format!("foretias/{}", env!("CARGO_PKG_VERSION")),
         };
 
         let kad_protocol =
-            libp2p::StreamProtocol::try_from_owned(format!("/foretias/kad/{}/1.0.0", namespace))
+            libp2p::StreamProtocol::try_from_owned(format!("/foretias/kad/{namespace}/1.0.0"))
                 .expect("valid protocol string");
         let mut kad_cfg = kad::Config::new(kad_protocol);
         kad_cfg.set_query_timeout(std::time::Duration::from_secs(30));
@@ -50,7 +50,7 @@ impl ForetiasBehaviour {
         .expect("gossipsub init");
 
         let protocols = iter::once((
-            StreamProtocol::try_from_owned(format!("/foretias/{}/rpc/1.0.0", namespace))
+            StreamProtocol::try_from_owned(format!("/foretias/{namespace}/rpc/1.0.0"))
                 .expect("valid protocol string"),
             request_response::ProtocolSupport::Full,
         ));

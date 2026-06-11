@@ -93,21 +93,21 @@ impl ReplicationLogger {
         let ts = chrono::Utc::now().to_rfc3339();
         let level_str = entry.level.to_string();
         let prefix = if entry.level == LogLevel::Error {
-            format!("ERROR:{}", level_str)
+            format!("ERROR:{level_str}")
         } else {
             level_str
         };
         let mut parts = vec![prefix];
-        parts.push(format!("ts={}", ts));
+        parts.push(format!("ts={ts}"));
         parts.push(format!("event={}", entry.event));
         if let Some(ref tbid) = entry.tbid {
-            parts.push(format!("tbid={}", tbid));
+            parts.push(format!("tbid={tbid}"));
         }
         if let Some(ref peer) = entry.peer {
-            parts.push(format!("peer={}", peer));
+            parts.push(format!("peer={peer}"));
         }
         for (k, v) in &entry.details {
-            parts.push(format!("{}={}", k, v));
+            parts.push(format!("{k}={v}"));
         }
         parts.join(" ")
     }

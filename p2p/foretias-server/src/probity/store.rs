@@ -120,9 +120,7 @@ mod tests {
     fn probity_store_evicts_oldest_over_cap() {
         let store = ProbityStore::with_config(UShapeConfig::default(), 3);
         for i in 0..5 {
-            store
-                .ingest(make_report("A", &format!("R{}", i), i))
-                .unwrap();
+            store.ingest(make_report("A", &format!("R{i}"), i)).unwrap();
         }
         assert_eq!(store.report_count("A"), 3);
         // Oldest two should have been evicted

@@ -141,7 +141,7 @@ impl NodeConfig {
     /// Returns the default filesystem path where the configuration file is expected.
     pub fn default_path() -> String {
         std::env::var("HOME")
-            .map(|h| format!("{}/.config/foretias/foretias.settings.json", h))
+            .map(|h| format!("{h}/.config/foretias/foretias.settings.json"))
             .unwrap_or_else(|_| ".config/foretias/foretias.settings.json".to_string())
     }
     /// Validates the configuration, returning an error string if invalid.
