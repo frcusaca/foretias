@@ -20,6 +20,7 @@ use crate::foretias::types::{SignatureBytes, Tbid};
 /// Returns (public_key, secret_key) where:
 ///   - public_key  is 96 bytes: Ed25519_PK(32) || SLH_DSA_PK(64)
 ///   - secret_key  is 240 bytes: EncEd25519(48) || NonceEd(24) || EncSLH(144) || NonceSLH(24)
+#[must_use = "TBID V1 keypair generation may fail; the error must be handled"]
 pub fn tbid_keypair() -> Result<(SignatureBytes, SignatureBytes), CryptoError> {
     // SAFETY: zeroing known-good #[repr(C)] structs from bindings.
     let mut secret: ForetiasTbidV1SecretKey = unsafe { std::mem::zeroed() };
@@ -64,6 +65,7 @@ pub fn tbid_keypair() -> Result<(SignatureBytes, SignatureBytes), CryptoError> {
 /// Sign a message with TBID V1 dual-key. Returns the signature bytes.
 ///
 /// The signature is 49,920 bytes: Ed25519_Sig(64) || SLH_DSA_Sig(49856).
+#[must_use = "TBID V1 signing may fail; the error must be handled"]
 pub fn tbid_sign(secret_key: &SignatureBytes, msg: &[u8]) -> Result<SignatureBytes, CryptoError> {
     // secret_key layout: encrypted_ed25519(48) || ed25519_nonce(24) || encrypted_slh_dsa(144) || slh_dsa_nonce(24)
     if secret_key.len() != 240 {
@@ -102,6 +104,7 @@ pub fn tbid_sign(secret_key: &SignatureBytes, msg: &[u8]) -> Result<SignatureByt
 ///
 /// Returns Ok(true) if both Ed25519 and SLH-DSA signatures validate.
 /// Returns Ok(false) if either signature is invalid.
+#[must_use = "TBID V1 verification result must be checked; an unchecked verification provides no security"]
 pub fn tbid_verify(
     public_key: &SignatureBytes,
     msg: &[u8],
@@ -158,6 +161,7 @@ pub fn tbid_slh_dsa_pub(public_key: &SignatureBytes) -> [u8; 64] {
 }
 
 /// Convert a TBID V1 public key byte vector to a `Tbid` struct.
+#[must_use = "TBID V1 public key parsing may fail if the byte length is not 96; the error must be handled"]
 pub fn tbid_from_bytes(public_key: &SignatureBytes) -> Result<Tbid, CryptoError> {
     if public_key.len() != 96 {
         return Err(CryptoError::BadInput("TBID public key must be 96 bytes"));

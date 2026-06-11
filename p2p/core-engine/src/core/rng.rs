@@ -4,6 +4,7 @@ use crate::core::bindings::*;
 use crate::error::{c_result_to_error, CryptoError};
 
 /// Fill buffer with cryptographically secure random bytes.
+#[must_use = "random byte generation may fail and the error must be handled"]
 pub fn random_bytes(buf: &mut [u8]) -> Result<(), CryptoError> {
     // SAFETY: buf is valid for its length.
     let rc = unsafe { foretias_rng_bytes(buf.as_mut_ptr(), buf.len()) };

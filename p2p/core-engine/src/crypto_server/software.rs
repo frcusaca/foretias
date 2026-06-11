@@ -54,6 +54,7 @@ pub struct SoftwareCryptoServer {
 
 impl SoftwareCryptoServer {
     /// Generates a new keypair and initializes a software crypto server for the given curve.
+    #[must_use = "crypto server generation may fail (e.g. unsupported curve); the error must be handled"]
     pub fn generate(curve: ForetiasCurve) -> Result<Self, CryptoError> {
         PrivKeyHandle::init();
         match curve {
@@ -115,6 +116,7 @@ impl SoftwareCryptoServer {
         self.mlkem_pub_key.as_ref()
     }
 
+    #[must_use = "crypto server generation from seed may fail; the error must be handled"]
     pub fn from_seed(seed: &[u8; 32]) -> Result<Self, CryptoError> {
         PrivKeyHandle::init();
         let handle = PrivKeyHandle::from_seed(seed)?;

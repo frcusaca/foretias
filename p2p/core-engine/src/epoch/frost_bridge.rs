@@ -7,6 +7,7 @@ use crate::error::NodeError;
 use crate::foretias::encoding::FTByteVector;
 
 /// Messages exchanged during a FROST signing round.
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FrostMsg {
     /// First round: a peer's commitment to its nonces.

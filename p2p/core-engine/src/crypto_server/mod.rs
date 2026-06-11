@@ -8,6 +8,7 @@ use crate::foretias::encoding::FTByteVector;
 use crate::foretias::types::{SignatureAlgorithm, SignatureBytes};
 
 /// Supported elliptic curve types for signing and key exchange.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
 pub enum ForetiasCurve {
     /// Ed25519 curve — the primary and fully supported curve.
@@ -26,6 +27,7 @@ impl From<ForetiasCurve> for u32 {
 }
 
 /// Serialized public key, parameterized by curve type.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
 pub enum PublicKeyBytes {
     /// 32-byte Ed25519 public key.
@@ -119,12 +121,14 @@ const NOT_SUPPORTED: &str = "CryptoServer: operation not supported by this backe
 /// Signing operations.
 pub trait SignOps: Send + Sync {
     /// Signs the given message with the server's private key.
+    #[must_use = "signing may fail and the error must be handled"]
     fn sign(&self, msg: &[u8]) -> Result<ForetiasSig64, CryptoError>;
 
     /// Returns the signature algorithm this server uses.
     fn signature_algorithm(&self) -> SignatureAlgorithm;
 
     /// Signs with the server's configured algorithm.
+    #[must_use = "signing may fail and the error must be handled"]
     fn sign_with(&self, msg: &[u8], alg: SignatureAlgorithm)
         -> Result<SignatureBytes, CryptoError>;
 }
@@ -132,6 +136,7 @@ pub trait SignOps: Send + Sync {
 /// Verification operations.
 pub trait VerifyOps: Send + Sync {
     /// Verifies an Ed25519 signature against a public key and message.
+    #[must_use = "verification result must be checked"]
     fn verify_ed25519(
         &self,
         pub_key: &ForetiasPubKey32,
@@ -140,6 +145,7 @@ pub trait VerifyOps: Send + Sync {
     ) -> Result<bool, CryptoError>;
 
     /// Verifies a P-256 signature against a public key and message.
+    #[must_use = "verification result must be checked"]
     fn verify_p256(
         &self,
         pub_key: &ForetiasPubKey33,
@@ -148,6 +154,7 @@ pub trait VerifyOps: Send + Sync {
     ) -> Result<bool, CryptoError>;
 
     /// Verifies a signature given the algorithm ID.
+    #[must_use = "verification result must be checked"]
     fn verify_with(
         &self,
         pub_key: &[u8],
@@ -160,10 +167,12 @@ pub trait VerifyOps: Send + Sync {
 /// Key-exchange (ECDH) operations.
 pub trait KexOps: Send + Sync {
     /// Performs Ed25519-based ECDH to derive a shared secret with a peer.
+    #[must_use = "key exchange may fail and the error must be handled"]
     fn ecdh_ed25519(&self, _peer_pub: &ForetiasPubKey32) -> Result<SharedSecret, CryptoError> {
         Err(CryptoError::Unsupported(NOT_SUPPORTED))
     }
     /// Performs P-256 ECDH to derive a shared secret with a peer.
+    #[must_use = "key exchange may fail and the error must be handled"]
     fn ecdh_p256(&self, _peer_pub: &ForetiasPubKey33) -> Result<SharedSecret, CryptoError> {
         Err(CryptoError::Unsupported(NOT_SUPPORTED))
     }
@@ -172,26 +181,33 @@ pub trait KexOps: Send + Sync {
 /// Hashing operations.
 pub trait HashOps: Send + Sync {
     /// Computes the SHA-256 hash of the given data.
+    #[must_use = "hashing may fail and the error must be handled"]
     fn sha256(&self, data: &[u8]) -> Result<ForetiasHash32, CryptoError>;
     /// Computes the BLAKE3 hash of the given data.
+    #[must_use = "hashing may fail and the error must be handled"]
     fn blake3(&self, data: &[u8]) -> Result<ForetiasHash32, CryptoError>;
     /// Computes MD5 hash (legacy, insecure — for compatibility only).
+    #[must_use = "hashing may fail and the error must be handled"]
     fn legacy_insecure_md5(&self, data: &[u8]) -> Result<ForetiasHash16, CryptoError>;
     /// Computes SHA-1 hash (legacy, insecure — for compatibility only).
+    #[must_use = "hashing may fail and the error must be handled"]
     fn legacy_insecure_sha1(&self, data: &[u8]) -> Result<ForetiasHash20, CryptoError>;
 }
 
 /// Sealing / unsealing operations (ChaCha20-Poly1305 with derived key).
 pub trait SealOps: Send + Sync {
     /// Encrypts data using the server's derived seal key, returning a sealed blob.
+    #[must_use = "sealing may fail and the error must be handled"]
     fn seal_for_self(&self, data: &[u8]) -> Result<SealedBlob, CryptoError>;
     /// Decrypts a sealed blob using the server's derived seal key.
+    #[must_use = "unsealing may fail and the error must be handled"]
     fn unseal_for_self(&self, blob: &SealedBlob) -> Result<Vec<u8>, CryptoError>;
 }
 
 /// Random-bytes generation.
 pub trait RngOps: Send + Sync {
     /// Fills the output buffer with cryptographically random bytes.
+    #[must_use = "random byte generation may fail and the error must be handled"]
     fn random_bytes(&self, out: &mut [u8]) -> Result<(), CryptoError>;
 }
 
@@ -210,8 +226,10 @@ pub trait IdentityOps: Send + Sync {
 /// FROST threshold-signing operations.
 pub trait FrostOps: Send + Sync {
     /// Stores a FROST threshold signing share for the given committee.
+    #[must_use = "storing FROST share may fail and the error must be handled"]
     fn store_frost_share(&self, committee_id: &str, share: &[u8]) -> Result<(), CryptoError>;
     /// Produces a partial FROST signature for the given committee and session.
+    #[must_use = "FROST signing may fail and the error must be handled"]
     fn frost_sign_partial(
         &self,
         committee_id: &str,
@@ -222,6 +240,7 @@ pub trait FrostOps: Send + Sync {
 /// Self-proof (attestation) operations.
 pub trait ProofOps: Send + Sync {
     /// Returns a proof that this backend executed the operation on a trusted device, if available.
+    #[must_use = "proof generation may fail and the error must be handled"]
     fn backend_self_proof(&self, challenge: &[u8]) -> Result<Option<Vec<u8>>, CryptoError>;
 }
 
@@ -263,11 +282,13 @@ pub mod signing_tbid;
 pub mod software;
 
 /// Creates a software-backed crypto server using the specified curve.
+#[must_use = "crypto server creation may fail and the error must be handled"]
 pub fn new_software(curve: ForetiasCurve) -> Result<Box<dyn CryptoServer>, CryptoError> {
     Ok(Box::new(software::SoftwareCryptoServer::generate(curve)?))
 }
 
 /// Creates the best available crypto server (currently falls back to software).
+#[must_use = "crypto server creation may fail and the error must be handled"]
 pub fn new_best_available(curve: ForetiasCurve) -> Result<Box<dyn CryptoServer>, CryptoError> {
     new_software(curve)
 }

@@ -145,6 +145,7 @@ impl NodeConfig {
             .unwrap_or_else(|_| ".config/foretias/foretias.settings.json".to_string())
     }
     /// Validates the configuration, returning an error string if invalid.
+    #[must_use = "configuration validation must be checked; an invalid config may cause runtime failures"]
     pub fn validate(&self) -> Result<(), String> {
         if self.dht_namespace.is_empty() {
             return Err("dht_namespace must not be empty".to_string());

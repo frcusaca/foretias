@@ -2,6 +2,7 @@ use crate::core::bindings::*;
 use crate::error::{c_result_to_error, CryptoError};
 use crate::foretias::types::SignatureBytes;
 
+#[must_use = "ML-KEM-768 keypair generation may fail; the error must be handled"]
 pub fn mlkem_768_keypair() -> Result<(SignatureBytes, SignatureBytes), CryptoError> {
     let mut secret: ForetiasKemSecretKey = unsafe { std::mem::zeroed() };
     let mut public: ForetiasKemPubKey = unsafe { std::mem::zeroed() };
@@ -22,6 +23,7 @@ pub fn mlkem_768_keypair() -> Result<(SignatureBytes, SignatureBytes), CryptoErr
     ))
 }
 
+#[must_use = "ML-KEM-768 encapsulation may fail; the error must be handled"]
 pub fn mlkem_768_encapsulate(
     public_key: &SignatureBytes,
 ) -> Result<(SignatureBytes, SignatureBytes), CryptoError> {
@@ -39,6 +41,7 @@ pub fn mlkem_768_encapsulate(
     ))
 }
 
+#[must_use = "ML-KEM-768 decapsulation may fail; the error must be handled"]
 pub fn mlkem_768_decapsulate(
     secret_key: &SignatureBytes,
     ciphertext: &SignatureBytes,

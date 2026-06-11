@@ -14,6 +14,7 @@ pub struct ReplicationLogEntry {
     pub details: Vec<(String, String)>,
 }
 
+#[non_exhaustive]
 #[derive(Debug, PartialEq)]
 pub enum LogLevel {
     Info,
@@ -37,6 +38,7 @@ pub struct ReplicationLogger {
 }
 
 impl ReplicationLogger {
+    #[must_use = "creating a replication logger may fail (e.g. I/O error creating directory); the error must be handled"]
     pub fn new(base_dir: impl Into<PathBuf>) -> Result<Self, std::io::Error> {
         let base_dir = base_dir.into();
         std::fs::create_dir_all(&base_dir)?;

@@ -33,6 +33,7 @@ pub trait CommunerdRpcHandler: Send + Sync {
 }
 
 /// Find a free port within the given range by shuffling and testing each port.
+#[must_use = "finding a free port may fail if all ports in the range are in use; the error must be handled"]
 pub fn find_free_port(range: std::ops::Range<u16>) -> Result<u16, NodeError> {
     let mut ports: Vec<u16> = range.collect();
     ports.shuffle(&mut rand::thread_rng());
@@ -52,6 +53,7 @@ pub struct SwarmHandle {
     pub task: tokio::task::JoinHandle<()>,
 }
 
+#[non_exhaustive]
 pub enum SwarmCommand {
     Bootstrap,
     Provide {

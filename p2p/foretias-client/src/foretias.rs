@@ -25,6 +25,7 @@ use crate::config::{ForetiasConfig, P2pConfig, PtpConfig, StandaloneConfig};
 use crate::noise_ptp::{noise_json_rpc, PtPError};
 
 /// Error type for Foretias operations.
+#[non_exhaustive]
 #[derive(Debug)]
 pub enum ForetiasError {
     Crypto(String),
@@ -91,6 +92,7 @@ pub struct ForetiasStatus {
 }
 
 /// Client level — determines capabilities and network access.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClientLevel {
     Standalone,
@@ -125,6 +127,7 @@ pub struct P2pState {
     pub p2p_config: P2pJoinConfig,
 }
 
+#[non_exhaustive]
 pub enum ForetiasInner {
     Standalone(StandaloneState),
     Ptp(PtpState),
@@ -156,6 +159,7 @@ pub struct Foretias {
 }
 
 impl Foretias {
+    #[must_use = "creating a Foretias client may fail (e.g. crypto initialization); the error must be handled"]
     pub fn new(_tbn: String, persist_path: Option<PathBuf>) -> Result<Self, ForetiasError> {
         let chronon_ns = 60_000_000_000u64;
         let calendar = Arc::new(Calendar::new(Tbid::default(), ""));
@@ -196,6 +200,7 @@ impl Foretias {
         })
     }
 
+    #[must_use = "loading a Foretias client from persisted data may fail; the error must be handled"]
     pub fn from_persist(path: PathBuf) -> Result<Self, ForetiasError> {
         let path_str = path.to_string_lossy().to_string();
         let crypto: Arc<dyn CryptoServer> =
@@ -264,6 +269,7 @@ impl Foretias {
         Self::connect(tbn, vec![peer_addr], 30, persist_path)
     }
 
+    #[must_use = "joining a P2P network may fail; the error must be handled"]
     pub async fn join(config: P2pJoinConfig) -> Result<Self, ForetiasError> {
         let standalone = Self::create_standalone_state(&config.tbn)?;
         let ptp = PtpState {
@@ -283,6 +289,7 @@ impl Foretias {
     }
 
     /// Create from configuration — level determined by config variant.
+    #[must_use = "creating a Foretias client from config may fail; the error must be handled"]
     pub async fn with_config(config: ForetiasConfig) -> Result<Self, ForetiasError> {
         match config {
             ForetiasConfig::Standalone(cfg) => Self::with_config_standalone(cfg),

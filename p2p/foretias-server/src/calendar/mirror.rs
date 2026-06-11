@@ -43,6 +43,7 @@ impl MirrorStore {
             .unwrap_or(0)
     }
 
+    #[must_use = "inserting a mirrored record may fail; the error must be handled"]
     pub fn insert_mirrored(&self, tbid_hex: &str, record: ChrononRecord) -> Result<(), NodeError> {
         let mut mirrors = self.mirrors.write();
         let entry = mirrors.entry(tbid_hex.to_string()).or_default();

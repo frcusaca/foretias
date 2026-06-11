@@ -3,6 +3,7 @@
 use super::super::capabilities::PeerCapability;
 use libp2p::{identify, kad, Multiaddr, PeerId};
 
+#[non_exhaustive]
 #[derive(Debug, Clone)]
 pub enum NetworkEvent {
     Connected {

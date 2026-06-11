@@ -76,6 +76,7 @@ pub struct CoverageInfo {
 }
 
 /// Result of a chronon chain lookup over a range.
+#[non_exhaustive]
 #[derive(Debug)]
 pub enum ChrononChainResult {
     /// All requested chronons were found.
@@ -456,7 +457,7 @@ mod tests {
     use super::*;
     use foretias_core::crypto_server;
     use foretias_core::foretias::clean_auth::CleanAuthenticated;
-    use foretias_core::foretias::{ChrononRecord};
+    use foretias_core::foretias::ChrononRecord;
 
     fn make_server() -> Arc<dyn foretias_core::crypto_server::CryptoServer> {
         let server: Box<dyn foretias_core::crypto_server::CryptoServer> =

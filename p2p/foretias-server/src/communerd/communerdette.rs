@@ -98,6 +98,7 @@ pub(crate) trait CommunerdetteHost: Send + Sync {
 }
 
 /// Evidence level for a TBID-to-transport binding.
+#[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TbidBindingStatus {
     /// No binding information available yet.
@@ -135,6 +136,7 @@ impl TbidBindingStatus {
 }
 
 /// Currently preferred transport route for this TBID.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ActiveRoute {
     /// libp2p direct RPC over request_response/yamux.
@@ -456,6 +458,7 @@ fn binding_msg(nonce: &[u8], channel_id: &str, responder_tbid_hex: &str) -> Vec<
 
 /// Phase 12.0: Channel binding, awaiting state field integration.
 #[allow(dead_code)]
+#[non_exhaustive]
 #[derive(Debug, Clone, Default)]
 pub enum ChannelBindingState {
     /// Channel known but binding challenge not yet sent/verified.
@@ -924,6 +927,7 @@ impl Communerdette {
 /// `BinaryHeap` max-heap semantics used by the queue worker.
 /// Phase 5.1: Request priority, awaiting queue worker.
 #[allow(dead_code)]
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum CommunerdettePriority {
     /// History dump, large calendar replication batch.
@@ -962,6 +966,7 @@ enum CommunerdetteCommand {
 }
 
 /// Errors returned by CommunerdetteLine methods.
+#[non_exhaustive]
 #[derive(Debug, thiserror::Error)]
 pub enum CommunerdetteError {
     #[error("transport error: {0}")]
@@ -1608,6 +1613,7 @@ pub struct UnverifiedSignatureEnvelopeAuthenticatedPong {
 
 #[allow(dead_code)]
 impl UnverifiedSignatureEnvelopeAuthenticatedPong {
+    #[must_use = "parsing an authenticated pong from JSON may fail; the error must be handled"]
     pub fn from_json_value(v: serde_json::Value) -> Result<Self, TransportError> {
         let inner: AuthenticatedPong =
             serde_json::from_value(v).map_err(|e| TransportError::Decode(e.to_string()))?;

@@ -28,6 +28,7 @@ pub trait Evaluator {
 }
 
 /// Error type for SnapshotSuite initialization failures.
+#[non_exhaustive]
 #[derive(Debug)]
 pub enum SnapshotSuiteError {
     /// Approved output files exist without corresponding test registrations.
@@ -51,6 +52,7 @@ impl std::fmt::Display for SnapshotSuiteError {
 impl std::error::Error for SnapshotSuiteError {}
 
 /// Failure type for individual snapshot tests.
+#[non_exhaustive]
 #[derive(Debug)]
 pub enum TestFailure {
     /// No approved snapshot exists yet.

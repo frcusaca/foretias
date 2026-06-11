@@ -30,6 +30,7 @@ impl Calendar {
         }
     }
 
+    #[must_use = "loading calendar from persisted file may fail; the error must be handled"]
     pub fn from_persisted(path: &str) -> Result<Self, NodeError> {
         let cal = CoreCalendar::load(path)?;
         let tbid = cal.tbid();
@@ -45,6 +46,7 @@ impl Calendar {
         self.inner.clone()
     }
 
+    #[must_use = "saving the calendar may fail (e.g. I/O error); the error must be handled"]
     pub fn save(&self, path: &str) -> Result<(), NodeError> {
         let cal = self.inner.read();
         let tick_count = cal.tick_count();
@@ -54,6 +56,7 @@ impl Calendar {
     }
 
     /// Save the calendar wrapped in `PersistedCalendar` format (with metadata header).
+    #[must_use = "saving the calendar as persisted format may fail (e.g. I/O or serialization error); the error must be handled"]
     pub fn save_as_persisted(&self, path: &str) -> Result<(), NodeError> {
         use foretias_core::config::{CalendarConfig, CalendarMetadata, PersistedCalendar};
 

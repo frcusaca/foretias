@@ -40,6 +40,7 @@ impl Tbid {
     }
 
     /// Parse from a 96-byte slice.
+    #[must_use = "TBID parsing may fail if the byte slice is not exactly 96 bytes; the error must be handled"]
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, crate::error::CryptoError> {
         if bytes.len() != 96 {
             return Err(crate::error::CryptoError::BadInput(
@@ -67,6 +68,7 @@ impl Tbid {
     }
 
     /// Parse from a hex-encoded string (192 hex chars = 96 bytes).
+    #[must_use = "TBID parsing from hex may fail if the string is invalid; the error must be handled"]
     pub fn from_hex(s: &str) -> Result<Self, crate::error::CryptoError> {
         let bytes =
             hex::decode(s).map_err(|_| crate::error::CryptoError::BadInput("invalid hex TBID"))?;
@@ -101,6 +103,7 @@ impl TbidSecret {
     /// Generate a fresh TBID keypair (both Ed25519 and SLH-DSA).
     ///
     /// Returns the public key (`Tbid`) and the secret key (`TbidSecret`).
+    #[must_use = "TBID keypair generation may fail; the error must be handled"]
     pub fn generate() -> Result<(Tbid, Self), crate::error::CryptoError> {
         use crate::crypto_server::signing_tbid;
         let (pub_bytes, sec_bytes) = signing_tbid::tbid_keypair()?;
@@ -111,6 +114,7 @@ impl TbidSecret {
 
     /// Sign a message with both algorithms.
     /// Returns Ed25519_SIG(64) ‖ SLH-DSA_SIG(49856) = 49,920 bytes.
+    #[must_use = "signing may fail and the error must be handled"]
     pub fn sign(&self, message: &[u8]) -> Result<SignatureBytes, crate::error::CryptoError> {
         use crate::crypto_server::signing_tbid;
         let mut secret_bytes = Vec::with_capacity(240);
@@ -436,6 +440,7 @@ impl TickNumber {
 }
 
 /// Signature algorithm selector.
+#[non_exhaustive]
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[serde(into = "String")]
@@ -463,6 +468,7 @@ impl SignatureAlgorithm {
     }
 
     /// Parse from a liboqs algorithm identifier string.
+    #[must_use = "signature algorithm parsing may fail for unknown algorithm names; the error must be handled"]
     pub fn from_id_string(id: &str) -> Result<Self, crate::error::CryptoError> {
         match id {
             "Ed25519" => Ok(Self::Ed25519),
@@ -514,6 +520,7 @@ impl std::fmt::Display for SignatureAlgorithm {
 }
 
 /// KEM algorithm selector.
+#[non_exhaustive]
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[serde(into = "String")]
@@ -535,6 +542,7 @@ impl KemAlgorithm {
     }
 
     /// Parse from a liboqs algorithm identifier string.
+    #[must_use = "KEM algorithm parsing may fail for unknown algorithm names; the error must be handled"]
     pub fn from_id_string(id: &str) -> Result<Self, crate::error::CryptoError> {
         match id {
             "Noise-XX" => Ok(Self::NoiseXX),

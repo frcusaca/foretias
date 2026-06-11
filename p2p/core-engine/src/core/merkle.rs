@@ -4,6 +4,7 @@ use crate::core::bindings::*;
 use crate::error::{c_result_to_error, CryptoError};
 
 /// Compute a Merkle leaf hash: SHA-256(0x00 || data).
+#[must_use = "Merkle leaf computation may fail and the error must be handled"]
 pub fn merkle_leaf(data: &[u8]) -> Result<ForetiasHash32, CryptoError> {
     // SAFETY: zeroing known-good #[repr(C)] struct from bindings.
     let mut out = unsafe { std::mem::zeroed() };
@@ -16,6 +17,7 @@ pub fn merkle_leaf(data: &[u8]) -> Result<ForetiasHash32, CryptoError> {
 /// Verify a single-leaf Merkle inclusion proof.
 ///
 /// Returns `Ok(true)` if the proof is valid, `Ok(false)` if the proof is invalid.
+#[must_use = "Merkle verification result must be checked"]
 pub fn merkle_verify(
     root: &ForetiasHash32,
     leaf: &ForetiasHash32,
@@ -36,6 +38,7 @@ pub fn merkle_verify(
 ///
 /// `leaves` must be non-empty (returns `CryptoError::ProofRangeEmpty` if empty).
 /// The C backend pads to the next power of two; max 128 padded leaves.
+#[must_use = "Merkle root computation may fail and the error must be handled"]
 pub fn merkle_root_from_leaves(leaves: &[ForetiasHash32]) -> Result<ForetiasHash32, CryptoError> {
     if leaves.is_empty() {
         return Err(CryptoError::ProofRangeEmpty);
@@ -54,6 +57,7 @@ pub fn merkle_root_from_leaves(leaves: &[ForetiasHash32]) -> Result<ForetiasHash
 /// `leaves` must be non-empty. `start` must be less than `end`, and `end` must
 /// not exceed the number of leaves. The range size (`end - start`) must not
 /// exceed `FORETIAS_MERKLE_MAX_RANGE_PROOF` (64).
+#[must_use = "Merkle range proof generation may fail and the error must be handled"]
 pub fn merkle_range_proof(
     leaves: &[ForetiasHash32],
     start: usize,
@@ -85,6 +89,7 @@ pub fn merkle_range_proof(
 ///
 /// Returns `Ok(true)` if the proof is valid, `Ok(false)` if invalid.
 /// The `start` and `end` must match the values used when generating the proof.
+#[must_use = "Merkle range proof verification result must be checked"]
 pub fn merkle_verify_range_proof(
     root: &ForetiasHash32,
     proof: &ForetiasMerkleRangeProof,

@@ -1,5 +1,6 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
 pub enum MetricField {
     StampsTotal,

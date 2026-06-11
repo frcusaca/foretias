@@ -7,6 +7,7 @@ use crate::core::bindings::ForetiasPubKey32;
 use crate::crypto_server::CryptoServer;
 
 /// Event emitted when a collision is confirmed.
+#[non_exhaustive]
 #[derive(Debug, Clone)]
 pub enum CollisionEvent {
     Confirmed { foreign_heartbeat: Heartbeat },

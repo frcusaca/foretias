@@ -3,7 +3,7 @@ use foretias_core::core::bindings::*;
 use foretias_core::noise::NoiseSession;
 use static_assertions::assert_not_impl_any;
 
-assert_not_impl_any!(ForetiasPrivKey32: std::fmt::Debug);
+assert_not_impl_any!(ForetiasPrivKey32: std::fmt::Debug, Copy, Clone);
 assert_not_impl_any!(ForetiasSecretKeyVar: std::fmt::Debug);
 assert_not_impl_any!(ForetiasKemSecretKey: std::fmt::Debug);
 assert_not_impl_any!(ForetiasTbidV1SecretKey: std::fmt::Debug);

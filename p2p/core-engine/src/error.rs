@@ -3,6 +3,7 @@
 use thiserror::Error;
 
 /// Top-level errors produced by the P2P node.
+#[non_exhaustive]
 #[derive(Debug, Error)]
 pub enum NodeError {
     /// A cryptographic operation failed; wraps a [`CryptoError`].
@@ -65,6 +66,7 @@ pub enum NodeError {
 }
 
 /// Errors originating from the cryptographic backend.
+#[non_exhaustive]
 #[derive(Debug, Error)]
 pub enum CryptoError {
     /// A signature verification failed.
@@ -100,6 +102,7 @@ pub enum CryptoError {
 }
 
 /// Convert C11 ForetiasResult code to CryptoError.
+#[must_use = "C result conversion may fail and the error must be handled"]
 pub fn c_result_to_error(code: i32) -> Result<(), CryptoError> {
     match code {
         0 => Ok(()),

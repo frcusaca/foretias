@@ -7,6 +7,7 @@ use crate::error::{c_result_to_error, CryptoError};
 #[deprecated(
     note = "use ed25519_sign_with_handle; see HOW_SECRET_IS_SECURED_BY_SOFTWARE_SPEC.md REQ-Z2.8"
 )]
+#[must_use = "signing may fail and the error must be handled"]
 pub fn ed25519_sign(
     priv_key: &ForetiasPrivKey32,
     msg: &[u8],
@@ -20,6 +21,7 @@ pub fn ed25519_sign(
 }
 
 /// Sign a message using an opaque handle. Private key bytes never cross the FFI.
+#[must_use = "signing may fail and the error must be handled"]
 pub fn ed25519_sign_with_handle(
     handle: &PrivKeyHandle,
     msg: &[u8],
@@ -28,6 +30,7 @@ pub fn ed25519_sign_with_handle(
 }
 
 /// Verify an Ed25519 signature. Returns Ok(true) if valid.
+#[must_use = "verification result must be checked"]
 pub fn ed25519_verify(
     pub_key: &ForetiasPubKey32,
     msg: &[u8],

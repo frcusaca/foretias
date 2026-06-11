@@ -353,6 +353,7 @@ impl Chronomatter {
 
     // ── Stamp ────────────────────────────────────────────────────────────────
 
+    #[must_use = "stamping may fail (e.g. dormant mode, crypto error); the error must be handled"]
     pub fn stamp(&self, content: Vec<u8>, echo: String) -> Result<StampedForetis, NodeError> {
         if self.is_dormant.load(SeqCst) {
             return Err(NodeError::Internal(
@@ -520,6 +521,7 @@ impl Chronomatter {
         }
     }
 
+    #[must_use = "daemon tick may fail (e.g. keypair generation, signing); the error must be handled"]
     pub fn daemon_tick(&self) -> Result<(), NodeError> {
         if self.is_dormant.load(SeqCst) {
             return Ok(());

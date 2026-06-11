@@ -13,6 +13,7 @@ use foretias_core::core::identity::generate_ed25519_keypair;
 use foretias_core::noise;
 
 /// Errors specific to PtP Noise transport operations.
+#[non_exhaustive]
 #[derive(Debug)]
 pub enum PtPError {
     Connect(String),

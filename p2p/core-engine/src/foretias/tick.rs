@@ -139,6 +139,7 @@ impl<S: chronon_record_builder::IsComplete> ChrononRecordBuilder<S> {
     ///
     /// # Errors
     /// Returns `NodeError::InvalidInput` if `chronon_number` is 0 or `public_key` is empty.
+    #[must_use = "ChrononRecord build may fail validation and the error must be handled"]
     pub fn build(self) -> Result<ChrononRecord, NodeError> {
         let record = self.build_internal();
         if record.chronon_number == 0 {
@@ -241,6 +242,7 @@ impl<S: foretis_record_builder::IsComplete> ForetisRecordBuilder<S> {
     ///
     /// # Errors
     /// Returns `NodeError::InvalidInput` if `chronon_number` is 0.
+    #[must_use = "ForetisRecord build may fail validation and the error must be handled"]
     pub fn build(self) -> Result<ForetisRecord, NodeError> {
         let record = self.build_internal();
         if record.chronon_number == 0 {
@@ -267,6 +269,7 @@ impl super::clean_auth::BaseRecord for ForetisRecord {
 /// Controls how raw bytes are serialized before being hashed and signed.
 /// `Postcard` is the canonical wire format for Foretias; `Bincode` is
 /// provided for interoperability with systems that prefer bincode encoding.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SerializationAlgorithm {
     /// Postcard serialization (canonical, compact, no-field-names).
@@ -276,6 +279,7 @@ pub enum SerializationAlgorithm {
 }
 
 impl SerializationAlgorithm {
+    #[must_use = "serialization may fail and the error must be handled"]
     pub fn serialize(&self, content: &[u8]) -> Result<Vec<u8>, NodeError> {
         match self {
             SerializationAlgorithm::Postcard => postcard::to_allocvec(content)

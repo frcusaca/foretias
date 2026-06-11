@@ -8,6 +8,7 @@ use libp2p::kad;
 use serde::{Deserialize, Serialize};
 
 /// Capabilities a node can advertise in the DHT for peer discovery.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PeerCapability {

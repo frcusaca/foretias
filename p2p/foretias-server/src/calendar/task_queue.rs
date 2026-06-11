@@ -30,6 +30,7 @@ pub const DEFAULT_WORKER_COUNT: usize = 4;
 /// runs it to completion (with internal timeouts), and returns to listen
 /// for the next task. Tasks must NEVER hold Calendar's internal locks
 /// across `.await` — they take snapshots via short critical sections.
+#[non_exhaustive]
 #[derive(Debug, Clone)]
 pub enum CalendarTask {
     /// Chronon-level mutual attestation with a specific TBID.
@@ -1076,6 +1077,7 @@ pub fn start_pool(
 
 /// Convenience: enqueue a task. Returns Err if the receiver has been dropped
 /// (which only happens after Calendar shutdown).
+#[must_use = "enqueuing a task may fail if the channel is closed; the error must be handled"]
 pub fn enqueue(sender: &CalendarTaskSender, task: CalendarTask) -> Result<(), CalendarTask> {
     sender.send(task).map_err(|e| {
         warn!("calendar task channel closed; cannot enqueue {:?}", e.0);

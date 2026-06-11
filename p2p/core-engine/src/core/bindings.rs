@@ -103,7 +103,6 @@ const _: () = {
         [::std::mem::offset_of!(ForetiasPubKey33, bytes) - 0usize];
 };
 #[repr(C)]
-#[derive(Copy, Clone)]
 pub struct ForetiasPrivKey32 {
     pub bytes: [u8; 32usize],
 }

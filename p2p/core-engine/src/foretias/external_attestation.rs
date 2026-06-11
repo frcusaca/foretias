@@ -63,6 +63,7 @@ impl<S: external_attestation_record_builder::IsComplete> ExternalAttestationReco
     ///
     /// # Errors
     /// Returns `NodeError::InvalidInput` if the foretis chronon_number is 0.
+    #[must_use = "building an external attestation may fail if chronon_number is zero; the error must be handled"]
     pub fn build(self) -> Result<ExternalAttestationRecord, NodeError> {
         let record = self.build_internal();
         if record.foretis.chronon_number == 0 {

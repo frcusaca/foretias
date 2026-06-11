@@ -105,6 +105,7 @@ impl BaseRecord for ProbityReportRecord {
 // ---------------------------------------------------------------------------
 
 /// Extract the Ed25519 public key (first 32 bytes) from a TBID hex string.
+#[must_use = "TBID hex parsing may fail if the string is invalid or too short; the error must be handled"]
 pub fn pub_key_from_tbid_hex(pub_key_hex: &str) -> Result<Vec<u8>, CleanAuthError> {
     let tbid_bytes = hex::decode(pub_key_hex)
         .map_err(|e| CleanAuthError::InvalidLength(format!("invalid TBID hex: {e}")))?;

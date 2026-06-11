@@ -126,6 +126,7 @@ impl P2pConfig {
 }
 
 /// Dispatch surface — select which level to instantiate.
+#[non_exhaustive]
 pub enum ForetiasConfig {
     Standalone(StandaloneConfig),
     Ptp(PtpConfig),

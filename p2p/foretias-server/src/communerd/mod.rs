@@ -1019,6 +1019,7 @@ impl Communerd {
         tracing::info!(component = "communerd", peer = %peer_id, "communerd: DHT-discovered peer added to pool");
     }
 
+    #[must_use = "DHT bootstrap may fail (e.g. invalid addresses); the error must be handled"]
     pub async fn bootstrap_dht(&self, bootstrap_addrs: Vec<String>) -> Result<(), NodeError> {
         let Some(cmd_tx) = self.p2p_cmd_tx.get() else {
             return Ok(());
@@ -1803,6 +1804,9 @@ impl PeerMessenger for Communerd {
                 };
                 Ok(CommunityResponse::PeerStatus { peer: addr, alive })
             }
+            _ => Err(CoreTransportError::Connect(
+                "unhandled CommunityQuery variant".into(),
+            )),
         }
     }
 }

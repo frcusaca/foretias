@@ -162,6 +162,7 @@ impl NoiseSession {
     ///
     /// # Arguments
     /// * `input` - Incoming handshake message from the peer (None for first initiator step)
+    #[must_use = "noise handshake step may fail and the error must be handled"]
     pub fn step(&mut self, input: Option<&[u8]>) -> Result<Vec<u8>, CryptoError> {
         let mut output = vec![0u8; HANDSHAKE_MAX];
         let mut output_len = output.len() as usize;
@@ -185,6 +186,7 @@ impl NoiseSession {
     /// Encrypt a plaintext payload after handshake completion.
     ///
     /// Returns ciphertext of length `plaintext.len() + 16` (Poly1305 tag).
+    #[must_use = "noise encryption may fail and the error must be handled"]
     pub fn send(&mut self, plaintext: &[u8]) -> Result<Vec<u8>, CryptoError> {
         let ct_len = plaintext.len() + 16;
         let mut ciphertext = vec![0u8; ct_len];
@@ -210,6 +212,7 @@ impl NoiseSession {
     ///
     /// # Arguments
     /// * `ciphertext` - Encrypted message (must be ≥ 16 bytes for the tag)
+    #[must_use = "noise decryption may fail and the error must be handled"]
     pub fn recv(&mut self, ciphertext: &[u8]) -> Result<Vec<u8>, CryptoError> {
         let mut plaintext = vec![0u8; ciphertext.len()];
         let mut actual_len = plaintext.len();

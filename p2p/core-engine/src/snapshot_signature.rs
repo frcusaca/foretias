@@ -38,6 +38,7 @@ use base64::Engine;
 use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 
 /// Errors from snapshot signature operations.
+#[non_exhaustive]
 #[derive(Debug)]
 pub enum SnapshotSignatureError {
     /// Argon2id key derivation failed.

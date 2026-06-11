@@ -137,6 +137,7 @@ impl CommunerdP2P {
     }
 
     /// Bootstrap DHT with known bootstrap peers.
+    #[must_use = "DHT bootstrap may fail (e.g. invalid addresses); the error must be handled"]
     pub async fn bootstrap_dht(&self, bootstrap_addrs: Vec<String>) -> Result<(), NodeError> {
         self.inner().bootstrap_dht(bootstrap_addrs).await
     }

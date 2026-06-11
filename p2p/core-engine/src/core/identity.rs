@@ -41,6 +41,7 @@ impl PrivKeyHandle {
     ///
     /// The seed is encrypted with the instance KEK before storage.
     /// Call [`PrivKeyHandle::init`] first.
+    #[must_use = "key generation may fail and the error must be handled"]
     pub fn generate() -> Result<Self, CryptoError> {
         // SAFETY: C11 generator returns a valid pointer on success or null on failure.
         let ptr = unsafe { foretias_privkey_ed25519_generate() };
@@ -57,6 +58,7 @@ impl PrivKeyHandle {
     ///
     /// The seed is encrypted with the instance KEK before storage.
     /// Call [`PrivKeyHandle::init`] first.
+    #[must_use = "key generation from seed may fail and the error must be handled"]
     pub fn from_seed(seed: &[u8; 32]) -> Result<Self, CryptoError> {
         // SAFETY: C11 generator returns a valid pointer on success or null on failure; seed is 32 bytes.
         let ptr = unsafe { foretias_privkey_ed25519_from_seed(seed.as_ptr()) };
@@ -80,6 +82,7 @@ impl PrivKeyHandle {
     }
 
     /// Derive the public key for this handle.
+    #[must_use = "public key derivation may fail and the error must be handled"]
     pub fn public_key(&self) -> Result<[u8; 32], CryptoError> {
         let mut out = [0u8; 32];
         // SAFETY: self.0 is valid; out is 32 bytes.
@@ -90,6 +93,7 @@ impl PrivKeyHandle {
     }
 
     /// Sign a message with this handle. Private key bytes never leave C.
+    #[must_use = "signing may fail and the error must be handled"]
     pub fn sign(&self, msg: &[u8]) -> Result<ForetiasSig64, CryptoError> {
         let mut sig = [0u8; 64];
         // SAFETY: self.0 is valid; msg and sig buffers are valid for their lengths.
@@ -107,6 +111,7 @@ impl PrivKeyHandle {
 
     /// Derive a 32-byte seal key via HKDF-SHA256 from the seed.
     /// The seed never leaves C memory.
+    #[must_use = "seal key derivation may fail and the error must be handled"]
     pub fn derive_seal_key(&self, info: &[u8]) -> Result<[u8; 32], CryptoError> {
         let mut seal_key = [0u8; 32];
         // SAFETY: self.0 is valid; info and seal_key buffers are valid for their lengths.
@@ -133,6 +138,7 @@ impl Drop for PrivKeyHandle {
 }
 
 /// Generate a fresh Ed25519 keypair.
+#[must_use = "keypair generation may fail and the error must be handled"]
 pub fn generate_ed25519_keypair() -> Result<(ForetiasPubKey32, ForetiasPrivKey32), CryptoError> {
     // SAFETY: zeroing known-good `#[repr(C)]` structs from bindings.
     let mut pub_key = unsafe { std::mem::zeroed() };
@@ -144,6 +150,7 @@ pub fn generate_ed25519_keypair() -> Result<(ForetiasPubKey32, ForetiasPrivKey32
 }
 
 /// Derive a PeerID from an Ed25519 public key.
+#[must_use = "peer ID derivation may fail and the error must be handled"]
 pub fn derive_ed25519_peer_id(pub_key: &ForetiasPubKey32) -> Result<ForetiasPeerID, CryptoError> {
     // SAFETY: zeroing known-good `#[repr(C)]` struct from bindings.
     let mut peer_id = unsafe { std::mem::zeroed() };

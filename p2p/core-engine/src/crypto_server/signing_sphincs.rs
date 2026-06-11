@@ -15,6 +15,7 @@ use crate::foretias::types::SignatureBytes;
 /// Generate a SPHINCS+ SHA2-128s-simple keypair.
 /// Returns (public_key, secret_key) as variable-length byte vectors.
 /// Secret is encrypted at C11 layer; ciphertext + nonce is returned.
+#[must_use = "SPHINCS+ SHA2-128s keypair generation may fail; the error must be handled"]
 pub fn sphincs_keypair() -> Result<(SignatureBytes, SignatureBytes), CryptoError> {
     let mut secret: ForetiasSecretKeyVar = unsafe { std::mem::zeroed() };
     secret.plaintext_len = FORETIAS_SIG_MAX_SECRET_BYTES as usize;
@@ -32,6 +33,7 @@ pub fn sphincs_keypair() -> Result<(SignatureBytes, SignatureBytes), CryptoError
 
 /// Sign a message with SPHINCS+ SHA2-128s. Returns the signature bytes.
 /// Secret is encrypted ciphertext + nonce (from sphincs_keypair).
+#[must_use = "SPHINCS+ SHA2-128s signing may fail; the error must be handled"]
 pub fn sphincs_sign(
     secret_key: &SignatureBytes,
     msg: &[u8],
@@ -51,6 +53,7 @@ pub fn sphincs_sign(
 }
 
 /// Verify a SPHINCS+ SHA2-128s signature. Returns Ok(true) if valid, Ok(false) if invalid.
+#[must_use = "SPHINCS+ SHA2-128s verification result must be checked; an unchecked verification provides no security"]
 pub fn sphincs_verify(
     public_key: &SignatureBytes,
     msg: &[u8],
@@ -79,6 +82,7 @@ pub fn sphincs_verify(
 /// Generate a SPHINCS+ SHA2-256f-simple keypair.
 /// Returns (public_key, secret_key) as variable-length byte vectors.
 /// Secret is encrypted at C11 layer; ciphertext + nonce is returned.
+#[must_use = "SPHINCS+ SHA2-256f keypair generation may fail; the error must be handled"]
 pub fn sphincs_sha2_256f_keypair() -> Result<(SignatureBytes, SignatureBytes), CryptoError> {
     let mut secret: ForetiasSecretKeyVar = unsafe { std::mem::zeroed() };
     secret.plaintext_len = FORETIAS_SIG_MAX_SECRET_BYTES as usize;
@@ -96,6 +100,7 @@ pub fn sphincs_sha2_256f_keypair() -> Result<(SignatureBytes, SignatureBytes), C
 
 /// Sign a message with SPHINCS+ SHA2-256f. Returns the signature bytes.
 /// Secret is encrypted ciphertext + nonce (from sphincs_sha2_256f_keypair).
+#[must_use = "SPHINCS+ SHA2-256f signing may fail; the error must be handled"]
 pub fn sphincs_sha2_256f_sign(
     secret_key: &SignatureBytes,
     msg: &[u8],
@@ -115,6 +120,7 @@ pub fn sphincs_sha2_256f_sign(
 }
 
 /// Verify a SPHINCS+ SHA2-256f signature. Returns Ok(true) if valid, Ok(false) if invalid.
+#[must_use = "SPHINCS+ SHA2-256f verification result must be checked; an unchecked verification provides no security"]
 pub fn sphincs_sha2_256f_verify(
     public_key: &SignatureBytes,
     msg: &[u8],

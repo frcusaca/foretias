@@ -29,6 +29,7 @@ pub struct PeerAddr {
 }
 
 /// Query types for community state.
+#[non_exhaustive]
 #[derive(Debug, Clone)]
 pub enum CommunityQuery {
     /// Get known peers.
@@ -38,6 +39,7 @@ pub enum CommunityQuery {
 }
 
 /// Response types for community queries.
+#[non_exhaustive]
 #[derive(Debug, Clone)]
 pub enum CommunityResponse {
     /// List of known peer addresses.
@@ -47,6 +49,7 @@ pub enum CommunityResponse {
 }
 
 /// Transport-level error.
+#[non_exhaustive]
 #[derive(Debug)]
 pub enum TransportError {
     /// Connection failed.

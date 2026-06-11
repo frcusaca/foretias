@@ -4,6 +4,7 @@ use crate::collision::heartbeat::Heartbeat;
 use crate::error::NodeError;
 
 /// Reason for requesting help from the liege (application-level peer manager).
+#[non_exhaustive]
 #[derive(Debug, Clone)]
 pub enum HelpReason {
     IdentityCollision { foreign_heartbeat: Heartbeat },

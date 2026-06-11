@@ -35,6 +35,7 @@ impl ProbityStore {
     }
 
     /// Ingest a verified report. Caller must have verified the signature already.
+    #[must_use = "ingesting a probity report may fail; the error must be handled"]
     pub fn ingest(&self, report: ProbityReportRecord) -> Result<(), NodeError> {
         let mut guard = self.reports.write();
         let list = guard.entry(report.subject().to_string()).or_default();

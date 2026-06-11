@@ -24,6 +24,7 @@ use serde::{Deserialize, Serialize};
 // ---------------------------------------------------------------------------
 
 /// Role of the signer in the ordered signature chain.
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum SignerRole {
     Chronomatter,
@@ -33,6 +34,7 @@ pub enum SignerRole {
 }
 
 /// Signature algorithm used by this entry.
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum SigAlgorithm {
     Ed25519, // fast
@@ -121,12 +123,14 @@ impl<T> UnverifiedSignatureEnvelope<T> {
 
 impl<T: serde::de::DeserializeOwned> UnverifiedSignatureEnvelope<T> {
     /// Parse from raw bytes (JSON). No verification performed.
+    #[must_use = "parsing from bytes may fail and the error must be handled"]
     pub fn from_bytes(b: &[u8]) -> Result<Self, ParseError> {
         let val: T = serde_json::from_slice(b).map_err(ParseError::InvalidJson)?;
         Ok(Self::from_parsed(val))
     }
 
     /// Parse from a JSON-RPC Value. No verification performed.
+    #[must_use = "parsing from JSON value may fail and the error must be handled"]
     pub fn from_json_value(v: serde_json::Value) -> Result<Self, ParseError> {
         let val: T = serde_json::from_value(v).map_err(ParseError::InvalidJson)?;
         Ok(Self::from_parsed(val))
@@ -426,6 +430,7 @@ impl<T: serde::Serialize> ExternalizedBuilder<T> {
     }
 
     /// Finalize: validate terminal entry is CommunerdEnvelope and return Externalized.
+    #[must_use = "building Externalized may fail validation and the error must be handled"]
     pub fn build(self) -> Result<Externalized<T>, CleanAuthError> {
         if self.signatures.is_empty() {
             return Err(CleanAuthError::SignatureCountMismatch {
@@ -449,6 +454,7 @@ impl<T: serde::Serialize> ExternalizedBuilder<T> {
 // ---------------------------------------------------------------------------
 
 /// Errors that occur during the cleansing and authentication process.
+#[non_exhaustive]
 #[derive(Debug)]
 pub enum CleanAuthError {
     /// Failed to parse inbound data.
@@ -521,6 +527,7 @@ impl std::fmt::Display for CleanAuthError {
 impl std::error::Error for CleanAuthError {}
 
 /// Errors that occur during parsing of inbound data.
+#[non_exhaustive]
 #[derive(Debug)]
 pub enum ParseError {
     /// Invalid JSON.
@@ -712,6 +719,7 @@ impl UnverifiedSignatureEnvelope<ForetisRecord> {
     /// Parse v2 wire format: `{foretis: <ForetisRecord>, signature: <hex>, signature_algorithm: <string>}`.
     ///
     /// v1 bare ForetisRecord JSON is rejected — clean cutover to v2.
+    #[must_use = "parsing v2 wire format may fail and the error must be handled"]
     pub fn from_json_value_v2(v: serde_json::Value) -> Result<Self, ParseError> {
         let obj = match v {
             serde_json::Value::Object(map) => map,

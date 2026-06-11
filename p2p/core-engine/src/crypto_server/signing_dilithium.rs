@@ -5,6 +5,7 @@ use crate::foretias::types::SignatureBytes;
 /// Generate a Dilithium3 keypair.
 /// Returns (public_key, secret_key) as variable-length byte vectors.
 /// Secret is encrypted at C11 layer; ciphertext + nonce is returned.
+#[must_use = "Dilithium3 keypair generation may fail; the error must be handled"]
 pub fn dilithium3_keypair() -> Result<(SignatureBytes, SignatureBytes), CryptoError> {
     let mut secret: ForetiasSecretKeyVar = unsafe { std::mem::zeroed() };
     secret.plaintext_len = FORETIAS_SIG_MAX_SECRET_BYTES as usize;
@@ -25,6 +26,7 @@ pub fn dilithium3_keypair() -> Result<(SignatureBytes, SignatureBytes), CryptoEr
 
 /// Sign a message with Dilithium3. Returns the signature bytes.
 /// Secret is encrypted ciphertext + nonce (from dilithium3_keypair).
+#[must_use = "Dilithium3 signing may fail; the error must be handled"]
 pub fn dilithium3_sign(
     secret_key: &SignatureBytes,
     msg: &[u8],
@@ -44,6 +46,7 @@ pub fn dilithium3_sign(
 }
 
 /// Verify a Dilithium3 signature. Returns Ok(true) if valid, Ok(false) if invalid.
+#[must_use = "Dilithium3 verification result must be checked; an unchecked verification provides no security"]
 pub fn dilithium3_verify(
     public_key: &SignatureBytes,
     msg: &[u8],

@@ -59,6 +59,7 @@ pub struct TimeFamilyServer {
 }
 
 impl TimeFamilyServer {
+    #[must_use = "server creation may fail (e.g. crypto initialization); the error must be handled"]
     pub fn new(listen_addr: &str, chronon_ns: u64) -> Result<Self, NodeError> {
         Self::new_with_config(listen_addr, chronon_ns, None, None)
     }
@@ -121,6 +122,7 @@ impl TimeFamilyServer {
         })
     }
 
+    #[must_use = "loading server from persisted calendar may fail; the error must be handled"]
     pub fn from_calendar(path: &str, listen_addr: &str) -> Result<Self, NodeError> {
         use foretias_core::crypto_server;
         use std::sync::Arc as StdArc;
@@ -162,6 +164,7 @@ impl TimeFamilyServer {
         self
     }
 
+    #[must_use = "creating server from config may fail; the error must be handled"]
     pub fn with_config(config: ForetiasServerConfig) -> Result<Self, NodeError> {
         let mut server = Self::new_with_config(
             &config.listen_addr,
@@ -247,6 +250,7 @@ impl TimeFamilyServer {
             .integrity_check(&*self.calendar, start, end)
     }
 
+    #[must_use = "saving the calendar may fail (e.g. I/O error); the error must be handled"]
     pub fn save(&self) -> Result<(), NodeError> {
         if let Some(ref p) = self.persist_path {
             let json_path = p.join(format!("{}.json", self.get_tbid().to_hex()));
@@ -260,6 +264,7 @@ impl TimeFamilyServer {
         Ok(())
     }
 
+    #[must_use = "daemon tick may fail (e.g. keypair generation, signing); the error must be handled"]
     pub fn daemon_tick(&self) -> Result<(), NodeError> {
         self.chronomatter.daemon_tick()
     }
@@ -288,10 +293,12 @@ impl TimeFamilyServer {
         self.chronomatter.stop_daemon();
     }
 
+    #[must_use = "starting the server may fail (e.g. bind error); the error must be handled"]
     pub fn start(self: Arc<Self>) -> Result<tokio::task::JoinHandle<()>, NodeError> {
         Self::start_tcp(self)
     }
 
+    #[must_use = "starting the TCP server may fail (e.g. bind error); the error must be handled"]
     pub fn start_tcp(self: Arc<Self>) -> Result<tokio::task::JoinHandle<()>, NodeError> {
         let addr = self.listen_addr.clone();
 

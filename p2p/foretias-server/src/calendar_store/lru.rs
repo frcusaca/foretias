@@ -23,6 +23,7 @@ const UNLIMITED_BUDGET: u64 = u64::MAX;
 
 /// Calendars are classified into bins. Eviction always comes from Unused
 /// first, and discards randomly to avoid a clairvoyant attacker.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CalendarBin {
     /// This node's calendar or liege's — never evicted.
@@ -38,6 +39,7 @@ pub enum CalendarBin {
 /// - `Everything`: Store calendars for every peer (expensive, complete).
 /// - `MyOwn`: Store only our own calendar (and our liege's).
 /// - `MyOwnPlusLru`: MyOwn + LRU cache of recently-used peers' calendars.
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub enum CalendarStoragePolicy {
     Everything,
@@ -122,6 +124,7 @@ impl BinBasedLru {
     }
 
     /// Evict Unused entries until there is room for `incoming_bytes`.
+    #[must_use = "eviction may fail if no unused entries are available (OutOfSpace); the error must be handled"]
     pub fn evict_to_fit(&self, incoming_bytes: u64) -> Result<(), NodeError> {
         if self.max_bytes == UNLIMITED_BUDGET {
             return Ok(());

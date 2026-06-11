@@ -4,6 +4,7 @@ use crate::core::bindings::*;
 use crate::error::{c_result_to_error, CryptoError};
 
 /// SHA-256 hash.
+#[must_use = "hashing may fail and the error must be handled"]
 pub fn sha256(data: &[u8]) -> Result<ForetiasHash32, CryptoError> {
     // SAFETY: zeroing known-good #[repr(C)] struct from bindings.
     let mut out = unsafe { std::mem::zeroed() };
@@ -14,6 +15,7 @@ pub fn sha256(data: &[u8]) -> Result<ForetiasHash32, CryptoError> {
 }
 
 /// SHA-256 of concatenated a || b.
+#[must_use = "hashing may fail and the error must be handled"]
 pub fn sha256_concat(a: &[u8], b: &[u8]) -> Result<ForetiasHash32, CryptoError> {
     // SAFETY: zeroing known-good #[repr(C)] struct from bindings.
     let mut out = unsafe { std::mem::zeroed() };
@@ -25,6 +27,7 @@ pub fn sha256_concat(a: &[u8], b: &[u8]) -> Result<ForetiasHash32, CryptoError> 
 }
 
 /// BLAKE3 hash (C11 stub returns unsupported).
+#[must_use = "hashing may fail and the error must be handled"]
 pub fn blake3(data: &[u8]) -> Result<ForetiasHash32, CryptoError> {
     // SAFETY: zeroing known-good #[repr(C)] struct from bindings.
     let mut out = unsafe { std::mem::zeroed() };
@@ -35,6 +38,7 @@ pub fn blake3(data: &[u8]) -> Result<ForetiasHash32, CryptoError> {
 }
 
 /// Legacy MD5 (noncrypto use only).
+#[must_use = "hashing may fail and the error must be handled"]
 pub fn legacy_insecure_md5(data: &[u8]) -> Result<ForetiasHash16, CryptoError> {
     // SAFETY: zeroing known-good #[repr(C)] struct from bindings.
     let mut out = unsafe { std::mem::zeroed() };
@@ -45,6 +49,7 @@ pub fn legacy_insecure_md5(data: &[u8]) -> Result<ForetiasHash16, CryptoError> {
 }
 
 /// Legacy SHA-1 (noncrypto use only).
+#[must_use = "hashing may fail and the error must be handled"]
 pub fn legacy_insecure_sha1(data: &[u8]) -> Result<ForetiasHash20, CryptoError> {
     // SAFETY: zeroing known-good #[repr(C)] struct from bindings.
     let mut out = unsafe { std::mem::zeroed() };

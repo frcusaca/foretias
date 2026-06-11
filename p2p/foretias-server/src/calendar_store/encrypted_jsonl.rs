@@ -49,6 +49,7 @@ impl CalendarBlock {
     /// are combined into a Merkle root via the C11 FFI.
     ///
     /// Returns `[0; 32]` if the block has no ticks.
+    #[must_use = "computing the Merkle root may fail (e.g. serialization error); the error must be handled"]
     pub fn compute_merkle_root(&self) -> Result<[u8; 32], NodeError> {
         if self.ticks.is_empty() {
             return Ok([0u8; 32]);
@@ -103,6 +104,7 @@ impl EncryptedJsonlCalendarStore {
     /// The ticks are wrapped in a [`CalendarBlock`], serialized to JSON,
     /// sealed with the node's seal key, CBOR-encoded, base64-encoded,
     /// and appended as a newline-terminated line to the backing file.
+    #[must_use = "appending a block may fail (e.g. sealing, I/O error); the error must be handled"]
     pub fn append_block(&self, ticks: Vec<Externalized<ChrononRecord>>) -> Result<(), NodeError> {
         let block_id = self.next_block_id.fetch_add(1, Ordering::SeqCst);
         let written_at_ns = self
@@ -151,6 +153,7 @@ impl EncryptedJsonlCalendarStore {
     ///
     /// Each line is base64-decoded, CBOR-decoded to a [`SealedBlob`],
     /// unsealed, and JSON-deserialized into a [`CalendarBlock`].
+    #[must_use = "reading all blocks may fail (e.g. I/O, decryption error); the error must be handled"]
     pub fn read_all(&self) -> Result<Vec<CalendarBlock>, NodeError> {
         if !self.path.exists() {
             return Ok(Vec::new());

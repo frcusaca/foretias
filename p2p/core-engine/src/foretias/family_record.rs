@@ -14,6 +14,7 @@ use serde::Serialize;
 pub const MAX_FAMILY_MEMBERS: usize = 64;
 
 /// Errors that can occur when constructing a FamilyRecord.
+#[non_exhaustive]
 #[derive(Debug, Clone, PartialEq)]
 pub enum FamilyError {
     EmptyMembers,
@@ -46,6 +47,7 @@ pub struct FamilyRecord {
 
 impl FamilyRecord {
     /// Construct a FamilyRecord, enforcing all invariants.
+    #[must_use = "FamilyRecord construction may fail due to empty members, duplicates, oversized family, or bad matrix dimensions; the error must be handled"]
     pub fn try_new(members: Vec<String>, matrix: Vec<Vec<Vec<u8>>>) -> Result<Self, FamilyError> {
         if members.is_empty() {
             return Err(FamilyError::EmptyMembers);
@@ -92,6 +94,7 @@ impl FamilyRecord {
     /// For each cell `matrix[i][j]`, verify the Ed25519 portion (first 64 bytes)
     /// is member i's Ed25519 signature over member j's TBID raw bytes.
     /// Returns `Ok(())` if all k² signatures verify, `Err` on first failure.
+    #[must_use = "matrix verification result must be checked; an unverified matrix may contain invalid signatures"]
     pub fn verify_matrix<C: VerifyOps + ?Sized>(&self, crypto: &C) -> Result<(), CryptoError> {
         let k = self.k();
         let tbids: Vec<Tbid> = self

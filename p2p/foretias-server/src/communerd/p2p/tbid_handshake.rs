@@ -32,6 +32,7 @@ pub struct TbidProofResponse {
 }
 
 /// Result of TBID proof verification.
+#[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TbidProofResult {
     Success { tbid: Tbid, peer_id: PeerId },

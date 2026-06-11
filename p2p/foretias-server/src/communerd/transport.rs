@@ -23,6 +23,7 @@ impl std::fmt::Display for PeerAddr {
 }
 
 /// Transport-level error.
+#[non_exhaustive]
 #[derive(Debug, thiserror::Error)]
 pub enum TransportError {
     #[error("connect failed: {0}")]
@@ -38,6 +39,7 @@ pub enum TransportError {
 }
 
 /// Which transport to use for a peer.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TransportKind {
     /// Direct TCP JSON-RPC — "close friend" low latency.

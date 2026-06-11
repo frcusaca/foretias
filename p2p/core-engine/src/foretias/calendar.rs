@@ -90,6 +90,7 @@ impl Calendar {
     }
 
     /// Appends a tick record; returns an error if the tick number is not strictly greater than the last.
+    #[must_use = "appending a tick may fail if chronon number is not strictly greater"]
     pub fn append(&mut self, record: ChrononRecord) -> Result<(), NodeError> {
         if let Some(last) = self.ticks.last() {
             if record.chronon_number <= last.chronon_number {
@@ -143,6 +144,7 @@ impl Calendar {
     /// Writes to a `.tmp` file first, then atomically renames it to the target path.
     /// On POSIX systems, `rename` is atomic — if a crash occurs mid-write, the
     /// original file is unaffected. On load, any leftover `.tmp` is recovered.
+    #[must_use = "calendar save may fail and the error must be handled"]
     pub fn save(&self, path: &str) -> Result<(), NodeError> {
         let data = serde_json::to_string_pretty(self)?;
         let tmp_path = format!("{}.tmp", path);
@@ -164,6 +166,7 @@ impl Calendar {
     ///    more recent atomic-write that completed its write but not its rename).
     /// 2. If `.tmp` is corrupt, delete it and load the main file.
     /// 3. If only the main file exists, load it normally.
+    #[must_use = "calendar load may fail and the error must be handled"]
     pub fn load(path: &str) -> Result<Self, NodeError> {
         let tmp_path = format!("{}.tmp", path);
 

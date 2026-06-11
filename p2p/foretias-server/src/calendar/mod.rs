@@ -83,6 +83,7 @@ impl Calendar {
         }
     }
 
+    #[must_use = "loading calendar from persisted file may fail; the error must be handled"]
     pub fn from_persisted(path: &str) -> Result<Self, NodeError> {
         let cal = CoreCalendar::load(path)?;
         let tbid = cal.tbid();
@@ -155,6 +156,7 @@ impl Calendar {
     /// Enqueue a calendar task. Returns `Err` if the task queue hasn't been
     /// started (callers should call `start_task_queue` once at construction
     /// time) or if the channel was closed.
+    #[must_use = "enqueuing a task may fail if the queue is not started; the error must be handled"]
     pub fn enqueue_task(&self, task: CalendarTask) -> Result<(), CalendarTask> {
         let guard = self.task_tx.lock().unwrap();
         match guard.as_ref() {
@@ -179,6 +181,7 @@ impl Calendar {
         self.inner.clone()
     }
 
+    #[must_use = "saving the calendar may fail (e.g. I/O error); the error must be handled"]
     pub fn save(&self, path: &str) -> Result<(), NodeError> {
         let cal = self.inner.read();
         let tick_count = cal.tick_count();
@@ -189,6 +192,7 @@ impl Calendar {
 
     /// Save the calendar wrapped in `PersistedCalendar` format (with metadata header).
     /// This is an additional save format alongside the raw JSON `save()` method.
+    #[must_use = "saving the calendar as persisted format may fail (e.g. I/O or serialization error); the error must be handled"]
     pub fn save_as_persisted(&self, path: &str) -> Result<(), NodeError> {
         use foretias_core::config::{CalendarConfig, CalendarMetadata, PersistedCalendar};
 
@@ -218,6 +222,7 @@ impl Calendar {
 
     /// Sign `foretis_bytes` with Calendar's Ed25519 key. Returns the 64-byte
     /// signature. Fails if the signing key was not generated at construction.
+    #[must_use = "signing a Foretis may fail (e.g. signing key not initialized); the error must be handled"]
     pub fn sign_foretis(&self, foretis_bytes: &[u8]) -> Result<Vec<u8>, NodeError> {
         let guard = self.signing_key.lock();
         let key = guard
