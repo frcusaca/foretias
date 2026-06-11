@@ -116,7 +116,9 @@ Within each phase, items are ordered by estimated effort (smallest first, to bui
 - [ ] Update module doc comment in `core-engine/src/foretias/clean_auth.rs` (lines 1-15) to accurately describe the two constructor gates:
   - `into_clean_authenticated()` — inbound gate, requires verification, returns `Result`
   - `from_trusted()` — local gate for internally-produced trusted data, public but named to signal intent
-- [ ] Remove the misleading "private constructors" claim
+- [x] Remove the misleading "private constructors" claim from spec files
+      (2026-06-11 15:00)
+      NOTE: Code module doc in clean_auth.rs already correct. Fixed spec files: COMBINED_GROUP7_COMMUNERDETTE_SPEC.md, COMBINED_GROUP6_MUTUAL_ATTESTATION_SPEC.md. Remaining references in TRUST_BOUNDARY_SEMANTIC_ANALYSIS_SPEC.md and IMPROVE_BUILDERS_AND_BIG_FNS_SPEC.md are about BaseRecord constructors (different concept) — left as-is.
 - [ ] Verify doc builds: `cargo doc -p foretias-core --no-deps`
 
 ### Item 2.8: Inline Format Variables (Section 2.8)

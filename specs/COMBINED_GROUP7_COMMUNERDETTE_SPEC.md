@@ -28,9 +28,10 @@ constructors being present:
 - **`COMBINED_GROUP1_TYPE_BASED_SAFETY_ENFORCEMENT_TAKE_3_SPEC.md`** — Defines
   `Unprocessed<T>`, `CleanAuthenticated<T>`, and `Externalized<T>` as generic
   wrappers in `core-engine/src/foretias/clean_auth.rs`. No concrete newtype
-  structs. `CleanAuthenticated<T>` has private constructors:
-  `from_trusted()` for locally created data and `verify()` on
-  `Unprocessed<T>` for the inbound gate. Type aliases via
+   structs. `CleanAuthenticated<T>` has two construction gates:
+   `from_trusted()` (local gate for internally-produced trusted data) and
+   `verify()` on `Unprocessed<T>` (inbound gate requiring verification).
+   Type aliases via
   `create_type_gated_classes!` macro (e.g., `CleanAuthenticatedChrononRecord`
   is an alias for `CleanAuthenticated<ChrononRecord>`). `ProbityReport` moved
   to `core-engine`.
@@ -537,7 +538,7 @@ Communerdette does NOT:
 
 - Define new `verify` methods — those live in `core-engine` per Take 3.
 - Construct `CleanAuthenticated<R>` directly — only `Unprocessed<R>::verify(...)`
-  and `CleanAuthenticated::<R>::from_trusted()` can do that (private constructors).
+   and `CleanAuthenticated::<R>::from_trusted()` can do that (two-gate construction).
 - Bypass the Take 3 pipeline for any record type.
 
 ### 11.3 What CleanAuthenticated<R> Means

@@ -16,8 +16,9 @@ The following specifications are code-complete and merged to `alpha`. This
 design depends on the types, traits, and behaviors they introduce:
 
 - **`COMBINED_GROUP1_TYPE_BASED_SAFETY_ENFORCEMENT_TAKE_3_SPEC.md`** —
-  `Unprocessed<R>` → `CleanAuthenticated<R>` → `Externalized<R>` triple with
-  private constructors and the inbound `verify()` gate. All remote records
+   `Unprocessed<R>` → `CleanAuthenticated<R>` → `Externalized<R>` triple with
+   two-gate construction (`from_trusted()` local gate, `verify()` inbound gate).
+   All remote records
   consumed by Mutual Attestation enter through this gate.
 - **`COMBINED_GROUP7_COMMUNERDETTE_SPEC.md`** — Communerdette + CommunerdetteLine
   as the per-TBID relationship handle. FB cadence reuses the per-TBID line
