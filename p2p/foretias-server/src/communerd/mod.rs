@@ -1780,7 +1780,7 @@ impl PeerMessenger for Communerd {
         match query {
             CommunityQuery::KnownPeers => {
                 // Bridge sync trait → async PeerPool via tokio block_on.
-                // Safe: we hold no async-unsafe locks here, and get_peers() is a
+                // SAFETY: we hold no async-unsafe locks here, and get_peers() is a
                 // non-blocking read (tokio::sync::RwLock::read is future-based).
                 let peers = match tokio::runtime::Handle::try_current() {
                     Ok(handle) => handle.block_on(async { self.peer_pool.get_peers().await }),

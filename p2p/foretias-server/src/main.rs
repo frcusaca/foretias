@@ -331,12 +331,15 @@ fn default_max_discovered_peers() -> usize {
     100
 }
 
-async fn cmd_serve(config: ServeConfig) -> Result<(), Box<dyn std::error::Error>> {
+/// Build the TimeFamilyConfig from CLI args and config file.
+fn build_time_family_config(
+    config: &ServeConfig,
+) -> Result<(String, u64, TimeFamilyConfig), Box<dyn std::error::Error>> {
     let cfg = load_config();
     let addr = if config.addr == "127.0.0.1:4001" {
-        cfg.listen_addr.unwrap_or(config.addr)
+        cfg.listen_addr.unwrap_or(config.addr.clone())
     } else {
-        config.addr
+        config.addr.clone()
     };
     let chronon_ns = if config.chronon_ns == 60_000_000_000 {
         cfg.chronon_ns.unwrap_or(config.chronon_ns)
@@ -371,28 +374,42 @@ async fn cmd_serve(config: ServeConfig) -> Result<(), Box<dyn std::error::Error>
         config_file_path: tfc_path_opt.map(|s| s.to_string()),
     });
 
-    let server: TimeFamilyServer = if config.start_dormant {
+    Ok((addr, chronon_ns, time_family_cfg))
+}
+
+/// Create the TimeFamilyServer, either from a persisted calendar or fresh.
+fn create_server(
+    config: &ServeConfig,
+    addr: &str,
+    chronon_ns: u64,
+) -> Result<TimeFamilyServer, Box<dyn std::error::Error>> {
+    if config.start_dormant {
         let persist = config
             .persist_path
+            .as_ref()
             .ok_or("--persist-path is required for --dormant mode")?;
-        let json_path = PathBuf::from(&persist);
-        TimeFamilyServer::from_calendar(
+        let json_path = PathBuf::from(persist);
+        Ok(TimeFamilyServer::from_calendar(
             json_path
                 .to_str()
                 .ok_or_else(|| format!("persist path contains invalid UTF-8: {:?}", json_path))?,
-            &addr,
-        )?
+            addr,
+        )?)
     } else {
-        let persist: Option<PathBuf> = config.persist_path.map(PathBuf::from);
-        TimeFamilyServer::new_with_persist(&addr, chronon_ns, persist)?
-    };
+        let persist: Option<PathBuf> = config.persist_path.clone().map(PathBuf::from);
+        Ok(TimeFamilyServer::new_with_persist(
+            addr, chronon_ns, persist,
+        )?)
+    }
+}
 
-    let server = if !config.peers.is_empty() {
-        Arc::new(server.with_communerd(time_family_cfg.communerd.clone()))
-    } else {
-        Arc::new(server)
-    };
-
+/// Set up P2P connections: listen address, dials, bootstrap, known servers.
+async fn setup_p2p(
+    server: &Arc<TimeFamilyServer>,
+    config: &ServeConfig,
+    addr: &str,
+    chronon_ns: u64,
+) -> Result<Option<libp2p::Multiaddr>, Box<dyn std::error::Error>> {
     let port_range = parse_port_range(&config.p2p_port_range)?;
 
     let p2p_listen_addr: Option<libp2p::Multiaddr> = if let Some(ref listen_str) = config.p2p_listen
@@ -434,9 +451,9 @@ async fn cmd_serve(config: ServeConfig) -> Result<(), Box<dyn std::error::Error>
             communerd
                 .enable_p2p(
                     Some(listen_ma.clone()),
-                    dials.clone(),
+                    dials,
                     &config.dht_namespace,
-                    Some(&addr),
+                    Some(addr),
                     Some(handler),
                 )
                 .await
@@ -453,7 +470,6 @@ async fn cmd_serve(config: ServeConfig) -> Result<(), Box<dyn std::error::Error>
         }
     }
 
-    // Wire --known-servers: self-register and discover peers via DHT
     if let Some(communerd) = server.communerd() {
         if !config.known_servers.is_empty() {
             let tbid = server.get_tbid();
@@ -463,7 +479,7 @@ async fn cmd_serve(config: ServeConfig) -> Result<(), Box<dyn std::error::Error>
                     &config.dht_namespace,
                     tbid,
                     chronon_ns,
-                    &addr,
+                    addr,
                     config.max_discovered_peers,
                 )
                 .await
@@ -471,6 +487,18 @@ async fn cmd_serve(config: ServeConfig) -> Result<(), Box<dyn std::error::Error>
         }
     }
 
+    Ok(p2p_listen_addr)
+}
+
+/// Print server startup status information.
+fn print_server_status(
+    server: &TimeFamilyServer,
+    config: &ServeConfig,
+    addr: &str,
+    chronon_ns: u64,
+    time_family_cfg: &TimeFamilyConfig,
+    p2p_listen_addr: &Option<libp2p::Multiaddr>,
+) {
     println!("Foretias TimeFamilyServer starting...");
     println!("  Listen : {addr}");
     println!("  TBN    : {}", server.get_tbn());
@@ -485,7 +513,7 @@ async fn cmd_serve(config: ServeConfig) -> Result<(), Box<dyn std::error::Error>
         println!("  Chronon: {}", humanize_nanoseconds(chronon_ns));
     }
     if server.communerd().is_some() {
-        if let Some(ma) = &p2p_listen_addr {
+        if let Some(ma) = p2p_listen_addr {
             println!("  P2P Listen : {ma}");
         }
         if let Some(peer_id) = server.communerd().and_then(|c| c.local_peer_id()) {
@@ -502,6 +530,27 @@ async fn cmd_serve(config: ServeConfig) -> Result<(), Box<dyn std::error::Error>
             c.config().mutual_attest.every_n_chronons
         );
     }
+}
+
+async fn cmd_serve(config: ServeConfig) -> Result<(), Box<dyn std::error::Error>> {
+    let (addr, chronon_ns, time_family_cfg) = build_time_family_config(&config)?;
+    let server = create_server(&config, &addr, chronon_ns)?;
+
+    let server = if !config.peers.is_empty() {
+        Arc::new(server.with_communerd(time_family_cfg.communerd.clone()))
+    } else {
+        Arc::new(server)
+    };
+
+    let p2p_listen_addr = setup_p2p(&server, &config, &addr, chronon_ns).await?;
+    print_server_status(
+        &server,
+        &config,
+        &addr,
+        chronon_ns,
+        &time_family_cfg,
+        &p2p_listen_addr,
+    );
 
     let handle = server.clone().start()?;
     server.start_daemon_arc();
@@ -854,11 +903,9 @@ fn init_tracing_with_file() -> Result<(), Box<dyn std::error::Error>> {
 
 // ── Entry point ─────────────────────────────────────────────────────────────
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let cli = Cli::parse();
-
-    match &cli.command {
+/// Initialize tracing based on the command being executed.
+fn init_tracing_for_command(cmd: &Commands) -> Result<(), Box<dyn std::error::Error>> {
+    match cmd {
         Commands::Serve { .. } => init_tracing_with_file()?,
         Commands::Stamp { .. } | Commands::Verify { .. } | Commands::VerifyWithProof { .. } => {
             // No tracing for client commands — stdout must be clean JSON for pipe consumption
@@ -867,91 +914,133 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             fmt().with_target(false).with_level(true).init();
         }
     }
+    Ok(())
+}
+
+/// Handle the `serve` subcommand.
+async fn cmd_serve_main(cmd: Commands) -> Result<(), Box<dyn std::error::Error>> {
+    let Commands::Serve {
+        addr,
+        chronon_ns,
+        persist_path,
+        start_dormant,
+        peer,
+        mutually_attest_every_chronons,
+        request_timeout_secs,
+        p2p_listen,
+        p2p_port_range,
+        p2p_dial,
+        known_servers,
+        dht_namespace,
+        dht_bootstrap,
+        max_discovered_peers,
+    } = cmd
+    else {
+        unreachable!()
+    };
+    cmd_serve(ServeConfig {
+        addr,
+        chronon_ns,
+        persist_path,
+        start_dormant,
+        peers: peer,
+        mutually_attest_every_chronons,
+        request_timeout_secs,
+        p2p_listen,
+        p2p_port_range,
+        p2p_dial,
+        known_servers,
+        dht_namespace,
+        dht_bootstrap,
+        max_discovered_peers,
+    })
+    .await
+}
+
+/// Handle the `stamp` subcommand.
+async fn cmd_stamp_main(cmd: Commands) -> Result<(), Box<dyn std::error::Error>> {
+    let Commands::Stamp {
+        message,
+        message_file,
+        stamp_output,
+        server,
+    } = cmd
+    else {
+        unreachable!()
+    };
+    cmd_stamp(message, message_file, stamp_output, server).await
+}
+
+/// Handle the `verify` subcommand.
+async fn cmd_verify_main(cmd: Commands) -> Result<(), Box<dyn std::error::Error>> {
+    let Commands::Verify {
+        message,
+        message_file,
+        foretis,
+        foretis_file,
+        signature,
+        signature_algorithm,
+        verify_output,
+        server,
+    } = cmd
+    else {
+        unreachable!()
+    };
+    cmd_verify(VerifyConfig {
+        message,
+        message_file,
+        foretis,
+        foretis_file,
+        signature,
+        signature_algorithm,
+        verify_output,
+        server_addr: server,
+    })
+    .await
+}
+
+/// Handle the `verify-with-proof` subcommand.
+async fn cmd_verify_with_proof_main(cmd: Commands) -> Result<(), Box<dyn std::error::Error>> {
+    let Commands::VerifyWithProof {
+        message,
+        message_file,
+        foretis,
+        foretis_file,
+        proof_output,
+        server,
+    } = cmd
+    else {
+        unreachable!()
+    };
+    cmd_verify_with_proof(
+        message,
+        message_file,
+        foretis,
+        foretis_file,
+        proof_output,
+        server,
+    )
+    .await
+}
+
+/// Handle the `inspect-attestations` subcommand.
+fn cmd_inspect_attestations_main(cmd: Commands) -> Result<(), Box<dyn std::error::Error>> {
+    let Commands::InspectAttestations { calendar } = cmd else {
+        unreachable!()
+    };
+    cmd_inspect_attestations(calendar)
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli::parse();
+    init_tracing_for_command(&cli.command)?;
 
     match cli.command {
-        Commands::Serve {
-            addr,
-            chronon_ns,
-            persist_path,
-            start_dormant,
-            peer,
-            mutually_attest_every_chronons,
-            request_timeout_secs,
-            p2p_listen,
-            p2p_port_range,
-            p2p_dial,
-            known_servers,
-            dht_namespace,
-            dht_bootstrap,
-            max_discovered_peers,
-        } => {
-            cmd_serve(ServeConfig {
-                addr,
-                chronon_ns,
-                persist_path,
-                start_dormant,
-                peers: peer,
-                mutually_attest_every_chronons,
-                request_timeout_secs,
-                p2p_listen,
-                p2p_port_range,
-                p2p_dial,
-                known_servers,
-                dht_namespace,
-                dht_bootstrap,
-                max_discovered_peers,
-            })
-            .await
-        }
-        Commands::Stamp {
-            message,
-            message_file,
-            stamp_output,
-            server,
-        } => cmd_stamp(message, message_file, stamp_output, server).await,
-        Commands::Verify {
-            message,
-            message_file,
-            foretis,
-            foretis_file,
-            signature,
-            signature_algorithm,
-            verify_output,
-            server,
-        } => {
-            cmd_verify(VerifyConfig {
-                message,
-                message_file,
-                foretis,
-                foretis_file,
-                signature,
-                signature_algorithm,
-                verify_output,
-                server_addr: server,
-            })
-            .await
-        }
-        Commands::VerifyWithProof {
-            message,
-            message_file,
-            foretis,
-            foretis_file,
-            proof_output,
-            server,
-        } => {
-            cmd_verify_with_proof(
-                message,
-                message_file,
-                foretis,
-                foretis_file,
-                proof_output,
-                server,
-            )
-            .await
-        }
-        Commands::InspectAttestations { calendar } => {
-            cmd_inspect_attestations(calendar)?;
-            Ok(())
-        }
+        Commands::Serve { .. } => cmd_serve_main(cli.command).await,
+        Commands::Stamp { .. } => cmd_stamp_main(cli.command).await,
+        Commands::Verify { .. } => cmd_verify_main(cli.command).await,
+        Commands::VerifyWithProof { .. } => cmd_verify_with_proof_main(cli.command).await,
+        Commands::InspectAttestations { .. } => cmd_inspect_attestations_main(cli.command),
     }
 }

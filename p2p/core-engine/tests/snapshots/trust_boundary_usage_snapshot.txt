@@ -42,6 +42,8 @@ foretias-server/src/calendar_store/encrypted_jsonl.rs | ChrononRecord | fn::migr
 foretias-server/src/calendar_store/encrypted_jsonl.rs | ChrononRecord | impl::EncryptedJsonlCalendarStore::fn::append_block | - | - | Y
 foretias-server/src/calendar_store/encrypted_jsonl.rs | ChrononRecord | struct::CalendarBlock | - | - | Y
 foretias-server/src/calendar_store/mod.rs | ChrononRecord | fn::find_gaps | - | Y | -
+foretias-server/src/calendar_store/mod.rs | ChrononRecord | fn::find_tick_index | - | - | Y
+foretias-server/src/calendar_store/mod.rs | ChrononRecord | fn::find_tick_index_after | - | - | Y
 foretias-server/src/calendar_store/mod.rs | ChrononRecord | impl::CalendarStore::fn::get_chronon | - | Y | -
 foretias-server/src/calendar_store/mod.rs | ChrononRecord | impl::CalendarStore::fn::get_chronon_chain | - | Y | -
 foretias-server/src/calendar_store/mod.rs | ChrononRecord | other | - | Y | -
@@ -64,8 +66,14 @@ foretias-server/src/communerd/tiers.rs | ForetisRecord | impl::CommunerdP2P::fn:
 foretias-server/src/communerd/tiers.rs | ForetisRecord | impl::CommunerdP2P::fn::stamp_chronon | - | Y | -
 foretias-server/src/communerd/tiers.rs | ForetisRecord | impl::CommunerdServer::fn::route_stamp | - | Y | -
 foretias-server/src/communerd/tiers.rs | ForetisRecord | impl::CommunerdServer::fn::stamp_chronon | - | Y | -
-foretias-server/src/server/handlers.rs | ChrononRecord | fn::handle_history_dump_chunk | Y | Y | -
-foretias-server/src/server/handlers.rs | ChrononRecord | fn::handle_ship_ack | Y | Y | -
+foretias-server/src/server/handlers.rs | ChrononRecord | fn::insert_ship_ack_records | - | Y | -
+foretias-server/src/server/handlers.rs | ChrononRecord | fn::parse_history_dump_chunk_params | Y | - | -
+foretias-server/src/server/handlers.rs | ChrononRecord | fn::parse_ship_ack_records | Y | - | -
+foretias-server/src/server/handlers.rs | ChrononRecord | fn::parse_stream_tick_params | Y | - | -
+foretias-server/src/server/handlers.rs | ChrononRecord | fn::verify_history_dump_chunk | Y | Y | -
+foretias-server/src/server/handlers.rs | ChrononRecord | fn::verify_ship_ack_chain | Y | Y | -
+foretias-server/src/server/handlers.rs | ChrononRecord | fn::verify_stream_tick_record | Y | Y | -
+foretias-server/src/server/handlers.rs | ForetisRecord | fn::build_route_stamp_response | - | Y | -
 foretias-server/src/server/handlers.rs | ForetisRecord | fn::cross_node_verify | Y | - | -
 
 
@@ -91,12 +99,12 @@ core-engine | UnverifiedSignatureEnvelope | ForetisRecord | 1
 core-engine | UnverifiedSignatureEnvelope | ProbityReportRecord | 1
 core-engine | UnverifiedSignatureEnvelope | T | 6
 foretias-server | CleanAuthenticated | AuthenticatedPong | 1
-foretias-server | CleanAuthenticated | ChrononRecord | 16
-foretias-server | CleanAuthenticated | ForetisRecord | 9
+foretias-server | CleanAuthenticated | ChrononRecord | 23
+foretias-server | CleanAuthenticated | ForetisRecord | 10
 foretias-server | CleanAuthenticated | u8 | 1
-foretias-server | Externalized | ChrononRecord | 5
+foretias-server | Externalized | ChrononRecord | 7
 foretias-server | Externalized | u8 | 1
-foretias-server | UnverifiedSignatureEnvelope | ChrononRecord | 2
+foretias-server | UnverifiedSignatureEnvelope | ChrononRecord | 7
 foretias-server | UnverifiedSignatureEnvelope | ForetisRecord | 2
 foretias-server | UnverifiedSignatureEnvelope | u8 | 1
 
@@ -112,20 +120,20 @@ foretias-server | UnverifiedSignatureEnvelope | u8 | 1
 wrapper | inner/context | count
 ================================================================================
 CleanAuthenticated | AuthenticatedPong | 1
-CleanAuthenticated | ChrononRecord | 25
+CleanAuthenticated | ChrononRecord | 32
 CleanAuthenticated | EpochSnapshotRecord | 3
-CleanAuthenticated | ForetisRecord | 12
+CleanAuthenticated | ForetisRecord | 13
 CleanAuthenticated | ProbityReportRecord | 3
 CleanAuthenticated | T | 7
 CleanAuthenticated | u32 | 2
 CleanAuthenticated | u8 | 1
-Externalized | ChrononRecord | 6
+Externalized | ChrononRecord | 8
 Externalized | EpochSnapshotRecord | 1
 Externalized | ForetisRecord | 1
 Externalized | ProbityReportRecord | 1
 Externalized | T | 3
 Externalized | u8 | 1
-UnverifiedSignatureEnvelope | ChrononRecord | 4
+UnverifiedSignatureEnvelope | ChrononRecord | 9
 UnverifiedSignatureEnvelope | EpochSnapshotRecord | 1
 UnverifiedSignatureEnvelope | FamilyRecord | 1
 UnverifiedSignatureEnvelope | ForetisRecord | 3

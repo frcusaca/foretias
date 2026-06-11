@@ -5,10 +5,10 @@ use std::sync::Arc;
 
 use foretias_core::core::merkle::{merkle_leaf, merkle_range_proof, merkle_verify_range_proof};
 use foretias_core::core::{ForetiasHash32, ForetiasMerkleRangeProof};
-use foretias_core::foretias::clean_auth::CleanAuthenticated;
+use foretias_core::foretias::clean_auth::{CleanAuthenticated, Externalized};
 use foretias_core::foretias::ChrononRecord;
 
-use encrypted_jsonl::EncryptedJsonlCalendarStore;
+use encrypted_jsonl::{CalendarBlock, EncryptedJsonlCalendarStore};
 
 // ---------------------------------------------------------------------------
 // Storage proof types
@@ -117,92 +117,11 @@ impl CalendarStore {
             return None;
         }
 
-        let blocks = match self.inner.read_all() {
-            Ok(b) => b,
-            Err(_) => return None,
-        };
-
+        let blocks = self.inner.read_all().ok()?;
         let requested_count = req.chronon_end - req.chronon_start + 1;
-        let mut block_proofs = Vec::new();
-        let mut covered_ticks: u64 = 0;
 
-        for block in &blocks {
-            let has_overlap = block.ticks.iter().any(|t| {
-                let cn = *t.inner().chronon_number();
-                cn >= req.chronon_start && cn <= req.chronon_end
-            });
-            if !has_overlap {
-                continue;
-            }
-
-            let leaves: Vec<ForetiasHash32> = block
-                .ticks
-                .iter()
-                .map(|t| {
-                    let canonical = serde_json::to_vec(t.inner()).unwrap_or_default();
-                    merkle_leaf(&canonical).unwrap_or(ForetiasHash32 { bytes: [0u8; 32] })
-                })
-                .collect();
-
-            if leaves.is_empty() {
-                block_proofs.push(BlockProof {
-                    block_id: block.block_id,
-                    merkle_root: block.merkle_root,
-                    leaves: [[0u8; 32]; 64],
-                    siblings: [[0u8; 32]; 32],
-                    leaf_count: 0,
-                    sibling_count: 0,
-                    n: 0,
-                });
-                continue;
-            }
-
-            let block_start = find_tick_index(&block.ticks, req.chronon_start);
-            let block_end = find_tick_index_after(&block.ticks, req.chronon_end);
-
-            if block_start >= block_end || block_end > leaves.len() {
-                continue;
-            }
-
-            let proof = match merkle_range_proof(&leaves, block_start, block_end) {
-                Ok(p) => p,
-                Err(_) => continue,
-            };
-
-            let mut proof_leaves = [[0u8; 32]; 64];
-            let mut proof_siblings = [[0u8; 32]; 32];
-
-            for (i, leaf) in proof_leaves
-                .iter_mut()
-                .enumerate()
-                .take(proof.leaf_count as usize)
-            {
-                *leaf = proof.leaves[i].bytes;
-            }
-            for (i, sibling) in proof_siblings
-                .iter_mut()
-                .enumerate()
-                .take(proof.sibling_count as usize)
-            {
-                *sibling = proof.siblings[i].bytes;
-            }
-
-            covered_ticks += (block_end - block_start) as u64;
-
-            block_proofs.push(BlockProof {
-                block_id: block.block_id,
-                merkle_root: block.merkle_root,
-                leaves: proof_leaves,
-                siblings: proof_siblings,
-                leaf_count: proof.leaf_count as usize,
-                sibling_count: proof.sibling_count as usize,
-                n: proof.n as usize,
-            });
-        }
-
-        if block_proofs.is_empty() {
-            return None;
-        }
+        let (block_proofs, covered_ticks) =
+            build_merkle_proofs(&blocks, req.chronon_start, req.chronon_end)?;
 
         Some(StorageProofResponse {
             blocks: block_proofs,
@@ -376,6 +295,103 @@ pub fn verify_storage_proof(
 // Internal helpers
 // ---------------------------------------------------------------------------
 
+/// Build Merkle proofs for all blocks that overlap the requested chronon range.
+/// Returns `(block_proofs, covered_ticks)` or `None` if no blocks overlap.
+fn build_merkle_proofs(
+    blocks: &[CalendarBlock],
+    chronon_start: u64,
+    chronon_end: u64,
+) -> Option<(Vec<BlockProof>, u64)> {
+    let mut block_proofs = Vec::new();
+    let mut covered_ticks: u64 = 0;
+
+    for block in blocks {
+        let has_overlap = block.ticks.iter().any(|t| {
+            let cn = *t.inner().chronon_number();
+            cn >= chronon_start && cn <= chronon_end
+        });
+        if !has_overlap {
+            continue;
+        }
+
+        let leaves: Vec<ForetiasHash32> = block
+            .ticks
+            .iter()
+            .map(|t| {
+                let canonical = serde_json::to_vec(t.inner()).unwrap_or_default();
+                merkle_leaf(&canonical).unwrap_or(ForetiasHash32 { bytes: [0u8; 32] })
+            })
+            .collect();
+
+        if leaves.is_empty() {
+            block_proofs.push(BlockProof {
+                block_id: block.block_id,
+                merkle_root: block.merkle_root,
+                leaves: [[0u8; 32]; 64],
+                siblings: [[0u8; 32]; 32],
+                leaf_count: 0,
+                sibling_count: 0,
+                n: 0,
+            });
+            continue;
+        }
+
+        let block_start = find_tick_index(&block.ticks, chronon_start);
+        let block_end = find_tick_index_after(&block.ticks, chronon_end);
+
+        if block_start >= block_end || block_end > leaves.len() {
+            continue;
+        }
+
+        let proof = match merkle_range_proof(&leaves, block_start, block_end) {
+            Ok(p) => p,
+            Err(_) => continue,
+        };
+
+        let (proof_leaves, proof_siblings) = format_proof_arrays(&proof);
+        covered_ticks += (block_end - block_start) as u64;
+
+        block_proofs.push(BlockProof {
+            block_id: block.block_id,
+            merkle_root: block.merkle_root,
+            leaves: proof_leaves,
+            siblings: proof_siblings,
+            leaf_count: proof.leaf_count as usize,
+            sibling_count: proof.sibling_count as usize,
+            n: proof.n as usize,
+        });
+    }
+
+    if block_proofs.is_empty() {
+        return None;
+    }
+
+    Some((block_proofs, covered_ticks))
+}
+
+/// Format Merkle proof leaves and siblings into fixed-size arrays.
+fn format_proof_arrays(proof: &ForetiasMerkleRangeProof) -> ([[u8; 32]; 64], [[u8; 32]; 32]) {
+    let mut proof_leaves = [[0u8; 32]; 64];
+    let mut proof_siblings = [[0u8; 32]; 32];
+
+    for (i, leaf) in proof_leaves
+        .iter_mut()
+        .enumerate()
+        .take(proof.leaf_count as usize)
+    {
+        *leaf = proof.leaves[i].bytes;
+    }
+    for (i, sibling) in proof_siblings
+        .iter_mut()
+        .enumerate()
+        .take(proof.sibling_count as usize)
+    {
+        *sibling = proof.siblings[i].bytes;
+    }
+
+    (proof_leaves, proof_siblings)
+}
+
 /// Reconstruct a `ForetiasMerkleRangeProof` from a `BlockProof`.
 fn reconstruct_range_proof(bp: &BlockProof) -> ForetiasMerkleRangeProof {
     let mut proof = ForetiasMerkleRangeProof {
@@ -399,12 +415,7 @@ fn reconstruct_range_proof(bp: &BlockProof) -> ForetiasMerkleRangeProof {
 }
 
 /// Find the index of the first tick whose chronon_number >= target.
-fn find_tick_index(
-    ticks: &[foretias_core::foretias::clean_auth::Externalized<
-        foretias_core::foretias::ChrononRecord,
-    >],
-    target: u64,
-) -> usize {
+fn find_tick_index(ticks: &[Externalized<ChrononRecord>], target: u64) -> usize {
     ticks
         .iter()
         .position(|t| *t.inner().chronon_number() >= target)
@@ -412,12 +423,7 @@ fn find_tick_index(
 }
 
 /// Find the index just past the last tick whose chronon_number <= target.
-fn find_tick_index_after(
-    ticks: &[foretias_core::foretias::clean_auth::Externalized<
-        foretias_core::foretias::ChrononRecord,
-    >],
-    target: u64,
-) -> usize {
+fn find_tick_index_after(ticks: &[Externalized<ChrononRecord>], target: u64) -> usize {
     ticks
         .iter()
         .rposition(|t| *t.inner().chronon_number() <= target)

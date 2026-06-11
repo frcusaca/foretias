@@ -51,6 +51,9 @@ pub struct Chronomatter {
 /// Result of building an auto-attestation: (signature, slow_signature, nonce, stamp_count).
 type AutoAttestationResult = (Vec<u8>, Vec<u8>, [u8; 16], u64);
 
+/// Genesis attestation parts: (forward, backward, nonce, stamps, tb_version).
+type GenesisAttestationParts = (Vec<u8>, Vec<u8>, [u8; 16], u64, u32);
+
 impl Chronomatter {
     pub fn new(
         chronon_ns: u64,
@@ -241,109 +244,139 @@ impl Chronomatter {
     }
 
     fn build_tick_record(&self, tick: u64, new_pub: [u8; 32]) -> Result<ChrononRecord, NodeError> {
-        let alg = self.crypto.signature_algorithm().to_id_string().to_string();
         if tick == 1 {
-            if let Some(ref obs) = self.mutual_attest_observer {
-                obs.on_mutual_attest_sent();
-            }
+            self.build_genesis_tick_record(tick, new_pub)
+        } else {
+            self.build_regular_tick_record(tick, new_pub)
+        }
+    }
 
-            let tb_version;
-            let (forward_foretis, backward_foretis, aa_nonce, stamps);
+    /// Build a genesis tick record (tick == 1) with optional PQC signing.
+    fn build_genesis_tick_record(
+        &self,
+        tick: u64,
+        new_pub: [u8; 32],
+    ) -> Result<ChrononRecord, NodeError> {
+        let alg = self.crypto.signature_algorithm().to_id_string().to_string();
 
+        if let Some(ref obs) = self.mutual_attest_observer {
+            obs.on_mutual_attest_sent();
+        }
+
+        let (forward_foretis, backward_foretis, aa_nonce, stamps, tb_version) =
             if let Some(secret) = &self.tbid_secret {
-                let mut genesis_blob = Vec::with_capacity(96 + 8 + new_pub.len());
-                genesis_blob.extend_from_slice(&self.tbid.raw_bytes());
-                genesis_blob.extend_from_slice(&tick.to_be_bytes());
-                genesis_blob.extend_from_slice(&new_pub);
-                let genesis_sig = secret.sign(&genesis_blob).map_err(NodeError::Crypto)?;
-                info!(
-                    genesis_blob_len = genesis_blob.len(),
-                    sig_len = genesis_sig.len(),
-                    "signed genesis tick"
-                );
-                tb_version = 1u32;
-
-                let stamps_count = self.chronon_stamp_count.swap(0, SeqCst);
-                let tbid_str = self.tbid.to_hex();
-                let (attest_blob, nonce) = auto_attestation_blob_with_genesis(
-                    &tbid_str,
-                    tick,
-                    &new_pub,
-                    &genesis_sig,
-                    stamps_count,
-                )?;
-
-                let kp_idx = 0usize;
-                let ed_sig = self.sign_with_keypair(kp_idx, &attest_blob)?;
-
-                let mut forward = Vec::with_capacity(ed_sig.len() + genesis_sig.len());
-                forward.extend_from_slice(&ed_sig);
-                forward.extend_from_slice(&genesis_sig);
-                let mut backward = Vec::with_capacity(ed_sig.len() + genesis_sig.len());
-                backward.extend_from_slice(&ed_sig);
-                backward.extend_from_slice(&genesis_sig);
-
-                forward_foretis = forward;
-                backward_foretis = backward;
-                aa_nonce = nonce;
-                stamps = stamps_count;
+                self.build_genesis_with_pqc(tick, new_pub, secret)?
             } else {
                 warn!("no TBID secret available for genesis tick signing");
-                let result = self.build_auto_attestation(tick, new_pub);
-                if let Some(ref obs) = self.mutual_attest_observer {
-                    match &result {
-                        Ok(_) => obs.on_mutual_attest_ok(),
-                        Err(_) => obs.on_mutual_attest_failed(),
-                    }
-                }
-                let (fwd, bwd, nonce, stamps_count) = result?;
-                tb_version = 0u32;
-                forward_foretis = fwd;
-                backward_foretis = bwd;
-                aa_nonce = nonce;
-                stamps = stamps_count;
-            }
+                self.build_genesis_without_pqc(tick, new_pub)?
+            };
 
-            if let Some(ref obs) = self.mutual_attest_observer {
-                obs.on_mutual_attest_ok();
-            }
-
-            Ok(ChrononRecord::builder()
-                .chronon_number(tick)
-                .public_key(new_pub.to_vec().into())
-                .signature_algorithm(alg.clone())
-                .forward_foretis(forward_foretis.into())
-                .backward_foretis(backward_foretis.into())
-                .aa_nonce(aa_nonce.into())
-                .chronon_stamp_count(stamps)
-                .tb_version(tb_version)
-                .tbid(self.tbid)
-                .build()?)
-        } else {
-            if let Some(ref obs) = self.mutual_attest_observer {
-                obs.on_mutual_attest_sent();
-            }
-            let result = self.build_auto_attestation(tick, new_pub);
-            if let Some(ref obs) = self.mutual_attest_observer {
-                match &result {
-                    Ok(_) => obs.on_mutual_attest_ok(),
-                    Err(_) => obs.on_mutual_attest_failed(),
-                }
-            }
-            let (forward_foretis, backward_foretis, aa_nonce, stamps) = result?;
-
-            Ok(ChrononRecord::builder()
-                .chronon_number(tick)
-                .public_key(new_pub.to_vec().into())
-                .signature_algorithm(alg)
-                .forward_foretis(forward_foretis.into())
-                .backward_foretis(backward_foretis.into())
-                .aa_nonce(aa_nonce.into())
-                .chronon_stamp_count(stamps)
-                .tb_version(0u32)
-                .tbid(self.tbid)
-                .build()?)
+        if let Some(ref obs) = self.mutual_attest_observer {
+            obs.on_mutual_attest_ok();
         }
+
+        ChrononRecord::builder()
+            .chronon_number(tick)
+            .public_key(new_pub.to_vec().into())
+            .signature_algorithm(alg)
+            .forward_foretis(forward_foretis.into())
+            .backward_foretis(backward_foretis.into())
+            .aa_nonce(aa_nonce.into())
+            .chronon_stamp_count(stamps)
+            .tb_version(tb_version)
+            .tbid(self.tbid)
+            .build()
+    }
+
+    /// Build genesis auto-attestation with PQC genesis signature.
+    fn build_genesis_with_pqc(
+        &self,
+        tick: u64,
+        new_pub: [u8; 32],
+        secret: &TbidSecret,
+    ) -> Result<GenesisAttestationParts, NodeError> {
+        let mut genesis_blob = Vec::with_capacity(96 + 8 + new_pub.len());
+        genesis_blob.extend_from_slice(&self.tbid.raw_bytes());
+        genesis_blob.extend_from_slice(&tick.to_be_bytes());
+        genesis_blob.extend_from_slice(&new_pub);
+        let genesis_sig = secret.sign(&genesis_blob).map_err(NodeError::Crypto)?;
+        info!(
+            genesis_blob_len = genesis_blob.len(),
+            sig_len = genesis_sig.len(),
+            "signed genesis tick"
+        );
+
+        let stamps_count = self.chronon_stamp_count.swap(0, SeqCst);
+        let tbid_str = self.tbid.to_hex();
+        let (attest_blob, nonce) = auto_attestation_blob_with_genesis(
+            &tbid_str,
+            tick,
+            &new_pub,
+            &genesis_sig,
+            stamps_count,
+        )?;
+
+        let ed_sig = self.sign_with_keypair(0, &attest_blob)?;
+
+        let mut forward = Vec::with_capacity(ed_sig.len() + genesis_sig.len());
+        forward.extend_from_slice(&ed_sig);
+        forward.extend_from_slice(&genesis_sig);
+        let mut backward = Vec::with_capacity(ed_sig.len() + genesis_sig.len());
+        backward.extend_from_slice(&ed_sig);
+        backward.extend_from_slice(&genesis_sig);
+
+        Ok((forward, backward, nonce, stamps_count, 1u32))
+    }
+
+    /// Build genesis auto-attestation without PQC (tb_version = 0).
+    fn build_genesis_without_pqc(
+        &self,
+        tick: u64,
+        new_pub: [u8; 32],
+    ) -> Result<GenesisAttestationParts, NodeError> {
+        let result = self.build_auto_attestation(tick, new_pub);
+        if let Some(ref obs) = self.mutual_attest_observer {
+            match &result {
+                Ok(_) => obs.on_mutual_attest_ok(),
+                Err(_) => obs.on_mutual_attest_failed(),
+            }
+        }
+        let (fwd, bwd, nonce, stamps_count) = result?;
+        Ok((fwd, bwd, nonce, stamps_count, 0u32))
+    }
+
+    /// Build a regular tick record (tick > 1) using auto-attestation.
+    fn build_regular_tick_record(
+        &self,
+        tick: u64,
+        new_pub: [u8; 32],
+    ) -> Result<ChrononRecord, NodeError> {
+        let alg = self.crypto.signature_algorithm().to_id_string().to_string();
+
+        if let Some(ref obs) = self.mutual_attest_observer {
+            obs.on_mutual_attest_sent();
+        }
+
+        let result = self.build_auto_attestation(tick, new_pub);
+        if let Some(ref obs) = self.mutual_attest_observer {
+            match &result {
+                Ok(_) => obs.on_mutual_attest_ok(),
+                Err(_) => obs.on_mutual_attest_failed(),
+            }
+        }
+        let (forward_foretis, backward_foretis, aa_nonce, stamps) = result?;
+
+        ChrononRecord::builder()
+            .chronon_number(tick)
+            .public_key(new_pub.to_vec().into())
+            .signature_algorithm(alg)
+            .forward_foretis(forward_foretis.into())
+            .backward_foretis(backward_foretis.into())
+            .aa_nonce(aa_nonce.into())
+            .chronon_stamp_count(stamps)
+            .tb_version(0u32)
+            .tbid(self.tbid)
+            .build()
     }
 
     fn notify_observer(&self, tick: u64, pk: &[u8; 32], record: &ChrononRecord) {

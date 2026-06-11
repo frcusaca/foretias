@@ -58,6 +58,7 @@ impl ChrononRecord {
         since = "0.2.0",
         note = "Use ChrononRecord::builder()...build() instead"
     )]
+    #[doc(hidden)]
     pub fn new(
         chronon_number: u64,
         public_key: FTByteVector,
@@ -190,6 +191,7 @@ impl ForetisRecord {
         since = "0.2.0",
         note = "Use ForetisRecord::builder()...build() instead"
     )]
+    #[doc(hidden)]
     pub fn new(
         chronon_number: u64,
         content_hash: FTByteArray<32>,

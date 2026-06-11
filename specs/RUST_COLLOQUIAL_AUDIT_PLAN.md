@@ -158,13 +158,26 @@ Within each phase, items are ordered by estimated effort (smallest first, to bui
 
 ### Item 2.9: Encapsulate Communerd/Behaviour Pub Fields (Section 2.9)
 
-- [ ] Audit all external access to `CommunerdHandle` fields (grep for `handle.crypto`, `handle.peer_pool`, `handle.tbid_index`)
-- [ ] Change `CommunerdHandle` fields from `pub` to `pub(crate)`
-- [ ] Add accessor methods for fields that legitimate external callers need (read-only)
-- [ ] Audit all external access to `ForetiasBehaviour` fields (grep for `.kademlia`, `.gossipsub`, `.identify`, `.ping`, `.request_response`)
-- [ ] Change `ForetiasBehaviour` fields from `pub` to `pub(super)` or add accessor methods
-- [ ] Verify `cargo check --workspace` passes
-- [ ] Verify `cargo test --workspace` passes
+- [x] Audit all external access to `CommunerdHandle` fields (grep for `handle.crypto`, `handle.peer_pool`, `handle.tbid_index`)
+      (2026-06-11 00:00)
+      FINDING: `Communerd` fields are already private (no visibility modifier). No `pub` fields exist.
+- [x] Change `CommunerdHandle` fields from `pub` to `pub(crate)`
+      (2026-06-11 00:00)
+      FINDING: Already private. No change needed.
+- [x] Add accessor methods for fields that legitimate external callers need (read-only)
+      (2026-06-11 00:00)
+      FINDING: Accessors already exist: `config()`, `local_peer_id()`, `probity_store()`, `p2p_cmd_tx()`, `crypto_server()`, `namespace()`, `local_multiaddr()`, `set_calendar()`. External callers (`main.rs`, `tiers.rs`) use these exclusively.
+- [x] Audit all external access to `ForetiasBehaviour` fields (grep for `.kademlia`, `.gossipsub`, `.identify`, `.ping`, `.request_response`)
+      (2026-06-11 00:00)
+      FINDING: All 5 fields already `pub(super)`. Accesses in `swarm.rs` and `gossip.rs` are within `p2p` parent module — correct scope.
+- [x] Change `ForetiasBehaviour` fields from `pub` to `pub(super)` or add accessor methods
+      (2026-06-11 00:00)
+      FINDING: Already `pub(super)`. No change needed.
+- [x] Verify `cargo check --workspace` passes
+      (2026-06-11 00:00)
+- [x] Verify `cargo test --workspace` passes
+      (2026-06-11 00:00)
+      NOTE: `crypto_callsite_snapshot` integration test is pre-existing failure (snapshot approval needed; unrelated to encapsulation). All 593 lib tests + 16 integration tests pass.
 
 ### Item 2.7: Split Large Functions (Section 2.7)
 

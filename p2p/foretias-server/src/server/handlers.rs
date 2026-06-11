@@ -102,52 +102,34 @@ pub fn handle_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse
     }
 }
 
-pub fn handle_route_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
-    let id = params.get("id").cloned();
+/// Parsed parameters for a routed stamp request.
+struct RouteStampParams {
+    target_tbid: String,
+    content_hex: String,
+    content: Vec<u8>,
+    echo: String,
+}
 
-    let target_tbid = match params.get("target_tbid").and_then(|v| v.as_str()) {
-        Some(h) => h.to_string(),
-        None => {
-            return resp_error(
-                server,
-                id,
-                jsonrpc::INVALID_PARAMS,
-                "missing or invalid 'target_tbid' (hex string)".into(),
-            )
-        }
-    };
+/// Parse and validate JSON-RPC parameters for a routed stamp.
+fn parse_route_stamp_params(params: &Value) -> Result<RouteStampParams, String> {
+    let target_tbid = params
+        .get("target_tbid")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "missing or invalid 'target_tbid' (hex string)".to_string())?
+        .to_string();
 
-    let content_hex = match params.get("content").and_then(|v| v.as_str()) {
-        Some(h) => h.to_string(),
-        None => {
-            return resp_error(
-                server,
-                id,
-                jsonrpc::INVALID_PARAMS,
-                "missing or invalid 'content' (hex string)".into(),
-            )
-        }
-    };
+    let content_hex = params
+        .get("content")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "missing or invalid 'content' (hex string)".to_string())?
+        .to_string();
 
-    let content = match hex::decode(&content_hex) {
-        Ok(b) => b,
-        Err(e) => {
-            return resp_error(
-                server,
-                id,
-                jsonrpc::INVALID_PARAMS,
-                format!("invalid hex: {e}"),
-            )
-        }
-    };
+    let content = hex::decode(&content_hex).map_err(|e| format!("invalid hex: {e}"))?;
 
     if content.len() > MAX_CONTENT_BYTES {
-        return resp_error(
-            server,
-            id,
-            jsonrpc::INVALID_PARAMS,
-            format!("content exceeds maximum size of {MAX_CONTENT_BYTES} bytes"),
-        );
+        return Err(format!(
+            "content exceeds maximum size of {MAX_CONTENT_BYTES} bytes"
+        ));
     }
 
     let echo = params
@@ -156,8 +138,49 @@ pub fn handle_route_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcRe
         .unwrap_or("")
         .to_string();
 
-    let my_tbid_hex = server.get_tbid().to_hex();
-    if target_tbid == my_tbid_hex {
+    Ok(RouteStampParams {
+        target_tbid,
+        content_hex,
+        content,
+        echo,
+    })
+}
+
+/// Build the response JSON from a CleanAuthenticated ForetisRecord.
+fn build_route_stamp_response(
+    server: &TimeFamilyServer,
+    id: Option<Value>,
+    ca_foretis: CleanAuthenticated<ForetisRecord>,
+) -> JsonRpcResponse {
+    let sig_hex = ca_foretis
+        .signature_bytes()
+        .map(hex::encode)
+        .unwrap_or_default();
+    let sig_alg = ca_foretis
+        .signature_algorithm()
+        .unwrap_or("Ed25519")
+        .to_string();
+    resp_success(
+        server,
+        id,
+        serde_json::json!({
+            "foretis": ca_foretis.into_inner(),
+            "signature": sig_hex,
+            "signature_algorithm": sig_alg,
+        }),
+    )
+}
+
+pub fn handle_route_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    let id = params.get("id").cloned();
+
+    let rps = match parse_route_stamp_params(&params) {
+        Ok(p) => p,
+        Err(e) => return resp_error(server, id, jsonrpc::INVALID_PARAMS, e),
+    };
+
+    // Self-route: delegate to local stamp handler
+    if rps.target_tbid == server.get_tbid().to_hex() {
         return handle_stamp(server, params);
     }
 
@@ -170,33 +193,16 @@ pub fn handle_route_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcRe
         );
     };
 
-    match tokio::runtime::Handle::current()
-        .block_on(async { cm.route_stamp(&target_tbid, &content_hex, &echo).await })
-    {
+    match tokio::runtime::Handle::current().block_on(async {
+        cm.route_stamp(&rps.target_tbid, &rps.content_hex, &rps.echo)
+            .await
+    }) {
         Ok(ca_foretis) => {
             server.metrics().inc(MetricField::StampsTotal);
             if let Err(e) = server.save() {
                 tracing::warn!("failed to persist calendar after routed stamp: {e}");
             }
-            // Extract signature metadata before consuming the wrapper, then return the
-            // same envelope shape as handle_stamp for response-shape consistency.
-            let sig_hex = ca_foretis
-                .signature_bytes()
-                .map(hex::encode)
-                .unwrap_or_default();
-            let sig_alg = ca_foretis
-                .signature_algorithm()
-                .unwrap_or("Ed25519")
-                .to_string();
-            resp_success(
-                server,
-                id,
-                serde_json::json!({
-                    "foretis": ca_foretis.into_inner(),
-                    "signature": sig_hex,
-                    "signature_algorithm": sig_alg,
-                }),
-            )
+            build_route_stamp_response(server, id, ca_foretis)
         }
         Err(e) => resp_error(
             server,
@@ -207,32 +213,28 @@ pub fn handle_route_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcRe
     }
 }
 
-pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
-    let id = params.get("id").cloned();
+/// Parsed and validated parameters for `handle_verify`.
+struct VerifyParams {
+    content: Vec<u8>,
+    foretis: ForetisRecord,
+    foretis_value: Value,
+    signature: Vec<u8>,
+    signature_algorithm: String,
+    cross_node: bool,
+}
 
-    let content_hex = match params.get("content").and_then(|v| v.as_str()) {
-        Some(h) => h.to_string(),
-        None => {
-            return resp_error(
-                server,
-                id,
-                jsonrpc::INVALID_PARAMS,
-                "missing 'content'".into(),
-            )
-        }
-    };
+/// Parse and validate the JSON-RPC parameters for a verify request.
+fn parse_verify_params(params: &Value) -> Result<VerifyParams, String> {
+    let content_hex = params
+        .get("content")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "missing 'content'".to_string())?
+        .to_string();
 
-    let foretis_value = match params.get("foretis") {
-        Some(v) => v.clone(),
-        None => {
-            return resp_error(
-                server,
-                id,
-                jsonrpc::INVALID_PARAMS,
-                "missing or invalid 'foretis'".into(),
-            )
-        }
-    };
+    let foretis_value = params
+        .get("foretis")
+        .cloned()
+        .ok_or_else(|| "missing or invalid 'foretis'".to_string())?;
 
     let signature_hex = params
         .get("signature")
@@ -246,91 +248,68 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
         .to_string();
     let signature = hex::decode(&signature_hex).unwrap_or_default();
 
-    let content = match hex::decode(&content_hex) {
-        Ok(b) => b,
-        Err(e) => {
-            return resp_error(
-                server,
-                id,
-                jsonrpc::INVALID_PARAMS,
-                format!("invalid hex: {e}"),
-            )
-        }
-    };
+    let content = hex::decode(&content_hex).map_err(|e| format!("invalid hex: {e}"))?;
 
     if content.len() > MAX_CONTENT_BYTES {
-        return resp_error(
-            server,
-            id,
-            jsonrpc::INVALID_PARAMS,
-            format!("content exceeds maximum size of {MAX_CONTENT_BYTES} bytes"),
-        );
+        return Err(format!(
+            "content exceeds maximum size of {MAX_CONTENT_BYTES} bytes"
+        ));
     }
 
-    let foretis: ForetisRecord = match serde_json::from_value(foretis_value.clone()) {
-        Ok(f) => f,
-        Err(e) => {
-            return resp_error(
-                server,
-                id,
-                jsonrpc::INVALID_PARAMS,
-                format!("failed to parse foretis: {e}"),
-            )
-        }
-    };
+    let foretis = serde_json::from_value(foretis_value.clone())
+        .map_err(|e| format!("failed to parse foretis: {e}"))?;
 
     let cross_node = params
         .get("cross_node")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
-    // Try local calendar first
+    Ok(VerifyParams {
+        content,
+        foretis,
+        foretis_value,
+        signature,
+        signature_algorithm,
+        cross_node,
+    })
+}
+
+/// Attempt local calendar verification; returns `Some(true)` if valid,
+/// `Some(false)` if not found locally, or `None` if cross-node verification is needed.
+fn try_local_verify(
+    server: &TimeFamilyServer,
+    foretis: &ForetisRecord,
+    signature: &[u8],
+    signature_algorithm: &str,
+    content: &[u8],
+) -> bool {
     let crypto = server.chronomatter().crypto_server();
     let calendar = server.calendar().inner();
     let cal_read = calendar.read();
-    let local_valid = if let Ok(recs) = cal_read.get(*foretis.chronon_number(), 1) {
+    if let Ok(recs) = cal_read.get(*foretis.chronon_number(), 1) {
         !recs.is_empty()
             && foretias_core::foretias::tick::verify(
                 crypto.as_ref(),
-                &foretis,
-                &signature,
-                &signature_algorithm,
-                &content,
+                foretis,
+                signature,
+                signature_algorithm,
+                content,
                 &*cal_read,
             )
             .unwrap_or(false)
     } else {
         false
-    };
-    drop(cal_read);
-
-    if local_valid {
-        return resp_success(
-            server,
-            id,
-            serde_json::json!({"valid": true, "method": "local"}),
-        );
     }
+}
 
-    // Local calendar miss — if cross_node is enabled, try DHT lookup
-    if !cross_node {
-        return resp_success(
-            server,
-            id,
-            serde_json::json!({"valid": false, "method": "local", "note": "foretis.tbid not found in local calendar"}),
-        );
-    }
-
-    let foretis_tbid_hex = foretis.tbid().to_hex();
-    if *foretis.tbid() == server.get_tbid() {
-        return resp_success(
-            server,
-            id,
-            serde_json::json!({"valid": false, "method": "local", "note": "own TBID but calendar miss"}),
-        );
-    }
-
-    // Cross-node verification: construct envelope and use existing path
+/// Build the JSON-RPC response for a cross-node verify attempt.
+fn build_cross_node_verify_response(
+    server: &TimeFamilyServer,
+    id: Option<Value>,
+    foretis_value: Value,
+    content: &[u8],
+    foretis_tbid_hex: &str,
+) -> JsonRpcResponse {
     let unproc_foretis =
         match UnverifiedSignatureEnvelope::<ForetisRecord>::from_json_value(foretis_value) {
             Ok(f) => f,
@@ -345,7 +324,7 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
         };
 
     match tokio::runtime::Handle::current().block_on(async {
-        cross_node_verify(server, &unproc_foretis, &content, &foretis_tbid_hex).await
+        cross_node_verify(server, &unproc_foretis, content, foretis_tbid_hex).await
     }) {
         Ok(valid) => resp_success(
             server,
@@ -359,6 +338,51 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
             format!("cross-node verify failed: {e}"),
         ),
     }
+}
+
+pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    let id = params.get("id").cloned();
+
+    let vp = match parse_verify_params(&params) {
+        Ok(p) => p,
+        Err(e) => return resp_error(server, id, jsonrpc::INVALID_PARAMS, e),
+    };
+
+    // Try local calendar first
+    if try_local_verify(
+        server,
+        &vp.foretis,
+        &vp.signature,
+        &vp.signature_algorithm,
+        &vp.content,
+    ) {
+        return resp_success(
+            server,
+            id,
+            serde_json::json!({"valid": true, "method": "local"}),
+        );
+    }
+
+    // Local calendar miss — if cross_node is disabled, return not found
+    if !vp.cross_node {
+        return resp_success(
+            server,
+            id,
+            serde_json::json!({"valid": false, "method": "local", "note": "foretis.tbid not found in local calendar"}),
+        );
+    }
+
+    let foretis_tbid_hex = vp.foretis.tbid().to_hex();
+    if *vp.foretis.tbid() == server.get_tbid() {
+        return resp_success(
+            server,
+            id,
+            serde_json::json!({"valid": false, "method": "local", "note": "own TBID but calendar miss"}),
+        );
+    }
+
+    // Cross-node verification
+    build_cross_node_verify_response(server, id, vp.foretis_value, &vp.content, &foretis_tbid_hex)
 }
 
 async fn cross_node_verify(
@@ -777,33 +801,78 @@ pub fn handle_ship_batch(server: &TimeFamilyServer, params: Value) -> JsonRpcRes
     }
 }
 
-pub fn handle_ship_ack(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
-    let id = params.get("id").cloned();
-
-    let tbid = params
-        .get("tbid")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
+/// Parse and validate the records array from a ship_ack request.
+fn parse_ship_ack_records(
+    params: &Value,
+) -> Result<Vec<UnverifiedSignatureEnvelope<ChrononRecord>>, String> {
     let empty_vec: Vec<Value> = vec![];
     let raw_records = params
         .get("records")
         .and_then(|v| v.as_array())
         .unwrap_or(&empty_vec);
-    let unprocessed: Result<Vec<UnverifiedSignatureEnvelope<ChrononRecord>>, _> = raw_records
+
+    raw_records
         .iter()
         .map(|v| UnverifiedSignatureEnvelope::<ChrononRecord>::from_json_value(v.clone()))
-        .collect();
-    let unprocessed = match unprocessed {
-        Ok(r) => r,
-        Err(e) => {
-            return resp_error(
-                server,
-                id,
-                jsonrpc::INVALID_PARAMS,
-                format!("failed to parse records: {e}"),
-            )
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("failed to parse records: {e}"))
+}
+
+/// Chain-verify a batch of unprocessed ChrononRecords against the crypto server.
+/// The first record must be genesis; subsequent records are verified against the
+/// previous authenticated record in the chain.
+fn verify_ship_ack_chain(
+    crypto: &dyn foretias_core::crypto_server::CryptoServer,
+    unprocessed: Vec<UnverifiedSignatureEnvelope<ChrononRecord>>,
+) -> Result<Vec<CleanAuthenticated<ChrononRecord>>, String> {
+    let mut verified: Vec<CleanAuthenticated<ChrononRecord>> = Vec::new();
+    for (i, unproc) in unprocessed.into_iter().enumerate() {
+        let clean: Result<CleanAuthenticated<ChrononRecord>, _> = if i == 0 {
+            if unproc.inner().is_genesis() {
+                unproc.into_clean_authenticated_genesis(crypto)
+            } else {
+                return Err("batch first record is not genesis (chronon_number != 1)".to_string());
+            }
+        } else {
+            let prev = verified.last().ok_or_else(|| {
+                "chain verification: missing previous record (internal invariant violation)"
+                    .to_string()
+            })?;
+            unproc.into_clean_authenticated(crypto, prev)
+        };
+        match clean {
+            Ok(v) => verified.push(v),
+            Err(e) => return Err(format!("chain verification failed at record {i}: {e}")),
         }
+    }
+    Ok(verified)
+}
+
+/// Insert verified records into the mirror store and return the updated tick count.
+fn insert_ship_ack_records(
+    mirror_store: &crate::calendar::mirror::MirrorStore,
+    tbid: &str,
+    verified: Vec<CleanAuthenticated<ChrononRecord>>,
+) -> u64 {
+    for record in verified {
+        if let Err(e) = mirror_store.insert_mirrored(tbid, record.into_inner()) {
+            tracing::warn!("mirror insert failed for {tbid}: {e}");
+        }
+    }
+    mirror_store.mirror_tick_count(tbid)
+}
+
+pub fn handle_ship_ack(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    let id = params.get("id").cloned();
+    let tbid = params
+        .get("tbid")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let unprocessed = match parse_ship_ack_records(&params) {
+        Ok(r) => r,
+        Err(e) => return resp_error(server, id, jsonrpc::INVALID_PARAMS, e),
     };
 
     if unprocessed.is_empty() {
@@ -819,54 +888,13 @@ pub fn handle_ship_ack(server: &TimeFamilyServer, params: Value) -> JsonRpcRespo
     }
 
     let crypto = server.chronomatter().crypto_server();
-
-    let mut verified: Vec<CleanAuthenticated<ChrononRecord>> = Vec::new();
-    for (i, unproc) in unprocessed.into_iter().enumerate() {
-        let clean = if i == 0 {
-            if unproc.inner().is_genesis() {
-                unproc.into_clean_authenticated_genesis(crypto.as_ref())
-            } else {
-                return resp_error(
-                    server,
-                    id,
-                    jsonrpc::INVALID_PARAMS,
-                    "batch first record is not genesis (chronon_number != 1)".into(),
-                );
-            }
-        } else {
-            let prev = match verified.last() {
-                Some(p) => p,
-                None => return resp_error(
-                    server,
-                    id,
-                    jsonrpc::INVALID_PARAMS,
-                    "chain verification: missing previous record (internal invariant violation)"
-                        .into(),
-                ),
-            };
-            unproc.into_clean_authenticated(crypto.as_ref(), prev)
-        };
-        match clean {
-            Ok(v) => verified.push(v),
-            Err(e) => {
-                return resp_error(
-                    server,
-                    id,
-                    jsonrpc::INVALID_PARAMS,
-                    format!("chain verification failed at record {i}: {e}"),
-                );
-            }
-        }
-    }
+    let verified = match verify_ship_ack_chain(crypto.as_ref(), unprocessed) {
+        Ok(v) => v,
+        Err(e) => return resp_error(server, id, jsonrpc::INVALID_PARAMS, e),
+    };
 
     let mirror_store = server.mirror_store();
-    for record in verified {
-        if let Err(e) = mirror_store.insert_mirrored(&tbid, record.into_inner()) {
-            tracing::warn!("mirror insert failed for {tbid}: {e}");
-        }
-    }
-
-    let tick_count = mirror_store.mirror_tick_count(&tbid);
+    let tick_count = insert_ship_ack_records(mirror_store, &tbid, verified);
 
     resp_success(
         server,
@@ -879,9 +907,10 @@ pub fn handle_ship_ack(server: &TimeFamilyServer, params: Value) -> JsonRpcRespo
     )
 }
 
-pub fn handle_stream_tick(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
-    let id = params.get("id").cloned();
-
+/// Parse stream_tick parameters: tbid, chronon_number, and the unverified record.
+fn parse_stream_tick_params(
+    params: &Value,
+) -> Result<(String, u64, UnverifiedSignatureEnvelope<ChrononRecord>), String> {
     let tbid = params
         .get("tbid")
         .and_then(|v| v.as_str())
@@ -891,61 +920,53 @@ pub fn handle_stream_tick(server: &TimeFamilyServer, params: Value) -> JsonRpcRe
         .get("chronon_number")
         .and_then(|v| v.as_u64())
         .unwrap_or(0);
-    let unproc = match params.get("record") {
-        Some(v) => UnverifiedSignatureEnvelope::<ChrononRecord>::from_json_value(v.clone()),
+    let unproc = params
+        .get("record")
+        .ok_or_else(|| "missing 'record'".to_string())?;
+    let unproc = UnverifiedSignatureEnvelope::<ChrononRecord>::from_json_value(unproc.clone())
+        .map_err(|e| format!("failed to parse record: {e}"))?;
+
+    Ok((tbid, chronon_number, unproc))
+}
+
+/// Verify a single record against the mirror store's latest record (or genesis).
+fn verify_stream_tick_record(
+    crypto: &dyn foretias_core::crypto_server::CryptoServer,
+    mirror_store: &crate::calendar::mirror::MirrorStore,
+    tbid: &str,
+    unproc: UnverifiedSignatureEnvelope<ChrononRecord>,
+) -> Result<CleanAuthenticated<ChrononRecord>, String> {
+    let latest = mirror_store.latest_record(tbid);
+    let result: Result<CleanAuthenticated<ChrononRecord>, _> = match latest {
+        Some(trusted_rec) => {
+            let prev = CleanAuthenticated::<ChrononRecord>::from_trusted(trusted_rec);
+            unproc.into_clean_authenticated(crypto, &prev)
+        }
         None => {
-            return resp_error(
-                server,
-                id,
-                jsonrpc::INVALID_PARAMS,
-                "missing 'record'".into(),
-            )
+            if unproc.inner().is_genesis() {
+                unproc.into_clean_authenticated_genesis(crypto)
+            } else {
+                return Err("non-genesis record without predecessor".to_string());
+            }
         }
     };
-    let unproc = match unproc {
-        Ok(r) => r,
-        Err(e) => {
-            return resp_error(
-                server,
-                id,
-                jsonrpc::INVALID_PARAMS,
-                format!("failed to parse record: {e}"),
-            )
-        }
+    result.map_err(|e| format!("verification failed: {e}"))
+}
+
+pub fn handle_stream_tick(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    let id = params.get("id").cloned();
+
+    let (tbid, chronon_number, unproc) = match parse_stream_tick_params(&params) {
+        Ok(p) => p,
+        Err(e) => return resp_error(server, id, jsonrpc::INVALID_PARAMS, e),
     };
 
     let crypto = server.chronomatter().crypto_server();
     let mirror_store = server.mirror_store();
 
-    let latest = mirror_store.latest_record(&tbid);
-    let verified = match latest {
-        Some(trusted_rec) => {
-            let prev = CleanAuthenticated::<ChrononRecord>::from_trusted(trusted_rec);
-            unproc.into_clean_authenticated(crypto.as_ref(), &prev)
-        }
-        None => {
-            if unproc.inner().is_genesis() {
-                unproc.into_clean_authenticated_genesis(crypto.as_ref())
-            } else {
-                return resp_error(
-                    server,
-                    id,
-                    jsonrpc::INVALID_PARAMS,
-                    "non-genesis record without predecessor".into(),
-                );
-            }
-        }
-    };
-    let verified = match verified {
+    let verified = match verify_stream_tick_record(&*crypto, mirror_store, &tbid, unproc) {
         Ok(v) => v,
-        Err(e) => {
-            return resp_error(
-                server,
-                id,
-                jsonrpc::INVALID_PARAMS,
-                format!("verification failed: {e}"),
-            )
-        }
+        Err(e) => return resp_error(server, id, jsonrpc::INVALID_PARAMS, e),
     };
 
     if let Err(e) = mirror_store.insert_mirrored(&tbid, verified.into_inner()) {
@@ -1238,24 +1259,16 @@ pub fn handle_history_dump_ack(server: &TimeFamilyServer, params: Value) -> Json
     )
 }
 
-/// `history_dump_chunk` — source delivering one chunk of N
-/// Externalized<ChrononRecord>. Each record is parsed as
-/// `UnverifiedSignatureEnvelopeChrononRecord` and chain-verified against the previous
-/// authenticated record (or genesis) before insertion into the mirror
-/// store. Preserves the trust boundary.
-pub fn handle_history_dump_chunk(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
-    let id = params.get("id").cloned();
-    let tbid = match params.get("tbid").and_then(|v| v.as_str()) {
-        Some(t) if !t.is_empty() => t.to_string(),
-        _ => {
-            return resp_error(
-                server,
-                id,
-                jsonrpc::INVALID_PARAMS,
-                "missing or empty 'tbid'".into(),
-            );
-        }
-    };
+/// Parse history_dump_chunk parameters: tbid, records array, and chunk size validation.
+fn parse_history_dump_chunk_params(
+    params: &Value,
+) -> Result<(String, Vec<UnverifiedSignatureEnvelope<ChrononRecord>>), String> {
+    let tbid = params
+        .get("tbid")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "missing or empty 'tbid'".to_string())?
+        .to_string();
+
     let empty_vec: Vec<Value> = vec![];
     let raw_records = params
         .get("records")
@@ -1263,64 +1276,73 @@ pub fn handle_history_dump_chunk(server: &TimeFamilyServer, params: Value) -> Js
         .unwrap_or(&empty_vec);
 
     if raw_records.len() > MAX_CALENDAR_SLICE_COUNT {
-        return resp_error(
-            server,
-            id,
-            jsonrpc::INVALID_PARAMS,
-            format!("chunk size exceeds maximum of {MAX_CALENDAR_SLICE_COUNT}"),
-        );
+        return Err(format!(
+            "chunk size exceeds maximum of {MAX_CALENDAR_SLICE_COUNT}"
+        ));
     }
 
     let unprocessed: Result<Vec<UnverifiedSignatureEnvelope<ChrononRecord>>, _> = raw_records
         .iter()
         .map(|v| UnverifiedSignatureEnvelope::<ChrononRecord>::from_json_value(v.clone()))
         .collect();
-    let unprocessed = match unprocessed {
-        Ok(r) => r,
-        Err(e) => {
-            return resp_error(
-                server,
-                id,
-                jsonrpc::INVALID_PARAMS,
-                format!("failed to parse records: {e}"),
-            );
+    let unprocessed = unprocessed.map_err(|e| format!("failed to parse records: {e}"))?;
+
+    Ok((tbid, unprocessed))
+}
+
+/// Chain-verify a chunk of records against the mirror store's latest record.
+/// Each record is verified against the previous authenticated record in the chunk,
+/// or the mirror store's latest record for the first record, or genesis verification
+/// if no predecessor exists.
+fn verify_history_dump_chunk(
+    crypto: &dyn foretias_core::crypto_server::CryptoServer,
+    mirror_store: &crate::calendar::mirror::MirrorStore,
+    tbid: &str,
+    unprocessed: Vec<UnverifiedSignatureEnvelope<ChrononRecord>>,
+) -> Result<Vec<CleanAuthenticated<ChrononRecord>>, String> {
+    let mut verified: Vec<CleanAuthenticated<ChrononRecord>> = Vec::new();
+    for (i, unproc) in unprocessed.into_iter().enumerate() {
+        let clean: Result<CleanAuthenticated<ChrononRecord>, _> =
+            if let Some(prev_record) = verified.last() {
+                unproc.into_clean_authenticated(crypto, prev_record)
+            } else if let Some(prev_trusted) = mirror_store.latest_record(tbid) {
+                let prev = CleanAuthenticated::<ChrononRecord>::from_trusted(prev_trusted);
+                unproc.into_clean_authenticated(crypto, &prev)
+            } else if unproc.inner().is_genesis() {
+                unproc.into_clean_authenticated_genesis(crypto)
+            } else {
+                return Err("non-genesis record without predecessor in store".to_string());
+            };
+        match clean {
+            Ok(v) => verified.push(v),
+            Err(e) => {
+                return Err(format!("chain verification failed at record {i}: {e}"));
+            }
         }
+    }
+    Ok(verified)
+}
+
+/// `history_dump_chunk` — source delivering one chunk of N
+/// Externalized<ChrononRecord>. Each record is parsed as
+/// `UnverifiedSignatureEnvelopeChrononRecord` and chain-verified against the previous
+/// authenticated record (or genesis) before insertion into the mirror
+/// store. Preserves the trust boundary.
+pub fn handle_history_dump_chunk(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    let id = params.get("id").cloned();
+
+    let (tbid, unprocessed) = match parse_history_dump_chunk_params(&params) {
+        Ok(p) => p,
+        Err(e) => return resp_error(server, id, jsonrpc::INVALID_PARAMS, e),
     };
 
     let crypto = server.chronomatter().crypto_server();
     let mirror_store = server.mirror_store();
 
-    let mut verified: Vec<CleanAuthenticated<ChrononRecord>> = Vec::new();
-    for (i, unproc) in unprocessed.into_iter().enumerate() {
-        // First record in chunk: chain against the latest stored record if any,
-        // else treat as genesis (chronon_number must be 1).
-        let clean = if let Some(prev_record) = verified.last() {
-            unproc.into_clean_authenticated(crypto.as_ref(), prev_record)
-        } else if let Some(prev_trusted) = mirror_store.latest_record(&tbid) {
-            let prev = CleanAuthenticated::<ChrononRecord>::from_trusted(prev_trusted);
-            unproc.into_clean_authenticated(crypto.as_ref(), &prev)
-        } else if unproc.inner().is_genesis() {
-            unproc.into_clean_authenticated_genesis(crypto.as_ref())
-        } else {
-            return resp_error(
-                server,
-                id,
-                jsonrpc::INVALID_PARAMS,
-                "non-genesis record without predecessor in store".into(),
-            );
-        };
-        match clean {
-            Ok(v) => verified.push(v),
-            Err(e) => {
-                return resp_error(
-                    server,
-                    id,
-                    jsonrpc::INVALID_PARAMS,
-                    format!("chain verification failed at record {i}: {e}"),
-                );
-            }
-        }
-    }
+    let verified = match verify_history_dump_chunk(&*crypto, mirror_store, &tbid, unprocessed) {
+        Ok(v) => v,
+        Err(e) => return resp_error(server, id, jsonrpc::INVALID_PARAMS, e),
+    };
 
     let accepted = verified.len();
     for record in verified {
@@ -1512,48 +1534,76 @@ pub fn handle_stamp_my_chronon_block(server: &TimeFamilyServer, params: Value) -
 
 // ── Storage proof handlers ─────────────────────────────────────────────────
 
+/// Parse storage_proof_request parameters: tbid, chronon_start, chronon_end.
+fn parse_storage_proof_request_params(
+    params: &Value,
+) -> Result<crate::calendar_store::StorageProofRequest, String> {
+    let tbid = params
+        .get("tbid")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "missing or empty 'tbid'".to_string())?
+        .to_string();
+
+    let chronon_start = params
+        .get("chronon_start")
+        .and_then(|v| v.as_u64())
+        .ok_or_else(|| "missing or invalid 'chronon_start' (u64)".to_string())?;
+
+    let chronon_end = params
+        .get("chronon_end")
+        .and_then(|v| v.as_u64())
+        .ok_or_else(|| "missing or invalid 'chronon_end' (u64)".to_string())?;
+
+    Ok(crate::calendar_store::StorageProofRequest {
+        tbid,
+        chronon_start,
+        chronon_end,
+    })
+}
+
+/// Build the JSON response from a StorageProofResponse.
+fn build_storage_proof_response(
+    server: &TimeFamilyServer,
+    id: Option<Value>,
+    resp: crate::calendar_store::StorageProofResponse,
+) -> JsonRpcResponse {
+    let blocks_json: Vec<Value> = resp
+        .blocks
+        .iter()
+        .map(|bp| {
+            serde_json::json!({
+                "block_id": bp.block_id,
+                "merkle_root": hex::encode(bp.merkle_root),
+                "leaves": bp.leaves.iter().take(bp.leaf_count)
+                    .map(hex::encode).collect::<Vec<_>>(),
+                "siblings": bp.siblings.iter().take(bp.sibling_count)
+                    .map(hex::encode).collect::<Vec<_>>(),
+                "leaf_count": bp.leaf_count,
+                "sibling_count": bp.sibling_count,
+                "n": bp.n,
+            })
+        })
+        .collect();
+
+    resp_success(
+        server,
+        id,
+        serde_json::json!({
+            "blocks": blocks_json,
+            "coverage_ratio": resp.coverage_ratio,
+        }),
+    )
+}
+
 /// `storage_proof_request` — generate a Merkle storage proof covering a
 /// chronon range. Returns per-block proofs with Merkle range evidence, or
 /// an error if no CalendarStore is configured or no data covers the range.
 pub fn handle_storage_proof_request(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
-    use crate::calendar_store::StorageProofRequest as Req;
-
     let id = params.get("id").cloned();
 
-    let tbid = match params.get("tbid").and_then(|v| v.as_str()) {
-        Some(t) if !t.is_empty() => t.to_string(),
-        _ => {
-            return resp_error(
-                server,
-                id,
-                jsonrpc::INVALID_PARAMS,
-                "missing or empty 'tbid'".into(),
-            )
-        }
-    };
-
-    let chronon_start = match params.get("chronon_start").and_then(|v| v.as_u64()) {
-        Some(v) => v,
-        None => {
-            return resp_error(
-                server,
-                id,
-                jsonrpc::INVALID_PARAMS,
-                "missing or invalid 'chronon_start' (u64)".into(),
-            )
-        }
-    };
-
-    let chronon_end = match params.get("chronon_end").and_then(|v| v.as_u64()) {
-        Some(v) => v,
-        None => {
-            return resp_error(
-                server,
-                id,
-                jsonrpc::INVALID_PARAMS,
-                "missing or invalid 'chronon_end' (u64)".into(),
-            )
-        }
+    let req = match parse_storage_proof_request_params(&params) {
+        Ok(r) => r,
+        Err(e) => return resp_error(server, id, jsonrpc::INVALID_PARAMS, e),
     };
 
     let Some(store) = server.calendar_store() else {
@@ -1565,41 +1615,8 @@ pub fn handle_storage_proof_request(server: &TimeFamilyServer, params: Value) ->
         );
     };
 
-    let req = Req {
-        tbid,
-        chronon_start,
-        chronon_end,
-    };
-
     match store.prove_storage(&req) {
-        Some(resp) => {
-            let blocks_json: Vec<Value> = resp
-                .blocks
-                .iter()
-                .map(|bp| {
-                    serde_json::json!({
-                        "block_id": bp.block_id,
-                        "merkle_root": hex::encode(bp.merkle_root),
-                        "leaves": bp.leaves.iter().take(bp.leaf_count)
-                            .map(hex::encode).collect::<Vec<_>>(),
-                        "siblings": bp.siblings.iter().take(bp.sibling_count)
-                            .map(hex::encode).collect::<Vec<_>>(),
-                        "leaf_count": bp.leaf_count,
-                        "sibling_count": bp.sibling_count,
-                        "n": bp.n,
-                    })
-                })
-                .collect();
-
-            resp_success(
-                server,
-                id,
-                serde_json::json!({
-                    "blocks": blocks_json,
-                    "coverage_ratio": resp.coverage_ratio,
-                }),
-            )
-        }
+        Some(resp) => build_storage_proof_response(server, id, resp),
         None => resp_error(
             server,
             id,
@@ -1852,65 +1869,39 @@ pub fn handle_get_chronon(server: &TimeFamilyServer, params: Value) -> JsonRpcRe
     }
 }
 
-/// `get_chronon_chain` — look up a range of chronon records by number from
-/// the persisted CalendarStore. Returns `{ "status": "complete"/"partial"/"none",
-/// "records": [...], "coverage": { "requested": N, "returned": M } }`.
-pub fn handle_get_chronon_chain(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
-    use crate::calendar_store::ChrononChainResult;
+/// Parse get_chronon_chain parameters: tbid, chronon_start, chronon_end, include_attestations.
+fn parse_chronon_chain_params(params: &Value) -> Result<(String, u64, u64, bool), String> {
+    let tbid = params
+        .get("tbid")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "missing or empty 'tbid'".to_string())?
+        .to_string();
 
-    let id = params.get("id").cloned();
+    let chronon_start = params
+        .get("chronon_start")
+        .and_then(|v| v.as_u64())
+        .ok_or_else(|| "missing or invalid 'chronon_start' (u64)".to_string())?;
 
-    let tbid = match params.get("tbid").and_then(|v| v.as_str()) {
-        Some(t) if !t.is_empty() => t.to_string(),
-        _ => {
-            return resp_error(
-                server,
-                id,
-                jsonrpc::INVALID_PARAMS,
-                "missing or empty 'tbid'".into(),
-            )
-        }
-    };
-
-    let chronon_start = match params.get("chronon_start").and_then(|v| v.as_u64()) {
-        Some(n) => n,
-        None => {
-            return resp_error(
-                server,
-                id,
-                jsonrpc::INVALID_PARAMS,
-                "missing or invalid 'chronon_start' (u64)".into(),
-            )
-        }
-    };
-
-    let chronon_end = match params.get("chronon_end").and_then(|v| v.as_u64()) {
-        Some(n) => n,
-        None => {
-            return resp_error(
-                server,
-                id,
-                jsonrpc::INVALID_PARAMS,
-                "missing or invalid 'chronon_end' (u64)".into(),
-            )
-        }
-    };
+    let chronon_end = params
+        .get("chronon_end")
+        .and_then(|v| v.as_u64())
+        .ok_or_else(|| "missing or invalid 'chronon_end' (u64)".to_string())?;
 
     let include_attestations = params
         .get("include_attestations")
         .and_then(|v| v.as_bool())
         .unwrap_or(true);
 
-    let Some(store) = server.calendar_store() else {
-        return resp_error(
-            server,
-            id,
-            jsonrpc::INTERNAL_ERROR,
-            "no calendar store configured (requires --persist-path)".into(),
-        );
-    };
+    Ok((tbid, chronon_start, chronon_end, include_attestations))
+}
 
-    let result = store.get_chronon_chain(&tbid, chronon_start, chronon_end, include_attestations);
+/// Build the JSON response from a ChrononChainResult.
+fn build_chronon_chain_response(
+    server: &TimeFamilyServer,
+    id: Option<Value>,
+    result: crate::calendar_store::ChrononChainResult,
+) -> JsonRpcResponse {
+    use crate::calendar_store::ChrononChainResult;
 
     match result {
         ChrononChainResult::Complete { records, coverage } => {
@@ -1971,6 +1962,31 @@ pub fn handle_get_chronon_chain(server: &TimeFamilyServer, params: Value) -> Jso
             }),
         ),
     }
+}
+
+/// `get_chronon_chain` — look up a range of chronon records by number from
+/// the persisted CalendarStore. Returns `{ "status": "complete"/"partial"/"none",
+/// "records": [...], "coverage": { "requested": N, "returned": M } }`.
+pub fn handle_get_chronon_chain(server: &TimeFamilyServer, params: Value) -> JsonRpcResponse {
+    let id = params.get("id").cloned();
+
+    let (tbid, chronon_start, chronon_end, include_attestations) =
+        match parse_chronon_chain_params(&params) {
+            Ok(p) => p,
+            Err(e) => return resp_error(server, id, jsonrpc::INVALID_PARAMS, e),
+        };
+
+    let Some(store) = server.calendar_store() else {
+        return resp_error(
+            server,
+            id,
+            jsonrpc::INTERNAL_ERROR,
+            "no calendar store configured (requires --persist-path)".into(),
+        );
+    };
+
+    let result = store.get_chronon_chain(&tbid, chronon_start, chronon_end, include_attestations);
+    build_chronon_chain_response(server, id, result)
 }
 
 #[cfg(test)]
