@@ -166,9 +166,10 @@ async fn start_server_with_calendar_data(
     let encrypted_store = EncryptedJsonlCalendarStore::new(store_path, crypto);
 
     // Populate with n_ticks chronon records as a single block.
+    // Chronon numbers start at 1 (genesis) per tick.rs validation.
     if n_ticks > 0 {
         let ticks: Vec<Externalized<ChrononRecord>> =
-            (0..n_ticks).map(make_externalized_tick).collect();
+            (1..=n_ticks).map(make_externalized_tick).collect();
         encrypted_store
             .append_block(ticks)
             .expect("failed to append block to calendar store");
@@ -227,8 +228,8 @@ async fn get_chronon_found() {
         record
     );
 
-    // Also query chronon 0 (first) and chronon 4 (last).
-    for cn in [0u64, 4] {
+    // Also query chronon 1 (first/genesis) and chronon 5 (last).
+    for cn in [1u64, 5] {
         let resp = jsonrpc_call(
             &http_addr,
             "get_chronon",
@@ -282,13 +283,13 @@ async fn get_chronon_not_found() {
         result
     );
 
-    // Also query chronon 3 — just past the end.
+    // Also query chronon 4 — just past the end (data has 1..3).
     let resp = jsonrpc_call(
         &http_addr,
         "get_chronon",
         serde_json::json!({
             "tbid": sample_tbid_hex(),
-            "chronon_number": 3,
+            "chronon_number": 4,
         }),
     )
     .await;
@@ -296,7 +297,7 @@ async fn get_chronon_not_found() {
     assert_eq!(
         result.get("status").and_then(|v| v.as_str()),
         Some("not_found"),
-        "chronon 3 should not be found when only 0..2 exist"
+        "chronon 4 should not be found when only 1..3 exist"
     );
 
     handle.abort();
@@ -368,14 +369,14 @@ async fn get_chronon_chain_partial() {
     // Start a server with 5 chronon records (chronon 0..4).
     let (http_addr, persist_dir, handle) = start_server_with_calendar_data(5).await;
 
-    // Query chronon 0..9 — only 0..4 exist, so result is partial.
+    // Query chronon 1..10 — only 1..5 exist, so result is partial.
     let resp = jsonrpc_call(
         &http_addr,
         "get_chronon_chain",
         serde_json::json!({
             "tbid": sample_tbid_hex(),
-            "chronon_start": 0,
-            "chronon_end": 9,
+            "chronon_start": 1,
+            "chronon_end": 10,
         }),
     )
     .await;
@@ -404,11 +405,11 @@ async fn get_chronon_chain_partial() {
         records.len()
     );
 
-    // Verify the returned records are chronon 0..4.
+    // Verify the returned records are chronon 1..5.
     for (i, rec) in records.iter().enumerate() {
         assert_eq!(
             rec.get("tick_number").and_then(|v| v.as_u64()),
-            Some(i as u64),
+            Some(1 + i as u64),
         );
     }
 
@@ -416,7 +417,7 @@ async fn get_chronon_chain_partial() {
     assert_eq!(
         coverage.get("requested").and_then(|v| v.as_u64()),
         Some(10),
-        "requested should be 10 (0..9 inclusive)"
+        "requested should be 10 (1..10 inclusive)"
     );
     assert_eq!(
         coverage.get("returned").and_then(|v| v.as_u64()),
@@ -432,13 +433,13 @@ async fn get_chronon_chain_partial() {
     assert_eq!(gaps.len(), 1, "expected 1 gap, got {}", gaps.len());
     assert_eq!(
         gaps[0].get("start").and_then(|v| v.as_u64()),
-        Some(5),
-        "gap should start at 5"
+        Some(6),
+        "gap should start at 6"
     );
     assert_eq!(
         gaps[0].get("end").and_then(|v| v.as_u64()),
-        Some(10),
-        "gap end is exclusive (5..10), should be 10"
+        Some(11),
+        "gap end is exclusive (6..11), should be 11"
     );
 
     handle.abort();
