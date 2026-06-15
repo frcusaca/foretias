@@ -180,7 +180,7 @@ pub fn handle_route_stamp(server: &TimeFamilyServer, params: Value) -> JsonRpcRe
     };
 
     // Self-route: delegate to local stamp handler
-    if rps.target_tbid == server.get_tbid().to_hex() {
+    if rps.target_tbid == server.tbid().to_hex() {
         return handle_stamp(server, params);
     }
 
@@ -373,7 +373,7 @@ pub fn handle_verify(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
     }
 
     let foretis_tbid_hex = vp.foretis.tbid().to_hex();
-    if *vp.foretis.tbid() == server.get_tbid() {
+    if *vp.foretis.tbid() == server.tbid() {
         return resp_success(
             server,
             id,
@@ -396,7 +396,7 @@ async fn cross_node_verify(
         return Err(NodeError::Internal("P2P not enabled".into()));
     };
 
-    // Phase 8.1: use CommunerdetteLine::get_tick — goes through the full Take 3
+    // Phase 8.1: use CommunerdetteLine::get_chronon — goes through the full Take 3
     // inbound gate (gate_chronon_records) and returns CleanAuthenticated<ChrononRecord>.
     // No manual DHT lookup, no PeerAddr construction, no from_trusted bypass.
     let tbid = foretias_core::foretias::types::Tbid::from_hex(foretis_tbid_hex)
@@ -405,9 +405,9 @@ async fn cross_node_verify(
         foretias_core::foretias::tick::ChrononRecord,
     > = com
         .line_for_tbid(tbid)
-        .get_tick(*foretis_ref.chronon_number())
+        .get_chronon(*foretis_ref.chronon_number())
         .await
-        .map_err(|e| NodeError::Internal(format!("get_tick failed: {e:?}")))?;
+        .map_err(|e| NodeError::Internal(format!("get_chronon failed: {e:?}")))?;
 
     let crypto = server.chronomatter().crypto_server();
     let valid = unproc_foretis
@@ -510,7 +510,7 @@ pub fn handle_channel_bind_challenge(server: &TimeFamilyServer, params: Value) -
         }
     };
 
-    let responder_tbid_hex = server.get_tbid().to_hex();
+    let responder_tbid_hex = server.tbid().to_hex();
 
     // Build the canonical message: nonce_bytes ‖ channel_id_bytes ‖ responder_tbid_hex_bytes
     let nonce_bytes = match hex::decode(&nonce_hex) {
@@ -568,7 +568,7 @@ pub fn handle_authenticated_ping(server: &TimeFamilyServer, params: Value) -> Js
             return jsonrpc::JsonRpcResponse::error(id, -32602, "challenge not hex".to_string())
         }
     };
-    let responder_tbid_hex = server.get_tbid().to_hex();
+    let responder_tbid_hex = server.tbid().to_hex();
     let mut msg = Vec::new();
     msg.extend_from_slice(&challenge);
     msg.extend_from_slice(responder_tbid_hex.as_bytes());
@@ -601,14 +601,14 @@ pub fn handle_status(server: &TimeFamilyServer, params: Value) -> JsonRpcRespons
     let id = params.get("id").cloned();
     let peer_count = server
         .communerd()
-        .map(|c| tokio::runtime::Handle::current().block_on(async { c.get_peers().await.len() }))
+        .map(|c| tokio::runtime::Handle::current().block_on(async { c.known_peers().await.len() }))
         .unwrap_or(0);
     resp_success(
         server,
         id,
         serde_json::json!({
-            "tbid": server.get_tbid().to_hex(),
-            "tbn": server.get_tbn(),
+            "tbid": server.tbid().to_hex(),
+            "tbn": server.tbn(),
             "tick_count": server.current_tick(),
             "peer_count": peer_count,
             "dormant": server.is_dormant(),
@@ -2488,7 +2488,7 @@ mod tests {
     #[test]
     fn handle_route_stamp_self_route_returns_envelope_shape() {
         let server = make_server();
-        let my_tbid = server.get_tbid().to_hex();
+        let my_tbid = server.tbid().to_hex();
         let params = serde_json::json!({
             "target_tbid": my_tbid,
             "content": hex::encode(b"route-test"),

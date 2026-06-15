@@ -87,7 +87,7 @@ async fn source_dumps_history_to_mirror() {
     );
 
     // The mirror starts with no record for A's TBID.
-    let tbid_a_hex = server_a.get_tbid().to_hex();
+    let tbid_a_hex = server_a.tbid().to_hex();
     assert_eq!(
         server_b.mirror_store().mirror_tick_count(&tbid_a_hex),
         0,
@@ -117,7 +117,7 @@ async fn source_dumps_history_to_mirror() {
         .await;
 
     // Confirm A's peer pool contains B before triggering FindNewMirror.
-    let peers = communerd_a.get_peers().await;
+    let peers = communerd_a.known_peers().await;
     assert!(
         peers.iter().any(|p| p.json_rpc == addr_b),
         "A's peer pool must contain B"
@@ -257,7 +257,7 @@ async fn mirror_announce_and_health_check_wire_path() {
     let b_peer = PeerAddr {
         json_rpc: addr_b.clone(),
     };
-    let tbid_a_hex = server_a.get_tbid().to_hex();
+    let tbid_a_hex = server_a.tbid().to_hex();
 
     // mirror_announce should succeed (B has capacity).
     let announce = communerd_a.mirror_announce(&b_peer, &tbid_a_hex).await;

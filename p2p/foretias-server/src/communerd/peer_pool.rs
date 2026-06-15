@@ -55,7 +55,7 @@ impl PeerPool {
         info!(component = "communerd", peer = %addr.json_rpc, "communerd: peer removed");
     }
 
-    pub async fn get_peers(&self) -> Vec<PeerAddr> {
+    pub async fn known_peers(&self) -> Vec<PeerAddr> {
         self.peers.read().await.clone()
     }
 
@@ -82,7 +82,7 @@ impl PeerPool {
 
         loop {
             interval.tick().await;
-            let peers = self.get_peers().await;
+            let peers = self.known_peers().await;
             for peer in &peers {
                 match self.transport.ping(peer).await {
                     Ok(()) => {
@@ -162,7 +162,7 @@ mod tests {
                 last_seen_ns: 0,
             })
             .await;
-            let peers = pool.get_peers().await;
+            let peers = pool.known_peers().await;
             assert_eq!(peers.len(), 1);
             assert_eq!(peers[0].json_rpc, "127.0.0.1:4001");
         });
@@ -187,7 +187,7 @@ mod tests {
                 last_seen_ns: 0,
             })
             .await;
-            let peers = pool.get_peers().await;
+            let peers = pool.known_peers().await;
             assert!(peers.is_empty());
         });
     }
@@ -211,7 +211,7 @@ mod tests {
                 last_seen_ns: 0,
             })
             .await;
-            assert_eq!(pool.get_peers().await.len(), 1);
+            assert_eq!(pool.known_peers().await.len(), 1);
         });
     }
 }

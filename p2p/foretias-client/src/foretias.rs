@@ -429,11 +429,11 @@ impl Foretias {
     }
 
     pub fn tbid(&self) -> String {
-        self.inner.chronomatter().get_tbid().to_hex()
+        self.inner.chronomatter().tbid().to_hex()
     }
 
     pub fn tbn(&self) -> String {
-        self.inner.chronomatter().get_tbn().to_string()
+        self.inner.chronomatter().tbn().to_string()
     }
 
     pub fn status(&self) -> ForetiasStatus {
@@ -480,7 +480,7 @@ impl Foretias {
         )?;
         cm.set_mutual_attest_observer(Arc::new(NoOpMutualAttest)
             as Arc<dyn foretias_core::foretias::callbacks::MutualAttestObserver>);
-        let (tbid, tbn_from_cm) = (cm.get_tbid(), cm.get_tbn().to_string());
+        let (tbid, tbn_from_cm) = (cm.tbid(), cm.tbn().to_string());
         let binding = calendar.inner();
         let mut cal_inner = binding.write();
         cal_inner.set_tbid(tbid);

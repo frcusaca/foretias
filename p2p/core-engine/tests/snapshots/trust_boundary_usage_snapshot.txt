@@ -54,7 +54,7 @@ foretias-server/src/communerd/communerdette.rs | ChrononRecord | impl::Communerd
 foretias-server/src/communerd/communerdette.rs | ChrononRecord | impl::CommunerdetteExecutor::fn::gate_chronon_records | - | Y | -
 foretias-server/src/communerd/communerdette.rs | ChrononRecord | impl::CommunerdetteExecutor::fn::gate_foretis | - | Y | -
 foretias-server/src/communerd/communerdette.rs | ChrononRecord | impl::CommunerdetteLine::fn::get_calendar_slice | - | Y | -
-foretias-server/src/communerd/communerdette.rs | ChrononRecord | impl::CommunerdetteLine::fn::get_tick | - | Y | -
+foretias-server/src/communerd/communerdette.rs | ChrononRecord | impl::CommunerdetteLine::fn::get_chronon | - | Y | -
 foretias-server/src/communerd/communerdette.rs | ChrononRecord | other | - | Y | -
 foretias-server/src/communerd/communerdette.rs | ForetisRecord | impl::Communerdette::fn::execute_stamp | - | Y | -
 foretias-server/src/communerd/communerdette.rs | ForetisRecord | impl::CommunerdetteExecutor::fn::gate_foretis | Y | Y | -

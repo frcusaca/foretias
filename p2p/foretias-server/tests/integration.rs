@@ -257,7 +257,7 @@ async fn test_two_nodes_mutual_attest() {
     if let Some(com) = server_a.communerd() {
         let result = com
             .route_stamp(
-                &server_b.get_tbid().to_hex(),
+                &server_b.tbid().to_hex(),
                 &hex::encode(b"auto attest test"),
                 "ma-test",
             )
@@ -266,7 +266,7 @@ async fn test_two_nodes_mutual_attest() {
         let _ = result;
     }
 
-    assert_ne!(server_a.get_tbid(), server_b.get_tbid());
+    assert_ne!(server_a.tbid(), server_b.tbid());
     assert!(!server_a.is_dormant());
     assert!(!server_b.is_dormant());
 

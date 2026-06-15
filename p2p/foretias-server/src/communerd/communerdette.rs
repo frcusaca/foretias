@@ -178,7 +178,7 @@ pub struct CommunerdetteRouteStats {
     pub smoothed_rtt_ms: Option<f64>,
     /// Consecutive failures on this route (triggers backoff).
     pub consecutive_failures: u32,
-    /// Monotonic timestamp (ns) of last successful application RPC (stamp, get_tick,
+    /// Monotonic timestamp (ns) of last successful application RPC (stamp, get_chronon,
     /// get_calendar_slice). This is the primary liveness signal — if recent enough,
     /// the transport-level ping is unnecessary.
     pub last_application_rpc_ns: Option<u64>,
@@ -197,7 +197,7 @@ impl CommunerdetteRouteStats {
         });
     }
 
-    /// Record a successful application RPC (stamp, get_tick, get_calendar_slice).
+    /// Record a successful application RPC (stamp, get_chronon, get_calendar_slice).
     pub fn record_application_rpc_success(&mut self, now_ns: u64) {
         self.last_application_rpc_ns = Some(now_ns);
     }
@@ -1286,7 +1286,7 @@ impl Communerdette {
         executor.gate_chronon_records(raw)
     }
 
-    /// Execute get_tick as get_calendar_slice(tick_number, 1) with exactly-one validation.
+    /// Execute get_chronon as get_calendar_slice(tick_number, 1) with exactly-one validation.
     async fn execute_tick(
         executor: &CommunerdetteExecutor,
         tick_number: u64,
@@ -1921,7 +1921,7 @@ impl CommunerdetteLine {
     ///
     /// Implemented as `get_calendar_slice(tick_number, 1)` with exactly-one validation.
     /// Returns `CleanAuthenticated<ChrononRecord>` after the Take 3 inbound gate.
-    pub async fn get_tick(
+    pub async fn get_chronon(
         &self,
         tick_number: u64,
     ) -> Result<CleanAuthenticated<ChrononRecord>, CommunerdetteError> {

@@ -132,15 +132,15 @@ impl<T> UnverifiedSignatureEnvelope<T> {
 impl<T: serde::de::DeserializeOwned> UnverifiedSignatureEnvelope<T> {
     /// Parse from raw bytes (JSON). No verification performed.
     #[must_use = "parsing from bytes may fail and the error must be handled"]
-    pub fn from_bytes(b: &[u8]) -> Result<Self, ParseError> {
-        let val: T = serde_json::from_slice(b).map_err(ParseError::InvalidJson)?;
+    pub fn from_bytes(b: &[u8]) -> Result<Self, CleanAuthParseError> {
+        let val: T = serde_json::from_slice(b).map_err(CleanAuthParseError::InvalidJson)?;
         Ok(Self::from_parsed(val))
     }
 
     /// Parse from a JSON-RPC Value. No verification performed.
     #[must_use = "parsing from JSON value may fail and the error must be handled"]
-    pub fn from_json_value(v: serde_json::Value) -> Result<Self, ParseError> {
-        let val: T = serde_json::from_value(v).map_err(ParseError::InvalidJson)?;
+    pub fn from_json_value(v: serde_json::Value) -> Result<Self, CleanAuthParseError> {
+        let val: T = serde_json::from_value(v).map_err(CleanAuthParseError::InvalidJson)?;
         Ok(Self::from_parsed(val))
     }
 }
@@ -442,7 +442,7 @@ impl<T: serde::Serialize> ExternalizedBuilder<T> {
 #[derive(Debug)]
 pub enum CleanAuthError {
     /// Failed to parse inbound data.
-    Parse(ParseError),
+    Parse(CleanAuthParseError),
     /// Cryptographic signature verification failed.
     InvalidSignature,
     /// Declared algorithm does not match the record's algorithm.
@@ -467,8 +467,8 @@ pub enum CleanAuthError {
     SignatureVerificationFailed { role: SignerRole, tbid: String },
 }
 
-impl From<ParseError> for CleanAuthError {
-    fn from(e: ParseError) -> Self {
+impl From<CleanAuthParseError> for CleanAuthError {
+    fn from(e: CleanAuthParseError) -> Self {
         CleanAuthError::Parse(e)
     }
 }
@@ -513,7 +513,7 @@ impl std::error::Error for CleanAuthError {}
 /// Errors that occur during parsing of inbound data.
 #[non_exhaustive]
 #[derive(Debug)]
-pub enum ParseError {
+pub enum CleanAuthParseError {
     /// Invalid JSON.
     InvalidJson(serde_json::Error),
     /// Input bytes truncated.
@@ -526,19 +526,19 @@ pub enum ParseError {
     UnknownAlgorithm(String),
 }
 
-impl std::fmt::Display for ParseError {
+impl std::fmt::Display for CleanAuthParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ParseError::InvalidJson(e) => write!(f, "invalid JSON: {e}"),
-            ParseError::TruncatedBytes => write!(f, "truncated bytes"),
-            ParseError::InvalidLength(msg) => write!(f, "invalid length: {msg}"),
-            ParseError::BadFormat(msg) => write!(f, "bad format: {msg}"),
-            ParseError::UnknownAlgorithm(id) => write!(f, "unknown signature algorithm: {id}"),
+            CleanAuthParseError::InvalidJson(e) => write!(f, "invalid JSON: {e}"),
+            CleanAuthParseError::TruncatedBytes => write!(f, "truncated bytes"),
+            CleanAuthParseError::InvalidLength(msg) => write!(f, "invalid length: {msg}"),
+            CleanAuthParseError::BadFormat(msg) => write!(f, "bad format: {msg}"),
+            CleanAuthParseError::UnknownAlgorithm(id) => write!(f, "unknown signature algorithm: {id}"),
         }
     }
 }
 
-impl std::error::Error for ParseError {}
+impl std::error::Error for CleanAuthParseError {}
 
 // ---------------------------------------------------------------------------
 // ChrononRecord — field accessors + verify + externalize
@@ -661,11 +661,11 @@ impl UnverifiedSignatureEnvelope<ForetisRecord> {
     ///
     /// v1 bare ForetisRecord JSON is rejected — clean cutover to v2.
     #[must_use = "parsing v2 wire format may fail and the error must be handled"]
-    pub fn from_json_value_v2(v: serde_json::Value) -> Result<Self, ParseError> {
+    pub fn from_json_value_v2(v: serde_json::Value) -> Result<Self, CleanAuthParseError> {
         let obj = match v {
             serde_json::Value::Object(map) => map,
             _ => {
-                return Err(ParseError::BadFormat(
+                return Err(CleanAuthParseError::BadFormat(
                     "v2 envelope requires JSON object".into(),
                 ))
             }
@@ -674,9 +674,9 @@ impl UnverifiedSignatureEnvelope<ForetisRecord> {
         // v2 format: must have "foretis" key
         let foretis_val = obj
             .get("foretis")
-            .ok_or_else(|| ParseError::BadFormat("v2 envelope requires 'foretis' key".into()))?;
+            .ok_or_else(|| CleanAuthParseError::BadFormat("v2 envelope requires 'foretis' key".into()))?;
         let foretis: ForetisRecord =
-            serde_json::from_value(foretis_val.clone()).map_err(ParseError::InvalidJson)?;
+            serde_json::from_value(foretis_val.clone()).map_err(CleanAuthParseError::InvalidJson)?;
 
         let mut env = Self::from_parsed(foretis);
 
@@ -687,9 +687,9 @@ impl UnverifiedSignatureEnvelope<ForetisRecord> {
                     let algorithm = match obj.get("signature_algorithm").and_then(|v| v.as_str()) {
                         Some("SLH-DSA") => SigAlgorithm::DualKey,
                         Some("Ed25519") => SigAlgorithm::Ed25519,
-                        Some(other) => return Err(ParseError::UnknownAlgorithm(other.to_string())),
+                        Some(other) => return Err(CleanAuthParseError::UnknownAlgorithm(other.to_string())),
                         None => {
-                            return Err(ParseError::BadFormat(
+                            return Err(CleanAuthParseError::BadFormat(
                                 "missing 'signature_algorithm' field".into(),
                             ))
                         }
@@ -1011,16 +1011,16 @@ mod tests {
         assert!(result.is_err());
 
         let result = UnverifiedSignatureEnvelope::<ForetisRecord>::from_bytes(b"[]");
-        assert!(matches!(result, Err(ParseError::InvalidJson(_))));
+        assert!(matches!(result, Err(CleanAuthParseError::InvalidJson(_))));
     }
 
     #[test]
     fn test_clean_auth_error_from_parse_error() {
-        let parse_err = ParseError::TruncatedBytes;
+        let parse_err = CleanAuthParseError::TruncatedBytes;
         let ca_err: CleanAuthError = parse_err.into();
         assert!(matches!(
             ca_err,
-            CleanAuthError::Parse(ParseError::TruncatedBytes)
+            CleanAuthError::Parse(CleanAuthParseError::TruncatedBytes)
         ));
     }
 

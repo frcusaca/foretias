@@ -356,7 +356,7 @@ async fn handle_task(worker_id: usize, task: CalendarTask, ctx: &WorkerContext) 
 ///
 /// Full flow:
 /// 1. Obtain a `CommunerdetteLine` for `target_tbid` via Communerd
-/// 2. Fetch the target's latest chronon via `line.get_tick(u64::MAX)`
+/// 2. Fetch the target's latest chronon via `line.get_chronon(u64::MAX)`
 /// 3. Internally stamp via Chronomatter (stamp-free, within trust boundary)
 /// 4. Sign the ForetisRecord with Calendar's key
 /// 5. Transmit the stamped content to the target via `line.stamp()`
@@ -394,12 +394,12 @@ async fn handle_do_chronon_attestation(worker_id: usize, target_tbid: &str, ctx:
 
     // ── Step 2: Request target's latest chronon ──────────────────────────
     let line = communerd.line_for_tbid(tbid);
-    let target_record = match line.get_tick(u64::MAX).await {
+    let target_record = match line.get_chronon(u64::MAX).await {
         Ok(record) => record,
         Err(e) => {
             warn!(
                 worker_id,
-                target_tbid, error = %e, "do_chronon_attestation: get_tick failed"
+                target_tbid, error = %e, "do_chronon_attestation: get_chronon failed"
             );
             return;
         }
@@ -512,7 +512,7 @@ async fn verify_chronon_attestation_recorded(
         foretias_core::foretias::tick::ForetisRecord,
     >,
 ) {
-    match line.get_tick(target_chronon).await {
+    match line.get_chronon(target_chronon).await {
         Ok(verified_record) => {
             let record = verified_record.inner();
             let remote_content_hash = *remote_foretis.inner().content_hash();
@@ -929,7 +929,7 @@ async fn get_verify_latest_chronon(
     target_tbid: &str,
     line: &crate::communerd::CommunerdetteLine,
 ) -> Option<u64> {
-    let record = line.get_tick(u64::MAX).await.ok()?;
+    let record = line.get_chronon(u64::MAX).await.ok()?;
     let latest_chronon = *record.inner().chronon_number();
     if latest_chronon == 0 {
         info!(

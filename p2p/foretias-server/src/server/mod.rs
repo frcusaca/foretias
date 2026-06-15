@@ -88,7 +88,7 @@ impl TimeFamilyServer {
             crypto.clone(),
         )?;
         cm.set_mutual_attest_observer(Arc::clone(&metrics) as Arc<dyn MutualAttestObserver>);
-        let (tbid, tbn) = (cm.get_tbid(), cm.get_tbn().to_string());
+        let (tbid, tbn) = (cm.tbid(), cm.tbn().to_string());
         let binding = calendar.inner();
         let mut cal_inner = binding.write();
         cal_inner.set_tbid(tbid);
@@ -185,8 +185,8 @@ impl TimeFamilyServer {
         Ok(server)
     }
 
-    pub fn get_tbid(&self) -> Tbid {
-        self.chronomatter.get_tbid()
+    pub fn tbid(&self) -> Tbid {
+        self.chronomatter.tbid()
     }
 
     /// Sign a message with this server's TBID secret key (Ed25519 + SLH-DSA).
@@ -201,8 +201,8 @@ impl TimeFamilyServer {
         self.chronomatter.sign_tbid_message(msg)
     }
 
-    pub fn get_tbn(&self) -> &str {
-        self.chronomatter.get_tbn()
+    pub fn tbn(&self) -> &str {
+        self.chronomatter.tbn()
     }
 
     pub fn is_dormant(&self) -> bool {
@@ -253,7 +253,7 @@ impl TimeFamilyServer {
     #[must_use = "saving the calendar may fail (e.g. I/O error); the error must be handled"]
     pub fn save(&self) -> Result<(), NodeError> {
         if let Some(ref p) = self.persist_path {
-            let json_path = p.join(format!("{}.json", self.get_tbid().to_hex()));
+            let json_path = p.join(format!("{}.json", self.tbid().to_hex()));
             std::fs::create_dir_all(p)?;
             self.calendar
                 .save(json_path.to_str().ok_or(NodeError::Internal(
@@ -417,12 +417,12 @@ async fn handle_connection(
     {
         Ok(res) => res,
         Err(e) => {
-            tracing::warn!(component = "server", tbid = %server.get_tbid().to_hex(), "noise handshake failed: {}", e);
+            tracing::warn!(component = "server", tbid = %server.tbid().to_hex(), "noise handshake failed: {}", e);
             return Err(NodeError::Internal("noise handshake failed".into()));
         }
     };
     let peer_addr = stream.peer_addr().ok().map(|a| a.to_string());
-    tracing::info!(component = "server", tbid = %server.get_tbid().to_hex(), peer = %peer_addr.as_deref().unwrap_or("unknown"), "noise handshake: success");
+    tracing::info!(component = "server", tbid = %server.tbid().to_hex(), peer = %peer_addr.as_deref().unwrap_or("unknown"), "noise handshake: success");
 
     let (reader, writer) = stream.into_split();
     let mut reader = tokio::io::BufReader::new(reader);

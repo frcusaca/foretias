@@ -38,8 +38,8 @@ async fn concurrent_stamps_no_conflicts() {
         Arc::from(crypto_server::new_software(ForetiasCurve::Ed25519).expect("crypto server"));
     let cm =
         Arc::new(Chronomatter::new(1_000_000_000, observer, crypto).expect("create Chronomatter"));
-    calendar.write().set_tbid(cm.get_tbid());
-    calendar.write().set_tbn(cm.get_tbn());
+    calendar.write().set_tbid(cm.tbid());
+    calendar.write().set_tbn(cm.tbn());
 
     let tasks = 16u64;
     let stamps_per_task = 100u64;

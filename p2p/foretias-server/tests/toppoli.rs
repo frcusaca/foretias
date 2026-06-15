@@ -495,8 +495,8 @@ async fn toppoli_mixed_config() {
     h.start_all().await;
     tokio::time::sleep(Duration::from_millis(50)).await;
     assert_eq!(h.running_count(), 3);
-    let tbid_0 = h.peer(0).server().get_tbid();
-    let tbid_s = h.peer(slow_idx).server().get_tbid();
+    let tbid_0 = h.peer(0).server().tbid();
+    let tbid_s = h.peer(slow_idx).server().tbid();
     assert_ne!(tbid_0, tbid_s, "each peer must have a distinct TBID");
     h.stop_all(20).await;
 }
@@ -567,8 +567,8 @@ async fn toppoli_fb_gossip() {
         .await;
     assert!(ok, "peers should be running");
 
-    let peer0_tbid_hex = f.harness.peer(0).server.chronomatter().get_tbid().to_hex();
-    let peer1_tbid_hex = f.harness.peer(1).server.chronomatter().get_tbid().to_hex();
+    let peer0_tbid_hex = f.harness.peer(0).server.chronomatter().tbid().to_hex();
+    let peer1_tbid_hex = f.harness.peer(1).server.chronomatter().tbid().to_hex();
     assert_ne!(
         peer0_tbid_hex, peer1_tbid_hex,
         "peers must have distinct TBIDs"
@@ -750,7 +750,7 @@ async fn toppoli_l1_ping_round_trip() {
 async fn toppoli_l2_auth_ping() {
     let f = ToppliLivenessTest::setup(2).await;
 
-    let peer0_tbid = f.harness.peer(0).server.get_tbid();
+    let peer0_tbid = f.harness.peer(0).server.tbid();
     let peer1_addr = f.harness.peer(1).addr.clone();
 
     let ok = f
@@ -825,7 +825,7 @@ async fn toppoli_gnf_churn() {
     assert!(ok, "all 12 peers must start within 5 s");
 
     let tbids: Vec<String> = (0..12)
-        .map(|i| f.harness.peer(i).server.get_tbid().to_hex())
+        .map(|i| f.harness.peer(i).server.tbid().to_hex())
         .collect();
     let tbid_set: std::collections::HashSet<&str> = tbids.iter().map(|s| s.as_str()).collect();
     assert_eq!(tbid_set.len(), 12, "all 12 peers must have distinct TBIDs");
@@ -855,7 +855,7 @@ async fn toppoli_gnf_churn() {
     assert!(ok, "all 12 peers must recover within 10 s of restart");
 
     let post_tbids: Vec<String> = (0..12)
-        .map(|i| f.harness.peer(i).server.get_tbid().to_hex())
+        .map(|i| f.harness.peer(i).server.tbid().to_hex())
         .collect();
     let post_set: std::collections::HashSet<&str> = post_tbids.iter().map(|s| s.as_str()).collect();
     assert_eq!(
@@ -890,13 +890,13 @@ async fn toppoli_channel_bind() {
     assert!(ok, "peers should be running within 5 s");
 
     let peer0 = f.harness.peer(0).server();
-    let peer1_tbid = f.harness.peer(1).server().get_tbid();
+    let peer1_tbid = f.harness.peer(1).server().tbid();
 
     let communerd_0 = peer0.communerd().expect("peer 0 must have communerd");
     let line = communerd_0.line_for_tbid(peer1_tbid);
 
     tracing::info!(
-        peer0_tbid = %peer0.get_tbid().to_hex(),
+        peer0_tbid = %peer0.tbid().to_hex(),
         peer1_tbid = %peer1_tbid.to_hex(),
         "toppoli_channel_bind: polling binding status on peer 0 → peer 1"
     );
@@ -960,14 +960,14 @@ async fn toppoli_channel_bind_two_channels() {
     let peer0 = f.harness.peer(0).server();
     let communerd_0 = peer0.communerd().expect("peer 0 must have communerd");
 
-    let peer1_tbid = f.harness.peer(1).server().get_tbid();
-    let peer2_tbid = f.harness.peer(2).server().get_tbid();
+    let peer1_tbid = f.harness.peer(1).server().tbid();
+    let peer2_tbid = f.harness.peer(2).server().tbid();
 
     let line_01 = communerd_0.line_for_tbid(peer1_tbid);
     let line_02 = communerd_0.line_for_tbid(peer2_tbid);
 
     tracing::info!(
-        peer0 = %peer0.get_tbid().to_hex(),
+        peer0 = %peer0.tbid().to_hex(),
         peer1 = %peer1_tbid.to_hex(),
         peer2 = %peer2_tbid.to_hex(),
         "toppoli_channel_bind_two_channels: polling two independent bindings"
@@ -1048,7 +1048,7 @@ async fn toppoli_channel_bind_two_channels() {
 async fn toppoli_l2_verified() {
     let f = ToppliLivenessTest::setup(2).await;
 
-    let peer0_tbid = f.harness.peer(0).server.get_tbid();
+    let peer0_tbid = f.harness.peer(0).server.tbid();
     let peer1_addr = f.harness.peer(1).addr.clone();
 
     let ok = f
@@ -1086,7 +1086,7 @@ async fn toppoli_l2_verified() {
             let responder = obj["responder_tbid"].as_str().unwrap_or("");
             assert_eq!(
                 responder,
-                f.harness.peer(1).server.get_tbid().to_hex(),
+                f.harness.peer(1).server.tbid().to_hex(),
                 "responder_tbid must match peer 1"
             );
 
@@ -1117,7 +1117,7 @@ async fn toppoli_l3_stamp() {
     let f = ToppliLivenessTest::setup(2).await;
 
     let peer0 = f.harness.peer(0).server();
-    let peer1_tbid = f.harness.peer(1).server().get_tbid();
+    let peer1_tbid = f.harness.peer(1).server().tbid();
     let _peer1_addr = f.harness.peer(1).addr.clone();
 
     let ok = f
@@ -1179,7 +1179,7 @@ async fn toppoli_fb_gossip_integration() {
         .await;
     assert!(ok, "2 peers should be running");
 
-    let peer0_tbid_hex = f.harness.peer(0).server.get_tbid().to_hex();
+    let peer0_tbid_hex = f.harness.peer(0).server.tbid().to_hex();
     let store1 = f
         .harness
         .peer(1)

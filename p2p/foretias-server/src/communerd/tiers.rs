@@ -85,8 +85,8 @@ impl CommunerdServer {
     }
 
     /// Get configured peers.
-    pub async fn get_peers(&self) -> Vec<PeerAddr> {
-        self.inner.get_peers().await
+    pub async fn known_peers(&self) -> Vec<PeerAddr> {
+        self.inner.known_peers().await
     }
 
     /// Get configuration.
@@ -230,8 +230,8 @@ impl CommunerdP2P {
     }
 
     /// Get configured peers.
-    pub async fn get_peers(&self) -> Vec<PeerAddr> {
-        self.server.get_peers().await
+    pub async fn known_peers(&self) -> Vec<PeerAddr> {
+        self.server.known_peers().await
     }
 
     /// Get configuration.

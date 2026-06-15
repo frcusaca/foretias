@@ -126,11 +126,11 @@ impl Chronomatter {
         Arc::clone(&self.crypto)
     }
 
-    pub fn get_tbid(&self) -> Tbid {
+    pub fn tbid(&self) -> Tbid {
         self.tbid
     }
 
-    pub fn get_tbn(&self) -> &str {
+    pub fn tbn(&self) -> &str {
         &self.tbn
     }
 
@@ -526,7 +526,7 @@ impl Chronomatter {
             tokio::time::Duration::from_millis(if chronon_ms > 0 { chronon_ms } else { 1 });
         let this = Arc::clone(self);
 
-        let tbid = this.get_tbid();
+        let tbid = this.tbid();
         let handle = tokio::spawn(async move {
             let mut interval = tokio::time::interval(duration);
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -660,8 +660,8 @@ mod tests {
             Arc::from(crypto_server::new_software(crypto_server::ForetiasCurve::Ed25519).unwrap());
         let cm = Chronomatter::new(1_000_000_000, observer, crypto)
             .expect("failed to create Chronomatter");
-        calendar.write().set_tbid(cm.get_tbid());
-        calendar.write().set_tbn(cm.get_tbn());
+        calendar.write().set_tbid(cm.tbid());
+        calendar.write().set_tbn(cm.tbn());
         (Arc::new(cm), last_tick, calendar)
     }
 

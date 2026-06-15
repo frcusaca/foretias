@@ -621,8 +621,8 @@ impl Communerd {
         self.notify_peer_change().await;
     }
 
-    pub async fn get_peers(&self) -> Vec<PeerAddr> {
-        self.peer_pool.get_peers().await
+    pub async fn known_peers(&self) -> Vec<PeerAddr> {
+        self.peer_pool.known_peers().await
     }
 
     /// Register a callback that fires after every peer-pool change.
@@ -640,7 +640,7 @@ impl Communerd {
     async fn notify_peer_change(&self) {
         let cb = self.peer_change_cb.lock().clone();
         if let Some(cb) = cb {
-            let peers = self.peer_pool.get_peers().await;
+            let peers = self.peer_pool.known_peers().await;
             let core_peers: Vec<CorePeerAddr> = peers
                 .into_iter()
                 .map(CorePeerAddr::from)
@@ -1493,7 +1493,7 @@ impl Communerd {
 impl crate::calendar::MirrorDispatcher for Communerd {
     async fn known_peers(&self) -> Vec<foretias_core::foretias::callbacks::PeerAddr> {
         self.peer_pool
-            .get_peers()
+            .known_peers()
             .await
             .into_iter()
             .filter(|p| !p.json_rpc.is_empty())
@@ -1779,7 +1779,7 @@ impl PeerMessenger for Communerd {
                 // SAFETY: we hold no async-unsafe locks here, and get_peers() is a
                 // non-blocking read (tokio::sync::RwLock::read is future-based).
                 let peers = match tokio::runtime::Handle::try_current() {
-                    Ok(handle) => handle.block_on(async { self.peer_pool.get_peers().await }),
+                    Ok(handle) => handle.block_on(async { self.peer_pool.known_peers().await }),
                     Err(_) => {
                         tracing::warn!("query_community: no tokio runtime available, returning empty peer list");
                         Vec::new()
@@ -1797,7 +1797,7 @@ impl PeerMessenger for Communerd {
                 // Check liveness: is this peer in our pool and does it have a recent last_seen_ns?
                 let alive = match tokio::runtime::Handle::try_current() {
                     Ok(handle) => handle.block_on(async {
-                        let peers = self.peer_pool.get_peers().await;
+                        let peers = self.peer_pool.known_peers().await;
                         peers
                             .iter()
                             .any(|p| p.json_rpc == addr.json_rpc && p.last_seen_ns > 0)
@@ -1835,7 +1835,7 @@ mod tests {
         let communerd = Communerd::new(config);
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
-            let peers = communerd.get_peers().await;
+            let peers = communerd.known_peers().await;
             assert_eq!(peers.len(), 1);
             assert_eq!(peers[0].json_rpc, "127.0.0.1:4002");
         });
@@ -1853,7 +1853,7 @@ mod tests {
                     last_seen_ns: 0,
                 })
                 .await;
-            let peers = communerd.get_peers().await;
+            let peers = communerd.known_peers().await;
             assert_eq!(peers.len(), 2);
         });
     }
@@ -1870,7 +1870,7 @@ mod tests {
                     last_seen_ns: 0,
                 })
                 .await;
-            assert!(communerd.get_peers().await.is_empty());
+            assert!(communerd.known_peers().await.is_empty());
         });
     }
 
@@ -1886,7 +1886,7 @@ mod tests {
                 last_seen_ns: 0,
             })
             .await;
-            let peers = communerd.get_peers().await;
+            let peers = communerd.known_peers().await;
             assert_eq!(peers.len(), 2);
         });
     }

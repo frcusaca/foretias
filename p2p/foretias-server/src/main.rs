@@ -245,7 +245,7 @@ fn format_comma_delimited(n: u64, unit: &str) -> String {
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-fn read_message(msg: Option<String>, msg_file: Option<String>) -> Result<Vec<u8>, std::io::Error> {
+fn load_message(msg: Option<String>, msg_file: Option<String>) -> Result<Vec<u8>, std::io::Error> {
     match (msg, msg_file) {
         (Some(m), None) => Ok(m.into_bytes()),
         (None, Some(f)) => std::fs::read(&f),
@@ -260,7 +260,7 @@ fn read_message(msg: Option<String>, msg_file: Option<String>) -> Result<Vec<u8>
     }
 }
 
-fn read_foretis(
+fn load_foretis(
     foretis: Option<String>,
     foretis_file: Option<String>,
 ) -> Result<String, std::io::Error> {
@@ -472,7 +472,7 @@ async fn setup_p2p(
 
     if let Some(communerd) = server.communerd() {
         if !config.known_servers.is_empty() {
-            let tbid = server.get_tbid();
+            let tbid = server.tbid();
             communerd
                 .register_and_discover(
                     config.known_servers.clone(),
@@ -501,8 +501,8 @@ fn print_server_status(
 ) {
     println!("Foretias TimeFamilyServer starting...");
     println!("  Listen : {addr}");
-    println!("  TBN    : {}", server.get_tbn());
-    println!("  TBID   : {}", server.get_tbid().to_hex());
+    println!("  TBN    : {}", server.tbn());
+    println!("  TBID   : {}", server.tbid().to_hex());
     println!(
         "  Config : TimeFamilyConfig v{version}",
         version = time_family_cfg.version
@@ -602,7 +602,7 @@ async fn cmd_stamp(
     stamp_output: Option<String>,
     server_addr: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let content = read_message(message, message_file)?;
+    let content = load_message(message, message_file)?;
     let echo = client_echo();
 
     let client = Foretias::connect_one("cli-stamp".into(), server_addr.clone(), None)?;
@@ -650,8 +650,8 @@ fn default_verify_server_addr() -> String {
 }
 
 async fn cmd_verify(config: VerifyConfig) -> Result<(), Box<dyn std::error::Error>> {
-    let content = read_message(config.message, config.message_file)?;
-    let stamp_str = read_foretis(config.foretis, config.foretis_file)?;
+    let content = load_message(config.message, config.message_file)?;
+    let stamp_str = load_foretis(config.foretis, config.foretis_file)?;
     let stamp_obj: serde_json::Value = serde_json::from_str(&stamp_str)?;
     let foretis: foretias_core::foretias::tick::ForetisRecord = serde_json::from_value(
         stamp_obj
@@ -707,8 +707,8 @@ async fn cmd_verify_with_proof(
     proof_output: Option<String>,
     server_addr: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let content = read_message(message, message_file)?;
-    let stamp_str = read_foretis(foretis, foretis_file)?;
+    let content = load_message(message, message_file)?;
+    let stamp_str = load_foretis(foretis, foretis_file)?;
     let stamp_obj: serde_json::Value = serde_json::from_str(&stamp_str)?;
     let foretis: foretias_core::foretias::tick::ForetisRecord = serde_json::from_value(
         stamp_obj
