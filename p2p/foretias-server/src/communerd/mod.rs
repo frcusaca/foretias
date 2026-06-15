@@ -643,9 +643,7 @@ impl Communerd {
             let peers = self.peer_pool.get_peers().await;
             let core_peers: Vec<CorePeerAddr> = peers
                 .into_iter()
-                .map(|p| CorePeerAddr {
-                    json_rpc: p.json_rpc,
-                })
+                .map(CorePeerAddr::from)
                 .collect();
             cb.on_peer_change(core_peers);
         }
@@ -1499,9 +1497,7 @@ impl crate::calendar::MirrorDispatcher for Communerd {
             .await
             .into_iter()
             .filter(|p| !p.json_rpc.is_empty())
-            .map(|p| foretias_core::foretias::callbacks::PeerAddr {
-                json_rpc: p.json_rpc,
-            })
+            .map(CorePeerAddr::from)
             .collect()
     }
 
@@ -1793,9 +1789,7 @@ impl PeerMessenger for Communerd {
                 let core_peers: Vec<CorePeerAddr> = peers
                     .into_iter()
                     .filter(|p| !p.json_rpc.is_empty())
-                    .map(|p| CorePeerAddr {
-                        json_rpc: p.json_rpc,
-                    })
+                    .map(CorePeerAddr::from)
                     .collect();
                 Ok(CommunityResponse::KnownPeers(core_peers))
             }

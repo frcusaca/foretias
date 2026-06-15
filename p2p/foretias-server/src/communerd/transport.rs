@@ -22,6 +22,14 @@ impl std::fmt::Display for PeerAddr {
     }
 }
 
+impl From<PeerAddr> for foretias_core::foretias::callbacks::PeerAddr {
+    fn from(p: PeerAddr) -> Self {
+        Self {
+            json_rpc: p.json_rpc,
+        }
+    }
+}
+
 /// Transport-level error.
 #[non_exhaustive]
 #[derive(Debug, thiserror::Error)]
