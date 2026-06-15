@@ -6,7 +6,7 @@
 //! 3. A record tampered after signing is rejected.
 //! 4. A record signed by one key but claiming a different TBID is rejected.
 
-use foretias_core::crypto_server::{self, ForetiasCurve, PublicKeyBytes};
+use foretias_core::crypto_server::{self, CryptoPublicKey, ForetiasCurve};
 use foretias_server::communerd::{validate_peer_registration, PeerRegistrationRecord};
 
 /// Build a 96-byte hex TBID with `pubkey_32` as the first 32 bytes and zeros
@@ -34,7 +34,7 @@ fn make_record(tbid_hex: String) -> PeerRegistrationRecord {
 /// Extract the 32-byte Ed25519 pubkey from a CryptoServer's public_key().
 fn ed25519_pub_of(crypto: &dyn foretias_core::crypto_server::CryptoServer) -> [u8; 32] {
     match crypto.public_key() {
-        PublicKeyBytes::Ed25519(pk) => pk.bytes,
+        CryptoPublicKey::Ed25519(pk) => pk.bytes,
         _ => panic!("expected Ed25519 public key from software crypto"),
     }
 }

@@ -51,7 +51,7 @@ mod cross_signature {
         let msg = b"Ed25519 self-test message";
         let sig = server.sign_with(msg, SignatureAlgorithm::Ed25519).unwrap();
         let pk = match server.public_key() {
-            crate::crypto_server::PublicKeyBytes::Ed25519(pk) => pk.bytes.to_vec(),
+            crate::crypto_server::CryptoPublicKey::Ed25519(pk) => pk.bytes.to_vec(),
             _ => panic!("expected Ed25519 pubkey"),
         };
 
@@ -233,7 +233,7 @@ mod mutual_attestation {
             .sign_with(msg, SignatureAlgorithm::Ed25519)
             .unwrap();
         let pk_c = match server_c.public_key() {
-            crate::crypto_server::PublicKeyBytes::Ed25519(pk) => pk.bytes.to_vec(),
+            crate::crypto_server::CryptoPublicKey::Ed25519(pk) => pk.bytes.to_vec(),
             _ => panic!("expected Ed25519 pubkey"),
         };
         assert!(server_a.verify_with(&pk_c, "Ed25519", msg, &sig_c).unwrap());
@@ -264,7 +264,7 @@ mod mutual_attestation {
         let server = make_server();
 
         let ed_pk = match server.public_key() {
-            crate::crypto_server::PublicKeyBytes::Ed25519(pk) => pk.bytes.to_vec(),
+            crate::crypto_server::CryptoPublicKey::Ed25519(pk) => pk.bytes.to_vec(),
             _ => panic!("expected Ed25519 pubkey"),
         };
         assert_eq!(ed_pk.len(), 32);
@@ -401,7 +401,7 @@ mod full_integration {
                     let valid = match alg {
                         SignatureAlgorithm::Ed25519 => {
                             let pk = match signer.public_key() {
-                                crate::crypto_server::PublicKeyBytes::Ed25519(pk) => {
+                                crate::crypto_server::CryptoPublicKey::Ed25519(pk) => {
                                     pk.bytes.to_vec()
                                 }
                                 _ => panic!("expected Ed25519"),

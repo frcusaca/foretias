@@ -189,7 +189,7 @@ mod tests {
         ts: u64,
     ) -> ProbityReportRecord {
         let pub_key = match crypto.public_key() {
-            foretias_core::crypto_server::PublicKeyBytes::Ed25519(pk) => pk.bytes.to_vec(),
+            foretias_core::crypto_server::CryptoPublicKey::Ed25519(pk) => pk.bytes.to_vec(),
             _ => panic!("expected Ed25519"),
         };
         let mut tbid = pub_key.clone();
@@ -303,7 +303,7 @@ mod tests {
 
         // Create a signed FB report (fast signature only)
         let pub_key = match crypto.public_key() {
-            foretias_core::crypto_server::PublicKeyBytes::Ed25519(pk) => pk.bytes.to_vec(),
+            foretias_core::crypto_server::CryptoPublicKey::Ed25519(pk) => pk.bytes.to_vec(),
             _ => panic!("expected Ed25519"),
         };
         let mut tbid = pub_key.clone();
@@ -344,7 +344,7 @@ mod tests {
         let now = 1_000_000_000_000;
 
         let pub_key = match crypto.public_key() {
-            foretias_core::crypto_server::PublicKeyBytes::Ed25519(pk) => pk.bytes.to_vec(),
+            foretias_core::crypto_server::CryptoPublicKey::Ed25519(pk) => pk.bytes.to_vec(),
             _ => panic!("expected Ed25519"),
         };
         let mut tbid = pub_key.clone();

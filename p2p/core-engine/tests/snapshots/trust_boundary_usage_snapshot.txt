@@ -85,19 +85,19 @@ core-engine | CleanAuthenticated | ChrononRecord | 9
 core-engine | CleanAuthenticated | EpochSnapshotRecord | 3
 core-engine | CleanAuthenticated | ForetisRecord | 3
 core-engine | CleanAuthenticated | ProbityReportRecord | 3
-core-engine | CleanAuthenticated | T | 7
+core-engine | CleanAuthenticated | T | 6
 core-engine | CleanAuthenticated | u32 | 2
 core-engine | Externalized | ChrononRecord | 1
 core-engine | Externalized | EpochSnapshotRecord | 1
 core-engine | Externalized | ForetisRecord | 1
 core-engine | Externalized | ProbityReportRecord | 1
-core-engine | Externalized | T | 3
+core-engine | Externalized | T | 2
 core-engine | UnverifiedSignatureEnvelope | ChrononRecord | 2
 core-engine | UnverifiedSignatureEnvelope | EpochSnapshotRecord | 1
 core-engine | UnverifiedSignatureEnvelope | FamilyRecord | 1
 core-engine | UnverifiedSignatureEnvelope | ForetisRecord | 1
 core-engine | UnverifiedSignatureEnvelope | ProbityReportRecord | 1
-core-engine | UnverifiedSignatureEnvelope | T | 6
+core-engine | UnverifiedSignatureEnvelope | T | 5
 foretias-server | CleanAuthenticated | AuthenticatedPong | 1
 foretias-server | CleanAuthenticated | ChrononRecord | 23
 foretias-server | CleanAuthenticated | ForetisRecord | 10
@@ -124,19 +124,19 @@ CleanAuthenticated | ChrononRecord | 32
 CleanAuthenticated | EpochSnapshotRecord | 3
 CleanAuthenticated | ForetisRecord | 13
 CleanAuthenticated | ProbityReportRecord | 3
-CleanAuthenticated | T | 7
+CleanAuthenticated | T | 6
 CleanAuthenticated | u32 | 2
 CleanAuthenticated | u8 | 1
 Externalized | ChrononRecord | 8
 Externalized | EpochSnapshotRecord | 1
 Externalized | ForetisRecord | 1
 Externalized | ProbityReportRecord | 1
-Externalized | T | 3
+Externalized | T | 2
 Externalized | u8 | 1
 UnverifiedSignatureEnvelope | ChrononRecord | 9
 UnverifiedSignatureEnvelope | EpochSnapshotRecord | 1
 UnverifiedSignatureEnvelope | FamilyRecord | 1
 UnverifiedSignatureEnvelope | ForetisRecord | 3
 UnverifiedSignatureEnvelope | ProbityReportRecord | 1
-UnverifiedSignatureEnvelope | T | 6
+UnverifiedSignatureEnvelope | T | 5
 UnverifiedSignatureEnvelope | u8 | 1

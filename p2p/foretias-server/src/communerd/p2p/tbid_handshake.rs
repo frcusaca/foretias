@@ -79,7 +79,7 @@ impl TbidHandshake {
     ) -> Result<TbidProofResponse, NodeError> {
         let tbid = self.local_tbid;
         let public_key: Vec<u8> = match self.crypto.public_key() {
-            foretias_core::crypto_server::PublicKeyBytes::Ed25519(pk) => pk.bytes.to_vec(),
+            foretias_core::crypto_server::CryptoPublicKey::Ed25519(pk) => pk.bytes.to_vec(),
             _ => return Err(NodeError::Internal("non-Ed25519 public key".into())),
         };
 
@@ -255,7 +255,7 @@ mod tests {
         let sig = crypto2.sign(&short_payload).expect("sign short payload");
 
         let pk_bytes = match crypto2.public_key() {
-            foretias_core::crypto_server::PublicKeyBytes::Ed25519(pk) => pk.bytes.to_vec(),
+            foretias_core::crypto_server::CryptoPublicKey::Ed25519(pk) => pk.bytes.to_vec(),
             _ => panic!("expected Ed25519 public key from software crypto"),
         };
 

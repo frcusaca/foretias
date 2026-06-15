@@ -10,7 +10,7 @@ use zeroize::Zeroizing;
 
 use super::{
     CryptoServerCapabilities, ForetiasCurve, FrostOps, HashOps, IdentityOps, KexOps, ProofOps,
-    PublicKeyBytes, RngOps, SealOps, SealedBlob, SignOps, VerifyOps,
+    CryptoPublicKey, RngOps, SealOps, SealedBlob, SignOps, VerifyOps,
 };
 use crate::core::bindings::*;
 use crate::core::identity::PrivKeyHandle;
@@ -31,7 +31,7 @@ pub struct SoftwareCryptoServer {
     /// The curve this server operates on.
     curve: ForetiasCurve,
     /// The public key generated at construction time.
-    pub_key: PublicKeyBytes,
+    pub_key: CryptoPublicKey,
     /// The opaque private key handle — bytes never leave C memory.
     priv_key: PrivKeyHandle,
     /// The peer ID derived from the public key.
@@ -81,7 +81,7 @@ impl SoftwareCryptoServer {
 
                 Ok(Self {
                     curve: ForetiasCurve::Ed25519,
-                    pub_key: PublicKeyBytes::Ed25519(pub_key),
+                    pub_key: CryptoPublicKey::Ed25519(pub_key),
                     priv_key: handle,
                     peer_id,
                     seal_key: Zeroizing::new(seal_key),
@@ -141,7 +141,7 @@ impl SoftwareCryptoServer {
 
         Ok(Self {
             curve: ForetiasCurve::Ed25519,
-            pub_key: PublicKeyBytes::Ed25519(pub_key),
+            pub_key: CryptoPublicKey::Ed25519(pub_key),
             priv_key: handle,
             peer_id,
             seal_key: Zeroizing::new(seal_key),
@@ -320,7 +320,7 @@ impl RngOps for SoftwareCryptoServer {
 }
 
 impl IdentityOps for SoftwareCryptoServer {
-    fn public_key(&self) -> PublicKeyBytes {
+    fn public_key(&self) -> CryptoPublicKey {
         self.pub_key
     }
     fn peer_id(&self) -> ForetiasPeerID {

@@ -2859,7 +2859,7 @@ mod tests {
             ChrononRecord::builder()
                 .chronon_number(chronon_number)
                 .public_key(FTByteVector::from(match pub_key {
-                    foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
+                    foretias_core::crypto_server::CryptoPublicKey::Ed25519(k) => k.bytes.to_vec(),
                     _ => panic!("expected Ed25519"),
                 }))
                 .forward_foretis(FTByteVector::from(vec![]))
@@ -2932,7 +2932,7 @@ mod tests {
             ChrononRecord::builder()
                 .chronon_number(chronon_number)
                 .public_key(FTByteVector::from(match pub_key {
-                    foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
+                    foretias_core::crypto_server::CryptoPublicKey::Ed25519(k) => k.bytes.to_vec(),
                     _ => panic!("expected Ed25519"),
                 }))
                 .forward_foretis(FTByteVector::from(vec![]))
@@ -3354,7 +3354,7 @@ mod tests {
             ChrononRecord::builder()
                 .chronon_number(1)
                 .public_key(FTByteVector::from(match pub_key {
-                    foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
+                    foretias_core::crypto_server::CryptoPublicKey::Ed25519(k) => k.bytes.to_vec(),
                     _ => panic!("expected Ed25519"),
                 }))
                 .forward_foretis(FTByteVector::from(vec![]))
@@ -3722,7 +3722,7 @@ mod tests {
             )
             .expect("sign");
         let pub_key_bytes = match crypto.public_key() {
-            foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
+            foretias_core::crypto_server::CryptoPublicKey::Ed25519(k) => k.bytes.to_vec(),
             _ => panic!("expected Ed25519"),
         };
 
@@ -4269,7 +4269,7 @@ mod tests {
             .expect("libsodium"),
         );
         let pub_key = match crypto.public_key() {
-            foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
+            foretias_core::crypto_server::CryptoPublicKey::Ed25519(k) => k.bytes.to_vec(),
             _ => panic!("expected Ed25519"),
         };
         let mut tbid_bytes = [0u8; 96];
@@ -4362,7 +4362,7 @@ mod tests {
             .expect("libsodium"),
         );
         let pub_key = match crypto.public_key() {
-            foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
+            foretias_core::crypto_server::CryptoPublicKey::Ed25519(k) => k.bytes.to_vec(),
             _ => panic!("expected Ed25519"),
         };
         let mut tbid_bytes = [0u8; 96];
@@ -4417,7 +4417,7 @@ mod tests {
             .expect("libsodium"),
         );
         let pub_key = match crypto_executor.public_key() {
-            foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
+            foretias_core::crypto_server::CryptoPublicKey::Ed25519(k) => k.bytes.to_vec(),
             _ => panic!("expected Ed25519"),
         };
         let mut tbid_bytes = [0u8; 96];
@@ -4469,7 +4469,7 @@ mod tests {
             .expect("libsodium"),
         );
         let pub_key = match crypto.public_key() {
-            foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
+            foretias_core::crypto_server::CryptoPublicKey::Ed25519(k) => k.bytes.to_vec(),
             _ => panic!("expected Ed25519"),
         };
         let mut tbid_bytes = [0u8; 96];
@@ -4768,7 +4768,7 @@ mod tests {
             )
             .expect("sign");
         let pub_key_bytes = match crypto.public_key() {
-            foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
+            foretias_core::crypto_server::CryptoPublicKey::Ed25519(k) => k.bytes.to_vec(),
             _ => panic!("expected Ed25519"),
         };
         let chronon_record = ChrononRecord::builder()
@@ -4849,7 +4849,7 @@ mod tests {
             )
             .expect("sign");
         let pub_key_bytes = match crypto.public_key() {
-            foretias_core::crypto_server::PublicKeyBytes::Ed25519(k) => k.bytes.to_vec(),
+            foretias_core::crypto_server::CryptoPublicKey::Ed25519(k) => k.bytes.to_vec(),
             _ => panic!("expected Ed25519"),
         };
         let chronon_record = ChrononRecord::builder()

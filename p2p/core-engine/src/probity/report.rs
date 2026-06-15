@@ -292,7 +292,7 @@ mod tests {
 
     fn make_signed_report(crypto: &dyn CryptoServer) -> ProbityReportRecord {
         let pub_key = match crypto.public_key() {
-            crate::crypto_server::PublicKeyBytes::Ed25519(pk) => pk.bytes.to_vec(),
+            crate::crypto_server::CryptoPublicKey::Ed25519(pk) => pk.bytes.to_vec(),
             _ => panic!("expected Ed25519"),
         };
         let mut tbid = pub_key.clone();

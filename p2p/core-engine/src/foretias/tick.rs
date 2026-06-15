@@ -712,8 +712,8 @@ mod tests {
         )
         .expect("stamp init tick");
         let public_key = match server.public_key() {
-            crate::crypto_server::PublicKeyBytes::Ed25519(pk) => pk.bytes.to_vec(),
-            crate::crypto_server::PublicKeyBytes::P256Compressed(pk) => pk.bytes.to_vec(),
+            crate::crypto_server::CryptoPublicKey::Ed25519(pk) => pk.bytes.to_vec(),
+            crate::crypto_server::CryptoPublicKey::P256Compressed(pk) => pk.bytes.to_vec(),
         };
         cal.append(ChrononRecord {
             chronon_number,
@@ -877,8 +877,8 @@ mod tests {
         let tbid = Tbid::from_raw([0xCC; 96]);
         let tbid_str = tbid.to_hex();
         let pub_key = match server.public_key() {
-            crate::crypto_server::PublicKeyBytes::Ed25519(pk) => pk.bytes,
-            crate::crypto_server::PublicKeyBytes::P256Compressed(pk) => {
+            crate::crypto_server::CryptoPublicKey::Ed25519(pk) => pk.bytes,
+            crate::crypto_server::CryptoPublicKey::P256Compressed(pk) => {
                 pk.bytes[..32].try_into().unwrap()
             }
         };
@@ -927,8 +927,8 @@ mod tests {
         let tbid = Tbid::from_raw([0xDD; 96]);
         let tbid_str = tbid.to_hex();
         let pub_key = match server.public_key() {
-            crate::crypto_server::PublicKeyBytes::Ed25519(pk) => pk.bytes,
-            crate::crypto_server::PublicKeyBytes::P256Compressed(pk) => {
+            crate::crypto_server::CryptoPublicKey::Ed25519(pk) => pk.bytes,
+            crate::crypto_server::CryptoPublicKey::P256Compressed(pk) => {
                 pk.bytes[..32].try_into().unwrap()
             }
         };

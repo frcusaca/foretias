@@ -713,7 +713,7 @@ impl Communerd {
         // Create collision detector (shared between gossip loop and heartbeat broadcaster)
         let pub_key = self.crypto.public_key();
         let my_pub_key = match pub_key {
-            foretias_core::crypto_server::PublicKeyBytes::Ed25519(pk) => pk,
+            foretias_core::crypto_server::CryptoPublicKey::Ed25519(pk) => pk,
             _ => ForetiasPubKey32 { bytes: [0u8; 32] },
         };
         let detector = Arc::new(CollisionDetector::new(

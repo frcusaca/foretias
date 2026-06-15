@@ -29,7 +29,7 @@ impl From<ForetiasCurve> for u32 {
 /// Serialized public key, parameterized by curve type.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
-pub enum PublicKeyBytes {
+pub enum CryptoPublicKey {
     /// 32-byte Ed25519 public key.
     Ed25519(ForetiasPubKey32),
     /// 33-byte compressed P-256 public key.
@@ -214,7 +214,7 @@ pub trait RngOps: Send + Sync {
 /// Identity information (public key, peer id, curve, capabilities).
 pub trait IdentityOps: Send + Sync {
     /// Returns the public key of this server.
-    fn public_key(&self) -> PublicKeyBytes;
+    fn public_key(&self) -> CryptoPublicKey;
     /// Returns the peer ID derived from the public key.
     fn peer_id(&self) -> ForetiasPeerID;
     /// Returns the curve this server operates on.
