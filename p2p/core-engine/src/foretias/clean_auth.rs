@@ -82,6 +82,19 @@ impl SignatureEntry {
     }
 }
 
+/// Generate field accessor methods that delegate to `self.inner.$field`.
+macro_rules! delegate_field_accessors {
+    ($field:ident -> $ret:ty) => {
+        pub fn $field(&self) -> &$ret {
+            &self.inner.$field
+        }
+    };
+    ($first:ident -> $first_ret:ty, $($rest:ident -> $rest_ret:ty),+ $(,)?) => {
+        delegate_field_accessors!($first -> $first_ret);
+        delegate_field_accessors!($($rest -> $rest_ret),+);
+    };
+}
+
 // ---------------------------------------------------------------------------
 // Generic trust boundary wrappers
 // ---------------------------------------------------------------------------
@@ -532,36 +545,18 @@ impl std::error::Error for ParseError {}
 // ---------------------------------------------------------------------------
 
 impl UnverifiedSignatureEnvelope<ChrononRecord> {
-    pub fn chronon_number(&self) -> &u64 {
-        &self.inner.chronon_number
-    }
-    pub fn public_key(&self) -> &FTByteVector {
-        &self.inner.public_key
-    }
-    pub fn signature_algorithm(&self) -> &str {
-        &self.inner.signature_algorithm
-    }
-    pub fn forward_foretis(&self) -> &FTByteVector {
-        &self.inner.forward_foretis
-    }
-    pub fn backward_foretis(&self) -> &FTByteVector {
-        &self.inner.backward_foretis
-    }
-    pub fn aa_nonce(&self) -> &FTByteArray<16> {
-        &self.inner.aa_nonce
-    }
-    pub fn chronon_stamp_count(&self) -> &u64 {
-        &self.inner.chronon_stamp_count
-    }
-    pub fn external_attestations(&self) -> &[ExternalAttestationRecord] {
-        &self.inner.external_attestations
-    }
-    pub fn tb_version(&self) -> &u32 {
-        &self.inner.tb_version
-    }
-    pub fn tbid(&self) -> &Tbid {
-        &self.inner.tbid
-    }
+    delegate_field_accessors!(
+        chronon_number -> u64,
+        public_key -> FTByteVector,
+        signature_algorithm -> str,
+        forward_foretis -> FTByteVector,
+        backward_foretis -> FTByteVector,
+        aa_nonce -> FTByteArray<16>,
+        chronon_stamp_count -> u64,
+        external_attestations -> [ExternalAttestationRecord],
+        tb_version -> u32,
+        tbid -> Tbid,
+    );
 
     /// Inbound gate: verify this record.
     ///
@@ -622,36 +617,18 @@ impl UnverifiedSignatureEnvelope<ChrononRecord> {
 }
 
 impl CleanAuthenticated<ChrononRecord> {
-    pub fn chronon_number(&self) -> &u64 {
-        &self.inner.chronon_number
-    }
-    pub fn public_key(&self) -> &FTByteVector {
-        &self.inner.public_key
-    }
-    pub fn signature_algorithm(&self) -> &str {
-        &self.inner.signature_algorithm
-    }
-    pub fn forward_foretis(&self) -> &FTByteVector {
-        &self.inner.forward_foretis
-    }
-    pub fn backward_foretis(&self) -> &FTByteVector {
-        &self.inner.backward_foretis
-    }
-    pub fn aa_nonce(&self) -> &FTByteArray<16> {
-        &self.inner.aa_nonce
-    }
-    pub fn chronon_stamp_count(&self) -> &u64 {
-        &self.inner.chronon_stamp_count
-    }
-    pub fn external_attestations(&self) -> &[ExternalAttestationRecord] {
-        &self.inner.external_attestations
-    }
-    pub fn tb_version(&self) -> &u32 {
-        &self.inner.tb_version
-    }
-    pub fn tbid(&self) -> &Tbid {
-        &self.inner.tbid
-    }
+    delegate_field_accessors!(
+        chronon_number -> u64,
+        public_key -> FTByteVector,
+        signature_algorithm -> str,
+        forward_foretis -> FTByteVector,
+        backward_foretis -> FTByteVector,
+        aa_nonce -> FTByteArray<16>,
+        chronon_stamp_count -> u64,
+        external_attestations -> [ExternalAttestationRecord],
+        tb_version -> u32,
+        tbid -> Tbid,
+    );
 
     /// Outbound gate: wrap the domain type for wire/disk.
     pub fn externalize(self) -> Externalized<ChrononRecord> {
@@ -666,24 +643,14 @@ impl CleanAuthenticated<ChrononRecord> {
 // ---------------------------------------------------------------------------
 
 impl UnverifiedSignatureEnvelope<ForetisRecord> {
-    pub fn chronon_number(&self) -> &u64 {
-        &self.inner.chronon_number
-    }
-    pub fn content_hash(&self) -> &FTByteArray<32> {
-        &self.inner.content_hash
-    }
-    pub fn tbid(&self) -> &Tbid {
-        &self.inner.tbid
-    }
-    pub fn echo(&self) -> &str {
-        &self.inner.echo
-    }
-    pub fn tbn(&self) -> &str {
-        &self.inner.tbn
-    }
-    pub fn time_being_reference_time(&self) -> &str {
-        &self.inner.time_being_reference_time
-    }
+    delegate_field_accessors!(
+        chronon_number -> u64,
+        content_hash -> FTByteArray<32>,
+        tbid -> Tbid,
+        echo -> str,
+        tbn -> str,
+        time_being_reference_time -> str,
+    );
 
     /// Returns true if this envelope has at least one signature.
     pub fn has_signatures(&self) -> bool {
@@ -821,24 +788,14 @@ impl<'a> super::tick::CalendarLookup for CalendarLookupFromCleanRecord<'a> {
 }
 
 impl CleanAuthenticated<ForetisRecord> {
-    pub fn chronon_number(&self) -> &u64 {
-        &self.inner.chronon_number
-    }
-    pub fn content_hash(&self) -> &FTByteArray<32> {
-        &self.inner.content_hash
-    }
-    pub fn tbid(&self) -> &Tbid {
-        &self.inner.tbid
-    }
-    pub fn echo(&self) -> &str {
-        &self.inner.echo
-    }
-    pub fn tbn(&self) -> &str {
-        &self.inner.tbn
-    }
-    pub fn time_being_reference_time(&self) -> &str {
-        &self.inner.time_being_reference_time
-    }
+    delegate_field_accessors!(
+        chronon_number -> u64,
+        content_hash -> FTByteArray<32>,
+        tbid -> Tbid,
+        echo -> str,
+        tbn -> str,
+        time_being_reference_time -> str,
+    );
 
     /// Return the signature bytes from the first entry in the ordered signature chain.
     ///
@@ -871,30 +828,16 @@ impl CleanAuthenticated<ForetisRecord> {
 use crate::epoch::snapshot::EpochSnapshotRecord;
 
 impl UnverifiedSignatureEnvelope<EpochSnapshotRecord> {
-    pub fn epoch_number(&self) -> &u64 {
-        &self.inner.epoch_number
-    }
-    pub fn epoch_start_ns(&self) -> &u64 {
-        &self.inner.epoch_start_ns
-    }
-    pub fn epoch_end_ns(&self) -> &u64 {
-        &self.inner.epoch_end_ns
-    }
-    pub fn peer_scores(&self) -> &[crate::epoch::snapshot::PeerScore] {
-        &self.inner.peer_scores
-    }
-    pub fn committee(&self) -> &[String] {
-        &self.inner.committee
-    }
-    pub fn threshold(&self) -> &u32 {
-        &self.inner.threshold
-    }
-    pub fn frost_signature(&self) -> &FTByteVector {
-        &self.inner.frost_signature
-    }
-    pub fn committee_pubkey(&self) -> &FTByteVector {
-        &self.inner.committee_pubkey
-    }
+    delegate_field_accessors!(
+        epoch_number -> u64,
+        epoch_start_ns -> u64,
+        epoch_end_ns -> u64,
+        peer_scores -> [crate::epoch::snapshot::PeerScore],
+        committee -> [String],
+        threshold -> u32,
+        frost_signature -> FTByteVector,
+        committee_pubkey -> FTByteVector,
+    );
 
     /// Inbound gate: verify FROST threshold signature.
     ///
@@ -920,30 +863,16 @@ impl UnverifiedSignatureEnvelope<EpochSnapshotRecord> {
 }
 
 impl CleanAuthenticated<EpochSnapshotRecord> {
-    pub fn epoch_number(&self) -> &u64 {
-        &self.inner.epoch_number
-    }
-    pub fn epoch_start_ns(&self) -> &u64 {
-        &self.inner.epoch_start_ns
-    }
-    pub fn epoch_end_ns(&self) -> &u64 {
-        &self.inner.epoch_end_ns
-    }
-    pub fn peer_scores(&self) -> &[crate::epoch::snapshot::PeerScore] {
-        &self.inner.peer_scores
-    }
-    pub fn committee(&self) -> &[String] {
-        &self.inner.committee
-    }
-    pub fn threshold(&self) -> &u32 {
-        &self.inner.threshold
-    }
-    pub fn frost_signature(&self) -> &FTByteVector {
-        &self.inner.frost_signature
-    }
-    pub fn committee_pubkey(&self) -> &FTByteVector {
-        &self.inner.committee_pubkey
-    }
+    delegate_field_accessors!(
+        epoch_number -> u64,
+        epoch_start_ns -> u64,
+        epoch_end_ns -> u64,
+        peer_scores -> [crate::epoch::snapshot::PeerScore],
+        committee -> [String],
+        threshold -> u32,
+        frost_signature -> FTByteVector,
+        committee_pubkey -> FTByteVector,
+    );
 
     /// Outbound gate: wrap the domain type for wire/disk.
     pub fn externalize(self) -> Externalized<EpochSnapshotRecord> {
