@@ -18,9 +18,16 @@ use foretias_core::foretias::clean_auth::CleanAuthenticated;
 use foretias_core::foretias::tick::{ChrononRecord, ForetisRecord};
 use libp2p;
 
-/// Server tier — contains CommunerdReader capabilities + TCP listener.
+/// Server tier — stamp/verify without P2P discovery.
 ///
-/// Accepts incoming PtP requests via the existing Communerd infrastructure.
+/// The server tier answers stamp/verify requests and can perform FB/GNF
+/// attestations as configured, but does NOT participate in P2P peer discovery.
+/// This is the base layer; `CommunerdP2P` extends it with DHT/gossipsub.
+///
+/// Design intent: the tier hierarchy is kept intentionally even though methods
+/// currently delegate to `Communerd`. The abstraction boundary allows future
+/// differentiation (e.g., rate limiting, capability gating) without changing
+/// the public API.
 pub struct CommunerdServer {
     inner: Arc<Communerd>,
 }
@@ -96,10 +103,11 @@ impl Clone for CommunerdServer {
     }
 }
 
-/// P2P tier — contains CommunerdServer capabilities + libp2P swarm.
+/// P2P tier — extends server with peer discovery.
 ///
-/// Full mesh: Kademlia DHT, gossipsub, peer pool, mutual attestation.
-/// Gated by `p2p_enabled` in server configuration.
+/// Adds Kademlia DHT, gossipsub, peer pool, and mutual attestation on top of
+/// the server tier. P2P is a capability of the server, not a separate entity.
+/// The server tier can operate independently (stamp/verify only) without P2P.
 pub struct CommunerdP2P {
     server: CommunerdServer,
 }
