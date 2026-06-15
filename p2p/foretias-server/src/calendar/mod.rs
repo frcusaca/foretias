@@ -21,7 +21,6 @@
 
 use std::sync::Arc;
 
-pub mod mirror;
 pub mod task_queue;
 
 use foretias_core::core::identity::PrivKeyHandle;
@@ -36,8 +35,8 @@ use parking_lot::RwLock;
 use rand::Rng;
 use tracing::{debug, info, warn};
 
+pub use foretias_client::calendar::mirror::{compute_hash_sanity, MirrorStore};
 pub use foretias_core::foretias::callbacks::PeerChangeCallback;
-pub use mirror::{compute_hash_sanity, MirrorStore};
 pub use task_queue::{
     start_pool, CalendarTask, CalendarTaskSender, MirrorDispatcher, MirrorState, WorkerPool,
     DEFAULT_WORKER_COUNT,

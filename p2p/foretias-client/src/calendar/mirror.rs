@@ -76,6 +76,13 @@ impl MirrorStore {
             .collect())
     }
 
+    pub fn latest_record(&self, tbid_hex: &str) -> Option<ChrononRecord> {
+        self.mirrors
+            .read()
+            .get(tbid_hex)
+            .and_then(|v| v.last().cloned())
+    }
+
     pub fn mirror_info(&self, tbid_hex: &str) -> Option<(u64, u64, String)> {
         let mirrors = self.mirrors.read();
         let records = mirrors.get(tbid_hex)?;
@@ -155,9 +162,11 @@ mod tests {
         store.insert_mirrored("tbid1", make_tick(1)).unwrap();
         store.insert_mirrored("tbid1", make_tick(2)).unwrap();
         store.insert_mirrored("tbid1", make_tick(3)).unwrap();
+
         let records = store.get_mirrored("tbid1", 2, 10).unwrap();
         assert_eq!(records.len(), 2);
         assert_eq!(*records[0].chronon_number(), 2);
+        assert_eq!(*records[1].chronon_number(), 3);
     }
 
     #[test]
@@ -174,8 +183,11 @@ mod tests {
         store.insert_mirrored("tbid1", make_tick(3)).unwrap();
         store.insert_mirrored("tbid1", make_tick(1)).unwrap();
         store.insert_mirrored("tbid1", make_tick(2)).unwrap();
+
         let records = store.get_mirrored("tbid1", 0, 10).unwrap();
         assert_eq!(*records[0].chronon_number(), 1);
+        assert_eq!(*records[1].chronon_number(), 2);
+        assert_eq!(*records[2].chronon_number(), 3);
     }
 
     #[test]

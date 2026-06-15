@@ -850,7 +850,7 @@ fn verify_ship_ack_chain(
 
 /// Insert verified records into the mirror store and return the updated tick count.
 fn insert_ship_ack_records(
-    mirror_store: &crate::calendar::mirror::MirrorStore,
+    mirror_store: &crate::calendar::MirrorStore,
     tbid: &str,
     verified: Vec<CleanAuthenticated<ChrononRecord>>,
 ) -> u64 {
@@ -932,7 +932,7 @@ fn parse_stream_tick_params(
 /// Verify a single record against the mirror store's latest record (or genesis).
 fn verify_stream_tick_record(
     crypto: &dyn foretias_core::crypto_server::CryptoServer,
-    mirror_store: &crate::calendar::mirror::MirrorStore,
+    mirror_store: &crate::calendar::MirrorStore,
     tbid: &str,
     unproc: UnverifiedSignatureEnvelope<ChrononRecord>,
 ) -> Result<CleanAuthenticated<ChrononRecord>, String> {
@@ -1296,7 +1296,7 @@ fn parse_history_dump_chunk_params(
 /// if no predecessor exists.
 fn verify_history_dump_chunk(
     crypto: &dyn foretias_core::crypto_server::CryptoServer,
-    mirror_store: &crate::calendar::mirror::MirrorStore,
+    mirror_store: &crate::calendar::MirrorStore,
     tbid: &str,
     unprocessed: Vec<UnverifiedSignatureEnvelope<ChrononRecord>>,
 ) -> Result<Vec<CleanAuthenticated<ChrononRecord>>, String> {
