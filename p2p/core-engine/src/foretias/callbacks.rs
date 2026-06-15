@@ -50,16 +50,23 @@ pub enum CommunityResponse {
 
 /// Transport-level error.
 #[non_exhaustive]
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum TransportError {
     /// Connection failed.
+    #[error("connect failed: {0}")]
     Connect(String),
     /// RPC error from peer.
+    #[error("rpc error {code}: {message}")]
     Rpc { code: i32, message: String },
     /// Request timed out.
+    #[error("timeout")]
     Timeout,
     /// Response decode failed.
+    #[error("decode error: {0}")]
     Decode(String),
+    /// Transport unsupported.
+    #[error("transport unsupported: {0}")]
+    Unsupported(String),
 }
 
 /// Community query interface — Communerd implements this.

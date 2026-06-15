@@ -5,6 +5,8 @@
 use async_trait::async_trait;
 use foretias_core::foretias::ChrononRecord;
 
+pub use foretias_core::foretias::callbacks::TransportError;
+
 /// Peer address for P2P communication.
 #[derive(Debug, Clone)]
 pub struct PeerAddr {
@@ -28,22 +30,6 @@ impl From<PeerAddr> for foretias_core::foretias::callbacks::PeerAddr {
             json_rpc: p.json_rpc,
         }
     }
-}
-
-/// Transport-level error.
-#[non_exhaustive]
-#[derive(Debug, thiserror::Error)]
-pub enum TransportError {
-    #[error("connect failed: {0}")]
-    Connect(String),
-    #[error("rpc error {code}: {message}")]
-    Rpc { code: i32, message: String },
-    #[error("timeout")]
-    Timeout,
-    #[error("decode error: {0}")]
-    Decode(String),
-    #[error("transport unsupported: {0}")]
-    Unsupported(String),
 }
 
 /// Which transport to use for a peer.
