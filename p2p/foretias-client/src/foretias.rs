@@ -24,6 +24,13 @@ use crate::calendar::Calendar;
 use crate::config::{ForetiasConfig, P2pConfig, PtpConfig, StandaloneConfig};
 use crate::noise_ptp::{noise_json_rpc, PtPError};
 
+struct NoOpMutualAttest;
+impl foretias_core::foretias::callbacks::MutualAttestObserver for NoOpMutualAttest {
+    fn on_mutual_attest_sent(&self) {}
+    fn on_mutual_attest_ok(&self) {}
+    fn on_mutual_attest_failed(&self) {}
+}
+
 /// Error type for Foretias operations.
 #[non_exhaustive]
 #[derive(Debug)]
@@ -170,12 +177,6 @@ impl Foretias {
             crypto,
         )?;
 
-        struct NoOpMutualAttest;
-        impl foretias_core::foretias::callbacks::MutualAttestObserver for NoOpMutualAttest {
-            fn on_mutual_attest_sent(&self) {}
-            fn on_mutual_attest_ok(&self) {}
-            fn on_mutual_attest_failed(&self) {}
-        }
         cm.set_mutual_attest_observer(Arc::new(NoOpMutualAttest)
             as Arc<dyn foretias_core::foretias::callbacks::MutualAttestObserver>);
 
@@ -219,12 +220,6 @@ impl Foretias {
 
         let mut cm =
             Chronomatter::from_calendar(&path_str, crypto.clone(), Arc::new(NoOpObserver))?;
-        struct NoOpMutualAttest;
-        impl foretias_core::foretias::callbacks::MutualAttestObserver for NoOpMutualAttest {
-            fn on_mutual_attest_sent(&self) {}
-            fn on_mutual_attest_ok(&self) {}
-            fn on_mutual_attest_failed(&self) {}
-        }
         cm.set_mutual_attest_observer(Arc::new(NoOpMutualAttest)
             as Arc<dyn foretias_core::foretias::callbacks::MutualAttestObserver>);
 
@@ -507,12 +502,6 @@ impl Foretias {
             Arc::clone(&calendar) as Arc<dyn TickObserver>,
             crypto,
         )?;
-        struct NoOpMutualAttest;
-        impl foretias_core::foretias::callbacks::MutualAttestObserver for NoOpMutualAttest {
-            fn on_mutual_attest_sent(&self) {}
-            fn on_mutual_attest_ok(&self) {}
-            fn on_mutual_attest_failed(&self) {}
-        }
         cm.set_mutual_attest_observer(Arc::new(NoOpMutualAttest)
             as Arc<dyn foretias_core::foretias::callbacks::MutualAttestObserver>);
         let (tbid, tbn_from_cm) = (cm.get_tbid(), cm.get_tbn().to_string());
