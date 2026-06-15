@@ -83,17 +83,6 @@ impl SignatureEntry {
 }
 
 // ---------------------------------------------------------------------------
-// TrustedInner trait (retained for backward compat -- inherent methods are preferred)
-// ---------------------------------------------------------------------------
-
-/// Trait for accessing the inner value of a trust boundary wrapper.
-pub trait TrustedInner<T>: Sized {
-    fn from_trusted(inner: T) -> Self;
-    fn inner(&self) -> &T;
-    fn into_inner(self) -> T;
-}
-
-// ---------------------------------------------------------------------------
 // Generic trust boundary wrappers
 // ---------------------------------------------------------------------------
 
@@ -140,21 +129,6 @@ impl<T: serde::de::DeserializeOwned> UnverifiedSignatureEnvelope<T> {
     pub fn from_json_value(v: serde_json::Value) -> Result<Self, ParseError> {
         let val: T = serde_json::from_value(v).map_err(ParseError::InvalidJson)?;
         Ok(Self::from_parsed(val))
-    }
-}
-
-impl<T> TrustedInner<T> for UnverifiedSignatureEnvelope<T> {
-    fn from_trusted(inner: T) -> Self {
-        Self {
-            inner,
-            signatures: Vec::new(),
-        }
-    }
-    fn inner(&self) -> &T {
-        &self.inner
-    }
-    fn into_inner(self) -> T {
-        self.inner
     }
 }
 
@@ -297,21 +271,6 @@ impl<T> CleanAuthenticated<T> {
     }
 }
 
-impl<T> TrustedInner<T> for CleanAuthenticated<T> {
-    fn from_trusted(inner: T) -> Self {
-        Self {
-            inner,
-            signatures: Vec::new(),
-        }
-    }
-    fn inner(&self) -> &T {
-        &self.inner
-    }
-    fn into_inner(self) -> T {
-        self.inner
-    }
-}
-
 /// SAFETY: Debug prints only structural metadata, not inner T.
 impl<T> fmt::Debug for CleanAuthenticated<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -391,18 +350,6 @@ impl<T> Externalized<T> {
     }
 
     pub fn into_inner(self) -> T {
-        self.inner
-    }
-}
-
-impl<T> TrustedInner<T> for Externalized<T> {
-    fn from_trusted(inner: T) -> Self {
-        Self { inner }
-    }
-    fn inner(&self) -> &T {
-        &self.inner
-    }
-    fn into_inner(self) -> T {
         self.inner
     }
 }
