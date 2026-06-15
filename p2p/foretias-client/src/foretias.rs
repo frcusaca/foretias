@@ -168,31 +168,7 @@ pub struct Foretias {
 impl Foretias {
     #[must_use = "creating a Foretias client may fail (e.g. crypto initialization); the error must be handled"]
     pub fn new(_tbn: String, persist_path: Option<PathBuf>) -> Result<Self, ForetiasError> {
-        let chronon_ns = 60_000_000_000u64;
-        let calendar = Arc::new(Calendar::new(Tbid::default(), ""));
-        let crypto = Arc::from(crypto_server::new_software(ForetiasCurve::Ed25519)?);
-        let mut cm = Chronomatter::new(
-            chronon_ns,
-            Arc::clone(&calendar) as Arc<dyn TickObserver>,
-            crypto,
-        )?;
-
-        cm.set_mutual_attest_observer(Arc::new(NoOpMutualAttest)
-            as Arc<dyn foretias_core::foretias::callbacks::MutualAttestObserver>);
-
-        let (tbid, tbn_from_cm) = (cm.get_tbid(), cm.get_tbn().to_string());
-        let binding = calendar.inner();
-        let mut cal_inner = binding.write();
-        cal_inner.set_tbid(tbid);
-        cal_inner.set_tbn(&tbn_from_cm);
-
-        let crypto: Arc<dyn CryptoServer> =
-            Arc::from(crypto_server::new_software(ForetiasCurve::Ed25519)?);
-        let state = StandaloneState {
-            chronomatter: Arc::new(cm),
-            calendar,
-            crypto,
-        };
+        let state = Self::create_standalone_state("")?;
 
         Ok(Self {
             level: ClientLevel::Standalone,
