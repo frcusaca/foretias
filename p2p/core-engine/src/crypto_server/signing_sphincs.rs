@@ -23,7 +23,6 @@ macro_rules! pq_signing_suite {
         #[doc = concat!("Generate a ", $doc_prefix, " keypair.")]
         #[doc = "Returns (public_key, secret_key) as variable-length byte vectors."]
         #[doc = "Secret is encrypted at C11 layer; ciphertext + nonce is returned."]
-        #[must_use]
         pub fn $keypair_fn() -> Result<(SignatureBytes, SignatureBytes), CryptoError> {
             let mut secret: ForetiasSecretKeyVar = unsafe { std::mem::zeroed() };
             secret.plaintext_len = FORETIAS_SIG_MAX_SECRET_BYTES as usize;
@@ -41,7 +40,6 @@ macro_rules! pq_signing_suite {
 
         #[doc = concat!("Sign a message with ", $doc_prefix, ". Returns the signature bytes.")]
         #[doc = "Secret is encrypted ciphertext + nonce (from keypair)."]
-        #[must_use]
         pub fn $sign_fn(
             secret_key: &SignatureBytes,
             msg: &[u8],
@@ -61,7 +59,6 @@ macro_rules! pq_signing_suite {
         }
 
         #[doc = concat!("Verify a ", $doc_prefix, " signature. Returns Ok(true) if valid, Ok(false) if invalid.")]
-        #[must_use]
         pub fn $verify_fn(
             public_key: &SignatureBytes,
             msg: &[u8],
