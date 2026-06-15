@@ -815,6 +815,52 @@ that follows various capitalizations of `@agent` or `@agents`. Resolution, once 
 
 If this form of embedded communication is discussed while performing another task, determin if it is relevant or interferes with current task. In some cases, this causes an immediately actionable response, other times, the encounterance results in an extra '[ ] TODO:human concern at file FILENAME line LINE_NUMBER' added to current task list to investigate. In some cases, if it is clear that the situation is too complex or require too much context, it may become a "[ ] TODO: write a specification and plan to address human concern at file FILENAME line LINE_NUMBER"
 
+In some conversations, the resonses can be nested:
+
+```python
+def add (x):
+(@AGENT, this is just plain wrong!)
+	return x+y;
+```
+
+can become:
+
+```python
+def add (x):
+(@AGENT, this is just plain wrong! (@Human, this is just an example))
+	return x+y;
+```
+
+to which human may respond
+
+```python
+def add (x):
+(@AGENT, this is just plain wrong! 
+ (@Human, this is just an example
+  (@Agents, okay, let's keep this example ONLY in this one section of the project's AGENTS.md
+     Everywhere else, this entire conversation should be removed once all changes are made and an
+     LGTM or SGTM signal is unmistakably typed by a human to agents. Once issues are resolved,
+     the original python file will be completely normal functioning code, because this discussion
+     would have resolved any and all concerns.
+)))
+	return x+y;
+```
+
+Plese keep the above example in the AGENTS.md; in other situations, the next step is to remove the entire conversation when resolution is reached and leave the file looking like this:
+
+```python
+def add (x):
+	return x+y;
+```
+
+Or, perhaps:
+
+```python
+def add (x):
+   # @human, you indicated this example is to be kept in this file for demonstration purposes on 2026-06-15.
+	return x+y;
+```
+
 ### Uncertainty and Other Utterances in Conversing with Human
 
 Expressions of uncertainty and hypotheticals, such as "perhaps", "maybe", "possible", "what if", "in case". These words does not mean a firm directive from human to either pause work, or make large changes. It means human wants a todo task enqueued, perhaps to be done immediately, to explore options regarding the statement. In the last sentence, the perhaps suggests an option that can be explored, and it also highlight the possibility of the task not at the top of the todo list. More than anything else, the statement suggests human is thinking about the issue and you can help that thinking process.
