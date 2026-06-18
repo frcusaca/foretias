@@ -1,6 +1,6 @@
 # Foretias — Open Work Index
 
-**Generated:** 2026-06-02
+**Generated:** 2026-06-12 (updated)
 **Purpose:** Single reference for all plans/specs with open tasks, organized by urgency and dependency order. Deferred and backburnered features at the end.
 
 ---
@@ -160,7 +160,21 @@
 
 ## TIER 4 — LOW PRIORITY (improvements, tooling)
 
-### 8. Peering v1 (Auto-Port, Self-Registration, DHT Discovery)
+### 8. Redundancy Elimination
+
+| File | Open | Done | Status |
+|------|------|------|--------|
+| `specs/REDUNDANCY_ELIMINATION_PLAN.md` | 4 | 13 | **IN PROGRESS** — Phases 1-13 complete on `redundancy-elimination` branch; Phase 14 (JSON-RPC helpers) deferred; Phases 15-17 (specs) pending |
+| `specs/REDUNDANCY_ELIMINATION_SPEC.md` | — | — | Spec (paired, with @Human responses) |
+
+**Dependencies:** None (Group 7 + Group 4 complete)
+**Blocks:** Nothing critical
+
+**Description:** Comprehensive code review found 37 redundancy findings (11 naming, 12 mechanism, 14 code) totaling ~1,470 estimated duplicated lines. Highest-impact: MirrorStore deletion (~276 lines), PQC signing macro (~190 lines), clean_auth accessor macro (~184 lines), PublicKeyBytes/SignatureBytes macro (~130 lines). Includes a bug vector: divergent default values across config files.
+
+---
+
+### 9. Peering v1 (Auto-Port, Self-Registration, DHT Discovery)
 
 | File | Open | Done | Status |
 |------|------|------|--------|
@@ -175,7 +189,7 @@
 
 ---
 
-### 9. Code Quality Tooling (Baseline + CI)
+### 10. Code Quality Tooling (Baseline + CI)
 
 | File | Open | Done | Status |
 |------|------|------|--------|
@@ -208,7 +222,7 @@
 
 ---
 
-### 10. Clippy Fix (Warning Remediation + Refactoring)
+### 11. Clippy Fix (Warning Remediation + Refactoring)
 
 | File | Open | Done | Status |
 |------|------|------|--------|
@@ -239,7 +253,7 @@
 
 ---
 
-### 11. Improve Builders and Big Functions
+### 12. Improve Builders and Big Functions
 
 | File | Open | Done | Status |
 |------|------|------|--------|
@@ -259,7 +273,7 @@
 
 ---
 
-### 10. Group 2 — Workspace Hygiene (Verification Only)
+### 13. Group 2 — Workspace Hygiene (Verification Only)
 
 | File | Open | Done | Status |
 |------|------|------|--------|
@@ -397,6 +411,32 @@ These features are explicitly out of active scope. They remain as specifications
 |------|--------|
 | `specs/CODE_QUALITY_TOOLING_SPEC.md` | **BACKBURNERED** |
 
+### Calendar Refactoring (from Redundancy Elimination N1, N3, N4, N5, N6)
+
+| File | Status |
+|------|--------|
+| `specs/CALENDAR_REFACTORING_SPEC.md` | **TO BE CREATED** — Phase 15 of Redundancy Elimination |
+| `specs/CALENDAR_REFACTORING_PLAN.md` | **TO BE CREATED** |
+
+**Description:** 5-component Calendar architecture (Calendar API, Storage API, API implementation, in-memory storage, file-system storage). Also includes TBIDRecord, MirrorStore consolidation, ProbityStore extraction, MirrorDispatcher refactoring.
+
+### Error Architecture (from Redundancy Elimination M6, M9)
+
+| File | Status |
+|------|--------|
+| `specs/ERROR_ARCHITECTURE_SPEC.md` | **TO BE CREATED** — Phase 16 of Redundancy Elimination |
+| `specs/ERROR_ARCHITECTURE_PLAN.md` | **TO BE CREATED** |
+
+**Description:** Nested error cause chains (PtPError → TransportError → ForetiasError), NodeError rename evaluation, Clock variant addition, recursive wrapping guidelines.
+
+### fn_delegation Feature Tracking
+
+| File | Status |
+|------|--------|
+| `rust_language_development_upkeep.md` | **TO BE CREATED** — Phase 17 of Redundancy Elimination |
+
+**Description:** Track `#![feature(fn_delegation)]` nightly feature stabilization. Current approach uses `macro_rules!` for passthrough accessors on trust-boundary wrappers. Evaluate migration when stable.
+
 ---
 
 ## Dependency Graph (Simplified)
@@ -415,7 +455,9 @@ Group 2 (pre-flight)
                       │    ├── Stream 4d: GNF/FB Mutual Attestation ✅
                       │    └── Stream 4e: Chronon Retrieval + FB Verification ✅
                       │
-                      └──► POST7 Audit & Cleanup [COMPLETE ✅]
+                      ├──► POST7 Audit & Cleanup [COMPLETE ✅]
+                      │
+                      └──► Redundancy Elimination [READY — 14 phases]
 ```
 
 ---
@@ -424,8 +466,7 @@ Group 2 (pre-flight)
 
 | Priority | Item | Action |
 |----------|------|--------|
-| **1** | Clippy Fix | ~120 tasks to fix all clippy warnings — spec+plan written, ready to execute |
-| **2** | Group 5 g5-c | Human decision on JSON-RPC auth (mTLS) — blocked, needs dedicated spec |
-| **3** | Group 4 StartStream | Implement live calendar streaming to mirrors (deferred — Phase 4b.4c) |
-| **4** | Peering v1 | 8 items blocked on bindings reintroduction |
-| **5** | Code Quality Tooling Phase 7 | 15 deferred test implementation items |
+| **1** | Redundancy Elimination | 14 phases, 37 findings — spec+plan written, ready to execute |
+| **2** | Group 4 StartStream | Implement live calendar streaming to mirrors (deferred — Phase 4b.4c) |
+| **3** | Peering v1 | 8 items blocked on bindings reintroduction |
+| **4** | Code Quality Tooling Phase 7 | 15 deferred test implementation items |

@@ -846,7 +846,7 @@ def add (x):
 	return x+y;
 ```
 
-Plese keep the above example in the AGENTS.md; in other situations, the next step is to remove the entire conversation when resolution is reached and leave the file looking like this:
+Plese keep the above example in the AGENTS.md; while conversing and resolving human or agent concerns, it is very important to keep the conversational context, so that both agent and user can quickly recover context of what they were discussing. I rare situations one may even need to add makers such as "see above @human comment M1m considering your @Agents comments M2m, and M3m below'.(And those markers would be searcheable to find easily) In other situations, the next step is to remove the entire conversation when resolution is reached and leave the file looking like this:
 
 ```python
 def add (x):
