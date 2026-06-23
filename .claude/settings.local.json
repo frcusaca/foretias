@@ -26,7 +26,8 @@
       "Bash(sed -i '759,1407d' AGENTS.md)",
       "Bash(sed -n '753,766p' AGENTS.md)",
       "Bash(grep -nE '^#{1,4} ' AGENTS.md)",
-      "Bash(grep -nE '^#{2,4} ' AGENTS.md)"
+      "Bash(grep -nE '^#{2,4} ' AGENTS.md)",
+      "Bash(claude --version)"
     ]
   }
 }
